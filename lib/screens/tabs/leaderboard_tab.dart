@@ -15,7 +15,7 @@ import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
-import '../../widgets/friend_request_sheet.dart';
+import '../../widgets/public_profile_sheet.dart';
 import '../../widgets/home_course_track.dart'
     show AnimatedCapybaraWithAccessories;
 import '../../widgets/leaderboard_visibility_toggle.dart';
@@ -954,13 +954,13 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     String displayName,
     String? profilePhotoUrl,
   ) {
-    showFriendRequestSheet(
+    showPublicProfileSheet(
       context: context,
       authService: widget.authService,
       backendApiService: _api,
       userId: userId,
-      displayName: displayName,
-      profilePhotoUrl: profilePhotoUrl,
+      fallbackName: displayName,
+      fallbackPhotoUrl: profilePhotoUrl,
     );
   }
 }

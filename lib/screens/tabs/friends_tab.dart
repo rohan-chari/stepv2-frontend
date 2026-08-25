@@ -16,6 +16,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/public_profile_sheet.dart';
 import '../referral_screen.dart';
 
 enum _SearchResultState { addable, friends, pending }
@@ -73,6 +74,7 @@ class _FriendsTabState extends State<FriendsTab> {
   bool _isSearching = false;
   bool _showDropdown = false;
   bool _legacyRaceNameSearch = false;
+  bool _dossierRefreshInFlight = false;
   Timer? _debounce;
 
   static const _textShadows = [
@@ -300,60 +302,36 @@ class _FriendsTabState extends State<FriendsTab> {
     }
   }
 
-  Future<void> _removeFriend(String friendshipId) async {
-    try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
-
-      await _backendApiService.removeFriend(
-        identityToken: identityToken,
-        friendshipId: friendshipId,
-      );
-
-      if (!mounted) return;
-      _friendsRepository.invalidate();
-      await _loadFriends();
-      widget.onFriendsChanged();
-    } catch (e) {
-      if (!mounted) return;
-      showErrorToast(context, 'Couldn\u2019t remove friend. Please try again.');
-    }
-  }
-
-  void _showFriendMenu(String friendshipId, String displayName) {
-    showModalBottomSheet(
+  void _openPublicProfile({
+    required String? userId,
+    required String fallbackName,
+    String? fallbackPhotoUrl,
+    required PublicProfileRelationship relationship,
+    String? friendshipId,
+  }) {
+    final id = userId?.trim();
+    if (id == null || id.isEmpty || id == widget.authService.userId) return;
+    showPublicProfileSheet(
       context: context,
-      backgroundColor: AppColors.of(context).parchment,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              atName(displayName),
-              style: PixelText.title(
-                size: 18,
-                color: AppColors.of(context).textDark,
-              ),
-            ),
-            const SizedBox(height: 16),
-            PillButton(
-              label: 'REMOVE FRIEND',
-              variant: PillButtonVariant.accent,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await _removeFriend(friendshipId);
-              },
-            ),
-          ],
-        ),
-      ),
+      authService: widget.authService,
+      backendApiService: _backendApiService,
+      userId: id,
+      fallbackName: fallbackName,
+      fallbackPhotoUrl: fallbackPhotoUrl,
+      initialRelationship: relationship,
+      friendshipId: friendshipId,
+      onChanged: () {
+        _friendsRepository.invalidate();
+        if (!_dossierRefreshInFlight) {
+          _dossierRefreshInFlight = true;
+          unawaited(
+            _loadFriends().whenComplete(() {
+              _dossierRefreshInFlight = false;
+            }),
+          );
+        }
+        widget.onFriendsChanged();
+      },
     );
   }
 
@@ -802,16 +780,21 @@ class _FriendsTabState extends State<FriendsTab> {
                 : null,
             child: Row(
               children: [
-                AppAvatar(
-                  name:
-                      _safeString(_searchResults[i]['discoverableName']) ??
-                      _safeString(_searchResults[i]['displayName']) ??
-                      '',
-                  imageUrl: _safeString(_searchResults[i]['profilePhotoUrl']),
-                  size: 30,
+                Expanded(
+                  child: _profileIdentity(
+                    userId: _extractUserId(_searchResults[i]),
+                    displayName:
+                        _safeString(_searchResults[i]['discoverableName']) ??
+                        _safeString(_searchResults[i]['displayName']) ??
+                        'Runner',
+                    profilePhotoUrl: _safeString(
+                      _searchResults[i]['profilePhotoUrl'],
+                    ),
+                    relationship: _searchRelationship(_searchResults[i]),
+                    friendshipId: _searchFriendshipId(_searchResults[i]),
+                    child: _searchIdentity(_searchResults[i]),
+                  ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(child: _searchIdentity(_searchResults[i])),
                 _buildSearchResultAction(_searchResults[i]),
               ],
             ),
@@ -913,18 +896,98 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
+  Widget _profileIdentity({
+    required String? userId,
+    required String displayName,
+    required String? profilePhotoUrl,
+    required PublicProfileRelationship relationship,
+    required String? friendshipId,
+    Widget? child,
+  }) {
+    final identity = Row(
+      children: [
+        AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
+        const SizedBox(width: 10),
+        Expanded(
+          child:
+              child ??
+              Text(
+                atName(displayName),
+                style: PixelText.body(
+                  size: 16,
+                  color: AppColors.of(context).textDark,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+        ),
+      ],
+    );
+    final validId =
+        userId != null &&
+        userId.isNotEmpty &&
+        userId != widget.authService.userId;
+    if (!validId) return identity;
+    return Semantics(
+      button: true,
+      label: 'View profile for ${atName(displayName)}',
+      child: InkWell(
+        key: ValueKey('friends-profile-$userId'),
+        onTap: () => _openPublicProfile(
+          userId: userId,
+          fallbackName: displayName,
+          fallbackPhotoUrl: profilePhotoUrl,
+          relationship: relationship,
+          friendshipId: friendshipId,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: identity,
+        ),
+      ),
+    );
+  }
+
   _SearchResultState _searchResultState(Map<String, dynamic> user) {
+    return switch (_searchRelationship(user)) {
+      PublicProfileRelationship.friends => _SearchResultState.friends,
+      PublicProfileRelationship.incoming ||
+      PublicProfileRelationship.outgoing => _SearchResultState.pending,
+      _ => _SearchResultState.addable,
+    };
+  }
+
+  PublicProfileRelationship _searchRelationship(Map<String, dynamic> user) {
+    // Match the dossier precedence exactly: accepted supersedes either
+    // pending direction, then outgoing supersedes incoming for a duplicate
+    // legacy row. This keeps the search action and opened dossier consistent.
     if (_friends.any((friend) => _matchesSearchUser(friend, user))) {
-      return _SearchResultState.friends;
+      return PublicProfileRelationship.friends;
     }
+    if (_outgoingRequests.any((request) => _matchesSearchUser(request, user))) {
+      return PublicProfileRelationship.outgoing;
+    }
+    if (_incomingRequests.any((request) => _matchesSearchUser(request, user))) {
+      return PublicProfileRelationship.incoming;
+    }
+    return PublicProfileRelationship.none;
+  }
 
-    final hasPendingRequest =
-        _incomingRequests.any((request) => _matchesSearchUser(request, user)) ||
-        _outgoingRequests.any((request) => _matchesSearchUser(request, user));
-
-    return hasPendingRequest
-        ? _SearchResultState.pending
-        : _SearchResultState.addable;
+  String? _searchFriendshipId(Map<String, dynamic> user) {
+    final relation = _searchRelationship(user);
+    final rows = switch (relation) {
+      PublicProfileRelationship.friends => _friends,
+      PublicProfileRelationship.incoming => _incomingRequests,
+      PublicProfileRelationship.outgoing => _outgoingRequests,
+      _ => const <Map<String, dynamic>>[],
+    };
+    for (final row in rows) {
+      if (_matchesSearchUser(row, user)) {
+        final id = _safeString(row['friendshipId']);
+        if (id != null) return id;
+      }
+    }
+    return _safeString(user['friendshipId']);
   }
 
   bool _matchesSearchUser(
@@ -997,31 +1060,25 @@ class _FriendsTabState extends State<FriendsTab> {
       color: index.isOdd
           ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
           : Colors.transparent,
-      child: InkWell(
-        onTap: () => _showFriendMenu(friendshipId, displayName),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  atName(displayName),
-                  style: PixelText.body(
-                    size: 16,
-                    color: AppColors.of(context).textDark,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: _profileIdentity(
+                userId: _extractUserId(friend),
+                displayName: displayName,
+                profilePhotoUrl: profilePhotoUrl,
+                relationship: PublicProfileRelationship.friends,
+                friendshipId: friendshipId,
               ),
-              Icon(
-                Icons.more_horiz,
-                size: 22,
-                color: AppColors.of(context).textMid,
-              ),
-            ],
-          ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 22,
+              color: AppColors.of(context).textMid,
+            ),
+          ],
         ),
       ),
     );
@@ -1040,16 +1097,13 @@ class _FriendsTabState extends State<FriendsTab> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
-          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              atName(displayName),
-              style: PixelText.body(
-                size: 16,
-                color: AppColors.of(context).textDark,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: _profileIdentity(
+              userId: _extractUserId(req),
+              displayName: displayName,
+              profilePhotoUrl: profilePhotoUrl,
+              relationship: PublicProfileRelationship.incoming,
+              friendshipId: friendshipId,
             ),
           ),
           PulseGlow(
@@ -1091,16 +1145,13 @@ class _FriendsTabState extends State<FriendsTab> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
-          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              atName(displayName),
-              style: PixelText.body(
-                size: 16,
-                color: AppColors.of(context).textDark,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: _profileIdentity(
+              userId: _extractUserId(req),
+              displayName: displayName,
+              profilePhotoUrl: profilePhotoUrl,
+              relationship: PublicProfileRelationship.outgoing,
+              friendshipId: friendshipId,
             ),
           ),
           Padding(

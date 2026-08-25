@@ -18,6 +18,114 @@ class DemoRaceApiService extends BackendApiService {
   DemoRaceApiService(this.engine);
 
   final DemoRaceEngine engine;
+  final Map<String, String> _socialState = <String, String>{};
+  final Map<String, String> _socialIds = <String, String>{};
+
+  void seedReversePending(String targetUserId) {
+    _socialState[targetUserId] = 'incoming';
+    _socialIds[targetUserId] = 'demo-reverse-pending';
+  }
+
+  // Social reads and mutations are local fixtures as well. The real Race
+  // Detail can open the same dossier as production, but a tutorial/demo
+  // target must never turn that gesture into a live request.
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async => {
+    'contract': 'public-profile-v1',
+    'user': {
+      'id': userId,
+      'displayName': userId == engine.myUserId ? 'Rohan' : 'Demo Runner',
+      'profilePhotoUrl': null,
+      'equippedAnimal': null,
+      'equippedAccessories': const <Map<String, dynamic>>[],
+    },
+    'stats': {
+      'racePodiums': {'first': 1, 'second': 0, 'third': 0},
+      'avgStepsPerDay': 12000,
+    },
+  };
+
+  @override
+  Future<Map<String, dynamic>> fetchFriends({
+    required String identityToken,
+  }) async {
+    final friends = <Map<String, dynamic>>[];
+    final incoming = <Map<String, dynamic>>[];
+    final outgoing = <Map<String, dynamic>>[];
+    _socialState.forEach((id, state) {
+      final user = {'id': id, 'displayName': 'Demo Runner'};
+      final friendshipId = _socialIds[id];
+      if (state == 'friends') {
+        friends.add({...user, 'friendshipId': friendshipId});
+      }
+      if (state == 'incoming') {
+        incoming.add({'friendshipId': friendshipId, 'user': user});
+      }
+      if (state == 'outgoing') {
+        outgoing.add({'friendshipId': friendshipId, 'user': user});
+      }
+    });
+    return {
+      'friends': friends,
+      'pending': {'incoming': incoming, 'outgoing': outgoing},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendFriendRequest({
+    required String identityToken,
+    required String addresseeId,
+  }) async {
+    final reverse = _socialState[addresseeId] == 'incoming';
+    if (!reverse && _socialState[addresseeId] == 'outgoing') {
+      throw const ApiException(
+        'Friend request already pending.',
+        statusCode: 409,
+      );
+    }
+    _socialState[addresseeId] = reverse ? 'friends' : 'outgoing';
+    _socialIds[addresseeId] ??= 'demo-request';
+    return {
+      'friendship': {
+        'id': _socialIds[addresseeId],
+        'status': reverse ? 'ACCEPTED' : 'PENDING',
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> respondToFriendRequest({
+    required String identityToken,
+    required String friendshipId,
+    required bool accept,
+  }) async {
+    final target = _socialIds.entries
+        .where((entry) => entry.value == friendshipId)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    if (target != null) _socialState[target] = accept ? 'friends' : 'none';
+    return {
+      'friendship': {
+        'id': friendshipId,
+        'status': accept ? 'ACCEPTED' : 'DECLINED',
+      },
+    };
+  }
+
+  @override
+  Future<void> removeFriend({
+    required String identityToken,
+    required String friendshipId,
+  }) async {
+    final target = _socialIds.entries
+        .where((entry) => entry.value == friendshipId)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    if (target != null) _socialState[target] = 'none';
+  }
 
   // Demo/tutorial narratives must never request live recipient-private impact
   // data or present an unscripted settlement overlay over a spotlight beat.

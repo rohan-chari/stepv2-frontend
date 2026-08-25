@@ -126,6 +126,28 @@ void main() {
     );
   });
 
+  test('social dossier calls are explicitly offline in demo and tutorial', () {
+    const required = [
+      'fetchPublicProfile',
+      'fetchFriends',
+      'sendFriendRequest',
+      'respondToFriendRequest',
+      'removeFriend',
+    ];
+    for (final method in required) {
+      expect(
+        RegExp('\\b$method\\s*\\(').hasMatch(demoSource),
+        isTrue,
+        reason: 'DemoRaceApiService must override $method',
+      );
+      expect(
+        RegExp('\\b$method\\s*\\(').hasMatch(tutorialSource),
+        isTrue,
+        reason: 'TutorialPreviewBackendApiService must override $method',
+      );
+    }
+  });
+
   test('tutorial preview overrides every race-detail stream call', () {
     const calls = {
       'fetchRaceBootstrap',

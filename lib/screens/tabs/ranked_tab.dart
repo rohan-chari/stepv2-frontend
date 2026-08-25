@@ -12,7 +12,7 @@ import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/home_course_track.dart'
     show AnimatedCapybaraWithAccessories;
-import '../../widgets/friend_request_sheet.dart';
+import '../../widgets/public_profile_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/tier_badge.dart';
@@ -1037,13 +1037,13 @@ class _RankedTabState extends State<RankedTab> {
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
-        onTap: () => showFriendRequestSheet(
+        onTap: () => showPublicProfileSheet(
           context: context,
           authService: widget.authService,
           backendApiService: _api,
           userId: userId,
-          displayName: displayName,
-          profilePhotoUrl: profilePhotoUrl,
+          fallbackName: displayName,
+          fallbackPhotoUrl: profilePhotoUrl,
         ),
         child: content,
       ),
@@ -1574,13 +1574,13 @@ class _RankedTabState extends State<RankedTab> {
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
-        onTap: () => showFriendRequestSheet(
+        onTap: () => showPublicProfileSheet(
           context: context,
           authService: widget.authService,
           backendApiService: _api,
           userId: userId,
-          displayName: row.displayName,
-          profilePhotoUrl: row.profilePhotoUrl,
+          fallbackName: row.displayName,
+          fallbackPhotoUrl: row.profilePhotoUrl,
         ),
         child: content,
       ),

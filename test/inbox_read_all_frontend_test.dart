@@ -147,7 +147,8 @@ void main() {
     expect(api.readAllCalls, 1);
     expect(api.perAlertReadCalls, 0);
     expect(badgeUpdates, [2]);
-    expect(find.text('NEW'), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('inbox-unread-alert-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-unread-thread-1')), findsOneWidget);
   });
 
   testWidgets('embedded Inbox does not clear on open', (tester) async {
@@ -171,7 +172,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
 
     expect(api.readAllCalls, 0);
-    expect(find.text('NEW'), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('inbox-unread-alert-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-unread-thread-1')), findsOneWidget);
     expect(badgeUpdates, [2]);
   });
 }

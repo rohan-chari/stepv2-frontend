@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
-import '../widgets/retro_card.dart';
 import '../widgets/arcade_page.dart';
 
 enum InboxDestinationRoute {
@@ -686,11 +685,25 @@ class _InboxScreenState extends State<InboxScreen>
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          'NOTIFICATIONS',
-          style: PixelText.title(
-            size: 22,
-            color: AppColors.of(context).textLight,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'INBOX',
+                style: PixelText.title(
+                  size: 28,
+                  color: AppColors.of(context).textLight,
+                ),
+              ),
+              Text(
+                'The things that need your attention.',
+                style: PixelText.body(
+                  size: 10,
+                  color: AppColors.of(context).textLight.withValues(alpha: .78),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -706,130 +719,269 @@ class _InboxScreenState extends State<InboxScreen>
       16,
       12,
     ),
-    child: Text(
-      'INBOX',
-      style: PixelText.title(size: 28, color: AppColors.of(context).textLight),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'INBOX',
+          style: PixelText.title(
+            size: 28,
+            color: AppColors.of(context).textLight,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'The things that need your attention.',
+          style: PixelText.body(
+            size: 10,
+            color: AppColors.of(context).textLight.withValues(alpha: .78),
+          ),
+        ),
+      ],
     ),
   );
 
   Widget _body(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: _InboxActionButton(label: 'TRY AGAIN', onPressed: _load),
-      );
-    }
-    if (_rows.isEmpty) {
-      return Center(
-        child: Text(
-          'YOU’RE CAUGHT UP',
-          style: PixelText.title(
-            size: 14,
-            color: AppColors.of(context).textMid,
-          ),
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      itemCount:
-          _rows.length +
-          (_alertsCursor == null && _threadsCursor == null ? 0 : 1),
-      separatorBuilder: (_, _) => const SizedBox(height: 6),
-      itemBuilder: (context, index) {
-        if (index == _rows.length) {
-          return Center(
-            child: _InboxActionButton(
-              label: _loadingMore ? 'LOADING…' : 'LOAD MORE',
-              onPressed: _loadingMore ? null : _loadMore,
-            ),
-          );
-        }
-        final row = _rows[index];
-        final isSupport = row['_inboxKind'] == 'support';
-        final title = isSupport
-            ? 'BARA SUPPORT'
-            : row['title'] is String
-            ? row['title'] as String
-            : 'BARA ALERT';
-        final body = isSupport
-            ? row['preview'] is String
-                  ? row['preview'] as String
-                  : 'Support conversation'
-            : row['body'] is String
-            ? row['body'] as String
-            : '';
-        final category = isSupport ? 'SUPPORT' : _categoryLabel(row['type']);
-        final unread = isSupport
-            ? row.containsKey('unreadByUser')
-                  ? row['unreadByUser'] == true
-                  : row.containsKey('unread')
-                  ? row['unread'] == true
-                  : row['readAt'] == null
-            : row['readAt'] == null;
-        return InkWell(
-          onTap: () => _openAlert(row),
-          child: RetroCard(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        category,
-                        style: PixelText.title(
-                          size: 10,
-                          color: unread
-                              ? AppColors.of(context).coinDark
-                              : AppColors.of(context).textMid,
+    final colors = AppColors.of(context);
+    final hasMore = _alertsCursor != null || _threadsCursor != null;
+    return Container(
+      key: const ValueKey('inbox-dispatch-board'),
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+      decoration: BoxDecoration(
+        color: colors.parchmentLight,
+        border: Border.all(color: colors.parchmentBorder, width: 2),
+        boxShadow: [
+          BoxShadow(color: colors.woodShadow, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: _loading
+          ? const Center(
+              key: ValueKey('inbox-loading'),
+              child: CircularProgressIndicator(),
+            )
+          : _error != null
+          ? Center(
+              key: const ValueKey('inbox-error'),
+              child: _InboxActionButton(label: 'TRY AGAIN', onPressed: _load),
+            )
+          : _rows.isEmpty
+          ? Center(
+              key: const ValueKey('inbox-empty'),
+              child: Text(
+                'YOU’RE CAUGHT UP',
+                style: PixelText.title(size: 14, color: colors.textMid),
+              ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
+              itemCount: _rows.length + (hasMore ? 1 : 0),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: colors.parchmentBorder),
+              itemBuilder: (context, index) {
+                if (index == _rows.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Center(
+                      key: const ValueKey('inbox-load-more'),
+                      child: _InboxActionButton(
+                        label: _loadingMore ? 'LOADING…' : 'LOAD MORE',
+                        onPressed: _loadingMore ? null : _loadMore,
+                      ),
+                    ),
+                  );
+                }
+                final row = _rows[index];
+                final isSupport = row['_inboxKind'] == 'support';
+                final title = isSupport
+                    ? 'BARA SUPPORT'
+                    : row['title'] is String
+                    ? row['title'] as String
+                    : 'BARA ALERT';
+                final body = isSupport
+                    ? row['preview'] is String
+                          ? row['preview'] as String
+                          : 'Support conversation'
+                    : row['body'] is String
+                    ? row['body'] as String
+                    : '';
+                final category = isSupport
+                    ? 'SUPPORT'
+                    : _categoryLabel(row['type']);
+                final unread = isSupport
+                    ? row.containsKey('unreadByUser')
+                          ? row['unreadByUser'] == true
+                          : row.containsKey('unread')
+                          ? row['unread'] == true
+                          : row['readAt'] == null
+                    : row['readAt'] == null;
+                final timestamp = _compactTimestamp(row['createdAt']);
+                return Semantics(
+                  button: true,
+                  label:
+                      '$title${timestamp == null ? '' : ', $timestamp'}${unread ? ', unread' : ''}',
+                  child: InkWell(
+                    key: ValueKey(
+                      'inbox-row-${isSupport ? 'support' : 'alert'}-${row['id']}',
+                    ),
+                    onTap: () => _openAlert(row),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 72),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: unread
+                                    ? colors.coinLight
+                                    : colors.parchmentDark,
+                                border: Border.all(
+                                  color: colors.parchmentBorder,
+                                ),
+                              ),
+                              child: Icon(
+                                _categoryIcon(row['type'], isSupport),
+                                size: 19,
+                                color: colors.textDark,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        category,
+                                        style: PixelText.title(
+                                          size: 9,
+                                          color: unread
+                                              ? colors.coinDark
+                                              : colors.textMid,
+                                        ),
+                                      ),
+                                      if (timestamp != null) ...[
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          timestamp,
+                                          style: PixelText.body(
+                                            size: 9,
+                                            color: colors.textMid,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: PixelText.title(
+                                      size: 13,
+                                      color: colors.textDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    body,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: colors.textMid,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (unread)
+                              Container(
+                                key: ValueKey('inbox-unread-${row['id']}'),
+                                width: 6,
+                                height: 6,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.coinDark,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: colors.textMid,
+                              size: 20,
+                            ),
+                          ],
                         ),
                       ),
-                      const Spacer(),
-                      if (unread)
-                        Text(
-                          'NEW',
-                          style: PixelText.title(
-                            size: 10,
-                            color: AppColors.of(context).coinDark,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    title,
-                    style: PixelText.title(
-                      size: 14,
-                      color: AppColors.of(context).textDark,
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.body(
-                      size: 13,
-                      color: AppColors.of(context).textMid,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    isSupport ? 'REPLY' : 'OPEN',
-                    style: PixelText.title(
-                      size: 10,
-                      color: AppColors.of(context).textAccent,
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          ),
-        );
-      },
     );
+  }
+
+  static IconData _categoryIcon(Object? raw, bool support) {
+    if (support) return Icons.support_agent_rounded;
+    final type = raw is String ? raw : '';
+    if (type.startsWith('FRIEND_REQUEST') ||
+        type.startsWith('FRIEND_ACCEPTED')) {
+        return Icons.person_add_alt_1_rounded;
+    }
+    if (type.startsWith('RACE_') ||
+        type.startsWith('TEAM_') ||
+        type == 'RACE_COMPLETED') {
+        return Icons.flag_rounded;
+    }
+    if (type.startsWith('TOURNAMENT') || type == 'TOURNAMENT') {
+        return Icons.emoji_events_rounded;
+    }
+    if (type.startsWith('REWARD') || type == 'REFERRAL_REWARDED') {
+        return Icons.card_giftcard_rounded;
+    }
+    return Icons.notifications_rounded;
+  }
+
+  static String? _compactTimestamp(Object? raw) {
+    if (raw is! String) return null;
+    final date = DateTime.tryParse(raw);
+    if (date == null) return null;
+    final local = date.toLocal();
+    final now = DateTime.now();
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
+      final hour = local.hour == 0
+          ? 12
+          : (local.hour > 12 ? local.hour - 12 : local.hour);
+      final minute = local.minute.toString().padLeft(2, '0');
+      return '$hour:$minute ${local.hour >= 12 ? 'PM' : 'AM'}';
+    }
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[local.month - 1]} ${local.day}';
   }
 }
 

@@ -50,7 +50,7 @@ import '../widgets/spinning_coin.dart';
 import '../widgets/coin_balance_badge.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
-import '../widgets/friend_request_sheet.dart';
+import '../widgets/public_profile_sheet.dart';
 import '../widgets/leaderboard_plank.dart';
 import '../services/ad_service.dart';
 import '../widgets/multiplier_chip.dart';
@@ -112,6 +112,13 @@ class RaceDetailScreen extends StatefulWidget {
   /// shipped app) allows every target.
   final bool Function(String userId)? demoTargetGate;
 
+  /// Demo-only inventory boundary. [CaseOpeningScreen] calls the real reveal
+  /// path first; this callback commits the demo engine only after that reveal.
+  final void Function(String powerupId)? demoCommitBoxOpen;
+
+  /// Demo-only rollback for a failed or abandoned reel.
+  final void Function(String powerupId)? demoCancelBoxOpen;
+
   /// Renders this screen as the onboarding **demo race** (spec §5.7).
   ///
   /// Suppression only: it hides ads, the notification opt-in card, the starter
@@ -141,6 +148,8 @@ class RaceDetailScreen extends StatefulWidget {
     this.tutorialClockKey,
     this.demoTapGate,
     this.demoTargetGate,
+    this.demoCommitBoxOpen,
+    this.demoCancelBoxOpen,
     this.demoMode = false,
     this.boxRerollAdController,
     this.showPostCreateSharePrompt = false,
@@ -427,6 +436,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// synchronously, and a spinner that outlives the response freezes a
   /// tutorial button mid-script (ui-test-planner risk 6).
   String? _actingPowerupId;
+
+  // Demo-only overlay state. Polls may return an older mystery-box snapshot
+  // while the non-opaque reel is spinning; these ids keep that snapshot from
+  // exposing a roll early or reverting a reveal that has just committed.
+  final Set<String> _demoPendingBoxIds = <String>{};
+  final Map<String, Map<String, dynamic>> _demoCommittedBoxResults = {};
 
   static const String _openAllActionId = '__open_all__';
 
@@ -999,6 +1014,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   @override
   void dispose() {
+    if (widget.demoMode) {
+      for (final boxId in _demoPendingBoxIds) {
+        widget.demoCancelBoxOpen?.call(boxId);
+      }
+    }
     WidgetsBinding.instance.removeObserver(this);
     appRouteObserver.unsubscribe(this);
     // Only dispose a controller we created; an injected one belongs to the
@@ -1584,6 +1604,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       final resolvedProgress = Map<String, dynamic>.from(progress)
         ..['participants'] = mergedParticipants;
+      final mergedPowerupData = _mergeDemoPowerupData(
+        resolvedProgress['powerupData'],
+      );
+      if (mergedPowerupData != null) {
+        resolvedProgress['powerupData'] = mergedPowerupData;
+      }
 
       if (fetchSeq == _progressFetchSeq) {
         setState(() {
@@ -2742,6 +2768,49 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// the server's transition on the local projection. The box row keeps its
   /// slot but becomes the rolled HELD powerup; a Fanny Pack that
   /// auto-activated is dropped (server marks it USED).
+  Map<String, dynamic>? _mergeDemoPowerupData(Object? raw) {
+    if (!widget.demoMode || raw is! Map) return null;
+    final data = <String, dynamic>{
+      for (final entry in raw.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+    final inventory = normalizePowerupInventory(data['inventory']);
+    final merged = <Map<String, dynamic>>[];
+    for (final row in inventory) {
+      final id = row['id'];
+      if (id is! String || id.isEmpty) {
+        merged.add(row);
+        continue;
+      }
+
+      if (_demoPendingBoxIds.contains(id)) {
+        merged.add({...row, 'status': 'MYSTERY_BOX'});
+        continue;
+      }
+
+      final committed = _demoCommittedBoxResults[id];
+      if (committed == null || row['status'] != 'MYSTERY_BOX') {
+        merged.add(row);
+        continue;
+      }
+      if (committed['autoActivated'] == true) continue;
+      merged.add({
+        ...row,
+        'type': committed['type'],
+        'rarity': committed['rarity'],
+        'status': 'HELD',
+      });
+    }
+    data['inventory'] = merged;
+    return data;
+  }
+
+  void _cancelDemoBoxOpen(String powerupId) {
+    _demoPendingBoxIds.remove(powerupId);
+    _demoCommittedBoxResults.remove(powerupId);
+    widget.demoCancelBoxOpen?.call(powerupId);
+  }
+
   void _optimisticallyApplyBoxOpen(
     String powerupId,
     Map<String, dynamic> openResult,
@@ -2777,6 +2846,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// Returns a rollback closure for the failure path (a later successful
   /// _loadProgress() replaces the whole projection anyway).
   VoidCallback _optimisticallyRemoveFromInventory(String powerupId) {
+    _demoCommittedBoxResults.remove(powerupId);
     final data = _powerupData;
     final inventory = data?['inventory'] as List?;
     if (data == null || inventory == null) return () {};
@@ -4356,7 +4426,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             // The normal hero uses a Spacer between left and right chips. In
             // the reflowing team hero a Spacer is invalid Wrap parent data and
             // would also consume no meaningful width, so omit it.
-            children: [for (final chip in chips) if (chip is! Spacer) chip],
+            children: [
+              for (final chip in chips)
+                if (chip is! Spacer) chip,
+            ],
           ),
         ),
       );
@@ -4371,6 +4444,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           backdropAsset: AppThemeAssets.of(context).raceDayCourse,
           frameless: true,
           runners: runners,
+          onRunnerProfileTap: _openRaceProfileForRunner,
         ),
         // HUD chips float over the empty sky band, clear of the bunting and
         // the grandstand. They never intercept the track's own gestures
@@ -4391,6 +4465,53 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
           ),
       ],
+    );
+  }
+
+  void _openRaceProfileForRunner(GoalTrackRunner runner) {
+    final id = runner.userId;
+    if (id == null || id.isEmpty || runner.isUser || runner.isStealthed) return;
+    showPublicProfileSheet(
+      context: context,
+      authService: widget.authService,
+      backendApiService: _api,
+      userId: id,
+      fallbackName: runner.name,
+      fallbackPhotoUrl: runner.profilePhotoUrl,
+    );
+  }
+
+  void _openRaceProfileForParticipant(Map<String, dynamic> participant) {
+    final id = participant['userId'];
+    final name = participant['displayName'];
+    if (id is! String ||
+        id.isEmpty ||
+        id == _myUserId ||
+        participant['stealthed'] == true) {
+      return;
+    }
+    showPublicProfileSheet(
+      context: context,
+      authService: widget.authService,
+      backendApiService: _api,
+      userId: id,
+      fallbackName: name is String && name.isNotEmpty ? name : 'Runner',
+      fallbackPhotoUrl: participant['profilePhotoUrl'] is String
+          ? participant['profilePhotoUrl'] as String
+          : null,
+    );
+  }
+
+  void _openRaceProfileForFinisher(PodiumFinisher finisher) {
+    final id = finisher.userId;
+    if (id == null || id.isEmpty || finisher.isViewer) return;
+    showPublicProfileSheet(
+      context: context,
+      authService: widget.authService,
+      backendApiService: _api,
+      userId: id,
+      fallbackName: finisher.displayName,
+      fallbackPhotoUrl: finisher.profilePhotoUrl,
     );
   }
 
@@ -4919,6 +5040,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       for (final p in shownParticipants)
         if (p['status'] == 'ACCEPTED')
           GoalTrackRunner(
+            userId: p['userId'] is String ? p['userId'] as String : null,
             name: p['displayName'] as String? ?? '???',
             progress: 0,
             isUser: (p['userId'] as String?) == _myUserId,
@@ -5040,6 +5162,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       (_isActing || _isSpectator || myStatus == 'DECLINED')
                       ? null
                       : _onLobbySlotTap,
+                  onMemberProfileTap: _openRaceProfileForParticipant,
                 ),
                 if (myStatus == 'INVITED' && _bothSidesFull()) ...[
                   // TR-207: over-inviting is allowed and the first to accept
@@ -5585,6 +5708,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             runners: [
               for (final p in participants)
                 GoalTrackRunner(
+                  userId: p['userId'] is String ? p['userId'] as String : null,
                   name: p['stealthed'] == true
                       ? '???'
                       : (p['displayName'] as String? ?? '???'),
@@ -6578,6 +6702,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             // Item 11 — the rewarded-ad reroll. Null (button hidden) unless
             // the backend advertised the feature AND we're not in the demo.
             onReroll: _boxRerollEnabled ? _rerollBoxPowerup : null,
+            onRollStarted: widget.demoMode
+                ? () => _demoPendingBoxIds.add(boxId)
+                : null,
+            onRollFailed: widget.demoMode
+                ? () => _cancelDemoBoxOpen(boxId)
+                : null,
+            onCancelled: widget.demoMode
+                ? () => _cancelDemoBoxOpen(boxId)
+                : null,
             onRevealed: (result) {
               // The overlay is non-opaque, so the inventory row stays visible
               // behind the reel. Mirror the server's state transition locally
@@ -6586,10 +6719,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               // this on the API response instead spoiled the result — and, for
               // an auto-activated Fanny Pack, deleted the row — behind the
               // still-spinning reel.
-              _optimisticallyApplyBoxOpen(
-                boxId,
-                result['result'] as Map<String, dynamic>? ?? result,
-              );
+              final rawOpenResult = result['result'];
+              final openResult = rawOpenResult is Map
+                  ? <String, dynamic>{
+                      for (final entry in rawOpenResult.entries)
+                        if (entry.key is String)
+                          entry.key as String: entry.value,
+                    }
+                  : result;
+              _optimisticallyApplyBoxOpen(boxId, openResult);
+              if (widget.demoMode) {
+                _demoPendingBoxIds.remove(boxId);
+                _demoCommittedBoxResults[boxId] = openResult;
+                // This is deliberately after the local optimistic projection
+                // and onRevealed, never after the later route-close callback.
+                widget.demoCommitBoxOpen?.call(boxId);
+              }
             },
           ),
           transitionsBuilder: (_, anim, _, child) =>
@@ -6597,6 +6742,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           transitionDuration: const Duration(milliseconds: 300),
         ),
       );
+
+      // A back/route abort before reveal returns here without an onRevealed
+      // callback. Clear the demo pending roll after the route is gone; the
+      // reel itself still owns the visible commit boundary.
+      if (widget.demoMode && _demoPendingBoxIds.contains(boxId)) {
+        _cancelDemoBoxOpen(boxId);
+      }
 
       if (!mounted) return;
       setState(() => _isActing = false);
@@ -7722,13 +7874,48 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final mine = m.senderId == null
         ? (m.pending || m.failed)
         : m.senderId == _myUserId;
+    final participant = _chatParticipant(m.senderId);
+    final canOpenProfile =
+        !mine &&
+        m.senderId != null &&
+        m.senderId!.isNotEmpty &&
+        participant != null &&
+        participant['stealthed'] != true &&
+        participant['isStealthed'] != true;
     return _ChatBubble(
       message: m,
       isMine: mine,
       onLongPress: mine && !m.pending && !m.failed
           ? () => _confirmDeleteMessage(m.id)
           : null,
+      onProfileTap: canOpenProfile
+          ? () => _openRaceProfileForParticipant({
+              'userId': m.senderId,
+              'displayName': m.senderName,
+              'profilePhotoUrl': m.senderPhotoUrl,
+            })
+          : null,
     );
+  }
+
+  Map<String, dynamic>? _chatParticipant(String? userId) {
+    if (userId == null || userId.isEmpty) return null;
+    final sources = <Object?>[
+      (_progressState.data ?? _progress)?['participants'],
+      _race?['participants'],
+    ];
+    for (final raw in sources) {
+      if (raw is! List) continue;
+      for (final item in raw) {
+        if (item is Map && item['userId'] == userId) {
+          return {
+            for (final entry in item.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          };
+        }
+      }
+    }
+    return null;
   }
 
   Widget _buildTabEmptyState(String text) {
@@ -7888,7 +8075,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           [],
     );
     final completedLeaderSteps = _leaderSteps(participants);
-    final winnerId = winner?['id'] as String?;
+    final rawWinnerUserId = winner?['userId'];
+    String? winnerId;
+    if (rawWinnerUserId is String && rawWinnerUserId.isNotEmpty) {
+      winnerId = rawWinnerUserId;
+    } else {
+      final fallbackWinnerId = winner?['id'];
+      if (fallbackWinnerId is String) winnerId = fallbackWinnerId;
+    }
     final winnerEntry = participants.firstWhere(
       (p) => (p['userId'] as String?) == winnerId,
       orElse: () => const <String, dynamic>{},
@@ -7945,6 +8139,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           runners: [
             for (final p in participants)
               GoalTrackRunner(
+                userId: p['userId'] is String ? p['userId'] as String : null,
                 name: p['displayName'] as String? ?? '???',
                 progress: _leaderRelativeProgress(
                   p['totalSteps'],
@@ -7983,31 +8178,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     else if (podiumFinishers != null)
                       RacePodium(
                         finishers: podiumFinishers,
+                        onProfileTap: _openRaceProfileForFinisher,
                         // The results popup fires the shared confetti at
                         // screen level; here the podium owns it.
                         showConfetti: !widget.demoMode,
                       )
-                    else if (winner != null) ...[
-                      RacerAvatar(
-                        rank: 1,
-                        accessories: winnerAccessories,
-                        size: 64,
-                        animal: winnerAnimal,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        winner['displayName'] is String
-                            ? atName(winner['displayName'] as String)
-                            : 'Unknown',
-                        style: PixelText.title(
-                          size: 22,
-                          color: AppColors.of(context).textDark,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 6),
-                      const PlacementPill(placement: 1),
-                    ] else
+                    else if (winner != null)
+                      _buildSingleWinnerCard(
+                        winner,
+                        winnerAccessories,
+                        winnerAnimal,
+                      )
+                    else
                       Text(
                         'No winner',
                         style: PixelText.title(
@@ -8053,6 +8235,62 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // auto-disables (read-only) via _canPostMessage.
         StaggerIn(index: 2, child: _buildActivityTabsSection()),
         SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildSingleWinnerCard(
+    Map<String, dynamic> winner,
+    List<Map<String, dynamic>> accessories,
+    String? animal,
+  ) {
+    final rawWinnerUserId = winner['userId'];
+    final id = rawWinnerUserId is String && rawWinnerUserId.isNotEmpty
+        ? rawWinnerUserId
+        : winner['id'] is String
+        ? winner['id'] as String
+        : null;
+    final rawName = winner['displayName'];
+    final name = rawName is String && rawName.isNotEmpty ? rawName : 'Unknown';
+    final identity = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RacerAvatar(
+          rank: 1,
+          accessories: accessories,
+          size: 64,
+          animal: animal,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          atName(name),
+          style: PixelText.title(
+            size: 22,
+            color: AppColors.of(context).textDark,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+    final canOpen = id != null && id.isNotEmpty && id != _myUserId;
+    return Column(
+      children: [
+        if (canOpen)
+          Semantics(
+            button: true,
+            label: 'View profile for ${atName(name)}',
+            child: InkWell(
+              key: ValueKey('single-winner-profile-$id'),
+              borderRadius: BorderRadius.circular(10),
+              onTap: () =>
+                  _openRaceProfileForParticipant({...winner, 'userId': id}),
+              child: Padding(padding: const EdgeInsets.all(4), child: identity),
+            ),
+          )
+        else
+          identity,
+        const SizedBox(height: 6),
+        const PlacementPill(placement: 1),
       ],
     );
   }
@@ -8600,27 +8838,53 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         badgeText = 'INVITED';
     }
 
+    final identity = Row(
+      children: [
+        AppAvatar(
+          name: name,
+          imageUrl: profilePhotoUrl,
+          size: 34,
+          isUser: isMe,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            isMe ? '${atName(name)} (you)' : atName(name),
+            style: PixelText.body(
+              size: 18,
+              color: isMe
+                  ? AppColors.of(context).textAccent
+                  : AppColors.of(context).textDark,
+            ),
+          ),
+        ),
+      ],
+    );
+    final canOpen =
+        !isMe &&
+        userId.isNotEmpty &&
+        p['stealthed'] != true &&
+        p['isStealthed'] != true;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          AppAvatar(
-            name: name,
-            imageUrl: profilePhotoUrl,
-            size: 34,
-            isUser: isMe,
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              isMe ? '${atName(name)} (you)' : atName(name),
-              style: PixelText.body(
-                size: 18,
-                color: isMe
-                    ? AppColors.of(context).textAccent
-                    : AppColors.of(context).textDark,
-              ),
-            ),
+            child: canOpen
+                ? Semantics(
+                    button: true,
+                    label: 'View profile for ${atName(name)}',
+                    child: InkWell(
+                      key: ValueKey('pending-participant-profile-$userId'),
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => _openRaceProfileForParticipant(p),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: identity,
+                      ),
+                    ),
+                  )
+                : identity,
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -8880,36 +9144,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             spacing: 14,
             runSpacing: 10,
             children: [
-              for (final m in members)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RacerAvatar(
-                      rank: 1,
-                      accessories:
-                          (m['accessories'] as List?)
-                              ?.cast<Map<String, dynamic>>() ??
-                          const [],
-                      size: 52,
-                      ringColor: color,
-                      animal: animalFromJson(m['animal']),
-                    ),
-                    const SizedBox(height: 5),
-                    SizedBox(
-                      width: 76,
-                      child: Text(
-                        atName(m['displayName'] as String? ?? '???'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: PixelText.body(
-                          size: 11,
-                          color: AppColors.of(context).textDark,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              for (final m in members) _buildTeamWinnerMember(m, color),
             ],
           ),
         ],
@@ -8917,6 +9152,65 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         const PlacementPill(placement: 1),
       ],
     );
+  }
+
+  Widget _buildTeamWinnerMember(Map<String, dynamic> member, Color color) {
+    final id = member['userId'] is String ? member['userId'] as String : null;
+    final isStealthed =
+        member['isStealthed'] == true || member['stealthed'] == true;
+    final rawName = member['displayName'];
+    final name = rawName is String && rawName.isNotEmpty ? rawName : 'Runner';
+    final identity = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RacerAvatar(
+          rank: 1,
+          accessories: _defensiveAccessories(member['accessories']),
+          size: 52,
+          ringColor: color,
+          animal: animalFromJson(member['animal']),
+        ),
+        const SizedBox(height: 5),
+        SizedBox(
+          width: 76,
+          child: Text(
+            atName(name),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: PixelText.body(
+              size: 11,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+        ),
+      ],
+    );
+    if (id == null || id.isEmpty || id == _myUserId || isStealthed) {
+      return identity;
+    }
+    return Semantics(
+      button: true,
+      label: 'View profile for ${atName(name)}',
+      child: InkWell(
+        key: ValueKey('team-winner-profile-$id'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _openRaceProfileForParticipant(member),
+        child: Padding(padding: const EdgeInsets.all(4), child: identity),
+      ),
+    );
+  }
+
+  static List<Map<String, dynamic>> _defensiveAccessories(Object? raw) {
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return <Map<String, dynamic>>[
+      for (final item in raw)
+        if (item is Map)
+          <String, dynamic>{
+            for (final entry in item.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          },
+    ];
   }
 
   /// TR-803: individual planks grouped by team under color/name headers.
@@ -9202,6 +9496,40 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       );
     }
 
+    final identity = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        avatar(),
+        const SizedBox(width: 3),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: double.infinity, child: nameText()),
+              const SizedBox(height: 2),
+              MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.3,
+                child: scoreGroup(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final identityHit = (!isMe && !isStealthed && userId.isNotEmpty)
+        ? Semantics(
+            button: true,
+            label: 'View profile for ${atName(name)}',
+            child: InkWell(
+              key: ValueKey('team-standings-profile-$userId'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _openRaceProfileForParticipant(p),
+              child: identity,
+            ),
+          )
+        : identity;
+
     final cell = Container(
       key: ValueKey('team-cell-$userId'),
       constraints: const BoxConstraints(minHeight: 59),
@@ -9232,26 +9560,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          avatar(),
-          const SizedBox(width: 3),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(width: double.infinity, child: nameText()),
-                const SizedBox(height: 2),
-                MediaQuery.withClampedTextScaling(
-                  // Give the compact stat line meaningful accessibility
-                  // growth while keeping the exact value on one line inside
-                  // a half-width team card. The username above remains fully
-                  // responsive to the user's chosen scale.
-                  maxScaleFactor: 1.3,
-                  child: scoreGroup(),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: identityHit),
           if (effects.isNotEmpty) ...[
             const SizedBox(width: 3),
             SizedBox(width: 44, child: _teamEffectTray(userId, effects)),
@@ -9264,21 +9573,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ? Opacity(opacity: 0.5, child: cell)
         : cell;
 
-    if (isMe || isStealthed || userId.isEmpty) return presentedCell;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => showFriendRequestSheet(
-        context: context,
-        authService: widget.authService,
-        backendApiService: _api,
-        userId: userId,
-        displayName: name,
-        profilePhotoUrl: p['profilePhotoUrl'] is String
-            ? p['profilePhotoUrl'] as String
-            : null,
-      ),
-      child: presentedCell,
-    );
+    return presentedCell;
   }
 
   /// How many planks a collapsed standings board shows.
@@ -10044,22 +10339,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       verticalPadding: large ? 11 : 8,
       effectIcons: _effectIconsFor(userId),
       currentMultiplier: currentMultiplier,
+      onProfileTap: (!isMe && !isStealthed && userId.isNotEmpty)
+          ? () => showPublicProfileSheet(
+              context: context,
+              authService: widget.authService,
+              backendApiService: _api,
+              userId: userId,
+              fallbackName: name,
+              fallbackPhotoUrl: p['profilePhotoUrl'] as String?,
+            )
+          : null,
     );
 
     // Tap a non-self, non-stealthed runner to open a friend-request sheet.
     if (isMe || isStealthed || userId.isEmpty) return plank;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => showFriendRequestSheet(
-        context: context,
-        authService: widget.authService,
-        backendApiService: _api,
-        userId: userId,
-        displayName: name,
-        profilePhotoUrl: p['profilePhotoUrl'] as String?,
-      ),
-      child: plank,
-    );
+    return plank;
   }
 
   /// Returns a fake progress value for stealthed runners, jittered ±10%.
@@ -10697,11 +10991,13 @@ class _ChatBubble extends StatelessWidget {
   final RaceChatMessage message;
   final bool isMine;
   final VoidCallback? onLongPress;
+  final VoidCallback? onProfileTap;
 
   const _ChatBubble({
     required this.message,
     required this.isMine,
     this.onLongPress,
+    this.onProfileTap,
   });
 
   String _formatTime(DateTime t) {
@@ -10732,68 +11028,103 @@ class _ChatBubble extends StatelessWidget {
             : MainAxisAlignment.start,
         children: [
           if (!isMine) ...[
-            PlayerAvatar(
-              name: message.senderName ?? '?',
-              imageUrl: message.senderPhotoUrl,
-              size: 28,
+            Semantics(
+              button: onProfileTap != null,
+              label: onProfileTap == null
+                  ? 'Sender avatar'
+                  : 'View profile for ${message.senderName ?? 'Runner'}',
+              child: GestureDetector(
+                onTap: onProfileTap,
+                child: PlayerAvatar(
+                  name: message.senderName ?? '?',
+                  imageUrl: message.senderPhotoUrl,
+                  size: 28,
+                ),
+              ),
             ),
             const SizedBox(width: 6),
           ],
           Flexible(
-            child: GestureDetector(
-              onLongPress: onLongPress,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: bubbleColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppColors.of(context).textMid.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!isMine && message.senderName != null)
-                      Text(
-                        atName(message.senderName!),
-                        style: PixelText.title(
-                          size: 12,
-                          color: AppColors.of(context).textMid,
+            child: Column(
+              crossAxisAlignment: isMine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                if (!isMine && message.senderName != null)
+                  GestureDetector(
+                    onTap: onProfileTap,
+                    child: Semantics(
+                      button: onProfileTap != null,
+                      label: 'View profile for ${message.senderName}',
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          atName(message.senderName!),
+                          style: PixelText.title(
+                            size: 12,
+                            color: AppColors.of(context).textMid,
+                          ),
                         ),
                       ),
-                    Text(
-                      message.body,
-                      style: PixelText.body(size: 16, color: textColor),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                  ),
+                GestureDetector(
+                  onLongPress: onLongPress,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: bubbleColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.of(
+                          context,
+                        ).textMid.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _formatTime(message.createdAt),
-                          style: PixelText.body(size: 11, color: metaColor),
+                          message.body,
+                          style: PixelText.body(size: 16, color: textColor),
                         ),
-                        if (message.pending) ...[
-                          const SizedBox(width: 4),
-                          Icon(Icons.access_time, size: 11, color: metaColor),
-                        ],
-                        if (message.failed) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.error_outline,
-                            size: 11,
-                            color: AppColors.of(context).feedAttack,
-                          ),
-                        ],
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _formatTime(message.createdAt),
+                              style: PixelText.body(size: 11, color: metaColor),
+                            ),
+                            if (message.pending) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.access_time,
+                                size: 11,
+                                color: metaColor,
+                              ),
+                            ],
+                            if (message.failed) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.error_outline,
+                                size: 11,
+                                color: AppColors.of(context).feedAttack,
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],

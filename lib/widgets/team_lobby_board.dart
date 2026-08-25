@@ -84,6 +84,7 @@ class TeamLobbyBoard extends StatefulWidget {
     required this.participants,
     required this.myUserId,
     this.onTapEmptySlot,
+    this.onMemberProfileTap,
   });
 
   final Map<String, dynamic> race;
@@ -93,6 +94,7 @@ class TeamLobbyBoard extends StatefulWidget {
   /// Called with the side whose empty peg was tapped. Null disables taps
   /// (viewer can't join/switch right now).
   final void Function(RaceTeam team)? onTapEmptySlot;
+  final ValueChanged<Map<String, dynamic>>? onMemberProfileTap;
 
   @override
   State<TeamLobbyBoard> createState() => _TeamLobbyBoardState();
@@ -445,6 +447,65 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
       ),
     );
 
+    final profileId = member['userId'] is String
+        ? member['userId'] as String
+        : null;
+    final stealthed =
+        member['stealthed'] == true || member['isStealthed'] == true;
+    final identityContent = Row(
+      children: [
+        if (isArriving)
+          AnimatedBuilder(
+            animation: _hopController,
+            builder: (context, inner) =>
+                Opacity(opacity: _landFade(_hopController.value), child: inner),
+            child: capy,
+          )
+        else
+          capy,
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                atName(name),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: PixelText.body(
+                  size: 14.5,
+                  color: AppColors.of(context).textDark,
+                ),
+              ),
+              if (isMe)
+                Container(
+                  margin: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorDark,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'YOU',
+                    style: PixelText.title(size: 9, color: Colors.white),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final canOpen =
+        widget.onMemberProfileTap != null &&
+        profileId != null &&
+        profileId.isNotEmpty &&
+        !isMe &&
+        !stealthed;
+
     return Container(
       key: key,
       height: _slotHeight,
@@ -466,57 +527,21 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
               ]
             : null,
       ),
-      child: Row(
-        children: [
-          // Arriving capy dissolves in over the cross-fade window; everyone
-          // else is fully opaque.
-          if (isArriving)
-            AnimatedBuilder(
-              animation: _hopController,
-              builder: (context, inner) => Opacity(
-                opacity: _landFade(_hopController.value),
-                child: inner,
-              ),
-              child: capy,
-            )
-          else
-            capy,
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  atName(name),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: PixelText.body(
-                    size: 14.5,
-                    color: AppColors.of(context).textDark,
-                  ),
+      child: canOpen
+          ? Semantics(
+              button: true,
+              label: 'View profile for ${atName(name)}',
+              child: InkWell(
+                key: ValueKey('team-lobby-profile-$profileId'),
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => widget.onMemberProfileTap?.call(member),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: identityContent,
                 ),
-                if (isMe)
-                  Container(
-                    margin: const EdgeInsets.only(top: 3),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorDark,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'YOU',
-                      style: PixelText.title(size: 9, color: Colors.white),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+              ),
+            )
+          : identityContent,
     );
   }
 

@@ -13,7 +13,9 @@ import 'spinning_coin.dart';
 class PodiumFinisher {
   const PodiumFinisher({
     required this.placement,
+    this.userId,
     required this.displayName,
+    this.profilePhotoUrl,
     this.totalSteps,
     this.accessories = const <Map<String, dynamic>>[],
     this.animal,
@@ -23,6 +25,8 @@ class PodiumFinisher {
 
   /// 1, 2 or 3.
   final int placement;
+  final String? userId;
+  final String? profilePhotoUrl;
   final String displayName;
 
   /// Null when the payload didn't carry a step total — the line is then
@@ -50,6 +54,7 @@ class RacePodium extends StatefulWidget {
     super.key,
     required this.finishers,
     this.showConfetti = false,
+    this.onProfileTap,
   });
 
   /// Ordered 1st, 2nd, 3rd. Length 2 or 3 — see [canRender].
@@ -59,6 +64,7 @@ class RacePodium extends StatefulWidget {
   /// The results popup already fires it at screen level, so only the race
   /// detail screen turns this on — two overlapping bursts read as a glitch.
   final bool showConfetti;
+  final ValueChanged<PodiumFinisher>? onProfileTap;
 
   /// A podium needs at least a 1st and a 2nd to read as a podium. A single
   /// finisher keeps the existing winner card — one lonely plinth looks broken.
@@ -141,14 +147,21 @@ class RacePodium extends StatefulWidget {
           // Clamp: a server placement of 4+ on a top-3 row would index off the
           // end of the platform geometry.
           placement: (placement >= 1 && placement <= 3) ? placement : i + 1,
+          userId: userId is String && userId.isNotEmpty ? userId : null,
+          profilePhotoUrl: p['profilePhotoUrl'] is String
+              ? p['profilePhotoUrl'] as String
+              : null,
           displayName: name is String && name.isNotEmpty ? name : '???',
           totalSteps: steps is num ? steps.toInt() : null,
-          accessories:
-              (rawAccessories is List)
-                  ? rawAccessories.whereType<Map>().map((e) {
-                      return e.cast<String, dynamic>();
-                    }).toList()
-                  : const <Map<String, dynamic>>[],
+          accessories: (rawAccessories is List)
+              ? rawAccessories.whereType<Map>().map((e) {
+                  final safe = <String, dynamic>{};
+                  e.forEach((key, value) {
+                    if (key is String) safe[key] = value;
+                  });
+                  return safe;
+                }).toList()
+              : const <Map<String, dynamic>>[],
           animal: p['animal'] is String ? p['animal'] as String : null,
           payoutCoins: payout,
           isViewer: viewerUserId != null && userId == viewerUserId,
@@ -232,7 +245,9 @@ class _RacePodiumState extends State<RacePodium>
       alignment: Alignment.topCenter,
       children: [
         podium,
-        const Positioned.fill(child: IgnorePointer(child: CelebrationConfetti())),
+        const Positioned.fill(
+          child: IgnorePointer(child: CelebrationConfetti()),
+        ),
       ],
     );
   }
@@ -251,7 +266,11 @@ class _RacePodiumState extends State<RacePodium>
     };
     final animation = CurvedAnimation(
       parent: _controller,
-      curve: Interval(start, (start + 0.6).clamp(0.0, 1.0), curve: Curves.easeOutBack),
+      curve: Interval(
+        start,
+        (start + 0.6).clamp(0.0, 1.0),
+        curve: Curves.easeOutBack,
+      ),
     );
 
     final payout = finisher.payoutCoins ?? 0;
@@ -262,32 +281,17 @@ class _RacePodiumState extends State<RacePodium>
         final t = animation.value.clamp(0.0, 1.0);
         return Opacity(
           opacity: t,
-          child: Transform.translate(offset: Offset(0, (1 - t) * 22), child: child),
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 22),
+            child: child,
+          ),
         );
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          RacerAvatar(
-            rank: placement,
-            accessories: finisher.accessories,
-            animal: finisher.animal,
-            size: isWinner ? 62 : 48,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            finisher.isViewer
-                ? '${atName(finisher.displayName)} (you)'
-                : atName(finisher.displayName),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: PixelText.title(
-              size: isWinner ? 14 : 12.5,
-              color: finisher.isViewer ? colors.textAccent : colors.textDark,
-            ),
-          ),
+          _profileHeader(context, finisher, isWinner, colors),
           if (finisher.totalSteps != null) ...[
             const SizedBox(height: 1),
             Text(
@@ -295,7 +299,10 @@ class _RacePodiumState extends State<RacePodium>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: PixelText.number(size: isWinner ? 14 : 12, color: colors.textMid),
+              style: PixelText.number(
+                size: isWinner ? 14 : 12,
+                color: colors.textMid,
+              ),
             ),
           ],
           if (payout > 0) ...[
@@ -327,8 +334,13 @@ class _RacePodiumState extends State<RacePodium>
             padding: const EdgeInsets.only(top: 7),
             decoration: BoxDecoration(
               color: blockColor.withValues(alpha: 0.30),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
-              border: Border.all(color: blockColor.withValues(alpha: 0.95), width: 2),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(7),
+              ),
+              border: Border.all(
+                color: blockColor.withValues(alpha: 0.95),
+                width: 2,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: colors.woodShadow.withValues(alpha: 0.35),
@@ -346,6 +358,54 @@ class _RacePodiumState extends State<RacePodium>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _profileHeader(
+    BuildContext context,
+    PodiumFinisher finisher,
+    bool isWinner,
+    AppPalette colors,
+  ) {
+    final header = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RacerAvatar(
+          rank: finisher.placement,
+          accessories: finisher.accessories,
+          animal: finisher.animal,
+          size: isWinner ? 62 : 48,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          finisher.isViewer
+              ? '${atName(finisher.displayName)} (you)'
+              : atName(finisher.displayName),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: PixelText.title(
+            size: isWinner ? 14 : 12.5,
+            color: finisher.isViewer ? colors.textAccent : colors.textDark,
+          ),
+        ),
+      ],
+    );
+    final canOpen =
+        widget.onProfileTap != null &&
+        finisher.userId != null &&
+        finisher.userId!.isNotEmpty &&
+        !finisher.isViewer;
+    if (!canOpen) return header;
+    return Semantics(
+      button: true,
+      label: 'View profile for ${atName(finisher.displayName)}',
+      child: InkWell(
+        key: ValueKey('race-podium-profile-${finisher.userId}'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => widget.onProfileTap?.call(finisher),
+        child: Padding(padding: const EdgeInsets.all(4), child: header),
       ),
     );
   }

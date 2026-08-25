@@ -46,6 +46,45 @@ class TutorialPreviewAuthService extends AuthService {
 }
 
 class TutorialPreviewBackendApiService extends BackendApiService {
+  final Map<String, String> _socialState = <String, String>{
+    'tutorial-maya': 'friends',
+    'tutorial-sam': 'friends',
+    'tutorial-jordan': 'friends',
+    'tutorial-dana': 'incoming',
+    'tutorial-priya': 'outgoing',
+  };
+  final Map<String, String> _socialIds = <String, String>{
+    'tutorial-maya': 'fs-1',
+    'tutorial-sam': 'fs-2',
+    'tutorial-jordan': 'fs-3',
+    'tutorial-dana': 'fs-in-1',
+    'tutorial-priya': 'fs-out-1',
+  };
+
+  void seedReversePending(String targetUserId) {
+    _socialState[targetUserId] = 'incoming';
+    _socialIds[targetUserId] = 'reverse-pending';
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async => {
+    'contract': 'public-profile-v1',
+    'user': {
+      'id': userId,
+      'displayName': userId == tutorialPreviewUserId ? 'Rohan' : 'Maya Chen',
+      'profilePhotoUrl': null,
+      'equippedAnimal': null,
+      'equippedAccessories': const <Map<String, dynamic>>[],
+    },
+    'stats': {
+      'racePodiums': {'first': 2, 'second': 1, 'third': 0},
+      'avgStepsPerDay': 74000,
+    },
+  };
+
   // New recipient-private settlement surfaces are deliberately suppressed in
   // the deterministic tutorial; no live fetch may cover a scripted beat.
   @override
@@ -290,39 +329,88 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchFriends({
     required String identityToken,
   }) async {
+    const names = <String, String>{
+      'tutorial-maya': 'Maya Chen',
+      'tutorial-sam': 'Sam Rivera',
+      'tutorial-jordan': 'Jordan Lee',
+      'tutorial-dana': 'Dana Fox',
+      'tutorial-priya': 'Priya N.',
+    };
+    final friends = <Map<String, dynamic>>[];
+    final incoming = <Map<String, dynamic>>[];
+    final outgoing = <Map<String, dynamic>>[];
+    _socialState.forEach((id, state) {
+      final user = <String, dynamic>{
+        'id': id,
+        'displayName': names[id] ?? 'Runner',
+        'profilePhotoUrl': null,
+      };
+      final friendshipId = _socialIds[id];
+      if (state == 'friends') {
+        friends.add({...user, 'friendshipId': friendshipId});
+      } else if (state == 'incoming') {
+        incoming.add({'friendshipId': friendshipId, 'user': user});
+      } else if (state == 'outgoing') {
+        outgoing.add({'friendshipId': friendshipId, 'user': user});
+      }
+    });
     return {
-      'friends': [
-        {
-          'displayName': 'Maya Chen',
-          'profilePhotoUrl': null,
-          'friendshipId': 'fs-1',
-        },
-        {
-          'displayName': 'Sam Rivera',
-          'profilePhotoUrl': null,
-          'friendshipId': 'fs-2',
-        },
-        {
-          'displayName': 'Jordan Lee',
-          'profilePhotoUrl': null,
-          'friendshipId': 'fs-3',
-        },
-      ],
-      'pending': {
-        'incoming': [
-          {
-            'friendshipId': 'fs-in-1',
-            'user': {'displayName': 'Dana Fox', 'profilePhotoUrl': null},
-          },
-        ],
-        'outgoing': [
-          {
-            'friendshipId': 'fs-out-1',
-            'user': {'displayName': 'Priya N.', 'profilePhotoUrl': null},
-          },
-        ],
+      'friends': friends,
+      'pending': {'incoming': incoming, 'outgoing': outgoing},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendFriendRequest({
+    required String identityToken,
+    required String addresseeId,
+  }) async {
+    final reverse = _socialState[addresseeId] == 'incoming';
+    if (!reverse && _socialState[addresseeId] == 'outgoing') {
+      throw const ApiException(
+        'Friend request already pending.',
+        statusCode: 409,
+      );
+    }
+    _socialState[addresseeId] = reverse ? 'friends' : 'outgoing';
+    _socialIds[addresseeId] ??= 'preview-request';
+    return {
+      'friendship': {
+        'id': _socialIds[addresseeId],
+        'status': reverse ? 'ACCEPTED' : 'PENDING',
       },
     };
+  }
+
+  @override
+  Future<Map<String, dynamic>> respondToFriendRequest({
+    required String identityToken,
+    required String friendshipId,
+    required bool accept,
+  }) async {
+    final target = _socialIds.entries
+        .where((entry) => entry.value == friendshipId)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    if (target != null) _socialState[target] = accept ? 'friends' : 'none';
+    return {
+      'friendship': {
+        'id': friendshipId,
+        'status': accept ? 'ACCEPTED' : 'DECLINED',
+      },
+    };
+  }
+
+  @override
+  Future<void> removeFriend({
+    required String identityToken,
+    required String friendshipId,
+  }) async {
+    final target = _socialIds.entries
+        .where((entry) => entry.value == friendshipId)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    if (target != null) _socialState[target] = 'none';
   }
 
   @override

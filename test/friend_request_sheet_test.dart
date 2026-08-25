@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
-import 'package:step_tracker/screens/public_profile_screen.dart';
 import 'package:step_tracker/widgets/friend_request_sheet.dart';
 
 /// Fake backend that returns the `/friends` payload in the shape the real
@@ -88,7 +87,8 @@ Future<void> _openSheet(
     ),
   );
   await tester.tap(find.text('open'));
-  await tester.pumpAndSettle();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 250));
 }
 
 void main() {
@@ -161,7 +161,7 @@ void main() {
         displayName: 'New Friend',
       );
 
-      expect(find.text('ACCEPT REQUEST'), findsOneWidget);
+      expect(find.text('ACCEPT'), findsOneWidget);
       expect(find.text('ADD FRIEND'), findsNothing);
     },
   );
@@ -186,7 +186,7 @@ void main() {
   });
 
   testWidgets(
-    'View Profile preserves add-friend action and opens public profile',
+    'legacy entry point opens the direct dossier and preserves add-friend action',
     (tester) async {
       final authService = await _createAuthService();
       final api = _FakeFriendsApi();
@@ -200,14 +200,12 @@ void main() {
       );
 
       expect(find.text('ADD FRIEND'), findsOneWidget);
-      expect(find.text('VIEW PROFILE'), findsOneWidget);
-      await tester.tap(find.text('VIEW PROFILE'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.byType(PublicProfileScreen), findsOneWidget);
-      expect(find.text('Stranger'), findsOneWidget);
-      expect(find.text('4567 per day'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('public-profile-sheet')),
+        findsOneWidget,
+      );
+      expect(find.text('@Stranger'), findsOneWidget);
+      expect(find.text('4567'), findsOneWidget);
     },
   );
 
@@ -225,7 +223,7 @@ void main() {
       displayName: 'Trail Walker',
     );
 
-    expect(find.text("That's you!"), findsOneWidget);
+    expect(find.text("THAT'S YOU"), findsOneWidget);
     expect(find.text('ADD FRIEND'), findsNothing);
     expect(api.fetchFriendsCalls, 0);
   });

@@ -21,6 +21,7 @@ const _friendColors = [
 
 /// A runner on the goal track.
 class GoalTrackRunner {
+  final String? userId;
   final String name;
   final String? profilePhotoUrl;
   final double progress;
@@ -42,6 +43,7 @@ class GoalTrackRunner {
   final String? label;
 
   const GoalTrackRunner({
+    this.userId,
     required this.name,
     this.profilePhotoUrl,
     required this.progress,
@@ -64,8 +66,14 @@ class GoalTrackRunner {
 class GoalTrack extends StatefulWidget {
   final List<GoalTrackRunner> runners;
   final double height;
+  final ValueChanged<GoalTrackRunner>? onRunnerProfileTap;
 
-  const GoalTrack({super.key, required this.runners, this.height = 240});
+  const GoalTrack({
+    super.key,
+    required this.runners,
+    this.height = 240,
+    this.onRunnerProfileTap,
+  });
 
   @override
   State<GoalTrack> createState() => _GoalTrackState();
@@ -197,12 +205,51 @@ class _GoalTrackState extends State<GoalTrack>
               ),
             ],
           ),
-          child: Text(
-            label,
-            style: PixelText.title(
-              size: 11,
-              color: AppColors.of(context).textLight,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: PixelText.title(
+                  size: 11,
+                  color: AppColors.of(context).textLight,
+                ),
+              ),
+              if (widget.onRunnerProfileTap != null &&
+                  target.userId != null &&
+                  target.userId!.isNotEmpty &&
+                  !target.isStealthed &&
+                  !target.isUser) ...[
+                const SizedBox(width: 4),
+                Semantics(
+                  button: true,
+                  label: 'View profile for ${target.name}',
+                  child: IconButton(
+                    key: const ValueKey('goal-track-profile'),
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      final runner = widget.runners.firstWhere(
+                        (item) => item.userId == target.userId,
+                        orElse: () =>
+                            const GoalTrackRunner(name: 'Runner', progress: 0),
+                      );
+                      if (runner.userId == target.userId) {
+                        widget.onRunnerProfileTap?.call(runner);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.person,
+                      size: 16,
+                      color: AppColors.of(context).textLight,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -247,6 +294,7 @@ class _GoalTrackState extends State<GoalTrack>
     final painted = widget.runners
         .map(
           (runner) => _PaintedRunner(
+            userId: runner.userId,
             name: runner.isStealthed
                 ? '???'
                 : (runner.isUser ? 'You' : runner.name),
@@ -309,6 +357,8 @@ class _GoalTrackState extends State<GoalTrack>
               name: runner.name,
               progress: runner.rawProgress,
               isStealthed: runner.isStealthed,
+              isUser: runner.isUser,
+              userId: runner.userId,
             ),
           );
         }(),
@@ -317,6 +367,7 @@ class _GoalTrackState extends State<GoalTrack>
 }
 
 class _PaintedRunner {
+  final String? userId;
   final String name;
   final String? profilePhotoUrl;
   final double position;
@@ -326,6 +377,7 @@ class _PaintedRunner {
   final Color color;
 
   const _PaintedRunner({
+    this.userId,
     required this.name,
     this.profilePhotoUrl,
     required this.position,
@@ -351,18 +403,22 @@ class _GoalTrackLayoutRunner {
 }
 
 class _RunnerHitTarget {
+  final String? userId;
   final Offset center;
   final double radius;
   final String name;
   final double progress;
   final bool isStealthed;
+  final bool isUser;
 
   const _RunnerHitTarget({
+    this.userId,
     required this.center,
     required this.radius,
     required this.name,
     required this.progress,
     this.isStealthed = false,
+    this.isUser = false,
   });
 }
 

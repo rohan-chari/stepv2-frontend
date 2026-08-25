@@ -20,6 +20,7 @@ class LeaderboardPlank extends StatelessWidget {
   final String formattedSteps;
   final List<Widget> effectIcons;
   final String? profilePhotoUrl;
+  final VoidCallback? onProfileTap;
 
   /// The participant's current (stacked, global-event-inclusive) step
   /// multiplier from the backend. Nullable/absent on older backends → no badge
@@ -55,6 +56,7 @@ class LeaderboardPlank extends StatelessWidget {
     this.finishPlace,
     this.effectIcons = const [],
     this.profilePhotoUrl,
+    this.onProfileTap,
     this.currentMultiplier,
     this.rankHidden = false,
     this.avatarSize = 32,
@@ -168,26 +170,34 @@ class LeaderboardPlank extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _buildAvatar(context),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onProfileTap,
+              child: _buildAvatar(context),
+            ),
             const SizedBox(width: 8),
             // Name + horizontally swipeable status tray.
             Expanded(
               child: Row(
                 children: [
                   Flexible(
-                    child: Text(
-                      atName(displayName),
-                      style: PixelText.body(
-                        size: nameSize,
-                        color: isStealthed
-                            ? AppColors.of(
-                                context,
-                              ).textMid.withValues(alpha: 0.5)
-                            : isUser
-                            ? AppColors.of(context).textAccent
-                            : AppColors.of(context).textDark,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onProfileTap,
+                      child: Text(
+                        atName(displayName),
+                        style: PixelText.body(
+                          size: nameSize,
+                          color: isStealthed
+                              ? AppColors.of(
+                                  context,
+                                ).textMid.withValues(alpha: 0.5)
+                              : isUser
+                              ? AppColors.of(context).textAccent
+                              : AppColors.of(context).textDark,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   ...() {

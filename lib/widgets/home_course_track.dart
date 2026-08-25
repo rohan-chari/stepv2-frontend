@@ -152,6 +152,7 @@ class HomeCourseTrack extends StatefulWidget {
     this.milestoneLabel,
     this.backdropAsset,
     this.frameless = false,
+    this.onRunnerProfileTap,
   });
 
   final List<GoalTrackRunner> runners;
@@ -166,6 +167,7 @@ class HomeCourseTrack extends StatefulWidget {
   /// When true the backdrop renders edge-to-edge: no rounded corners, no
   /// hairline border (for full-bleed hero placements).
   final bool frameless;
+  final ValueChanged<GoalTrackRunner>? onRunnerProfileTap;
 
   /// Position of a "goal" milestone marker along the track, in the same
   /// leader-relative 0..1 space as runner progress. When null, no marker.
@@ -384,14 +386,45 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          child: Text(
-            label,
-            style: HomeText.body(
-              size: 11,
-              color: Colors.white,
-              weight: FontWeight.w700,
-              height: 1.0,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: HomeText.body(
+                  size: 11,
+                  color: Colors.white,
+                  weight: FontWeight.w700,
+                  height: 1.0,
+                ),
+              ),
+              if (widget.onRunnerProfileTap != null &&
+                  target.runner.userId != null &&
+                  target.runner.userId!.isNotEmpty &&
+                  !target.runner.isStealthed &&
+                  !target.runner.isUser) ...[
+                const SizedBox(width: 4),
+                Semantics(
+                  button: true,
+                  label: 'View profile for ${target.runner.name}',
+                  child: IconButton(
+                    key: const ValueKey('home-course-profile'),
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    padding: EdgeInsets.zero,
+                    onPressed: () =>
+                        widget.onRunnerProfileTap?.call(target.runner),
+                    icon: const Icon(
+                      Icons.person,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
