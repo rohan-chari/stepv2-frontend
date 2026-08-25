@@ -140,6 +140,12 @@ class CaseOpeningScreen extends StatefulWidget {
   /// Fanny Pack row deletion) can't appear behind the still-spinning reel.
   final void Function(Map<String, dynamic> result)? onRevealed;
 
+  /// Lifecycle hooks used by the demo to keep its pending roll aligned with
+  /// the reel. They never affect the live backend opening path.
+  final VoidCallback? onRollStarted;
+  final VoidCallback? onRollFailed;
+  final VoidCallback? onCancelled;
+
   /// Item 11 (batch 2026-08-08) — the rewarded-ad reroll.
   ///
   /// Non-null ONLY when the host wants the button: the race detail screen
@@ -163,6 +169,9 @@ class CaseOpeningScreen extends StatefulWidget {
     super.key,
     required this.openMysteryBox,
     this.onRevealed,
+    this.onRollStarted,
+    this.onRollFailed,
+    this.onCancelled,
     this.dropOdds,
     this.rarityByType,
     this.onReroll,
@@ -303,6 +312,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
       setState(() => _spinning = true);
       return true;
     }
+    widget.onRollStarted?.call();
     setState(() => _spinning = true);
     try {
       final result = await widget.openMysteryBox();
@@ -320,6 +330,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
       // Roll failed: the reel re-arms, so let the user back out again.
       if (mounted) {
         setState(() => _spinning = false);
+        widget.onRollFailed?.call();
         showErrorToast(context, 'Failed to open mystery box');
       }
       return false;
@@ -337,6 +348,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   void _closeOverlay() {
     // A committed spin cannot be dismissed midway (spec §6).
     if (!_canDismiss) return;
+    if (!_revealed) widget.onCancelled?.call();
     Navigator.of(context).pop();
   }
 

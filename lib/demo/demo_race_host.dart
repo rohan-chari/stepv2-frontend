@@ -184,6 +184,9 @@ class _DemoRaceHostState extends State<DemoRaceHost>
     _attackTimer?.cancel();
     _finishTimer?.cancel();
     _engine.onChanged = null;
+    for (final boxId in _engine.pendingBoxIds) {
+      _engine.cancelBoxOpen(boxId);
+    }
     _engine.onDemoEvent = null;
     _demoAuth.dispose();
     super.dispose();
@@ -197,6 +200,14 @@ class _DemoRaceHostState extends State<DemoRaceHost>
 
   void _recordDemoEvent(String name) {
     unawaited(_analytics.record(name));
+  }
+
+  void _commitDemoBoxOpen(String boxId) {
+    _engine.commitBoxOpen(boxId);
+  }
+
+  void _cancelDemoBoxOpen(String boxId) {
+    _engine.cancelBoxOpen(boxId);
   }
 
   /// Re-measures the anchor and drives the beats that are not user taps.
@@ -457,6 +468,8 @@ class _DemoRaceHostState extends State<DemoRaceHost>
       tutorialClockKey: _clockKey,
       demoTapGate: _gateTap,
       demoTargetGate: _gateTarget,
+      demoCommitBoxOpen: _commitDemoBoxOpen,
+      demoCancelBoxOpen: _cancelDemoBoxOpen,
     );
   }
 

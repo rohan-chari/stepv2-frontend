@@ -18,19 +18,25 @@ DemoRaceEngine _rawEngine({DateTime? startedAt}) => DemoRaceEngine(
   startedAt: startedAt ?? DateTime(2026, 7, 26, 12),
 );
 
+Map<String, dynamic> openAndCommit(DemoRaceEngine engine, String powerupId) {
+  final result = engine.openBox(powerupId);
+  engine.commitBoxOpen(powerupId);
+  return result;
+}
+
 /// Plays the whole script through the engine's public surface, exactly as the
 /// host would drive it. Returns the final standings.
 List<Map<String, dynamic>> _playFullScript(DemoRaceEngine e) {
   e.acknowledgeIntro();
   final boxes = DemoRaceEngine.mysteryBoxIds;
-  e.openBox(boxes[0]);
+  openAndCommit(e, boxes[0]);
   e.usePowerup(powerupId: boxes[0]);
-  e.openBox(boxes[1]);
+  openAndCommit(e, boxes[1]);
   e.usePowerup(powerupId: boxes[1]);
   e.resolveScriptedAttack();
   e.acknowledgeAttack();
   // The Shortcut is what the third box rolls; it is never pre-owned.
-  e.openBox(boxes[2]);
+  openAndCommit(e, boxes[2]);
   e.usePowerup(
     powerupId: DemoRaceEngine.shortcutPowerupId,
     targetUserId: DemoRaceEngine.rivalLeaderUserId,
@@ -41,6 +47,51 @@ List<Map<String, dynamic>> _playFullScript(DemoRaceEngine e) {
 
 void main() {
   group('engine determinism (§10.17)', () {
+    test('openBox exposes a pending roll and commit is idempotent', () {
+      final e = _engine();
+      final id = DemoRaceEngine.shortcutPowerupId;
+
+      final first = e.openBox(id);
+      expect(e.openedBoxCount, 0);
+      expect(e.pendingBoxIds, [id]);
+      expect(
+        (e.raceProgress(DateTime(2026, 7, 26, 12))['powerupData']
+            as Map)['inventory'],
+        contains(
+          predicate<Map>(
+            (row) => row['id'] == id && row['status'] == 'MYSTERY_BOX',
+          ),
+        ),
+      );
+      expect(
+        e.openBox(id),
+        first,
+        reason: 'duplicate roll is the same pending roll',
+      );
+
+      e.commitBoxOpen(id);
+      e.commitBoxOpen(id);
+      expect(e.openedBoxCount, 1);
+      expect(e.pendingBoxIds, isEmpty);
+      expect(
+        e.raceProgress(DateTime(2026, 7, 26, 12))['powerupData'],
+        isNotNull,
+      );
+    });
+
+    test('cancelled pending rolls do not advance the demo', () {
+      final e = _engine();
+      final id = DemoRaceEngine.mysteryBoxIds.first;
+      e.acknowledgeIntro();
+      e.openBox(id);
+      e.cancelBoxOpen(id);
+      e.cancelBoxOpen(id);
+
+      expect(e.openedBoxCount, 0);
+      expect(e.pendingBoxIds, isEmpty);
+      expect(e.beat, DemoBeat.openBox);
+    });
+
     test('two full runs produce identical standings', () {
       final a = _playFullScript(_engine());
       final b = _playFullScript(_engine());
@@ -57,9 +108,12 @@ void main() {
       for (var i = 0; i < 5; i++) {
         final e = _engine();
         final boxes = DemoRaceEngine.mysteryBoxIds;
-        expect(e.openBox(boxes[0])['result']['type'], 'PROTEIN_SHAKE');
-        expect(e.openBox(boxes[1])['result']['type'], 'COMPRESSION_SOCKS');
-        expect(e.openBox(boxes[2])['result']['type'], 'SHORTCUT');
+        expect(openAndCommit(e, boxes[0])['result']['type'], 'PROTEIN_SHAKE');
+        expect(
+          openAndCommit(e, boxes[1])['result']['type'],
+          'COMPRESSION_SOCKS',
+        );
+        expect(openAndCommit(e, boxes[2])['result']['type'], 'SHORTCUT');
       }
     });
 
@@ -68,9 +122,9 @@ void main() {
       // the script stays reachable (spec §5.7b).
       final e = _engine();
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      expect(e.openBox(boxes[2])['result']['type'], 'PROTEIN_SHAKE');
-      expect(e.openBox(boxes[0])['result']['type'], 'COMPRESSION_SOCKS');
-      expect(e.openBox(boxes[1])['result']['type'], 'SHORTCUT');
+      expect(openAndCommit(e, boxes[2])['result']['type'], 'PROTEIN_SHAKE');
+      expect(openAndCommit(e, boxes[0])['result']['type'], 'COMPRESSION_SOCKS');
+      expect(openAndCommit(e, boxes[1])['result']['type'], 'SHORTCUT');
     });
   });
 
@@ -80,20 +134,30 @@ void main() {
     test('ticks down in real time above the floor', () {
       final e = _engine(startedAt: t0);
       expect(e.remainingAt(t0), const Duration(minutes: 2));
-      expect(e.remainingAt(t0.add(const Duration(seconds: 30))),
-          const Duration(seconds: 90));
-      expect(e.remainingAt(t0.add(const Duration(seconds: 99))),
-          const Duration(seconds: 21));
+      expect(
+        e.remainingAt(t0.add(const Duration(seconds: 30))),
+        const Duration(seconds: 90),
+      );
+      expect(
+        e.remainingAt(t0.add(const Duration(seconds: 99))),
+        const Duration(seconds: 21),
+      );
     });
 
     test('floors at 0:20 and never expires while the user reads', () {
       final e = _engine(startedAt: t0);
-      expect(e.remainingAt(t0.add(const Duration(seconds: 100))),
-          DemoRaceEngine.clockFloor);
-      expect(e.remainingAt(t0.add(const Duration(seconds: 600))),
-          DemoRaceEngine.clockFloor);
-      expect(e.remainingAt(t0.add(const Duration(hours: 3))),
-          DemoRaceEngine.clockFloor);
+      expect(
+        e.remainingAt(t0.add(const Duration(seconds: 100))),
+        DemoRaceEngine.clockFloor,
+      );
+      expect(
+        e.remainingAt(t0.add(const Duration(seconds: 600))),
+        DemoRaceEngine.clockFloor,
+      );
+      expect(
+        e.remainingAt(t0.add(const Duration(hours: 3))),
+        DemoRaceEngine.clockFloor,
+      );
     });
 
     test('never re-pins upward, even if wall time goes backwards', () {
@@ -137,7 +201,7 @@ void main() {
       e.acknowledgeIntro();
       final before = e.stepsFor(e.myUserId);
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
+      openAndCommit(e, boxes[0]);
       e.usePowerup(powerupId: boxes[0]);
 
       expect(e.stepsFor(e.myUserId), before + 1500);
@@ -148,9 +212,9 @@ void main() {
       final e = _engine();
       e.acknowledgeIntro();
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
+      openAndCommit(e, boxes[0]);
       e.usePowerup(powerupId: boxes[0]);
-      e.openBox(boxes[1]);
+      openAndCommit(e, boxes[1]);
       e.usePowerup(powerupId: boxes[1]);
 
       final before = e.stepsFor(e.myUserId);
@@ -158,21 +222,24 @@ void main() {
 
       expect(outcome['result']['blocked'], isTrue);
       expect(outcome['result']['outcome'], 'BLOCKED');
-      expect(e.stepsFor(e.myUserId), before,
-          reason: 'the shield ate the steal');
+      expect(
+        e.stepsFor(e.myUserId),
+        before,
+        reason: 'the shield ate the steal',
+      );
     });
 
     test('the Shortcut takes 1,000 from the leader and wins the race', () {
       final e = _engine();
       e.acknowledgeIntro();
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
+      openAndCommit(e, boxes[0]);
       e.usePowerup(powerupId: boxes[0]);
-      e.openBox(boxes[1]);
+      openAndCommit(e, boxes[1]);
       e.usePowerup(powerupId: boxes[1]);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
-      e.openBox(boxes[2]);
+      openAndCommit(e, boxes[2]);
 
       final leaderBefore = e.stepsFor(DemoRaceEngine.rivalLeaderUserId);
       final meBefore = e.stepsFor(e.myUserId);
@@ -193,13 +260,13 @@ void main() {
       final e = _engine();
       e.acknowledgeIntro();
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
+      openAndCommit(e, boxes[0]);
       e.usePowerup(powerupId: boxes[0]);
-      e.openBox(boxes[1]);
+      openAndCommit(e, boxes[1]);
       e.usePowerup(powerupId: boxes[1]);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
-      e.openBox(boxes[2]);
+      openAndCommit(e, boxes[2]);
 
       e.usePowerup(
         powerupId: DemoRaceEngine.shortcutPowerupId,
@@ -216,7 +283,7 @@ void main() {
       e.acknowledgeIntro();
       final boxes = DemoRaceEngine.mysteryBoxIds;
       for (final id in boxes) {
-        expect(e.openBox(id)['result']['coinsSpent'], 0);
+        expect(openAndCommit(e, id)['result']['coinsSpent'], 0);
       }
       for (final id in boxes) {
         final r = e.usePowerup(
@@ -236,18 +303,18 @@ void main() {
       expect(e.beat, DemoBeat.openBox);
 
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
+      openAndCommit(e, boxes[0]);
       expect(e.beat, DemoBeat.useBoost);
       e.usePowerup(powerupId: boxes[0]);
       expect(e.beat, DemoBeat.openSecondBox);
-      e.openBox(boxes[1]);
+      openAndCommit(e, boxes[1]);
       expect(e.beat, DemoBeat.useShield);
       e.usePowerup(powerupId: boxes[1]);
       expect(e.beat, DemoBeat.blockedAttack);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
       expect(e.beat, DemoBeat.openThirdBox);
-      e.openBox(boxes[2]);
+      openAndCommit(e, boxes[2]);
       expect(e.beat, DemoBeat.useShortcut);
       e.usePowerup(
         powerupId: DemoRaceEngine.shortcutPowerupId,
@@ -262,8 +329,8 @@ void main() {
       final e = _engine();
       e.acknowledgeIntro();
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
-      e.openBox(boxes[1]);
+      openAndCommit(e, boxes[0]);
+      openAndCommit(e, boxes[1]);
       // Beat 2 and beat 4 are both satisfied; the coach advances to the first
       // still-incomplete goal, which is "use the boost".
       expect(e.beat, DemoBeat.useBoost);
@@ -278,7 +345,7 @@ void main() {
       e.acknowledgeIntro();
       final boxes = DemoRaceEngine.mysteryBoxIds;
       for (final id in boxes) {
-        e.openBox(id);
+        openAndCommit(e, id);
       }
       e.usePowerup(
         powerupId: DemoRaceEngine.shortcutPowerupId,
@@ -326,10 +393,7 @@ void main() {
       expect(inventory.length, 3);
       // Nothing is pre-owned: every slot starts as an unopened box, and the
       // Shortcut only exists once the third one is opened.
-      expect(
-        inventory.where((p) => p['status'] == 'MYSTERY_BOX').length,
-        3,
-      );
+      expect(inventory.where((p) => p['status'] == 'MYSTERY_BOX').length, 3);
       expect(inventory.where((p) => p['status'] == 'HELD'), isEmpty);
     });
 
@@ -348,10 +412,7 @@ void main() {
       _playFullScript(e);
       final details = e.raceDetails(DateTime(2026, 7, 26, 12));
       expect(details['status'], 'COMPLETED');
-      expect(
-        (details['winner'] as Map<String, dynamic>)['userId'],
-        e.myUserId,
-      );
+      expect((details['winner'] as Map<String, dynamic>)['userId'], e.myUserId);
     });
   });
 

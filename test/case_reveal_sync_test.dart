@@ -23,8 +23,9 @@ void main() {
     await tester.pump(); // resolve the (immediate) roll future
   }
 
-  testWidgets('single open: inventory commit is deferred until the reel lands',
-      (tester) async {
+  testWidgets('single open: inventory commit is deferred until the reel lands', (
+    tester,
+  ) async {
     Map<String, dynamic>? committed;
 
     await tester.pumpWidget(
@@ -93,8 +94,9 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('single open: dismissal is blocked between roll and reveal',
-      (tester) async {
+  testWidgets('single open: dismissal is blocked between roll and reveal', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CaseOpeningScreen(
@@ -130,8 +132,56 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Open All: results commit together only after all reels land',
-      (tester) async {
+  testWidgets(
+    'single open: a failed roll re-arms and clears demo pending state',
+    (tester) async {
+      var failures = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CaseOpeningScreen(
+            openMysteryBox: () async => throw StateError('roll failed'),
+            onRollFailed: () => failures++,
+          ),
+        ),
+      );
+      await tester.pump();
+      await startSpin(tester);
+      await tester.pump();
+
+      expect(failures, 1);
+      expect(tester.widget<PopScope>(find.byType(PopScope)).canPop, isTrue);
+      expect(find.text('SWIPE OR TAP'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('single open: duplicate reveal completion commits once', (
+    tester,
+  ) async {
+    var commits = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CaseOpeningScreen(
+          openMysteryBox: () async => {
+            'result': {'type': 'SHORTCUT', 'rarity': 'COMMON'},
+          },
+          onRevealed: (_) => commits++,
+        ),
+      ),
+    );
+    await tester.pump();
+    await startSpin(tester);
+    await tester.pump(const Duration(milliseconds: _spinMs));
+    await tester.pump(const Duration(milliseconds: _settleMs + 100));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(commits, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Open All: results commit together only after all reels land', (
+    tester,
+  ) async {
     List<Map<String, dynamic>>? committed;
     const results = [
       {'powerupId': 'b1', 'type': 'PROTEIN_SHAKE', 'rarity': 'COMMON'},

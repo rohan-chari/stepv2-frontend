@@ -201,6 +201,63 @@ void main() {
     expect(find.text(kDemoBeatCopy[DemoBeat.useBoost]!.title), findsOneWidget);
   });
 
+  testWidgets('the first two boxes commit before the third, while the third '
+      'stays a mystery box through the reel and polling', (tester) async {
+    final ctx = build();
+    await pumpHost(tester, ctx);
+    await tapCoach(tester);
+
+    // Regression guard for the first and second box paths: both rolls commit
+    // once their real CaseOpeningScreen reel has landed.
+    await openABox(tester);
+    expect(ctx.engine.openedBoxCount, 1);
+    expect(heldSlotOfType('PROTEIN_SHAKE'), findsOneWidget);
+    await useHeldPowerup(tester, 'PROTEIN_SHAKE');
+
+    await openABox(tester);
+    expect(ctx.engine.openedBoxCount, 2);
+    expect(heldSlotOfType('COMPRESSION_SOCKS'), findsOneWidget);
+    await useHeldPowerup(tester, 'COMPRESSION_SOCKS');
+    await settleDemo(tester, frames: 40);
+    await dismissBlockedModal(tester);
+
+    // Beat 7: open the last box, then check the backing demo inventory while
+    // the non-opaque reel is still spinning. A three-second detail poll lands
+    // during this interval, so this also exercises the stale-poll barrier.
+    expect(boxSlots(), findsOneWidget);
+    await tester.tap(boxSlots().first);
+    await settleDemo(tester);
+    expect(find.byType(CaseOpeningScreen), findsOneWidget);
+    await tester.tap(find.byType(CaseOpeningScreen));
+    await settleDemo(tester, frames: 32);
+
+    expect(
+      boxSlots(),
+      findsOneWidget,
+      reason: 'the third row remains unopened behind the reel',
+    );
+    expect(
+      heldSlotOfType('SHORTCUT'),
+      findsNothing,
+      reason: 'Shortcut cannot appear before onRevealed',
+    );
+    expect(ctx.engine.openedBoxCount, 2);
+    expect(
+      ctx.engine.pendingBoxIds,
+      contains(DemoRaceEngine.shortcutPowerupId),
+    );
+
+    await settleDemo(tester, frames: 25);
+    expect(ctx.engine.openedBoxCount, 3);
+    expect(ctx.engine.pendingBoxIds, isEmpty);
+    expect(heldSlotOfType('SHORTCUT'), findsOneWidget);
+    expect(boxSlots(), findsNothing);
+    expect(
+      find.text(kDemoBeatCopy[DemoBeat.useShortcut]!.title),
+      findsOneWidget,
+    );
+  });
+
   // -- 4 ---------------------------------------------------------------------
 
   testWidgets('4 — using the boost raises the user\'s steps, still 2nd', (

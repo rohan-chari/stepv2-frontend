@@ -150,6 +150,10 @@ class DemoRaceEngine {
     for (final id in mysteryBoxIds) {'id': id, 'status': 'MYSTERY_BOX'},
   ];
 
+  /// The reel owns the pending boundary: a roll is authoritative once
+  /// requested, but the visible inventory stays a box until reveal.
+  final Map<String, Map<String, dynamic>> _pendingRolls = {};
+
   final List<Map<String, dynamic>> _activity = [];
 
   /// Fired whenever the engine's state changes, so the host can rebuild.
@@ -169,6 +173,8 @@ class DemoRaceEngine {
   bool get raceCreated => _raceCreated;
   bool get friendsInvited => _friendsInvited;
   int get durationDays => _durationDays;
+  int get openedBoxCount => _boxesOpened;
+  List<String> get pendingBoxIds => List.unmodifiable(_pendingRolls.keys);
 
   /// The demo race's app-funded pool, computed with the SAME mirrored formula
   /// the create screen previews with, so the tutorial never shows the user two
@@ -311,39 +317,79 @@ class DemoRaceEngine {
 
   // -- Actions ----------------------------------------------------------------
 
-  /// Opens a mystery box. Scripted by **open order**, not by slot id, so a user
-  /// who taps the second box first still gets the boost first.
+  /// Begins a mystery-box roll. Scripted by **open order**, not by slot id, so
+  /// a user who taps the second box first still gets the boost first. The
+  /// visible inventory is untouched until [commitBoxOpen].
   Map<String, dynamic> openBox(String powerupId) {
     final row = _rowFor(powerupId);
-    final type = boxRollOrder[_boxesOpened.clamp(0, boxRollOrder.length - 1)];
-    if (row != null && row['status'] == 'MYSTERY_BOX') {
+    final existing = _pendingRolls[powerupId];
+    if (existing != null) {
+      return {'result': Map<String, dynamic>.from(existing)};
+    }
+
+    if (row == null || row['status'] != 'MYSTERY_BOX') {
+      return {
+        'result': {
+          'powerupId': powerupId,
+          'type': null,
+          'rarity': 'COMMON',
+          'autoActivated': false,
+          'coinsSpent': 0,
+        },
+      };
+    }
+
+    final type =
+        boxRollOrder[(_boxesOpened + _pendingRolls.length).clamp(
+          0,
+          boxRollOrder.length - 1,
+        )];
+    final roll = <String, dynamic>{
+      'powerupId': powerupId,
+      'type': type,
+      'rarity': 'COMMON',
+      'autoActivated': false,
+      'coinsSpent': 0,
+    };
+    _pendingRolls[powerupId] = roll;
+    return {'result': Map<String, dynamic>.from(roll)};
+  }
+
+  /// Commits a pending roll exactly once at the reel's reveal boundary.
+  /// Duplicate reveals and stale callbacks after cancellation are safe no-ops.
+  void commitBoxOpen(String powerupId) {
+    final roll = _pendingRolls.remove(powerupId);
+    if (roll == null) return;
+    final row = _rowFor(powerupId);
+    if (row == null || row['status'] != 'MYSTERY_BOX') return;
+
+    final type = roll['type'];
+    final typeName = type is String && type.isNotEmpty ? type : 'POWERUP';
+    if (type is String && type.isNotEmpty) {
       row['type'] = type;
-      row['rarity'] = 'COMMON';
-      row['status'] = 'HELD';
-      _boxesOpened += 1;
-      _applyDrift();
-      onDemoEvent?.call('demo_box_opened');
-      _activity.insert(0, {
-        'id': 'demo-sys-box-$_boxesOpened',
-        'kind': 'SYSTEM',
-        'eventType': 'MYSTERY_BOX_OPENED',
-        'powerupType': type,
-        'body': 'You opened a mystery box and found ${_articleFor(type)}!',
-        'actorUserId': myUserId,
-        'createdAt': DateTime.now().toIso8601String(),
-      });
+    }
+    row['rarity'] = roll['rarity'];
+    row['status'] = 'HELD';
+    _boxesOpened += 1;
+    _applyDrift();
+    onDemoEvent?.call('demo_box_opened');
+    _activity.insert(0, {
+      'id': 'demo-sys-box-$_boxesOpened',
+      'kind': 'SYSTEM',
+      'eventType': 'MYSTERY_BOX_OPENED',
+      'powerupType': typeName,
+      'body': 'You opened a mystery box and found ${_articleFor(typeName)}!',
+      'actorUserId': myUserId,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    _notify();
+  }
+
+  /// Aborts a pending roll without advancing the tutorial.
+  void cancelBoxOpen(String powerupId) {
+    if (_pendingRolls.remove(powerupId) != null) {
       _notify();
     }
-    return {
-      'result': {
-        'powerupId': powerupId,
-        'type': type,
-        'rarity': 'COMMON',
-        'autoActivated': false,
-        // Second line of defense for G1: even a leaked write is a no-op.
-        'coinsSpent': 0,
-      },
-    };
   }
 
   /// Uses a held powerup. Returns the shape `_usePowerup` reads defensively:
