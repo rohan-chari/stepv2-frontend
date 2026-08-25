@@ -386,14 +386,47 @@ void main() {
     expect(tabBar.items.map((item) => item.label), [
       'Home',
       'Races',
-      'Leaderboard',
+      'Boards',
       'Friends',
       'Profile',
     ]);
     expect(find.byKey(const Key('home-inbox-button')), findsNothing);
   });
 
-  testWidgets('Home hides Notifications when unread count is one', (
+  testWidgets('Home keeps notification bell visible with no unread badge', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 0,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const Key('home-notifications-card')), findsOneWidget);
+    expect(find.byKey(const Key('home-notifications-badge')), findsNothing);
+    expect(
+      find.bySemanticsLabel('Notifications, no unread notifications'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Home shows notification badge when unread count is one', (
     WidgetTester tester,
   ) async {
     final authService = await _authService();
@@ -418,7 +451,65 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.byKey(const Key('home-notifications-card')), findsNothing);
+    expect(find.byKey(const Key('home-notifications-card')), findsOneWidget);
+    expect(find.byKey(const Key('home-notifications-badge')), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Notifications, 1 unread notification'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Home header fits long identity and 9+ badge at compact width', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authService = await _authService();
+    await authService.updateDisplayName(
+      'A Very Long Trail Walker Display Name That Must Truncate',
+    );
+    await authService.updateCoins(987654321);
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 12,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: child!,
+        ),
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final coin = find.byKey(const Key('home-coin-balance'));
+    final bell = find.byKey(const Key('home-notifications-card'));
+    expect(coin, findsOneWidget);
+    expect(bell, findsOneWidget);
+    expect(
+      tester.getRect(coin).right,
+      lessThanOrEqualTo(tester.getRect(bell).left),
+    );
+    expect(tester.getRect(bell).right, lessThanOrEqualTo(320));
+    expect(find.text('9+'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Home opens Inbox from Notifications when unread count is two', (
@@ -452,6 +543,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.byType(InboxScreen), findsOneWidget);
+  });
+
+  testWidgets('Home caps the visible notification badge at 9+', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 12,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const Key('home-notifications-badge')), findsOneWidget);
+    expect(find.text('9+'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Notifications, 12 unread notifications'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('mixed net-zero 2x summary remains eligible on Home', (

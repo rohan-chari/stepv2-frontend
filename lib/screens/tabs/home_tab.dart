@@ -112,8 +112,8 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onEnterInviteCode;
   final VoidCallback? onSkipInviteCode;
   final VoidCallback? onStartQuickRace;
-  // Deprecated compatibility input. Inbox is now shell navigation and Home no
-  // longer renders an Inbox affordance.
+  // Shell-owned Inbox state and navigation. Home only presents these values in
+  // its hero header; it never fetches or mutates notification data itself.
 
   /// Shell-owned Home invite overlay is showing this same invitation. Keep the
   /// inline fallback out of the underlying Home tree until it is dismissed.
@@ -186,8 +186,9 @@ class HomeTab extends StatelessWidget {
     // the persistent reconnect banner above the tab bar for exactly that case.
     // Home itself stays a normal home: the degraded user's step count is 0,
     // which is the truth, not an error state.
-    final topInset = MediaQuery.of(context).padding.top;
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final mediaPadding = MediaQuery.of(context).padding;
+    final topInset = mediaPadding.top;
+    final bottomInset = mediaPadding.bottom;
     final tabBarHeight = 77.5 + bottomInset;
     final bottomPadding = tabBarHeight;
     final hasProfilePhoto =
@@ -291,12 +292,7 @@ class HomeTab extends StatelessWidget {
                                   16,
                                   0,
                                 ),
-                                child: Column(
-                                  children: [
-                                    _buildQuickActionsRow(context),
-                                    _buildNotificationsCard(context),
-                                  ],
-                                ),
+                                child: _buildQuickActionsRow(context),
                               ),
                             ),
                             // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
@@ -1136,7 +1132,8 @@ class HomeTab extends StatelessWidget {
     // The scene runs edge-to-edge behind the status bar; the inset is added
     // to the scene height and to every top-anchored element so the HUD stays
     // clear of the system chrome.
-    final topInset = MediaQuery.of(context).padding.top;
+    final mediaPadding = MediaQuery.of(context).padding;
+    final topInset = mediaPadding.top;
     final heroHeight = (compact ? 352.0 : 404.0) + topInset;
     const groundHeight = 84.0;
     final capySize = compact ? 126.0 : 148.0;
@@ -1240,44 +1237,88 @@ class HomeTab extends StatelessWidget {
         child: Stack(
           children: [
             Positioned(
-              left: 20,
-              right: 20,
+              left: 20 + mediaPadding.left,
+              right: 20 + mediaPadding.right,
               top: topInset + 12,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      atName(displayName ?? 'You'),
-                      style: PixelText.title(
-                        size: 24,
-                        color: AppColors.of(context).textLight,
-                      ).copyWith(shadows: _heroShadows),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  CoinBalanceBadge(
-                    coins: authService.coins,
-                    coinSize: 16,
-                    // "+" = earn more coins -> the Get Coins hub
-                    // (watch an ad, invite friends, daily box).
-                    onAddTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => GetCoinsScreen(
-                          authService: authService,
-                          backendApiService: backendApiService,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Keep both trailing actions inside the viewport. The name
+                  // yields first, while the coin control scales down inside a
+                  // bounded allocation for large balances and text scales.
+                  final coinMaxWidth = (constraints.maxWidth * 0.34)
+                      .clamp(88.0, 136.0)
+                      .toDouble();
+                  return SizedBox(
+                    height: 44,
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 0,
+                          right: 50,
+                          top: 0,
+                          bottom: 0,
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.3,
+                                  child: Text(
+                                    atName(displayName ?? 'You'),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: PixelText.title(
+                                      size: 24,
+                                      color: AppColors.of(context).textLight,
+                                    ).copyWith(shadows: _heroShadows),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                key: const Key('home-coin-balance'),
+                                width: coinMaxWidth,
+                                height: 44,
+                                child: FittedBox(
+                                  alignment: Alignment.centerLeft,
+                                  fit: BoxFit.scaleDown,
+                                  child: CoinBalanceBadge(
+                                    coins: authService.coins,
+                                    coinSize: 16,
+                                    // "+" = earn more coins -> the Get Coins hub
+                                    // (watch an ad, invite friends, daily box).
+                                    onAddTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => GetCoinsScreen(
+                                          authService: authService,
+                                          backendApiService: backendApiService,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _buildNotificationHudButton(context),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
             Positioned(
               left: 16,
               right: 16,
-              top: topInset + (compact ? 52 : 72),
+              // The compact HUD used to begin at +52. The complete 44px
+              // button and its 3px shadow now end at +59, so +72 leaves a
+              // deliberate 13px gap while retaining clearance above the
+              // walking capybara.
+              top: topInset + 72,
               child: hud,
             ),
             // The wooden pace-line trail sign that used to stand in the dirt
@@ -1340,51 +1381,97 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildNotificationsCard(BuildContext context) {
+  Widget _buildNotificationHudButton(BuildContext context) {
     final colors = AppColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 8),
-      child: Semantics(
-        button: true,
-        label: 'Open notifications',
+    final unreadCount = unreadNotificationCount < 0
+        ? 0
+        : unreadNotificationCount;
+    final enabled = onOpenNotifications != null;
+    final semanticsLabel = switch (unreadCount) {
+      0 => 'Notifications, no unread notifications',
+      1 => 'Notifications, 1 unread notification',
+      _ => 'Notifications, $unreadCount unread notifications',
+    };
+    final badgeLabel = unreadCount > 9 ? '9+' : '$unreadCount';
+    final backplate = colors.pillGold;
+    final borderColor = colors.pillGoldDark;
+    final iconColor = colors.pillGreenShadow;
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      label: semanticsLabel,
+      onTap: onOpenNotifications,
+      child: ExcludeSemantics(
         child: GestureDetector(
           key: const Key('home-notifications-card'),
           onTap: onOpenNotifications,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _HomeSectionHeader(title: 'NOTIFICATIONS', topPadding: 0),
-              GameContainer(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 9,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox.square(
+            dimension: 44,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Align(
+                  alignment: Alignment.center,
+                  child: SizedBox.square(
+                    dimension: 34,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: backplate,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderColor, width: 1.25),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.pillGoldShadow,
+                            offset: const Offset(0, 1),
+                            blurRadius: 0,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.notifications_rounded,
+                        size: 22,
+                        color: iconColor,
+                      ),
+                    ),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.notifications_rounded, color: colors.roofDark),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        unreadNotificationCount > 0
-                            ? '$unreadNotificationCount NEW'
-                            : 'NO NEW NOTIFICATIONS',
-                        style: PixelText.title(
-                          size: 15,
-                          color: colors.textDark,
+                if (unreadCount > 0)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Container(
+                      key: const Key('home-notifications-badge'),
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: unreadCount > 9 ? 3 : 2,
+                      ),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.error,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: colors.textLight, width: 1.5),
+                      ),
+                      child: MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1,
+                        child: Text(
+                          badgeLabel,
+                          maxLines: 1,
+                          style: PixelText.number(
+                            size: 9,
+                            color: colors.textLight,
+                          ).copyWith(height: 1),
                         ),
                       ),
                     ),
-                    Text(
-                      'OPEN',
-                      style: PixelText.title(
-                        size: 12,
-                        color: colors.textAccent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2923,10 +3010,9 @@ class _SmallRaceButton extends StatelessWidget {
 }
 
 class _HomeSectionHeader extends StatelessWidget {
-  const _HomeSectionHeader({required this.title, this.topPadding = 16});
+  const _HomeSectionHeader({required this.title});
 
   final String title;
-  final double topPadding;
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -2937,7 +3023,7 @@ class _HomeSectionHeader extends StatelessWidget {
     // See _HomeRaceHeader: the `feltLine` top rule is gone from both headers.
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(16, topPadding, 16, 9),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
       child: Row(
         children: [
           const _SectionTick(),

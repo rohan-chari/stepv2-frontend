@@ -1224,9 +1224,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final sessionIsValid = await _refreshSessionToken();
     if (!sessionIsValid || !mounted) return;
 
-    // The Home notification card is sourced from the existing Inbox endpoint.
-    // This is best-effort: an older backend or malformed optional count keeps
-    // the card hidden without affecting the rest of the shell.
+    // Home's header bell is sourced from the existing Inbox endpoint. This is
+    // best-effort: an older backend or malformed optional count leaves the
+    // persistent bell unbadged without affecting the rest of the shell.
     unawaited(_refreshInboxUnreadCount());
 
     // Hydrate before the first race fetch/result detection. Matching queued
