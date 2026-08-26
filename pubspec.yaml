@@ -92,6 +92,7 @@ flutter:
     - assets/images/
     - assets/images/accessories/
     - assets/images/powerups/
+    - assets/images/referral/
     # Variable TTFs registered at runtime by the iOS native ad factory
     # (RaceFeedNativeAdFactory) — assets only, NOT a flutter fonts: entry.
     # (Jersey25-Regular.ttf in here IS a real fonts: family — see below.)

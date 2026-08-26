@@ -9,6 +9,8 @@ import 'package:step_tracker/screens/giveaway_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/home_giveaway_banner.dart';
 
 class _HomeGiveawayApi extends BackendApiService {
   @override
@@ -164,7 +166,52 @@ void main() {
     expect(find.textContaining('US\$'), findsNothing);
     expect(find.byKey(const Key('home-service-banner')), findsNothing);
 
+    final shopY = tester
+        .getTopLeft(find.byKey(const Key('home-shop-button')))
+        .dy;
+    final bannerY = tester
+        .getTopLeft(find.byKey(const Key('home-giveaway-banner')))
+        .dy;
+    expect(bannerY, greaterThan(shopY));
+
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('contest banner uses the night event palette in dark mode', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.light(),
+        darkTheme: AppThemeData.night(),
+        themeMode: ThemeMode.dark,
+        home: Scaffold(
+          body: HomeGiveawayBanner(
+            message: 'Bara Referral Contest is open now.',
+            coinPrize: 5000,
+            endsAt: DateTime.now().add(const Duration(days: 2)),
+            onTap: () {},
+          ),
+        ),
+      ),
+    );
+
+    final banner = tester.widget<Container>(
+      find.byKey(const Key('home-giveaway-banner')),
+    );
+    final decoration = banner.decoration! as BoxDecoration;
+    expect(decoration.color, AppPalette.night.pillGold);
+
+    final chip = tester.widget<Container>(
+      find.byKey(const Key('home-giveaway-fact-5,000 COINS')),
+    );
+    final chipDecoration = chip.decoration! as BoxDecoration;
+    expect(chipDecoration.color, AppPalette.night.parchmentDark);
+
+    final headline = tester.widget<Text>(
+      find.text('Bara Referral Contest is open now.'),
+    );
+    expect(headline.style?.color, AppPalette.night.textDark);
   });
 
   testWidgets('ignores missing or malformed automatic banner data', (

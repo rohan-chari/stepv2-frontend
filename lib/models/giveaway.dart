@@ -485,11 +485,17 @@ final class GiveawayStanding {
     required this.reviewableCount,
     required this.provisionalRank,
     this.reachedCountAt,
+    this.percentile,
+    this.nextTargetRank,
+    this.referralsBehindNextTarget,
   });
   final int verifiedCount;
   final int reviewableCount;
   final int? provisionalRank;
   final DateTime? reachedCountAt;
+  final int? percentile;
+  final int? nextTargetRank;
+  final int? referralsBehindNextTarget;
 
   static GiveawayStanding? tryParse(Object? raw) {
     if (raw is! Map) return null;
@@ -511,11 +517,30 @@ final class GiveawayStanding {
         : (rank == null || reached.value == null)) {
       return null;
     }
+    final percentileRaw = _strictInt(raw['percentile']);
+    final percentile =
+        rank != null &&
+            percentileRaw != null &&
+            percentileRaw >= 1 &&
+            percentileRaw <= 100
+        ? percentileRaw
+        : null;
+    final nextRankRaw = _strictInt(raw['nextTargetRank']);
+    final behindRaw = _strictInt(raw['referralsBehindNextTarget']);
+    final validTarget =
+        rank != null &&
+        rank > 1 &&
+        nextRankRaw == rank - 1 &&
+        behindRaw != null &&
+        behindRaw >= 1;
     return GiveawayStanding(
       verifiedCount: verified,
       reviewableCount: reviewable,
       provisionalRank: rank,
       reachedCountAt: reached.value,
+      percentile: percentile,
+      nextTargetRank: validTarget ? nextRankRaw : null,
+      referralsBehindNextTarget: validTarget ? behindRaw : null,
     );
   }
 }
@@ -566,6 +591,51 @@ final class GiveawayWinner {
   }
 }
 
+enum GiveawayRecentReferralStatus {
+  signedUp,
+  inRace,
+  underReview,
+  qualified,
+  notCounted,
+}
+
+/// A privacy-minimized activity item from the optional joined-dashboard
+/// extension. Each row is independently validated so one malformed additive
+/// item cannot invalidate the established contest response.
+final class GiveawayRecentReferral {
+  const GiveawayRecentReferral({
+    required this.displayName,
+    required this.occurredAt,
+    required this.status,
+  });
+
+  final String displayName;
+  final DateTime occurredAt;
+  final GiveawayRecentReferralStatus status;
+
+  static GiveawayRecentReferral? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final displayName = _boundedString(raw['displayName'], 80);
+    final occurredAt = _date(raw['occurredAt']);
+    final status = switch (raw['status']) {
+      'SIGNED_UP' => GiveawayRecentReferralStatus.signedUp,
+      'IN_RACE' => GiveawayRecentReferralStatus.inRace,
+      'UNDER_REVIEW' => GiveawayRecentReferralStatus.underReview,
+      'QUALIFIED' => GiveawayRecentReferralStatus.qualified,
+      'NOT_COUNTED' => GiveawayRecentReferralStatus.notCounted,
+      _ => null,
+    };
+    if (displayName == null || occurredAt == null || status == null) {
+      return null;
+    }
+    return GiveawayRecentReferral(
+      displayName: displayName,
+      occurredAt: occurredAt,
+      status: status,
+    );
+  }
+}
+
 final class GiveawayCurrent {
   const GiveawayCurrent({
     required this.contest,
@@ -574,6 +644,7 @@ final class GiveawayCurrent {
     required this.standing,
     required this.share,
     required this.winner,
+    this.recentReferrals = const [],
   });
   final GiveawayContest contest;
   final List<GiveawayLeaderboardRow> leaderboard;
@@ -581,6 +652,7 @@ final class GiveawayCurrent {
   final GiveawayStanding? standing;
   final GiveawayShare? share;
   final GiveawayWinner? winner;
+  final List<GiveawayRecentReferral> recentReferrals;
 
   static GiveawayCurrent? tryParse(Object? raw) {
     if (raw is! Map) return null;
@@ -610,6 +682,17 @@ final class GiveawayCurrent {
       winner = GiveawayWinner.tryParse(raw['winner']);
       if (winner == null) return null;
     }
+    final recentReferrals = <GiveawayRecentReferral>[];
+    final rawRecent = raw['recentReferrals'];
+    if (rawRecent is List) {
+      for (final item in rawRecent) {
+        final parsed = GiveawayRecentReferral.tryParse(item);
+        if (parsed != null) {
+          recentReferrals.add(parsed);
+          if (recentReferrals.length == 4) break;
+        }
+      }
+    }
     if (contest.status != GiveawayStatus.finalResult && winner != null) {
       return null;
     }
@@ -636,9 +719,12 @@ final class GiveawayCurrent {
       }
     }
     final withdrawn = entry.status == GiveawayEntryStatus.withdrawn;
-    if (withdrawn
-        ? (standing != null || share != null)
-        : (standing == null || share == null)) {
+    final global =
+        contest.eligibilityMode == GiveawayEligibilityMode.baraAccount;
+    if (withdrawn ? (standing != null || share != null) : standing == null) {
+      return null;
+    }
+    if (!withdrawn && !global && share == null) {
       return null;
     }
     if (contest.status == GiveawayStatus.finalResult &&
@@ -673,6 +759,7 @@ final class GiveawayCurrent {
       standing: standing,
       share: share,
       winner: winner,
+      recentReferrals: List.unmodifiable(recentReferrals),
     );
   }
 }

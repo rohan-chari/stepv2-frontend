@@ -281,10 +281,6 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            // An active referral contest is the canonical Home
-                            // promotion. It deliberately outranks the legacy
-                            // admin service banner when both are present.
-                            ?giveawayBanner,
                             if (serviceBanner case final banner?)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
@@ -302,13 +298,18 @@ class HomeTab extends StatelessWidget {
                               child: Padding(
                                 padding: const EdgeInsets.fromLTRB(
                                   16,
-                                  14,
+                                  8,
                                   16,
                                   0,
                                 ),
                                 child: _buildQuickActionsRow(context),
                               ),
                             ),
+                            // Keep the contest promotion directly below the
+                            // daily reward and shop actions so those daily
+                            // actions remain the first thing users see.
+                            if (giveawayBanner case final banner?)
+                              Padding(padding: EdgeInsets.zero, child: banner),
                             // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
                             // every user while a step-multiplier window is live. The
                             // shared widget self-ticks the countdown and collapses on
@@ -545,6 +546,8 @@ class HomeTab extends StatelessWidget {
                         slug: contestSlug!,
                         authService: authService,
                         backendApiService: backendApiService,
+                        equippedAccessories: equippedAccessories,
+                        equippedAnimal: equippedAnimal,
                       ),
                     ),
                   ),
@@ -598,6 +601,8 @@ class HomeTab extends StatelessWidget {
             slug: slug,
             authService: authService,
             backendApiService: backendApiService,
+            equippedAccessories: equippedAccessories,
+            equippedAnimal: equippedAnimal,
           ),
         ),
       ),
@@ -1133,6 +1138,8 @@ class HomeTab extends StatelessWidget {
                       builder: (_) => ReferralScreen(
                         authService: authService,
                         backendApiService: backendApiService,
+                        equippedAccessories: equippedAccessories,
+                        equippedAnimal: equippedAnimal,
                       ),
                     ),
                   );
@@ -1468,30 +1475,42 @@ class HomeTab extends StatelessWidget {
   /// old in-hero row — only their home moved.
   Widget _buildQuickActionsRow(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: StreakChip(
-            key: streakChipKey,
-            authService: authService,
-            backendApiService: backendApiService,
-            compact: true,
-            // Fed by the home batch so the CLAIM button lands with everything
-            // else; falls back to its own fetch on old backends.
-            initialData: raceCard?['dailyReward'] as Map<String, dynamic>?,
-            awaitingBatch: raceCardLoading,
-            onClaimedToday: onDailyRewardClaimed,
+          child: SizedBox(
+            height: 58,
+            child: KeyedSubtree(
+              key: const Key('home-daily-reward-button'),
+              child: StreakChip(
+                key: streakChipKey,
+                authService: authService,
+                backendApiService: backendApiService,
+                compact: true,
+                // Fed by the home batch so the CLAIM button lands with everything
+                // else; falls back to its own fetch on old backends.
+                initialData: raceCard?['dailyReward'] as Map<String, dynamic>?,
+                awaitingBatch: raceCardLoading,
+                onClaimedToday: onDailyRewardClaimed,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: KeyedSubtree(
-            key: tutorialShopKey,
-            child: PillButton(
-              label: 'SHOP',
-              icon: Icons.storefront_rounded,
-              variant: PillButtonVariant.secondary,
-              fullWidth: true,
-              onPressed: onOpenShop,
+          child: SizedBox(
+            height: 58,
+            child: KeyedSubtree(
+              key: tutorialShopKey,
+              child: PillButton(
+                key: const Key('home-shop-button'),
+                label: 'SHOP',
+                icon: Icons.storefront_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 15,
+                fullWidth: true,
+                onPressed: onOpenShop,
+              ),
             ),
           ),
         ),

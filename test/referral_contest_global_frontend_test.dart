@@ -9,7 +9,9 @@ import 'package:step_tracker/screens/display_name_screen.dart';
 import 'package:step_tracker/screens/giveaway_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
+import 'package:step_tracker/widgets/referral_contest_overview.dart';
 
 const _globalContest = <String, dynamic>{
   'slug': 'september-trail',
@@ -37,7 +39,7 @@ const _globalContest = <String, dynamic>{
       {
         'heading': 'Contest window',
         'body':
-            'Referrals count only after you join and before the contest ends.',
+            'The contest runs from 2026-08-20T04:00:00.000Z through 2026-10-01T04:00:00.000Z UTC. Referrals count only after you join and before the contest ends.',
       },
       {
         'heading': 'How to win',
@@ -58,15 +60,17 @@ Map<String, dynamic> _globalCurrent({
   String entryStatus = 'ACTION_REQUIRED',
   String displayName = 'TrailBara',
   bool emptyLeaderboard = false,
+  String contestStatus = 'ACTIVE',
+  bool winner = false,
 }) => {
-  'contest': _globalContest,
+  'contest': {..._globalContest, 'status': contestStatus},
   'leaderboard': emptyLeaderboard
       ? <Map<String, dynamic>>[]
       : const [
           {'rank': 1, 'displayName': 'Scout', 'completedCount': 8},
           {'rank': 2, 'displayName': 'Moss', 'completedCount': 6},
         ],
-  'winner': null,
+  'winner': winner ? {'displayName': 'Scout', 'originalRank': 1} : null,
   'entry': {
     'status': entryStatus,
     'acceptedAt': entryStatus == 'ACTION_REQUIRED'
@@ -75,15 +79,38 @@ Map<String, dynamic> _globalCurrent({
     'region': null,
     'displayName': displayName,
   },
-  'standing': {
-    'verifiedCount': entryStatus == 'ACTION_REQUIRED' ? 0 : 3,
-    'reviewableCount': entryStatus == 'ACTION_REQUIRED' ? 0 : 1,
-    'provisionalRank': entryStatus == 'ACTION_REQUIRED' ? null : 8,
-    'reachedCountAt': entryStatus == 'ACTION_REQUIRED'
-        ? null
-        : '2026-08-26T12:00:00.000Z',
-  },
-  'share': {'code': 'BARA-7F3K', 'url': 'https://barastep.com/r/BARA-7F3K'},
+  'standing': entryStatus == 'WITHDRAWN'
+      ? null
+      : {
+          'verifiedCount':
+              entryStatus != 'ACTION_REQUIRED' &&
+                  entryStatus != 'INELIGIBLE' &&
+                  contestStatus != 'SCHEDULED'
+              ? 3
+              : 0,
+          'reviewableCount':
+              entryStatus != 'ACTION_REQUIRED' &&
+                  entryStatus != 'INELIGIBLE' &&
+                  contestStatus != 'SCHEDULED' &&
+                  contestStatus != 'FINAL'
+              ? 1
+              : 0,
+          'provisionalRank':
+              entryStatus != 'ACTION_REQUIRED' &&
+                  entryStatus != 'INELIGIBLE' &&
+                  contestStatus != 'SCHEDULED'
+              ? 8
+              : null,
+          'reachedCountAt':
+              entryStatus != 'ACTION_REQUIRED' &&
+                  entryStatus != 'INELIGIBLE' &&
+                  contestStatus != 'SCHEDULED'
+              ? '2026-08-26T12:00:00.000Z'
+              : null,
+        },
+  'share': entryStatus == 'WITHDRAWN'
+      ? null
+      : {'code': 'BARA-7F3K', 'url': 'https://barastep.com/r/BARA-7F3K'},
 };
 
 class _GlobalGiveawayApi extends BackendApiService {
@@ -280,12 +307,16 @@ Future<void> _pumpContest(
   String? displayName = 'TrailBara',
   Size size = const Size(390, 844),
   double textScale = 1,
+  ThemeMode themeMode = ThemeMode.light,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
+      theme: AppThemeData.light(),
+      darkTheme: AppThemeData.night(),
+      themeMode: themeMode,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           textScaler: TextScaler.linear(textScale),
@@ -303,15 +334,42 @@ Future<void> _pumpContest(
   await tester.pump();
 }
 
-Future<void> _readToEnd(WidgetTester tester) async {
-  final scroll = find.byKey(const Key('giveaway-global-rules-scroll'));
-  expect(scroll, findsOneWidget);
-  await tester.fling(scroll, const Offset(0, -4000), 1200);
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 100));
+Future<void> _openOverviewRules(WidgetTester tester) async {
+  tester
+      .widget<ReferralContestOverview>(find.byType(ReferralContestOverview))
+      .onJoin();
+  await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets('joined contest uses the night event palette in dark mode', (
+    tester,
+  ) async {
+    await _pumpContest(
+      tester,
+      _GlobalGiveawayApi(payload: _globalCurrent(entryStatus: 'ELIGIBLE')),
+      themeMode: ThemeMode.dark,
+    );
+
+    final summary = tester.widget<Container>(
+      find.byKey(const Key('contest-dashboard-summary')),
+    );
+    final decoration = summary.decoration! as BoxDecoration;
+    expect(decoration.color, AppPalette.night.parchment);
+
+    final shareFace = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(const Key('contest-dashboard-share')),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final shareDecoration = shareFace.decoration! as BoxDecoration;
+    expect(shareDecoration.color, AppPalette.night.pillGold);
+
+    final rankText = tester.widget<Text>(find.text('#8').first);
+    expect(rankText.style?.color, AppPalette.night.textAccent);
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -357,55 +415,105 @@ void main() {
     );
   });
 
-  testWidgets(
-    'global pre-entry embeds the route and rules and gates exact join request',
-    (tester) async {
-      final api = _GlobalGiveawayApi();
-      await _pumpContest(tester, api);
+  testWidgets('global overview opens rules and gates the exact join request', (
+    tester,
+  ) async {
+    final api = _GlobalGiveawayApi();
+    await _pumpContest(tester, api);
 
-      expect(find.text('ROUTE TO THE PRIZE'), findsOneWidget);
-      for (final text in [
-        'Join the contest',
-        'Share your invite',
-        'Your friend signs up',
-        'They finish a qualifying race',
-        'Most verified referrals wins',
-      ]) {
-        expect(find.text(text), findsOneWidget);
+    expect(find.byKey(const Key('contest-overview-race-hero')), findsOneWidget);
+    expect(find.text('BARA REFERRAL CONTEST'), findsWidgets);
+    expect(find.text('HOW IT WORKS'), findsOneWidget);
+    expect(find.text('HOW TO WIN'), findsOneWidget);
+    expect(find.text('WHO CAN JOIN'), findsNothing);
+    expect(find.textContaining('18 or older'), findsNothing);
+    expect(find.textContaining('legal resident'), findsNothing);
+    expect(find.byKey(const Key('giveaway-region-field')), findsNothing);
+    expect(find.textContaining('ID'), findsNothing);
+
+    await _openOverviewRules(tester);
+
+    expect(
+      find.byKey(const Key('giveaway-rules-summary-card')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('giveaway-rules-document-card')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('giveaway-rules-sticky-footer')),
+      findsOneWidget,
+    );
+    expect(find.text('BARA REFERRAL CONTEST'), findsOneWidget);
+    expect(find.text('OFFICIAL RULES'), findsOneWidget);
+    expect(find.text('5,000 COINS'), findsOneWidget);
+    for (final section
+        in (_globalContest['rules']! as Map)['sections']! as List) {
+      final rule = section as Map;
+      expect(find.text(rule['heading']! as String), findsOneWidget);
+      if (rule['heading'] == 'Contest window') {
+        expect(
+          find.textContaining('Aug 20, 2026 at 12:00 AM EDT'),
+          findsOneWidget,
+        );
+      } else {
+        expect(find.text(rule['body']! as String), findsOneWidget);
       }
-      expect(find.text('OFFICIAL RULES'), findsOneWidget);
-      expect(find.text('WHO CAN JOIN'), findsOneWidget);
-      expect(find.textContaining('18 or older'), findsNothing);
-      expect(find.textContaining('legal resident'), findsNothing);
-      expect(find.byKey(const Key('giveaway-region-field')), findsNothing);
-      expect(find.textContaining('ID'), findsNothing);
+    }
+    expect(
+      find.text('Rules version bara-account-v1-0123456789abcdef01234567'),
+      findsNothing,
+    );
+    expect(find.textContaining('2026-08-20T04:00:00.000Z'), findsNothing);
+    expect(find.text('Platforms & sponsor'), findsNothing);
 
-      final join = find.widgetWithText(PillButton, 'JOIN CONTEST');
-      expect(tester.widget<PillButton>(join).onPressed, isNull);
-      await tester.tap(find.byKey(const Key('giveaway-global-rules-accepted')));
-      await tester.pump();
-      expect(tester.widget<PillButton>(join).onPressed, isNull);
+    final join = find.widgetWithText(PillButton, 'JOIN CONTEST');
+    expect(tester.widget<PillButton>(join).onPressed, isNull);
+    await tester.tap(find.byKey(const Key('giveaway-global-rules-accepted')));
+    await tester.pump();
+    expect(tester.widget<PillButton>(join).onPressed, isNotNull);
+    await tester.tap(join);
+    await tester.pumpAndSettle();
 
-      await _readToEnd(tester);
-      expect(tester.widget<PillButton>(join).onPressed, isNotNull);
-      await tester.tap(join);
-      await tester.pump();
+    expect(api.entries, [
+      {
+        'slug': 'september-trail',
+        'rulesVersion': 'bara-account-v1-0123456789abcdef01234567',
+        'rulesAccepted': true,
+      },
+    ]);
+    expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
+    expect(find.text('SHARE YOUR INVITE'), findsOneWidget);
+    expect(find.textContaining('3 VERIFIED'), findsOneWidget);
+    expect(find.textContaining('#8'), findsOneWidget);
+  });
 
-      expect(api.entries, [
-        {
-          'slug': 'september-trail',
-          'rulesVersion': 'bara-account-v1-0123456789abcdef01234567',
-          'rulesAccepted': true,
-        },
-      ]);
-      expect(find.text('YOUR RUN'), findsOneWidget);
-      expect(find.text('SHARE YOUR INVITE'), findsOneWidget);
-      expect(find.text('3'), findsWidgets);
-      expect(find.text('#8'), findsWidgets);
-    },
-  );
+  testWidgets('global pre-entry is an informational contest overview', (
+    tester,
+  ) async {
+    await _pumpContest(tester, _GlobalGiveawayApi());
 
-  testWidgets('global join preserves scroll and acceptance after errors', (
+    for (final key in [
+      'contest-overview-prize-card',
+      'contest-overview-race-hero',
+      'contest-overview-how-to-win',
+      'contest-overview-join',
+      'contest-overview-official-rules',
+    ]) {
+      expect(find.byKey(Key(key)), findsOneWidget);
+    }
+    expect(find.text('SHARE YOUR\nINVITE'), findsOneWidget);
+    expect(find.text('FRIEND\nSIGNS UP'), findsOneWidget);
+    expect(find.text('FRIEND FINISHES\nA QUALIFYING\nRACE'), findsOneWidget);
+    expect(find.text('MOST VERIFIED\nREFERRALS\nWINS'), findsOneWidget);
+    expect(
+      find.byKey(const Key('giveaway-global-rules-accepted')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('global join refreshes stale rules after version conflicts', (
     tester,
   ) async {
     final api = _GlobalGiveawayApi(
@@ -416,23 +524,14 @@ void main() {
       ),
     );
     await _pumpContest(tester, api);
-    await _readToEnd(tester);
+    await _openOverviewRules(tester);
     await tester.tap(find.byKey(const Key('giveaway-global-rules-accepted')));
     await tester.pump();
     await tester.tap(find.widgetWithText(PillButton, 'JOIN CONTEST'));
-    await tester.pump();
-    expect(find.textContaining('rules changed'), findsOneWidget);
-    expect(
-      tester
-          .widget<Checkbox>(
-            find.descendant(
-              of: find.byKey(const Key('giveaway-global-rules-accepted')),
-              matching: find.byType(Checkbox),
-            ),
-          )
-          .value,
-      isTrue,
-    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('giveaway-rules-sticky-footer')), findsNothing);
+    expect(find.byKey(const Key('contest-overview-join')), findsOneWidget);
+    expect(api.entries, hasLength(1));
   });
 
   testWidgets('joined hub has pinned standing, expansion, and empty guidance', (
@@ -447,22 +546,177 @@ void main() {
         ),
       ),
     );
-    expect(find.text('YOUR RUN'), findsOneWidget);
-    expect(find.text('#8'), findsWidgets);
+    expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
+    expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
+    expect(find.textContaining('#8'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('contest-trail-landmark-leaders')));
+    await tester.pump();
     expect(
       find.textContaining('Share your invite to lead the trail'),
       findsOneWidget,
     );
-    expect(find.text('WHAT COUNTS?'), findsOneWidget);
-    await tester.ensureVisible(find.text('WHAT COUNTS?'));
-    await tester.tap(find.text('WHAT COUNTS?'));
+    await tester.tap(
+      find.byKey(const Key('contest-trail-landmark-what-counts')),
+    );
     await tester.pump();
     expect(
       find.textContaining('qualifying race with another real player'),
       findsOneWidget,
     );
     expect(find.text('OFFICIAL RULES'), findsOneWidget);
+    final rulesButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'OFFICIAL RULES'),
+    );
+    expect(
+      rulesButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+      AppPalette.light.textLight,
+    );
   });
+
+  testWidgets('joined global trail exposes map HUD and deliberate drawers', (
+    tester,
+  ) async {
+    await _pumpContest(
+      tester,
+      _GlobalGiveawayApi(
+        payload: _globalCurrent(
+          entryStatus: 'ELIGIBLE',
+          emptyLeaderboard: true,
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
+    expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
+    expect(find.text('YOUR RUN'), findsNothing);
+    expect(find.text('VERIFIED REFERRALS'), findsNothing);
+    expect(find.text('PROVISIONAL RANK'), findsNothing);
+    expect(find.byKey(const Key('contest-trail-share')), findsOneWidget);
+    expect(find.textContaining('SEPTEMBER REFERRAL TRAIL'), findsWidgets);
+    expect(find.textContaining('AUG 20'), findsWidgets);
+    for (final key in [
+      'contest-trail-landmark-start',
+      'contest-trail-landmark-race',
+      'contest-trail-landmark-win',
+    ]) {
+      expect(
+        tester.getSemantics(find.byKey(Key(key))),
+        matchesSemantics(
+          isButton: false,
+          hasTapAction: false,
+          hasEnabledState: true,
+        ),
+      );
+    }
+
+    await tester.tap(find.byKey(const Key('contest-trail-landmark-leaders')));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('contest-trail-leaders-drawer')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('contest-trail-landmark-what-counts')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const Key('contest-trail-what-counts-drawer')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'global entry status matrix fails closed without false share claims',
+    (tester) async {
+      for (final status in [
+        'ELIGIBLE',
+        'UNDER_REVIEW',
+        'INELIGIBLE',
+        'WITHDRAWN',
+      ]) {
+        await _pumpContest(
+          tester,
+          _GlobalGiveawayApi(payload: _globalCurrent(entryStatus: status)),
+        );
+        expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
+        expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
+        expect(find.text('JOIN CONTEST'), findsNothing);
+        if (status == 'ELIGIBLE' || status == 'UNDER_REVIEW') {
+          expect(find.text('SHARE YOUR INVITE'), findsOneWidget);
+        } else {
+          expect(find.text('SHARE YOUR INVITE'), findsNothing);
+          expect(find.byKey(const Key('contest-trail-share')), findsNothing);
+          expect(
+            find.byKey(const Key('contest-trail-landmark-share')),
+            findsNothing,
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
+
+  testWidgets('final copy remains visible for every joined entry status', (
+    tester,
+  ) async {
+    for (final status in [
+      'ELIGIBLE',
+      'UNDER_REVIEW',
+      'INELIGIBLE',
+      'WITHDRAWN',
+    ]) {
+      await _pumpContest(
+        tester,
+        _GlobalGiveawayApi(
+          payload: _globalCurrent(
+            entryStatus: status,
+            contestStatus: 'FINAL',
+            winner: status != 'WITHDRAWN',
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
+      if (status == 'WITHDRAWN') {
+        expect(
+          find.textContaining('No winner was reported for this contest.'),
+          findsOneWidget,
+        );
+      } else {
+        expect(find.textContaining('WINNER'), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets(
+    'global scheduled, verifying, and final states keep explicit copy',
+    (tester) async {
+      for (final fixture in [
+        (status: 'SCHEDULED', entry: 'ELIGIBLE', copy: 'The trail opens'),
+        (
+          status: 'VERIFYING',
+          entry: 'ELIGIBLE',
+          copy: 'Final checks are underway',
+        ),
+        (status: 'FINAL', entry: 'ELIGIBLE', copy: 'WINNER: Scout'),
+        (status: 'FINAL', entry: 'ELIGIBLE', copy: 'No winner was reported'),
+      ]) {
+        await _pumpContest(
+          tester,
+          _GlobalGiveawayApi(
+            payload: _globalCurrent(
+              entryStatus: fixture.entry,
+              contestStatus: fixture.status,
+              winner:
+                  fixture.status == 'FINAL' && fixture.copy.contains('WINNER'),
+            ),
+          ),
+        );
+        expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
+        expect(find.textContaining(fixture.copy), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
 
   testWidgets('missing display name routes to the existing recovery screen', (
     tester,
@@ -472,21 +726,28 @@ void main() {
       _GlobalGiveawayApi(payload: _globalCurrent(displayName: '')),
       displayName: null,
     );
-    await _readToEnd(tester);
-    expect(find.text('SET DISPLAY NAME TO JOIN'), findsOneWidget);
+    await _openOverviewRules(tester);
+    expect(find.text('SET DISPLAY NAME'), findsOneWidget);
     tester
-        .widget<PillButton>(
-          find.widgetWithText(PillButton, 'SET DISPLAY NAME TO JOIN'),
-        )
+        .widget<PillButton>(find.widgetWithText(PillButton, 'SET DISPLAY NAME'))
         .onPressed!();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(DisplayNameScreen), findsOneWidget);
   });
 
-  testWidgets('narrow large-text global entry keeps the sticky footer usable', (
+  testWidgets('contest overview is responsive at supported phone widths', (
     tester,
   ) async {
+    for (final width in [375.0, 390.0, 430.0]) {
+      await _pumpContest(tester, _GlobalGiveawayApi(), size: Size(width, 844));
+      expect(tester.takeException(), isNull, reason: 'width $width');
+      expect(find.text('BARA REFERRAL CONTEST'), findsWidgets);
+      expect(find.text('5,000 COINS'), findsOneWidget);
+      expect(find.text('HOW IT WORKS'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+
     await _pumpContest(
       tester,
       _GlobalGiveawayApi(),
@@ -494,23 +755,12 @@ void main() {
       textScale: 1.7,
     );
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('giveaway-entry-footer')), findsOneWidget);
-    await _readToEnd(tester);
-    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('contest-overview-join')), findsOneWidget);
   });
 
   testWidgets('rules fallback belongs only to the current successful screen', (
     tester,
   ) async {
-    final api = _GlobalGiveawayApi();
-    await _pumpContest(tester, api);
-    api.loadError = const ApiException('offline');
-    await tester.tap(find.byKey(const Key('giveaway-retry')));
-    await tester.pump();
-    expect(find.text('Contest unavailable'), findsOneWidget);
-    expect(find.text('OFFICIAL RULES'), findsOneWidget);
-
-    await tester.pumpWidget(const SizedBox.shrink());
     await _pumpContest(
       tester,
       _GlobalGiveawayApi(loadError: const ApiException('offline')),

@@ -84,7 +84,7 @@ class HomeGiveawayBanner extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: PixelText.title(
                             size: 15,
-                            color: colors.woodDarker,
+                            color: colors.textDark,
                           ),
                         ),
                         const SizedBox(height: 7),
@@ -156,15 +156,25 @@ class _FactChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
+    key: ValueKey('home-giveaway-fact-$label'),
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
     decoration: BoxDecoration(
-      color: colors.parchment.withValues(alpha: 0.72),
+      color: colors.isDark
+          ? colors.parchmentDark
+          : colors.parchment.withValues(alpha: 0.72),
       borderRadius: BorderRadius.circular(99),
-      border: Border.all(color: colors.woodDarker.withValues(alpha: 0.45)),
+      border: Border.all(
+        color: colors.isDark
+            ? colors.pillGold.withValues(alpha: 0.82)
+            : colors.woodDarker.withValues(alpha: 0.45),
+      ),
     ),
     child: Text(
       label,
-      style: PixelText.pill(size: 9, color: colors.woodDarker),
+      style: PixelText.pill(
+        size: 9,
+        color: colors.isDark ? colors.textDark : colors.woodDarker,
+      ),
     ),
   );
 }

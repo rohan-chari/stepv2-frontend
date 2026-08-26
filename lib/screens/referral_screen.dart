@@ -33,10 +33,14 @@ class ReferralScreen extends StatefulWidget {
     super.key,
     required this.authService,
     this.backendApiService,
+    this.equippedAccessories = const [],
+    this.equippedAnimal,
   });
 
   final AuthService authService;
   final BackendApiService? backendApiService;
+  final List<Map<String, dynamic>> equippedAccessories;
+  final String? equippedAnimal;
 
   @override
   State<ReferralScreen> createState() => _ReferralScreenState();
@@ -465,6 +469,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
                   slug: contest.slug,
                   authService: widget.authService,
                   backendApiService: _api,
+                  equippedAccessories: widget.equippedAccessories,
+                  equippedAnimal: widget.equippedAnimal,
                 ),
               ),
             ),
