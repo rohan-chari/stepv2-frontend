@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/streak_chip.dart';
@@ -23,6 +26,37 @@ class _FakeDailyRewardApi extends BackendApiService {
     statusCalls += 1;
     return {'claimedToday': false};
   }
+}
+
+class _DelayedDailyRewardApi extends BackendApiService {
+  final Completer<Map<String, dynamic>> response = Completer();
+
+  @override
+  Future<Map<String, dynamic>> fetchDailyRewardStatus({
+    required String identityToken,
+    required String localDate,
+  }) => response.future;
+}
+
+class _FakeAdController implements ExtraSpinAdController {
+  int loadCalls = 0;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  bool get isReady => false;
+
+  @override
+  Future<void> load({required String userId, required String localDate}) async {
+    loadCalls++;
+  }
+
+  @override
+  Future<bool> showAndAwaitReward() async => false;
+
+  @override
+  void dispose() {}
 }
 
 Future<AuthService> _createAuthService() async {
@@ -78,10 +112,7 @@ void main() {
           body: StreakChip(
             authService: authService,
             backendApiService: api,
-            initialData: {
-              'claimedToday': true,
-              'localDate': _todayLocalDate(),
-            },
+            initialData: {'claimedToday': true, 'localDate': _todayLocalDate()},
           ),
         ),
       ),
@@ -178,4 +209,41 @@ void main() {
     expect(api.statusCalls, 1);
     expect(find.text('DAILY REWARD'), findsOneWidget);
   });
+
+  testWidgets(
+    'StreakChip ignores a status response from the previous account',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final api = _DelayedDailyRewardApi();
+      final ads = _FakeAdController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StreakChip(
+              authService: authService,
+              backendApiService: api,
+              adController: ads,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await authService.updateSessionToken('new-session');
+      await authService.syncFromBackendUser(const {'id': 'user-2'});
+      api.response.complete({
+        'claimedToday': true,
+        'adExtraSpin': {
+          'available': true,
+          'pendingGrant': false,
+          'used': false,
+        },
+      });
+      await tester.pump();
+
+      expect(ads.loadCalls, 0);
+      expect(find.text('EXTRA SPIN'), findsNothing);
+    },
+  );
 }

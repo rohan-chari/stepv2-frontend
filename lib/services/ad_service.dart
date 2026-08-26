@@ -7,6 +7,230 @@ import 'package:flutter/services.dart';
 import 'package:gma_mediation_unity/unity_privacy_api.g.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+enum RewardedAdPlacement {
+  extraSpin,
+  getCoins,
+  powerupUnlock,
+  cosmeticUnlock,
+  boxReroll,
+  racePayoutDouble,
+}
+
+@immutable
+class RewardedAdContext {
+  const RewardedAdContext({
+    required this.placement,
+    required this.userId,
+    required this.customData,
+    this.localDate,
+  });
+
+  factory RewardedAdContext.extraSpin({
+    required String userId,
+    required String localDate,
+  }) => RewardedAdContext(
+    placement: RewardedAdPlacement.extraSpin,
+    userId: userId,
+    customData: localDate,
+    localDate: localDate,
+  );
+
+  factory RewardedAdContext.getCoins({
+    required String userId,
+    required String localDate,
+  }) => RewardedAdContext(
+    placement: RewardedAdPlacement.getCoins,
+    userId: userId,
+    customData: 'coins:$localDate',
+    localDate: localDate,
+  );
+
+  factory RewardedAdContext.powerupUnlock({
+    required String userId,
+    required String sku,
+    required String localDate,
+  }) => RewardedAdContext(
+    placement: RewardedAdPlacement.powerupUnlock,
+    userId: userId,
+    customData: 'powerup_unlock:$userId:$sku',
+    localDate: localDate,
+  );
+
+  factory RewardedAdContext.cosmeticUnlock({
+    required String userId,
+    required String sku,
+    required String localDate,
+  }) => RewardedAdContext(
+    placement: RewardedAdPlacement.cosmeticUnlock,
+    userId: userId,
+    customData: 'shop_unlock:$userId:$sku',
+    localDate: localDate,
+  );
+
+  factory RewardedAdContext.boxReroll({
+    required String userId,
+    required String localDate,
+  }) => RewardedAdContext(
+    placement: RewardedAdPlacement.boxReroll,
+    userId: userId,
+    customData: 'box_reroll:$userId:$localDate',
+    localDate: localDate,
+  );
+
+  factory RewardedAdContext.racePayoutDouble({
+    required String userId,
+    required String offerId,
+  }) => RewardedAdContext(
+    placement: RewardedAdPlacement.racePayoutDouble,
+    userId: userId,
+    customData: 'race_payout_double:$userId:$offerId',
+  );
+
+  final RewardedAdPlacement placement;
+  final String userId;
+  final String customData;
+  final String? localDate;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RewardedAdContext &&
+      placement == other.placement &&
+      userId == other.userId &&
+      customData == other.customData &&
+      localDate == other.localDate;
+
+  @override
+  int get hashCode => Object.hash(placement, userId, customData, localDate);
+}
+
+abstract class ContextBoundRewardedAdController {
+  Future<void> warm(RewardedAdContext context);
+  bool isReadyFor(RewardedAdContext context);
+  Future<bool> showAndAwaitRewardFor(RewardedAdContext context);
+  void disposeContext(RewardedAdContext context);
+}
+
+extension ContextBoundExtraSpinAdController on ExtraSpinAdController {
+  Future<void> warm(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      return contextual.warm(context);
+    }
+    final legacyData = context.placement == RewardedAdPlacement.boxReroll
+        ? context.localDate ?? context.customData
+        : context.customData;
+    return load(userId: context.userId, localDate: legacyData);
+  }
+
+  bool isReadyFor(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      return contextual.isReadyFor(context);
+    }
+    return isReady;
+  }
+
+  Future<bool> showAndAwaitRewardFor(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      return contextual.showAndAwaitRewardFor(context);
+    }
+    return showAndAwaitReward();
+  }
+
+  void disposeContext(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      contextual.disposeContext(context);
+    } else {
+      dispose();
+    }
+  }
+}
+
+extension ContextBoundRacePayoutAdController on RacePayoutDoubleAdController {
+  Future<void> warm(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      return contextual.warm(context);
+    }
+    final prefix = 'race_payout_double:${context.userId}:';
+    if (!context.customData.startsWith(prefix)) return Future.value();
+    return loadForRacePayoutDouble(
+      userId: context.userId,
+      offerId: context.customData.substring(prefix.length),
+    );
+  }
+
+  bool isReadyFor(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      return contextual.isReadyFor(context);
+    }
+    return isReady;
+  }
+
+  Future<bool> showAndAwaitRewardFor(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      return contextual.showAndAwaitRewardFor(context);
+    }
+    return showAndAwaitReward();
+  }
+
+  void disposeContext(RewardedAdContext context) {
+    final controller = this;
+    if (controller is ContextBoundRewardedAdController) {
+      final contextual = controller as ContextBoundRewardedAdController;
+      contextual.disposeContext(context);
+    } else {
+      dispose();
+    }
+  }
+}
+
+abstract class RewardedAdNativeHandle {
+  Future<bool> showAndAwaitReward({required Duration timeout});
+  void dispose();
+}
+
+typedef RewardedAdLoader =
+    Future<RewardedAdNativeHandle?> Function({
+      required String adUnitId,
+      required String userId,
+      required String customData,
+    });
+
+class RewardedAdSdkInitializer {
+  RewardedAdSdkInitializer(this._initialize);
+
+  final Future<void> Function() _initialize;
+  Future<void>? _inFlight;
+  bool _initialized = false;
+
+  Future<void> ensureInitialized() {
+    if (_initialized) return Future.value();
+    final existing = _inFlight;
+    if (existing != null) return existing;
+
+    late final Future<void> flight;
+    flight = Future<void>.sync(_initialize)
+        .then((_) => _initialized = true)
+        .whenComplete(() {
+          if (identical(_inFlight, flight)) _inFlight = null;
+        });
+    _inFlight = flight;
+    return flight;
+  }
+}
+
 /// Contract the daily-reward screen talks to for the rewarded-ad extra spin,
 /// so widget tests inject a fake and no screen ever imports google_mobile_ads
 /// directly (keeps a future mediation swap — e.g. AppLovin MAX — inside this
@@ -51,13 +275,31 @@ abstract class RacePayoutDoubleAdController {
 ///
 /// The earned-reward callback here is UX-only (it lets the screen proceed to
 /// the claim); the actual entitlement is minted server-side by AdMob's SSV
-/// callback hitting /ads/ssv. The default ad-unit IDs are Google's public
-/// TEST units — real per-flavor IDs are injected with --dart-define like
-/// BACKEND_BASE_URL (see DEPLOYMENT.md).
-class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
-  AdService({String? adUnitId, String? customDataPrefix})
-    : _adUnitIdOverride = adUnitId,
-      _customDataPrefix = customDataPrefix;
+/// callback hitting /ads/ssv. Real per-platform IDs are injected with
+/// --dart-define like BACKEND_BASE_URL (see DEPLOYMENT.md); an absent rewarded
+/// unit disables that placement instead of silently using a test unit.
+class AdService
+    implements
+        ExtraSpinAdController,
+        RacePayoutDoubleAdController,
+        ContextBoundRewardedAdController {
+  AdService({
+    String? adUnitId,
+    String? customDataPrefix,
+    bool requireConfiguredAdUnit = true,
+    bool? supportedOverride,
+    RewardedAdSdkInitializer? sdkInitializer,
+    RewardedAdLoader? rewardedAdLoader,
+    DateTime Function()? now,
+    Duration maxCacheAge = const Duration(minutes: 45),
+  }) : _adUnitIdOverride = adUnitId,
+       _customDataPrefix = customDataPrefix,
+       _requireConfiguredAdUnit = requireConfiguredAdUnit,
+       _supportedOverride = supportedOverride,
+       _sdkInitializer = sdkInitializer ?? _productionSdkInitializer,
+       _rewardedAdLoader = rewardedAdLoader ?? _loadGoogleRewardedAd,
+       _now = now ?? DateTime.now,
+       _maxCacheAge = maxCacheAge;
 
   static const _metaAdsChannel = MethodChannel('com.steptracker/meta_ads');
 
@@ -79,15 +321,10 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   static const _envAdUnitIdAndroid = String.fromEnvironment(
     'ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID',
   );
-  // Google's documented test rewarded ad units.
-  static const _testAdUnitAndroid = 'ca-app-pub-3940256099942544/5224354917';
-  static const _testAdUnitIos = 'ca-app-pub-3940256099942544/1712485313';
-
   // Rewarded unit for the shop "watch ads to unlock a powerup" flow. A
   // dedicated unit is preferred so its SSV callback can be scoped to this flow,
-  // but when the define is absent we fall back to the extra-spin rewarded unit
-  // (and, absent that, Google's test unit) so the feature is never blocked on
-  // Rohan creating the unit. iOS uses the base define; Android the `_ANDROID`.
+  // but when the define is absent we fall back only to the real extra-spin
+  // rewarded unit. iOS uses the base define; Android the `_ANDROID`.
   static const _envPowerupUnlockAdUnitId = String.fromEnvironment(
     'ADMOB_POWERUP_UNLOCK_AD_UNIT_ID',
   );
@@ -192,7 +429,7 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
 
   /// Resolved rewarded unit for the powerup-unlock flow: the dedicated define
   /// for this platform when baked in, else the extra-spin real unit, else ''
-  /// (which makes [AdService] fall back to Google's public test unit). Pass to
+  /// (which leaves the placement unsupported). Pass to
   /// `AdService(adUnitId: AdService.powerupUnlockAdUnitId)`.
   static String get powerupUnlockAdUnitId {
     if (kIsWeb) return '';
@@ -316,8 +553,13 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   /// Initialize the ads SDK once (with an iOS ATT prompt on first run). Shared
   /// by the rewarded-ad path and [AdBannerSlot] so neither owns SDK setup.
   /// Safe to call repeatedly.
-  static Future<void> ensureInitialized() async {
-    if (_sdkInitialized) return;
+  static final RewardedAdSdkInitializer _productionSdkInitializer =
+      RewardedAdSdkInitializer(_initializeProductionSdk);
+
+  static Future<void> ensureInitialized() =>
+      _productionSdkInitializer.ensureInitialized();
+
+  static Future<void> _initializeProductionSdk() async {
     // ATT first (iOS): with tracking denied the SDK serves non-personalized
     // ads, which is fine — the reward/banner flows are identical.
     if (!kIsWeb && Platform.isIOS) {
@@ -362,10 +604,15 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
       );
     }
     await MobileAds.instance.initialize();
-    _sdkInitialized = true;
   }
 
   final String? _adUnitIdOverride;
+  final bool _requireConfiguredAdUnit;
+  final bool? _supportedOverride;
+  final RewardedAdSdkInitializer _sdkInitializer;
+  final RewardedAdLoader _rewardedAdLoader;
+  final DateTime Function() _now;
+  final Duration _maxCacheAge;
 
   /// Namespaces this controller's SSV `customData` (batch 2026-08-08, item 11).
   ///
@@ -376,32 +623,59 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   /// `<prefix>:<userId>:<localDate>` (e.g. `box_reroll:u123:2026-08-08`),
   /// which the backend matches with its own regex + kind.
   final String? _customDataPrefix;
-  RewardedAd? _ad;
-  bool _loading = false;
-  static bool _sdkInitialized = false;
+  RewardedAdNativeHandle? _ad;
+  RewardedAdContext? _adContext;
+  DateTime? _loadedAt;
+  RewardedAdContext? _activeContext;
+  RewardedAdContext? _desiredContext;
+  Future<void>? _loadLoop;
+  int _generation = 0;
+  bool _disposed = false;
 
   String get _adUnitId {
-    if (_adUnitIdOverride != null && _adUnitIdOverride.isNotEmpty) {
-      return _adUnitIdOverride;
-    }
-    final id = _platformExtraSpinUnitId;
-    if (id.isNotEmpty) return id;
-    return (!kIsWeb && Platform.isAndroid)
-        ? _testAdUnitAndroid
-        : _testAdUnitIos;
+    final override = _adUnitIdOverride;
+    if (override != null) return override;
+    return _platformExtraSpinUnitId;
   }
 
   @override
-  bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  bool get isSupported {
+    final platformSupported =
+        _supportedOverride ??
+        (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
+    if (!platformSupported) return false;
+    return !_requireConfiguredAdUnit || _adUnitId.isNotEmpty;
+  }
 
   @override
-  bool get isReady => _ad != null;
+  bool get isReady {
+    final context = _adContext;
+    return context != null && isReadyFor(context);
+  }
 
   @override
   Future<void> load({required String userId, required String localDate}) async {
-    await _loadRewarded(
-      userId: userId,
-      customData: _customDataFor(userId, localDate),
+    final customData = _customDataFor(userId, localDate);
+    final placement = switch (_customDataPrefix) {
+      'box_reroll' => RewardedAdPlacement.boxReroll,
+      _ when customData.startsWith('coins:') => RewardedAdPlacement.getCoins,
+      _ when customData.startsWith('powerup_unlock:') =>
+        RewardedAdPlacement.powerupUnlock,
+      _ when customData.startsWith('shop_unlock:') =>
+        RewardedAdPlacement.cosmeticUnlock,
+      _ => RewardedAdPlacement.extraSpin,
+    };
+    await warm(
+      RewardedAdContext(
+        placement: placement,
+        userId: userId,
+        customData: customData,
+        localDate:
+            placement == RewardedAdPlacement.extraSpin ||
+                placement == RewardedAdPlacement.boxReroll
+            ? localDate
+            : null,
+      ),
     );
   }
 
@@ -410,69 +684,109 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
     required String userId,
     required String offerId,
   }) async {
-    await _loadRewarded(
-      userId: userId,
-      customData: 'race_payout_double:$userId:$offerId',
+    await warm(
+      RewardedAdContext.racePayoutDouble(userId: userId, offerId: offerId),
     );
   }
 
-  Future<void> _loadRewarded({
-    required String userId,
-    required String customData,
-  }) async {
-    if (!isSupported || _loading || _ad != null) return;
-    _loading = true;
-    try {
-      await ensureInitialized().timeout(_loadTimeout);
+  @override
+  Future<void> warm(RewardedAdContext context) {
+    if (_disposed ||
+        !isSupported ||
+        context.userId.trim().isEmpty ||
+        context.customData.isEmpty) {
+      return Future.value();
+    }
+    if (isReadyFor(context)) return Future.value();
+    if (_ad != null) _disposeReadyAd();
 
-      final completer = Completer<void>();
-      await RewardedAd.load(
+    final active = _activeContext;
+    final running = _loadLoop;
+    if (running != null) {
+      if (active == context && _desiredContext == null) return running;
+      if (_desiredContext != context) {
+        _desiredContext = context;
+        _generation++;
+      }
+      return running;
+    }
+
+    _desiredContext = context;
+    late final Future<void> loop;
+    loop = _runLoadLoop().whenComplete(() {
+      if (identical(_loadLoop, loop)) _loadLoop = null;
+    });
+    _loadLoop = loop;
+    return loop;
+  }
+
+  Future<void> _runLoadLoop() async {
+    while (!_disposed) {
+      final target = _desiredContext;
+      if (target == null) return;
+      _desiredContext = null;
+      _activeContext = target;
+      final generation = ++_generation;
+      await _loadOne(target, generation);
+      _activeContext = null;
+    }
+  }
+
+  Future<void> _loadOne(RewardedAdContext context, int generation) async {
+    if (isReadyFor(context)) return;
+    try {
+      await _sdkInitializer.ensureInitialized().timeout(_loadTimeout);
+      if (!_accepts(context, generation)) return;
+
+      final loadFuture = _rewardedAdLoader(
         adUnitId: _adUnitId,
-        request: const AdRequest(),
-        rewardedAdLoadCallback: RewardedAdLoadCallback(
-          onAdLoaded: (ad) {
-            // The callback type is void, so an async callback's exception
-            // would otherwise be unhandled and leave [completer] pending.
-            unawaited(() async {
-              try {
-                // SSV identity: the callback Google sends us echoes these
-                // back as user_id / custom_data.
-                await ad.setServerSideOptions(
-                  ServerSideVerificationOptions(
-                    userId: userId,
-                    customData: customData,
-                  ),
-                );
-                _ad = ad;
-              } catch (error) {
-                debugPrint('Rewarded ad setup failed: $error');
-                ad.dispose();
-              } finally {
-                if (!completer.isCompleted) completer.complete();
-              }
-            }());
-          },
-          onAdFailedToLoad: (error) {
-            debugPrint('Rewarded ad failed to load: $error');
-            completer.complete();
-          },
-        ),
-      ).timeout(_loadTimeout);
-      // Neither callback firing would wedge _loading true forever, and with it
-      // every later load() on this controller (the guard above returns early).
-      // Time out instead: a slow fill that lands after this still populates
-      // _ad via onAdLoaded, it just doesn't block the caller.
-      await completer.future.timeout(
-        _loadTimeout,
-        onTimeout: () => debugPrint('Rewarded ad load timed out'),
+        userId: context.userId,
+        customData: context.customData,
       );
+      RewardedAdNativeHandle? handle;
+      try {
+        handle = await loadFuture.timeout(_loadTimeout);
+      } on TimeoutException {
+        unawaited(
+          loadFuture
+              .then<void>((lateHandle) => lateHandle?.dispose())
+              .catchError((_) {}),
+        );
+        debugPrint('Rewarded ad load timed out');
+        return;
+      }
+      if (handle == null) return;
+      if (!_accepts(context, generation)) {
+        handle.dispose();
+        return;
+      }
+      _disposeReadyAd();
+      _ad = handle;
+      _adContext = context;
+      _loadedAt = _now();
     } on TimeoutException {
-      debugPrint('Rewarded ad load timed out');
+      debugPrint('Rewarded ad SDK initialization timed out');
     } catch (error) {
       debugPrint('Rewarded ad load threw: $error');
-    } finally {
-      _loading = false;
     }
+  }
+
+  bool _accepts(RewardedAdContext context, int generation) =>
+      !_disposed &&
+      generation == _generation &&
+      _activeContext == context &&
+      (_desiredContext == null || _desiredContext == context);
+
+  @override
+  bool isReadyFor(RewardedAdContext context) {
+    _evictStale();
+    return !_disposed && _ad != null && _adContext == context;
+  }
+
+  void _evictStale() {
+    final loadedAt = _loadedAt;
+    if (_ad == null || loadedAt == null) return;
+    if (_now().difference(loadedAt) >= _maxCacheAge) _disposeReadyAd();
   }
 
   /// Bare date for the extra spin (unchanged wire format for the existing
@@ -485,13 +799,104 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
 
   @override
   Future<bool> showAndAwaitReward() async {
-    final ad = _ad;
-    if (ad == null) return false;
-    _ad = null;
+    final context = _adContext;
+    if (context == null) return false;
+    return showAndAwaitRewardFor(context);
+  }
 
+  @override
+  Future<bool> showAndAwaitRewardFor(RewardedAdContext context) async {
+    if (!isReadyFor(context)) return false;
+    final ad = _ad;
+    _ad = null;
+    _adContext = null;
+    _loadedAt = null;
+    if (ad == null) return false;
+    try {
+      return await ad.showAndAwaitReward(timeout: _showTimeout);
+    } catch (error) {
+      debugPrint('Rewarded ad show threw: $error');
+      ad.dispose();
+      return false;
+    }
+  }
+
+  @override
+  void disposeContext(RewardedAdContext context) {
+    if (_adContext == context) _disposeReadyAd();
+    if (_activeContext == context || _desiredContext == context) {
+      _generation++;
+      if (_desiredContext == context) _desiredContext = null;
+    }
+  }
+
+  void _disposeReadyAd() {
+    _ad?.dispose();
+    _ad = null;
+    _adContext = null;
+    _loadedAt = null;
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _generation++;
+    _desiredContext = null;
+    _disposeReadyAd();
+  }
+}
+
+Future<RewardedAdNativeHandle?> _loadGoogleRewardedAd({
+  required String adUnitId,
+  required String userId,
+  required String customData,
+}) async {
+  final completer = Completer<RewardedAdNativeHandle?>();
+  await RewardedAd.load(
+    adUnitId: adUnitId,
+    request: const AdRequest(),
+    rewardedAdLoadCallback: RewardedAdLoadCallback(
+      onAdLoaded: (ad) {
+        unawaited(() async {
+          try {
+            await ad.setServerSideOptions(
+              ServerSideVerificationOptions(
+                userId: userId,
+                customData: customData,
+              ),
+            );
+            if (!completer.isCompleted) {
+              completer.complete(_GoogleRewardedAdHandle(ad));
+            } else {
+              ad.dispose();
+            }
+          } catch (error) {
+            debugPrint('Rewarded ad setup failed: $error');
+            ad.dispose();
+            if (!completer.isCompleted) completer.complete(null);
+          }
+        }());
+      },
+      onAdFailedToLoad: (error) {
+        debugPrint('Rewarded ad failed to load: $error');
+        if (!completer.isCompleted) completer.complete(null);
+      },
+    ),
+  );
+  return completer.future;
+}
+
+class _GoogleRewardedAdHandle implements RewardedAdNativeHandle {
+  _GoogleRewardedAdHandle(this._ad);
+
+  final RewardedAd _ad;
+
+  @override
+  Future<bool> showAndAwaitReward({required Duration timeout}) async {
     final completer = Completer<bool>();
     var earned = false;
-    ad.fullScreenContentCallback = FullScreenContentCallback(
+    _ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
         if (!completer.isCompleted) completer.complete(earned);
@@ -503,26 +908,22 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
       },
     );
     try {
-      await ad.show(onUserEarnedReward: (_, _) => earned = true);
+      await _ad.show(onUserEarnedReward: (_, _) => earned = true);
     } catch (error) {
       debugPrint('Rewarded ad show threw: $error');
-      ad.dispose();
+      _ad.dispose();
       if (!completer.isCompleted) completer.complete(false);
     }
-
     return completer.future.timeout(
-      _showTimeout,
+      timeout,
       onTimeout: () {
         debugPrint('Rewarded ad fullscreen callback timed out');
-        ad.dispose();
+        _ad.dispose();
         return false;
       },
     );
   }
 
   @override
-  void dispose() {
-    _ad?.dispose();
-    _ad = null;
-  }
+  void dispose() => _ad.dispose();
 }

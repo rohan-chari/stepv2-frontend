@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,6 +48,7 @@ class _FakeBackendApiService extends BackendApiService {
   final List<Object> claimResults;
   int claimCalls = 0;
   int statusCalls = 0;
+  final List<String> claimDates = [];
 
   @override
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
@@ -61,6 +64,7 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     required String localDate,
   }) async {
+    claimDates.add(localDate);
     final result = claimResults[claimCalls.clamp(0, claimResults.length - 1)];
     claimCalls++;
     if (result is ApiException) throw result;
@@ -68,7 +72,8 @@ class _FakeBackendApiService extends BackendApiService {
   }
 }
 
-class _FakeAdController implements ExtraSpinAdController {
+class _FakeAdController
+    implements ExtraSpinAdController, ContextBoundRewardedAdController {
   _FakeAdController({this.readyAfterLoad = true});
 
   final bool readyAfterLoad;
@@ -77,6 +82,8 @@ class _FakeAdController implements ExtraSpinAdController {
   int showCalls = 0;
   bool earnReward = true;
   String? lastLoadLocalDate;
+  int disposeContextCalls = 0;
+  RewardedAdContext? lastContext;
 
   @override
   bool get isSupported => true;
@@ -99,7 +106,44 @@ class _FakeAdController implements ExtraSpinAdController {
   }
 
   @override
+  Future<void> warm(RewardedAdContext context) async {
+    lastContext = context;
+    await load(userId: context.userId, localDate: context.customData);
+  }
+
+  @override
+  bool isReadyFor(RewardedAdContext context) =>
+      _ready && lastContext == context;
+
+  @override
+  Future<bool> showAndAwaitRewardFor(RewardedAdContext context) async {
+    if (!isReadyFor(context)) return false;
+    return showAndAwaitReward();
+  }
+
+  @override
+  void disposeContext(RewardedAdContext context) {
+    disposeContextCalls++;
+    if (lastContext == context) _ready = false;
+  }
+
+  @override
   void dispose() {}
+}
+
+class _DeferredStatusApi extends _FakeBackendApiService {
+  _DeferredStatusApi() : super(status: const {});
+
+  final statusCompleter = Completer<Map<String, dynamic>>();
+
+  @override
+  Future<Map<String, dynamic>> fetchDailyRewardStatus({
+    required String identityToken,
+    required String localDate,
+  }) {
+    statusCalls++;
+    return statusCompleter.future;
+  }
 }
 
 Future<AuthService> _createAuthService() async {
@@ -120,6 +164,7 @@ Future<AuthService> _pumpScreen(
   WidgetTester tester, {
   required _FakeBackendApiService api,
   ExtraSpinAdController? adController,
+  DateTime Function()? now,
 }) async {
   final auth = await _createAuthService();
   await tester.pumpWidget(
@@ -128,6 +173,7 @@ Future<AuthService> _pumpScreen(
         authService: auth,
         backendApiService: api,
         adController: adController,
+        now: now,
       ),
     ),
   );
@@ -149,7 +195,9 @@ void main() {
   testWidgets('renders all three earn methods when the offer is live', (
     tester,
   ) async {
-    final api = _FakeBackendApiService(status: _status(adCoinReward: _liveOffer));
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
@@ -176,10 +224,61 @@ void main() {
     expect(find.text('INVITE FRIENDS'), findsOneWidget);
   });
 
+  testWidgets('available false discards the speculative session ad', (
+    tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: {..._liveOffer, 'available': false}),
+    );
+    final ads = _FakeAdController().._ready = true;
+    await _pumpScreen(tester, api: api, adController: ads);
+
+    expect(ads.disposeContextCalls, 1);
+    expect(find.text('WATCH AD · RANDOM COINS'), findsNothing);
+  });
+
+  testWidgets(
+    'in-flight session preload remains concurrent with unresolved status',
+    (tester) async {
+      final api = _DeferredStatusApi();
+      final ads = _FakeAdController();
+      final auth = await _createAuthService();
+      final now = DateTime.now();
+      String two(int n) => n.toString().padLeft(2, '0');
+      final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
+      await ads.warm(
+        RewardedAdContext.getCoins(userId: 'user-1', localDate: localDate),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GetCoinsScreen(
+            authService: auth,
+            backendApiService: api,
+            adController: ads,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(ads.loadCalls, 1);
+      expect(find.textContaining('WATCH AD'), findsNothing);
+
+      api.statusCompleter.complete(_status(adCoinReward: _liveOffer));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
+      expect(ads.loadCalls, 1, reason: 'the screen must reuse the session ad');
+    },
+  );
+
   testWidgets('tap: shows the ad, claims, updates coins and remaining count', (
     tester,
   ) async {
-    final api = _FakeBackendApiService(status: _status(adCoinReward: _liveOffer));
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
     final ads = _FakeAdController();
     final auth = await _pumpScreen(tester, api: api, adController: ads);
 
@@ -192,6 +291,28 @@ void main() {
     expect(auth.coins, 150);
     expect(find.textContaining('4 of 5'), findsOneWidget);
     expect(find.text('+47 coins earned!'), findsOneWidget);
+  });
+
+  testWidgets('midnight invalidates the stale ad instead of showing it', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 8, 25, 23, 59);
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
+    await _pumpScreen(
+      tester,
+      api: api,
+      adController: _FakeAdController(),
+      now: () => now,
+    );
+
+    now = DateTime(2026, 8, 26, 0, 1);
+    await tester.tap(find.text('WATCH AD · RANDOM COINS'));
+    await tester.pump();
+
+    expect(api.claimDates, isEmpty);
+    expect(api.statusCalls, 2);
   });
 
   testWidgets('retries the claim while SSV has not landed yet', (tester) async {
@@ -239,35 +360,34 @@ void main() {
     },
   );
 
-  testWidgets(
-    'terminal claim failure refetches status and re-arms the ad '
-    '(button recovers instead of sticking on LOADING)',
-    (tester) async {
-      final api = _FakeBackendApiService(
-        status: _status(adCoinReward: _liveOffer),
-        claimResults: [
-          const ApiException('Internal server error', statusCode: 500),
-        ],
-      );
-      final ads = _FakeAdController();
-      await _pumpScreen(tester, api: api, adController: ads);
+  testWidgets('terminal claim failure refetches status and re-arms the ad '
+      '(button recovers instead of sticking on LOADING)', (tester) async {
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+      claimResults: [
+        const ApiException('Internal server error', statusCode: 500),
+      ],
+    );
+    final ads = _FakeAdController();
+    await _pumpScreen(tester, api: api, adController: ads);
 
-      await tester.tap(find.text('WATCH AD · RANDOM COINS'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('WATCH AD · RANDOM COINS'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
-      expect(api.claimCalls, 1);
-      expect(api.statusCalls, 2, reason: 'status refetch picks up pendingGrant');
-      expect(ads.loadCalls, greaterThanOrEqualTo(2));
-      expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
-      expect(find.text('LOADING AD...'), findsNothing);
-    },
-  );
+    expect(api.claimCalls, 1);
+    expect(api.statusCalls, 2, reason: 'status refetch picks up pendingGrant');
+    expect(ads.loadCalls, greaterThanOrEqualTo(2));
+    expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
+    expect(find.text('LOADING AD...'), findsNothing);
+  });
 
   testWidgets('ad fails to load: tappable TRY AGAIN instead of stuck LOADING', (
     tester,
   ) async {
-    final api = _FakeBackendApiService(status: _status(adCoinReward: _liveOffer));
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
     final ads = _FakeAdController(readyAfterLoad: false);
     await _pumpScreen(tester, api: api, adController: ads);
 
@@ -324,12 +444,35 @@ void main() {
     expect(find.text('COME BACK TOMORROW'), findsOneWidget);
     expect(find.textContaining('WATCH AD ·'), findsNothing);
     expect(ads.loadCalls, 0);
+    expect(ads.disposeContextCalls, 1);
+  });
+
+  testWidgets('missing status disposes an unused speculative session ad', (
+    tester,
+  ) async {
+    final api = _FakeBackendApiService(status: _status());
+    final ads = _FakeAdController();
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    await ads.warm(
+      RewardedAdContext.getCoins(
+        userId: 'user-1',
+        localDate: '${now.year}-${two(now.month)}-${two(now.day)}',
+      ),
+    );
+
+    await _pumpScreen(tester, api: api, adController: ads);
+
+    expect(find.textContaining('WATCH AD'), findsNothing);
+    expect(ads.disposeContextCalls, 1);
   });
 
   testWidgets('INVITE FRIENDS pushes the existing ReferralScreen', (
     tester,
   ) async {
-    final api = _FakeBackendApiService(status: _status(adCoinReward: _liveOffer));
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
     await _pumpScreen(tester, api: api, adController: _FakeAdController());
 
     await tester.tap(find.text('SHARE INVITE LINK'));
@@ -343,9 +486,13 @@ void main() {
     tester,
   ) async {
     final auth = await _createAuthService();
-    final api = _FakeBackendApiService(status: _status(adCoinReward: _liveOffer));
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
     await tester.pumpWidget(
-      MaterialApp(home: ShopTab(authService: auth, backendApiService: api)),
+      MaterialApp(
+        home: ShopTab(authService: auth, backendApiService: api),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));

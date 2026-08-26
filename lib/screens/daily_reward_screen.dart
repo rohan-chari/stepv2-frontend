@@ -20,12 +20,6 @@ import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_coin.dart';
 
-String _todayLocalDate() {
-  final now = DateTime.now();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${now.year}-${two(now.month)}-${two(now.day)}';
-}
-
 class DailyRewardScreen extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
@@ -37,6 +31,7 @@ class DailyRewardScreen extends StatefulWidget {
   // before ads existed.
   final ExtraSpinAdController? adController;
   final ActivationAnalyticsService? analytics;
+  final DateTime Function()? now;
 
   /// Only Home and Results are valid backend `surface` values. Other entry
   /// points intentionally omit it rather than inventing a new contract value.
@@ -50,13 +45,15 @@ class DailyRewardScreen extends StatefulWidget {
     this.adController,
     this.analytics,
     this.analyticsSurface,
+    this.now,
   });
 
   @override
   State<DailyRewardScreen> createState() => _DailyRewardScreenState();
 }
 
-class _DailyRewardScreenState extends State<DailyRewardScreen> {
+class _DailyRewardScreenState extends State<DailyRewardScreen>
+    with WidgetsBindingObserver {
   Map<String, dynamic>? _status;
   bool _isLoading = true;
   bool _isClaiming = false;
@@ -82,6 +79,22 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   late final bool _ownsAdCtrl;
   late final ActivationAnalyticsService _analytics;
   bool _extraSpinOfferShown = false;
+  RewardedAdContext? _preparedExtraSpinContext;
+
+  String _todayLocalDate() {
+    final now = widget.now?.call() ?? DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${now.year}-${two(now.month)}-${two(now.day)}';
+  }
+
+  RewardedAdContext? get _extraSpinAdContext {
+    final userId = widget.authService.userId;
+    if (userId == null || userId.isEmpty) return null;
+    return RewardedAdContext.extraSpin(
+      userId: userId,
+      localDate: _todayLocalDate(),
+    );
+  }
 
   @override
   void initState() {
@@ -90,13 +103,38 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     _ownsAdCtrl = provided == null;
     _adCtrl = provided ?? AdService();
     _analytics = widget.analytics ?? ActivationAnalyticsService();
+    WidgetsBinding.instance.addObserver(this);
+    widget.authService.addListener(_handleRewardedAdAuthChanged);
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.authService.removeListener(_handleRewardedAdAuthChanged);
     if (_ownsAdCtrl) _adCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _invalidateStaleAdContext();
+  }
+
+  void _handleRewardedAdAuthChanged() => _invalidateStaleAdContext();
+
+  void _invalidateStaleAdContext() {
+    final prepared = _preparedExtraSpinContext;
+    final current = _extraSpinAdContext;
+    if (prepared == null || prepared == current) return;
+    _adCtrl.disposeContext(prepared);
+    _preparedExtraSpinContext = null;
+    if (mounted) {
+      setState(() {
+        _adReady = false;
+        _adLoading = false;
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -189,24 +227,25 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final extra = _adExtraSpin;
     final ctrl = _adCtrl;
     if (extra == null || !_hasAvailableExtraSpin || !ctrl.isSupported) return;
-    if (extra['pendingGrant'] == true) return;
-    final userId = widget.authService.userId;
-    if (userId == null || userId.isEmpty) {
+    final context = _extraSpinAdContext;
+    if (context == null) {
       _record(
         'extra_spin_ad_not_ready',
         context: {..._analyticsSurfaceContext, 'result': 'load_failed'},
       );
       return;
     }
-    if (!ctrl.isReady) {
+    _preparedExtraSpinContext = context;
+    if (extra['pendingGrant'] == true) return;
+    if (!ctrl.isReadyFor(context)) {
       if (mounted) setState(() => _adLoading = true);
       try {
-        await ctrl.load(userId: userId, localDate: _todayLocalDate());
+        await ctrl.warm(context);
       } finally {
         if (mounted) setState(() => _adLoading = false);
       }
     }
-    if (ctrl.isReady) {
+    if (ctrl.isReadyFor(context)) {
       _record('extra_spin_ad_ready', context: _analyticsSurfaceContext);
     } else {
       _record(
@@ -214,7 +253,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         context: {..._analyticsSurfaceContext, 'result': 'load_failed'},
       );
     }
-    if (mounted) setState(() => _adReady = ctrl.isReady);
+    if (mounted) setState(() => _adReady = ctrl.isReadyFor(context));
   }
 
   /// A failed SDK load is terminal for that request, not for today's server
@@ -309,10 +348,25 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   // callback minted a grant — the client never asserts "I watched an ad".
   Future<void> _startExtraSpin() async {
     if (_adFlowBusy || _isClaiming) return;
+    final stalePreparedContext = _preparedExtraSpinContext;
+    final currentContext = _extraSpinAdContext;
+    _invalidateStaleAdContext();
+    if (stalePreparedContext != null &&
+        stalePreparedContext != currentContext) {
+      unawaited(_maybePrepareExtraSpin());
+      return;
+    }
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
     final ctrl = _adCtrl;
     final pending = _adExtraSpin?['pendingGrant'] == true;
+    final adContext = _preparedExtraSpinContext ?? _extraSpinAdContext;
+    if (adContext == null || adContext != _extraSpinAdContext) {
+      unawaited(_maybePrepareExtraSpin());
+      return;
+    }
+    final userId = widget.authService.userId;
+    if (userId == null || userId.isEmpty) return;
 
     _record('extra_spin_cta_tapped', context: _analyticsSurfaceContext);
 
@@ -324,9 +378,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final priorOpening = _opening;
     try {
       if (!pending) {
-        if (!ctrl.isReady) return;
+        if (!ctrl.isReadyFor(adContext)) return;
         setState(() => _adReady = false);
-        final earned = await ctrl.showAndAwaitReward();
+        final earned = await ctrl.showAndAwaitRewardFor(adContext);
+        if (!_extraSpinFlowCurrent(token, userId, adContext)) return;
         if (!earned) {
           _record(
             'extra_spin_ad_not_ready',
@@ -347,8 +402,15 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         _rewardApplied = false;
         _extraSpinDone = true;
       });
-      final res = await _claimExtraWithRetry(token);
-      if (!mounted) return;
+      final claimDate = adContext.localDate;
+      if (claimDate == null) return;
+      final res = await _claimExtraWithRetry(
+        token,
+        userId,
+        claimDate,
+        adContext,
+      );
+      if (!_extraSpinFlowCurrent(token, userId, adContext)) return;
       _record('extra_spin_claim_succeeded', context: _analyticsSurfaceContext);
       setState(() {
         _boxResult = res;
@@ -375,13 +437,21 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   // AdMob's server-side verification can land a few seconds after the ad
   // closes on-device; the backend answers 409 ("no verified ad reward") until
   // it does. Retry briefly before giving up.
-  Future<Map<String, dynamic>> _claimExtraWithRetry(String token) async {
+  Future<Map<String, dynamic>> _claimExtraWithRetry(
+    String token,
+    String userId,
+    String localDate,
+    RewardedAdContext context,
+  ) async {
     const maxAttempts = 5;
     for (var attempt = 0; ; attempt++) {
       try {
+        if (!_extraSpinFlowCurrent(token, userId, context)) {
+          throw StateError('Rewarded-ad context changed');
+        }
         return await widget.backendApiService.claimExtraDailyRewardBox(
           identityToken: token,
-          localDate: _todayLocalDate(),
+          localDate: localDate,
         );
       } on ApiException catch (e) {
         final ssvLag =
@@ -392,6 +462,17 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       }
     }
   }
+
+  bool _extraSpinFlowCurrent(
+    String token,
+    String userId,
+    RewardedAdContext context,
+  ) =>
+      mounted &&
+      widget.authService.authToken == token &&
+      widget.authService.userId == userId &&
+      _preparedExtraSpinContext == context &&
+      _extraSpinAdContext == context;
 
   void _onStripComplete() {
     if (_claimedReward != null || _boxResult == null) return;

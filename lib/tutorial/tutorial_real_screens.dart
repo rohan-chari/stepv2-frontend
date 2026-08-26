@@ -7,6 +7,7 @@ import '../screens/tabs/races_tab.dart';
 import '../screens/tabs/profile_tab.dart';
 import '../screens/tabs/friends_tab.dart';
 import '../screens/race_detail_screen.dart';
+import '../services/ad_service.dart';
 import 'tutorial_preview_data.dart';
 import 'tutorial_screen.dart' show TutorialMockPage;
 
@@ -102,6 +103,7 @@ class TutorialRealHost extends StatelessWidget {
           displayName: 'Rohan',
           authService: authService,
           backendApiService: api,
+          getCoinsAdController: _tutorialUnsupportedRewardedAds,
           onRefresh: () async {},
           onEnableHealth: () {},
           onEnableNotifications: () {},
@@ -165,4 +167,27 @@ class TutorialRealHost extends StatelessWidget {
         );
     }
   }
+}
+
+final ExtraSpinAdController _tutorialUnsupportedRewardedAds =
+    _TutorialUnsupportedRewardedAds();
+
+class _TutorialUnsupportedRewardedAds implements ExtraSpinAdController {
+  @override
+  bool get isReady => false;
+
+  @override
+  bool get isSupported => false;
+
+  @override
+  Future<void> load({
+    required String userId,
+    required String localDate,
+  }) async {}
+
+  @override
+  Future<bool> showAndAwaitReward() async => false;
+
+  @override
+  void dispose() {}
 }

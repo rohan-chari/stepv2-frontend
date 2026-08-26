@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -158,6 +159,8 @@ class ShopTab extends StatefulWidget {
     this.backendApiService,
     this.onShopChanged,
     this.adControllerBuilder,
+    this.getCoinsAdController,
+    this.now,
   });
 
   final AuthService authService;
@@ -168,12 +171,14 @@ class ShopTab extends StatefulWidget {
   /// 10). Overridable in tests; defaults to a real [AdService] pointed at the
   /// powerup-unlock ad unit (falling back to the extra-spin/test unit).
   final ExtraSpinAdController Function()? adControllerBuilder;
+  final ExtraSpinAdController? getCoinsAdController;
+  final DateTime Function()? now;
 
   @override
   State<ShopTab> createState() => _ShopTabState();
 }
 
-class _ShopTabState extends State<ShopTab> {
+class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
@@ -201,15 +206,63 @@ class _ShopTabState extends State<ShopTab> {
   // (contract §4.3); when it is absent — an older backend — we keep the
   // compiled-in legacy behaviour byte for byte.
   _AdUnlockConfig _adUnlock = _AdUnlockConfig.legacy;
+  bool _hasValidServerAdUnlock = false;
+  ExtraSpinAdController? _shopAdController;
+  RewardedAdContext? _shopAdContext;
+  RewardedAdContext? _shopActionContext;
+  final Set<ExtraSpinAdController> _activeShopAdControllers = {};
+  int _shopActionGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _backendApiService = widget.backendApiService ?? BackendApiService();
+    WidgetsBinding.instance.addObserver(this);
+    widget.authService.addListener(_handleShopAuthChanged);
     _loadCatalog();
   }
 
+  @override
+  void dispose() {
+    _shopActionGeneration++;
+    for (final controller in _activeShopAdControllers.toList()) {
+      controller.dispose();
+    }
+    _activeShopAdControllers.clear();
+    WidgetsBinding.instance.removeObserver(this);
+    widget.authService.removeListener(_handleShopAuthChanged);
+    _disposeShopAdTarget();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final context = _shopAdContext;
+    if (context != null && context.localDate != _localDate()) {
+      _disposeShopAdTarget();
+    }
+  }
+
+  void _handleShopAuthChanged() {
+    _shopActionGeneration++;
+    if (_activeShopAdControllers.isNotEmpty) {
+      for (final controller in _activeShopAdControllers.toList()) {
+        controller.dispose();
+      }
+      _activeShopAdControllers.clear();
+    }
+    final context = _shopAdContext;
+    if (context != null && context.userId != widget.authService.userId) {
+      _disposeShopAdTarget();
+    }
+  }
+
   Future<void> _loadCatalog() async {
+    // A refresh can change or remove the server-advertised SKU eligibility.
+    // Drop the speculative target before accepting the new catalog rather
+    // than allowing an ad bound to the previous payload to survive it.
+    _disposeShopAdTarget();
     final previous = _catalog;
     if (mounted) {
       setState(() {
@@ -284,9 +337,10 @@ class _ShopTabState extends State<ShopTab> {
       // The ad-unlock rules ride on either catalog (contract §4.3). Prefer the
       // powerup store's copy when it carried one, else the cosmetics catalog's,
       // else the legacy compiled-in rules.
-      _adUnlock = _powerupAdUnlockBlock != null
-          ? _AdUnlockConfig.fromJson(_powerupAdUnlockBlock)
-          : _AdUnlockConfig.fromJson(catalog['adUnlock']);
+      final rawAdUnlock = _powerupAdUnlockBlock ?? catalog['adUnlock'];
+      _adUnlock = _AdUnlockConfig.fromJson(rawAdUnlock);
+      _hasValidServerAdUnlock = _validAdUnlockBlock(rawAdUnlock);
+      if (!_hasValidServerAdUnlock) _disposeShopAdTarget();
 
       if (mounted) {
         setState(() {
@@ -471,9 +525,20 @@ class _ShopTabState extends State<ShopTab> {
   Map<dynamic, dynamic>? _powerupAdUnlockBlock;
 
   void _recomputeAdUnlock() {
-    _adUnlock = _powerupAdUnlockBlock != null
-        ? _AdUnlockConfig.fromJson(_powerupAdUnlockBlock)
-        : _AdUnlockConfig.fromJson(_catalog?['adUnlock']);
+    final raw = _powerupAdUnlockBlock ?? _catalog?['adUnlock'];
+    _adUnlock = _AdUnlockConfig.fromJson(raw);
+    _hasValidServerAdUnlock = _validAdUnlockBlock(raw);
+    if (!_hasValidServerAdUnlock) _disposeShopAdTarget();
+  }
+
+  bool _validAdUnlockBlock(Object? raw) {
+    if (raw is! Map) return false;
+    for (final key in const ['maxShortfall', 'coinsPerAd', 'maxAds']) {
+      final value = raw[key];
+      if (value is! num || value.toInt() <= 0) return false;
+    }
+    final remaining = raw['remainingToday'];
+    return remaining == null || (remaining is num && remaining.toInt() >= 0);
   }
 
   Future<void> _purchase(Map<String, dynamic> item) async {
@@ -798,6 +863,7 @@ class _ShopTabState extends State<ShopTab> {
                         builder: (_) => GetCoinsScreen(
                           authService: widget.authService,
                           backendApiService: _backendApiService,
+                          adController: widget.getCoinsAdController,
                         ),
                       ),
                     ),
@@ -1278,56 +1344,68 @@ class _ShopTabState extends State<ShopTab> {
     // by the same server-served rules.
     final route = _routeFor(price);
     final adsNeeded = _adsNeededFor(price);
-    void openSheet() => _showItemSheet(
-      art: _cosmeticArt(item, iconSize: 48),
-      name: name,
-      slotLabel: _slotLabels[item['slot']],
-      description: item['description'] as String? ?? '',
-      actions: [
-        ?_adUnlockCapNotice(price),
-        switch (route) {
-          _AffordRoute.affordable => PillButton(
-            label: 'BUY · $price',
-            leading: const CoinGlyph(size: 16),
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            onPressed: _saving
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _purchase(item);
-                  },
-          ),
-          _AffordRoute.watchAds => PillButton(
-            label: adsNeeded == 1
-                ? 'WATCH 1 AD TO UNLOCK'
-                : 'WATCH $adsNeeded ADS TO UNLOCK',
-            icon: Icons.smart_display_rounded,
-            variant: PillButtonVariant.secondary,
-            fontSize: 13,
-            fullWidth: true,
-            onPressed: _saving
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _unlockCosmeticWithAds(item, adsNeeded);
-                  },
-          ),
-          _AffordRoute.getCoins => PillButton(
-            label: 'GET MORE COINS',
-            icon: Icons.add_circle_rounded,
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            onPressed: () {
-              Navigator.of(context).pop();
-              _openGetCoins();
+    final adContext = route == _AffordRoute.watchAds
+        ? _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock)
+        : null;
+    void openSheet() {
+      _warmShopAd(adContext);
+      unawaited(
+        _showItemSheet(
+          art: _cosmeticArt(item, iconSize: 48),
+          name: name,
+          slotLabel: _slotLabels[item['slot']],
+          description: item['description'] as String? ?? '',
+          actions: [
+            ?_adUnlockCapNotice(price),
+            switch (route) {
+              _AffordRoute.affordable => PillButton(
+                label: 'BUY · $price',
+                leading: const CoinGlyph(size: 16),
+                variant: PillButtonVariant.secondary,
+                fontSize: 14,
+                fullWidth: true,
+                onPressed: _saving
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _purchase(item);
+                      },
+              ),
+              _AffordRoute.watchAds => PillButton(
+                label: adsNeeded == 1
+                    ? 'WATCH 1 AD TO UNLOCK'
+                    : 'WATCH $adsNeeded ADS TO UNLOCK',
+                icon: Icons.smart_display_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _saving
+                    ? null
+                    : () {
+                        _shopActionContext = adContext;
+                        Navigator.of(context).pop();
+                        _unlockCosmeticWithAds(item, adsNeeded);
+                      },
+              ),
+              _AffordRoute.getCoins => PillButton(
+                label: 'GET MORE COINS',
+                icon: Icons.add_circle_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 14,
+                fullWidth: true,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _openGetCoins();
+                },
+              ),
             },
-          ),
-        },
-      ],
-    );
+          ],
+        ).whenComplete(() {
+          if (_shopActionContext != adContext) _disposeShopAdTarget();
+        }),
+      );
+    }
+
     return _ShopTile(
       art: _cosmeticArt(item),
       name: name,
@@ -1684,6 +1762,7 @@ class _ShopTabState extends State<ShopTab> {
         builder: (_) => GetCoinsScreen(
           authService: widget.authService,
           backendApiService: _backendApiService,
+          adController: widget.getCoinsAdController,
         ),
       ),
     );
@@ -1692,6 +1771,136 @@ class _ShopTabState extends State<ShopTab> {
   ExtraSpinAdController _newAdController() =>
       widget.adControllerBuilder?.call() ??
       AdService(adUnitId: AdService.powerupUnlockAdUnitId);
+
+  RewardedAdContext? _shopContextFor(
+    Map<String, dynamic> item,
+    RewardedAdPlacement placement,
+  ) {
+    final userId = widget.authService.userId;
+    final sku = item['sku'];
+    if (userId == null || userId.isEmpty || sku is! String || sku.isEmpty) {
+      return null;
+    }
+    return placement == RewardedAdPlacement.powerupUnlock
+        ? RewardedAdContext.powerupUnlock(
+            userId: userId,
+            sku: sku,
+            localDate: _localDate(),
+          )
+        : RewardedAdContext.cosmeticUnlock(
+            userId: userId,
+            sku: sku,
+            localDate: _localDate(),
+          );
+  }
+
+  void _warmShopAd(RewardedAdContext? context) {
+    if (!_hasValidServerAdUnlock || context == null) {
+      _disposeShopAdTarget();
+      return;
+    }
+    final previous = _shopAdContext;
+    if (previous != null && previous != context) _disposeShopAdTarget();
+    final controller = _shopAdController ??= _newAdController();
+    if (!controller.isSupported) {
+      _disposeShopAdTarget();
+      return;
+    }
+    _shopAdContext = context;
+    unawaited(controller.warm(context));
+  }
+
+  void _disposeShopAdTarget() {
+    _shopAdController?.dispose();
+    _shopAdController = null;
+    _shopAdContext = null;
+    _shopActionContext = null;
+  }
+
+  void _disposeActiveShopController(ExtraSpinAdController controller) {
+    if (_activeShopAdControllers.remove(controller)) controller.dispose();
+  }
+
+  Future<bool> _watchShopUnlockAds(
+    RewardedAdContext context,
+    int adsNeeded,
+    int generation,
+    String token,
+  ) async {
+    final matching = _shopAdContext == context ? _shopAdController : null;
+    ExtraSpinAdController current = matching ?? _newAdController();
+    _activeShopAdControllers.add(current);
+    _shopAdController = null;
+    _shopAdContext = null;
+    _shopActionContext = null;
+    if (!current.isSupported) {
+      current.dispose();
+      if (mounted) {
+        showErrorToast(this.context, 'Ads aren’t available on this device.');
+      }
+      return false;
+    }
+
+    try {
+      for (var index = 1; index <= adsNeeded; index++) {
+        if (!_shopFlowCurrent(generation, token, context)) return false;
+        if (!mounted) return false;
+        showInfoToast(this.context, 'Ad $index of $adsNeeded…');
+        if (!current.isReadyFor(context)) {
+          await current.warm(context);
+          if (!_shopFlowCurrent(generation, token, context)) return false;
+        }
+        if (!current.isReadyFor(context)) {
+          if (mounted) {
+            showErrorToast(this.context, 'Ad didn’t load. No coins spent.');
+          }
+          return false;
+        }
+
+        final showFuture = current.showAndAwaitRewardFor(context);
+        ExtraSpinAdController? next;
+        Future<void>? nextWarm;
+        if (index < adsNeeded) {
+          next = _newAdController();
+          _activeShopAdControllers.add(next);
+          if (next.isSupported) {
+            nextWarm = next.warm(context);
+          }
+        }
+        final earned = await showFuture;
+        if (!_shopFlowCurrent(generation, token, context)) {
+          if (next != null) _disposeActiveShopController(next);
+          return false;
+        }
+        if (!earned) {
+          if (next != null) _disposeActiveShopController(next);
+          if (mounted) {
+            showErrorToast(this.context, 'Ad not finished. No coins spent.');
+          }
+          return false;
+        }
+        if (next != null) {
+          await nextWarm;
+          if (!_shopFlowCurrent(generation, token, context)) return false;
+          _disposeActiveShopController(current);
+          current = next;
+        }
+      }
+      return true;
+    } finally {
+      _disposeActiveShopController(current);
+    }
+  }
+
+  bool _shopFlowCurrent(
+    int generation,
+    String token,
+    RewardedAdContext context,
+  ) =>
+      mounted &&
+      generation == _shopActionGeneration &&
+      widget.authService.authToken == token &&
+      widget.authService.userId == context.userId;
 
   /// Watches [adsNeeded] rewarded ads back-to-back, then asks the server to
   /// unlock the powerup (which zeroes coins + grants it). The SERVER is the
@@ -1707,50 +1916,33 @@ class _ShopTabState extends State<ShopTab> {
     final sku = item['sku'] as String?;
     if (token == null || token.isEmpty || sku == null || adsNeeded < 1) return;
 
-    final controller = _newAdController();
-    if (!controller.isSupported) {
-      showErrorToast(context, 'Ads aren’t available on this device.');
-      return;
-    }
-
-    final userId = widget.authService.userId ?? 'user';
-    // SSV custom-data tag scopes each verified watch to this flow (item 10).
-    final customData = 'powerup_unlock:$userId:$sku';
+    final adContext = _shopContextFor(item, RewardedAdPlacement.powerupUnlock);
+    if (adContext == null) return;
+    final generation = _shopActionGeneration;
     final name = item['name'] as String? ?? 'Powerup';
 
     setState(() => _saving = true);
     try {
-      for (var k = 1; k <= adsNeeded; k++) {
-        if (!mounted) return;
-        showInfoToast(context, 'Ad $k of $adsNeeded…');
-        await controller.load(userId: userId, localDate: customData);
-        if (!controller.isReady) {
-          if (mounted) {
-            showErrorToast(context, 'Ad didn’t load. No coins spent.');
-          }
-          return;
-        }
-        final earned = await controller.showAndAwaitReward();
-        if (!earned) {
-          if (mounted) {
-            showErrorToast(context, 'Ad not finished. No coins spent.');
-          }
-          return;
-        }
+      if (!await _watchShopUnlockAds(adContext, adsNeeded, generation, token)) {
+        return;
       }
+      if (!_shopFlowCurrent(generation, token, adContext)) return;
 
       final result = await _backendApiService.unlockPowerupWithAds(
         identityToken: token,
         sku: sku,
         idempotencyKey:
-            '${widget.authService.userId ?? 'user'}-pwunlock-${DateTime.now().microsecondsSinceEpoch}',
-        localDate: _localDate(),
+            '${adContext.userId}-pwunlock-${DateTime.now().microsecondsSinceEpoch}',
+        localDate: adContext.localDate,
       );
+      if (!_shopFlowCurrent(generation, token, adContext)) return;
       final rawCoins = result['coins'];
       final coins = rawCoins is num ? rawCoins.toInt() : null;
       if (_isIdempotent(result) || !_patchPowerupMutation(result, item)) {
         await _loadPowerups(token);
+        if (!_shopFlowCurrent(generation, token, adContext)) return;
       } else if (coins != null) {
+        if (!_shopFlowCurrent(generation, token, adContext)) return;
         await widget.authService.updateCoins(coins);
       }
       if (mounted) showInfoToast(context, '$name unlocked!');
@@ -1764,7 +1956,6 @@ class _ShopTabState extends State<ShopTab> {
         );
       }
     } finally {
-      controller.dispose();
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -1772,7 +1963,7 @@ class _ShopTabState extends State<ShopTab> {
   /// The device's local calendar day, so the server's once-per-day ad-unlock
   /// cap uses the user's midnight rather than UTC's (contract §4.1/§4.2).
   String _localDate() {
-    final now = DateTime.now();
+    final now = widget.now?.call() ?? DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');
     return '${now.year}-${two(now.month)}-${two(now.day)}';
   }
@@ -1796,50 +1987,33 @@ class _ShopTabState extends State<ShopTab> {
       return;
     }
 
-    final controller = _newAdController();
-    if (!controller.isSupported) {
-      showErrorToast(context, 'Ads aren’t available on this device.');
-      return;
-    }
-
-    final userId = widget.authService.userId ?? 'user';
-    // Distinct SSV custom-data prefix from the powerup flow (contract §4.2).
-    final customData = 'shop_unlock:$userId:$sku';
+    final adContext = _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock);
+    if (adContext == null) return;
+    final generation = _shopActionGeneration;
     final name = item['name'] as String? ?? 'Item';
 
     setState(() => _saving = true);
     try {
-      for (var k = 1; k <= adsNeeded; k++) {
-        if (!mounted) return;
-        showInfoToast(context, 'Ad $k of $adsNeeded…');
-        await controller.load(userId: userId, localDate: customData);
-        if (!controller.isReady) {
-          if (mounted) {
-            showErrorToast(context, 'Ad didn’t load. No coins spent.');
-          }
-          return;
-        }
-        final earned = await controller.showAndAwaitReward();
-        if (!earned) {
-          if (mounted) {
-            showErrorToast(context, 'Ad not finished. No coins spent.');
-          }
-          return;
-        }
+      if (!await _watchShopUnlockAds(adContext, adsNeeded, generation, token)) {
+        return;
       }
+      if (!_shopFlowCurrent(generation, token, adContext)) return;
 
       final result = await _backendApiService.unlockShopItemWithAds(
         identityToken: token,
         sku: sku,
         idempotencyKey:
-            '${widget.authService.userId ?? 'user'}-shopunlock-${DateTime.now().microsecondsSinceEpoch}',
-        localDate: _localDate(),
+            '${adContext.userId}-shopunlock-${DateTime.now().microsecondsSinceEpoch}',
+        localDate: adContext.localDate,
       );
+      if (!_shopFlowCurrent(generation, token, adContext)) return;
       final rawCoins = result['coins'];
       final coins = rawCoins is num ? rawCoins.toInt() : null;
       if (_isIdempotent(result) || !_patchCosmeticPurchase(result)) {
         await _refreshCosmetics(token);
+        if (!_shopFlowCurrent(generation, token, adContext)) return;
       } else if (coins != null) {
+        if (!_shopFlowCurrent(generation, token, adContext)) return;
         await widget.authService.updateCoins(coins);
       }
       if (mounted) showInfoToast(context, '$name unlocked!');
@@ -1857,7 +2031,6 @@ class _ShopTabState extends State<ShopTab> {
         showErrorToast(context, 'Couldn’t unlock this item. Please try again.');
       }
     } finally {
-      controller.dispose();
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -1875,17 +2048,34 @@ class _ShopTabState extends State<ShopTab> {
     final route = _routeFor(price);
     final canAdUnlock = route == _AffordRoute.watchAds;
     final adsNeeded = _adsNeededFor(price);
+    final adContext = canAdUnlock
+        ? _shopContextFor(item, RewardedAdPlacement.powerupUnlock)
+        : null;
 
-    void openSheet() => _showItemSheet(
-      art: _powerupArt(type, fallbackSize: 64),
-      name: name,
-      badge: owned > 0 ? 'OWNED x$owned' : null,
-      description: item['description'] as String? ?? '',
-      actions: [
-        ?_adUnlockCapNotice(price),
-        _powerupSheetAction(item, price, affordable, canAdUnlock, adsNeeded),
-      ],
-    );
+    void openSheet() {
+      _warmShopAd(adContext);
+      unawaited(
+        _showItemSheet(
+          art: _powerupArt(type, fallbackSize: 64),
+          name: name,
+          badge: owned > 0 ? 'OWNED x$owned' : null,
+          description: item['description'] as String? ?? '',
+          actions: [
+            ?_adUnlockCapNotice(price),
+            _powerupSheetAction(
+              item,
+              price,
+              affordable,
+              canAdUnlock,
+              adsNeeded,
+              adContext,
+            ),
+          ],
+        ).whenComplete(() {
+          if (_shopActionContext != adContext) _disposeShopAdTarget();
+        }),
+      );
+    }
 
     return _ShopTile(
       art: _powerupArt(type),
@@ -1908,6 +2098,7 @@ class _ShopTabState extends State<ShopTab> {
     bool affordable,
     bool canAdUnlock,
     int adsNeeded,
+    RewardedAdContext? adContext,
   ) {
     if (affordable) {
       return PillButton(
@@ -1919,6 +2110,7 @@ class _ShopTabState extends State<ShopTab> {
         onPressed: _saving
             ? null
             : () {
+                _shopActionContext = adContext;
                 Navigator.of(context).pop();
                 _purchasePowerup(item);
               },

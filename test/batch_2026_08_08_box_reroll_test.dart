@@ -3,6 +3,7 @@
 // Covers the gating (flag on/off, demo, already-rerolled), the re-spin to the
 // new result, and the ui-test-planner's risks 4 and 5: the button must NOT
 // leak onto the OPEN ALL flow, the hand-forked daily-reward reel, or the demo.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -73,6 +74,9 @@ class _FakeAdController implements ExtraSpinAdController {
   String? lastLocalDate;
   String? lastUserId;
   bool _loaded = false;
+  int loadCalls = 0;
+  int disposeCalls = 0;
+  Completer<bool>? showCompleter;
 
   @override
   bool get isSupported => true;
@@ -82,6 +86,7 @@ class _FakeAdController implements ExtraSpinAdController {
 
   @override
   Future<void> load({required String userId, required String localDate}) async {
+    loadCalls++;
     lastUserId = userId;
     lastLocalDate = localDate;
     _loaded = true;
@@ -90,11 +95,11 @@ class _FakeAdController implements ExtraSpinAdController {
   @override
   Future<bool> showAndAwaitReward() async {
     _loaded = false;
-    return earn;
+    return showCompleter?.future ?? earn;
   }
 
   @override
-  void dispose() {}
+  void dispose() => disposeCalls++;
 }
 
 class _RerollStubApi extends BackendApiService {
@@ -224,7 +229,7 @@ Future<AuthService> _rerollAuth() async {
   return auth;
 }
 
-Future<void> _pumpRaceDetail(
+Future<AuthService> _pumpRaceDetail(
   WidgetTester tester, {
   required _RerollStubApi api,
   required _FakeAdController ad,
@@ -249,6 +254,7 @@ Future<void> _pumpRaceDetail(
   for (var i = 0; i < 4; i++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
+  return auth;
 }
 
 /// Taps the mystery-box slot and drives its reel to the reveal.
@@ -507,6 +513,22 @@ void main() {
     });
   });
   group('the reroll request carries localDate (fix 1)', () {
+    testWidgets('eligible opened-box overlay warms before the reroll tap', (
+      tester,
+    ) async {
+      final api = _RerollStubApi();
+      final ad = _FakeAdController();
+
+      await _pumpRaceDetail(tester, api: api, ad: ad, boxReroll: true);
+      await _openBoxAndReveal(tester);
+
+      expect(_rerollButton, findsOneWidget);
+      expect(ad.loadCalls, 1);
+      expect(ad.lastUserId, isNotEmpty);
+      expect(ad.lastLocalDate, matches(r'^\d{4}-\d{2}-\d{2}$'));
+      await _teardownRace(tester);
+    });
+
     testWidgets(
       'the SAME localDate as the ad grant is posted, and is stable across '
       'AD_NOT_VERIFIED retries',
@@ -552,6 +574,32 @@ void main() {
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
+
+      expect(api.rerollCalls, 0);
+      await _teardownRace(tester);
+    });
+
+    testWidgets('account switch during the ad blocks the old reroll grant', (
+      tester,
+    ) async {
+      final api = _RerollStubApi();
+      final ad = _FakeAdController()..showCompleter = Completer<bool>();
+      final auth = await _pumpRaceDetail(
+        tester,
+        api: api,
+        ad: ad,
+        boxReroll: true,
+      );
+      await _openBoxAndReveal(tester);
+      await tester.tap(_rerollButton);
+      await tester.pump();
+
+      await auth.updateSessionToken('new-session');
+      await auth.syncFromBackendUser(const {'id': 'user-2'});
+      await tester.pump();
+      expect(ad.disposeCalls, 1);
+      ad.showCompleter!.complete(true);
+      await tester.pump();
 
       expect(api.rerollCalls, 0);
       await _teardownRace(tester);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -36,6 +37,7 @@ class RaceResultsSummaryScreen extends StatefulWidget {
     this.authService,
     this.backendApiService,
     this.adController,
+    this.adControllerOwnedByCaller = false,
     this.claimRetryDelay = const Duration(seconds: 2),
     this.onBeforeDismiss,
   });
@@ -46,6 +48,7 @@ class RaceResultsSummaryScreen extends StatefulWidget {
   final AuthService? authService;
   final BackendApiService? backendApiService;
   final RacePayoutDoubleAdController? adController;
+  final bool adControllerOwnedByCaller;
   final Duration claimRetryDelay;
   final Future<void> Function()? onBeforeDismiss;
 
@@ -65,18 +68,23 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
   bool _dismissStarted = false;
   int? _earnedBaseCoins;
   int? _earnedBonusCoins;
-
-  bool get _flowBusy =>
-      _flowState == _PayoutDoubleFlowState.loading ||
-      _flowState == _PayoutDoubleFlowState.verifying;
+  Future<void>? _preparationFuture;
+  int _popupGeneration = 0;
+  bool _presentationStarted = false;
+  bool _recoveryClaimedOffer = false;
+  String? _boundToken;
+  String? _boundUserId;
 
   @override
   void initState() {
     super.initState();
     _offer = widget.payoutDoubleOffer;
-    if (_offer?.offerId != null && _dependenciesAvailable) {
+    _boundToken = widget.authService?.authToken;
+    _boundUserId = widget.authService?.userId;
+    widget.authService?.addListener(_handleAuthChanged);
+    if (_offer != null && _dependenciesAvailable) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _recoverPendingOffer();
+        if (mounted) unawaited(_ensurePrepared());
       });
     }
   }
@@ -95,8 +103,24 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
 
   @override
   void dispose() {
-    widget.adController?.dispose();
+    _popupGeneration++;
+    widget.authService?.removeListener(_handleAuthChanged);
+    if (!widget.adControllerOwnedByCaller) widget.adController?.dispose();
     super.dispose();
+  }
+
+  void _handleAuthChanged() {
+    if (!mounted) return;
+    final token = widget.authService?.authToken;
+    final userId = widget.authService?.userId;
+    if (token == _boundToken && userId == _boundUserId) return;
+    final oldContext = _contextForOffer(_offer, userId: _boundUserId);
+    if (oldContext != null) widget.adController?.disposeContext(oldContext);
+    _boundToken = token;
+    _boundUserId = userId;
+    _popupGeneration++;
+    _preparationFuture = null;
+    _hideOffer();
   }
 
   Future<void> _dismiss([bool? result]) async {
@@ -111,18 +135,38 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     if (mounted) Navigator.of(context).pop(result);
   }
 
-  Future<void> _recoverPendingOffer() async {
-    final offerId = _offer?.offerId;
-    if (offerId == null || _flowBusy || _offerHidden) return;
-    await _claimPreparedOffer(offerId, recovery: true);
+  Future<void> _ensurePrepared() {
+    final existing = _preparationFuture;
+    if (existing != null) return existing;
+    final generation = _popupGeneration;
+    late final Future<void> future;
+    future = _prepareOfferAndAd(generation);
+    _preparationFuture = future;
+    return future;
   }
 
-  Future<void> _startPayoutDouble() async {
-    if (_flowBusy ||
-        _offerHidden ||
-        _flowState == _PayoutDoubleFlowState.earned) {
-      return;
+  bool _generationMatches(int generation, String token, String userId) =>
+      mounted &&
+      generation == _popupGeneration &&
+      widget.authService?.authToken == token &&
+      widget.authService?.userId == userId;
+
+  RewardedAdContext? _contextForOffer(
+    RacePayoutDoubleOffer? offer, {
+    String? userId,
+  }) {
+    userId ??= widget.authService?.userId;
+    final offerId = offer?.offerId;
+    if (userId == null ||
+        userId.isEmpty ||
+        offerId == null ||
+        offerId.isEmpty) {
+      return null;
     }
+    return RewardedAdContext.racePayoutDouble(userId: userId, offerId: offerId);
+  }
+
+  Future<void> _prepareOfferAndAd(int generation) async {
     final api = widget.backendApiService;
     final auth = widget.authService;
     final ads = widget.adController;
@@ -142,43 +186,132 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       return;
     }
 
-    if (_earnedCallbackReceived && current.offerId != null) {
-      await _claimPreparedOffer(current.offerId!);
+    if (current.offerId != null) {
+      await _claimPreparedOffer(
+        current.offerId!,
+        recovery: true,
+        generation: generation,
+        token: token,
+        userId: userId,
+      );
+      if (!_generationMatches(generation, token, userId) ||
+          _offerHidden ||
+          _flowState == _PayoutDoubleFlowState.earned ||
+          _earnedCallbackReceived) {
+        return;
+      }
+      current = _offer;
+    }
+
+    try {
+      if (current?.offerId == null) {
+        current = await api.createRacePayoutDoubleOffer(
+          identityToken: token,
+          raceIds: current!.raceIds,
+          popupRaceIds: _popupRaceIds,
+        );
+        if (!_generationMatches(generation, token, userId)) return;
+        setState(() => _offer = current);
+      }
+      final context = _contextForOffer(current);
+      if (context == null) {
+        _hideOffer();
+        return;
+      }
+      if (!ads.isReadyFor(context)) await ads.warm(context);
+      if (!_generationMatches(generation, token, userId)) return;
+      setState(() {
+        _flowState = _PayoutDoubleFlowState.ready;
+        if (!ads.isReadyFor(context)) {
+          _message = "Ad didn't load. Your coins are unchanged.";
+        }
+      });
+    } on ApiException catch (error) {
+      if (!_generationMatches(generation, token, userId)) return;
+      _handleFlowError(error, preparing: current?.offerId == null);
+    } catch (_) {
+      if (!_generationMatches(generation, token, userId)) return;
+      setState(() {
+        _flowState = _PayoutDoubleFlowState.ready;
+        _message = 'Bonus unavailable right now. Your coins are unchanged.';
+      });
+    }
+  }
+
+  Future<void> _startPayoutDouble() async {
+    if (_presentationStarted ||
+        _offerHidden ||
+        _flowState == _PayoutDoubleFlowState.earned) {
+      return;
+    }
+    final api = widget.backendApiService;
+    final auth = widget.authService;
+    final ads = widget.adController;
+    final token = auth?.authToken;
+    final userId = auth?.userId;
+    final generation = _popupGeneration;
+    var current = _offer;
+    if (api == null ||
+        auth == null ||
+        ads == null ||
+        !ads.isSupported ||
+        token == null ||
+        token.isEmpty ||
+        userId == null ||
+        userId.isEmpty ||
+        current == null) {
+      _hideOffer();
       return;
     }
 
+    _presentationStarted = true;
     setState(() {
       _flowState = _PayoutDoubleFlowState.loading;
       _message = null;
     });
     try {
-      if (current.offerId == null) {
-        current = await api.createRacePayoutDoubleOffer(
-          identityToken: token,
-          raceIds: current.raceIds,
-          popupRaceIds: _popupRaceIds,
-        );
-        if (!mounted) return;
-        setState(() => _offer = current);
+      await _ensurePrepared();
+      if (!_generationMatches(generation, token, userId) || _offerHidden) {
+        return;
+      }
+      if (_flowState == _PayoutDoubleFlowState.earned ||
+          _recoveryClaimedOffer) {
+        return;
+      }
+      current = _offer;
+      if (current == null) {
+        _hideOffer();
+        return;
       }
       final offerId = current.offerId;
       if (offerId == null) {
         _hideOffer();
         return;
       }
-      if (!ads.isReady) {
-        await ads.loadForRacePayoutDouble(userId: userId, offerId: offerId);
+      if (_earnedCallbackReceived) {
+        await _claimPreparedOffer(
+          offerId,
+          generation: generation,
+          token: token,
+          userId: userId,
+        );
+        return;
       }
-      if (!mounted) return;
-      if (!ads.isReady) {
+      final context = RewardedAdContext.racePayoutDouble(
+        userId: userId,
+        offerId: offerId,
+      );
+      if (!ads.isReadyFor(context)) await ads.warm(context);
+      if (!_generationMatches(generation, token, userId)) return;
+      if (!ads.isReadyFor(context)) {
         setState(() {
           _flowState = _PayoutDoubleFlowState.ready;
           _message = "Ad didn't load. Your coins are unchanged.";
         });
         return;
       }
-      final earned = await ads.showAndAwaitReward();
-      if (!mounted) return;
+      final earned = await ads.showAndAwaitRewardFor(context);
+      if (!_generationMatches(generation, token, userId)) return;
       if (!earned) {
         setState(() {
           _flowState = _PayoutDoubleFlowState.ready;
@@ -189,7 +322,12 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
         return;
       }
       _earnedCallbackReceived = true;
-      await _claimPreparedOffer(offerId);
+      await _claimPreparedOffer(
+        offerId,
+        generation: generation,
+        token: token,
+        userId: userId,
+      );
     } on ApiException catch (error) {
       if (!mounted) return;
       _handleFlowError(error, preparing: current?.offerId == null);
@@ -199,17 +337,21 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
         _flowState = _PayoutDoubleFlowState.ready;
         _message = 'Bonus unavailable right now. Your coins are unchanged.';
       });
+    } finally {
+      _presentationStarted = false;
     }
   }
 
   Future<void> _claimPreparedOffer(
     String offerId, {
     bool recovery = false,
+    required int generation,
+    required String token,
+    required String userId,
   }) async {
     final api = widget.backendApiService;
     final auth = widget.authService;
-    final token = auth?.authToken;
-    if (api == null || auth == null || token == null || token.isEmpty) {
+    if (api == null || auth == null || token.isEmpty) {
       _hideOffer();
       return;
     }
@@ -222,23 +364,29 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       const maxAttempts = 5;
       for (var attempt = 0; attempt < maxAttempts; attempt++) {
         try {
+          if (!_generationMatches(generation, token, userId)) return;
           result = await api.claimRacePayoutDouble(
             identityToken: token,
             offerId: offerId,
             popupRaceIds: _popupRaceIds,
           );
+          if (!_generationMatches(generation, token, userId)) return;
           break;
         } on ApiException catch (error) {
           if (error.code != 'AD_NOT_VERIFIED' || attempt == maxAttempts - 1) {
             rethrow;
           }
           await Future<void>.delayed(widget.claimRetryDelay);
+          if (!_generationMatches(generation, token, userId)) return;
         }
       }
-      if (!mounted || result == null) return;
+      if (!_generationMatches(generation, token, userId) || result == null) {
+        return;
+      }
       var coins = result.coins;
       if (coins == null) {
         final me = await api.fetchMe(identityToken: token);
+        if (!_generationMatches(generation, token, userId)) return;
         final refreshed = me['coins'];
         if (refreshed is int && refreshed >= 0) coins = refreshed;
       }
@@ -248,16 +396,18 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
           code: 'BALANCE_UNAVAILABLE',
         );
       }
+      if (!_generationMatches(generation, token, userId)) return;
       await auth.updateCoins(coins);
-      if (!mounted) return;
+      if (!_generationMatches(generation, token, userId)) return;
       setState(() {
         _earnedBaseCoins = result!.baseCoins;
         _earnedBonusCoins = result.bonusCoins;
         _flowState = _PayoutDoubleFlowState.earned;
         _message = null;
       });
+      if (recovery) _recoveryClaimedOffer = true;
     } on ApiException catch (error) {
-      if (!mounted) return;
+      if (!_generationMatches(generation, token, userId)) return;
       if (recovery) {
         // A recovered pending offer represents an interrupted entitlement.
         // Retry its claim directly after transient/claim-switch failures. Only
@@ -267,7 +417,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       }
       _handleFlowError(error, preparing: false);
     } catch (_) {
-      if (!mounted) return;
+      if (!_generationMatches(generation, token, userId)) return;
       setState(() {
         _flowState = _PayoutDoubleFlowState.ready;
         _message = 'Verification is taking longer. Try again.';
@@ -317,11 +467,17 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
 
   void _hideOffer() {
     if (!mounted) return;
+    _disposeOfferContext();
     setState(() {
       _offerHidden = true;
       _flowState = _PayoutDoubleFlowState.ready;
       _message = null;
     });
+  }
+
+  void _disposeOfferContext() {
+    final context = _contextForOffer(_offer);
+    if (context != null) widget.adController?.disposeContext(context);
   }
 
   List<String> get _popupRaceIds => widget.races
@@ -594,7 +750,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
               key: const Key('race-payout-double-semantics'),
               container: true,
               button: true,
-              enabled: !_flowBusy,
+              enabled: !_presentationStarted,
               liveRegion: announceActionState,
               excludeSemantics: true,
               label: actionSemanticsLabel,
@@ -615,7 +771,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                 // and did not match the app-wide action hierarchy.
                 variant: PillButtonVariant.primary,
                 fullWidth: true,
-                onPressed: _flowBusy ? null : _startPayoutDouble,
+                onPressed: _presentationStarted ? null : _startPayoutDouble,
               ),
             ),
           ],

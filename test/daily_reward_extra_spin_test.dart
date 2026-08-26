@@ -66,6 +66,7 @@ class _FakeBackendApiService extends BackendApiService {
   // One entry per expected claim attempt; an ApiException entry is thrown.
   final List<Object> claimResults;
   int claimCalls = 0;
+  final List<String> claimDates = [];
 
   @override
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
@@ -80,6 +81,7 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     required String localDate,
   }) async {
+    claimDates.add(localDate);
     final result = claimResults[claimCalls.clamp(0, claimResults.length - 1)];
     claimCalls++;
     if (result is ApiException) throw result;
@@ -95,6 +97,7 @@ class _FakeAdController implements ExtraSpinAdController {
   bool _ready = false;
   int loadCalls = 0;
   int showCalls = 0;
+  int disposeCalls = 0;
   bool earnReward = true;
 
   @override
@@ -117,7 +120,7 @@ class _FakeAdController implements ExtraSpinAdController {
   }
 
   @override
-  void dispose() {}
+  void dispose() => disposeCalls++;
 }
 
 class _UnsupportedAdController implements ExtraSpinAdController {
@@ -175,6 +178,7 @@ Future<void> _pumpScreen(
   ExtraSpinAdController? adController,
   AuthService? authService,
   ActivationAnalyticsService? analytics,
+  DateTime Function()? now,
 }) async {
   final auth = authService ?? await _createAuthService();
   await tester.pumpWidget(
@@ -184,6 +188,7 @@ Future<void> _pumpScreen(
         backendApiService: api,
         adController: adController,
         analytics: analytics,
+        now: now,
       ),
     ),
   );
@@ -303,6 +308,83 @@ void main() {
       expect(find.text('DAILY REWARD'), findsOneWidget);
     },
   );
+
+  testWidgets('home ticket never warms while a verified grant is pending', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final ads = _FakeAdController();
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StreakChip(
+          authService: auth,
+          backendApiService: _FakeBackendApiService(status: _status()),
+          adController: ads,
+          initialData: {
+            'claimedToday': true,
+            'localDate': localDate,
+            'adExtraSpin': const {
+              'available': true,
+              'pendingGrant': true,
+              'used': false,
+            },
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(ExtraSpinRewardTicket), findsOneWidget);
+    expect(ads.loadCalls, 0);
+  });
+
+  testWidgets('Home resume gives a failed ticket preload one bounded retry', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final ads = _FakeAdController(readyAfterLoad: false);
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StreakChip(
+          authService: auth,
+          backendApiService: _FakeBackendApiService(
+            status: _status(
+              adExtraSpin: const {
+                'available': true,
+                'pendingGrant': false,
+                'used': false,
+              },
+            ),
+          ),
+          adController: ads,
+          initialData: {
+            'claimedToday': true,
+            'localDate': localDate,
+            'adExtraSpin': const {
+              'available': true,
+              'pendingGrant': false,
+              'used': false,
+            },
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(ads.loadCalls, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(ads.loadCalls, 2);
+  });
 
   testWidgets('extra-spin pill keeps the existing quick-action footprint', (
     tester,
@@ -585,6 +667,27 @@ void main() {
     expect(ads.showCalls, 0);
     expect(api.claimCalls, 1);
     expect(find.byType(CaseOpeningReel), findsOneWidget);
+  });
+
+  testWidgets('midnight invalidates the stale extra-spin ad', (tester) async {
+    var now = DateTime(2026, 8, 25, 23, 59);
+    final api = _FakeBackendApiService(
+      status: _status(
+        adExtraSpin: {'available': true, 'pendingGrant': false, 'used': false},
+      ),
+    );
+    await _pumpScreen(
+      tester,
+      api: api,
+      adController: _FakeAdController(),
+      now: () => now,
+    );
+
+    now = DateTime(2026, 8, 26, 0, 1);
+    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.pump();
+
+    expect(api.claimDates, isEmpty);
   });
 
   testWidgets('retries the claim while SSV has not landed yet', (tester) async {

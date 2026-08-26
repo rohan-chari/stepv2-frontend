@@ -14,12 +14,6 @@ import '../widgets/pill_button.dart';
 import 'daily_reward_screen.dart';
 import 'referral_screen.dart';
 
-String _todayLocalDate() {
-  final now = DateTime.now();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${now.year}-${two(now.month)}-${two(now.day)}';
-}
-
 /// The "Get Coins" hub — where the "+" next to the coin balance lands. One
 /// page listing every way to earn coins: watch-ad-for-coins (SSV-verified,
 /// capped per day), invite friends (pushes the full [ReferralScreen]), and
@@ -37,19 +31,22 @@ class GetCoinsScreen extends StatefulWidget {
   // Rewarded-ad controller. Null (or an unsupported platform) hides the
   // watch-ad section entirely.
   final ExtraSpinAdController? adController;
+  final DateTime Function()? now;
 
   const GetCoinsScreen({
     super.key,
     required this.authService,
     this.backendApiService,
     this.adController,
+    this.now,
   });
 
   @override
   State<GetCoinsScreen> createState() => _GetCoinsScreenState();
 }
 
-class _GetCoinsScreenState extends State<GetCoinsScreen> {
+class _GetCoinsScreenState extends State<GetCoinsScreen>
+    with WidgetsBindingObserver {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
@@ -67,6 +64,13 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   bool _adReady = false;
   bool _adLoading = false;
   bool _adFlowBusy = false;
+  RewardedAdContext? _activeAdContext;
+
+  String _todayLocalDate() {
+    final now = widget.now?.call() ?? DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${now.year}-${two(now.month)}-${two(now.day)}';
+  }
 
   @override
   void initState() {
@@ -75,24 +79,73 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
     final provided = widget.adController;
     _ownsAdController = provided == null;
     _adController = provided ?? AdService();
+    WidgetsBinding.instance.addObserver(this);
+    widget.authService.addListener(_handleAuthChanged);
+    _activeAdContext = _currentAdContext;
+    _observeReadiness();
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.authService.removeListener(_handleAuthChanged);
     if (_ownsAdController) _adController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncContextAndReload();
+  }
+
+  RewardedAdContext? get _currentAdContext {
+    final userId = widget.authService.userId;
+    if (userId == null || userId.isEmpty) return null;
+    return RewardedAdContext.getCoins(
+      userId: userId,
+      localDate: _todayLocalDate(),
+    );
+  }
+
+  void _handleAuthChanged() => _syncContextAndReload();
+
+  void _syncContextAndReload() {
+    if (!mounted) return;
+    final next = _currentAdContext;
+    final previous = _activeAdContext;
+    if (previous == next) {
+      _observeReadiness();
+      return;
+    }
+    if (previous != null) _adController.disposeContext(previous);
+    setState(() {
+      _activeAdContext = next;
+      _status = null;
+      _adReady = false;
+      _adLoading = false;
+    });
+    _observeReadiness();
+    _load();
+  }
+
+  void _observeReadiness() {
+    final context = _activeAdContext;
+    if (!mounted || context == null) return;
+    final ready = _adController.isReadyFor(context);
+    if (_adReady != ready) setState(() => _adReady = ready);
+  }
+
   Future<void> _load() async {
     final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
+    final context = _activeAdContext;
+    if (token == null || token.isEmpty || context?.localDate == null) return;
     try {
       final res = await _api.fetchGetCoinsStatus(
         identityToken: token,
-        localDate: _todayLocalDate(),
+        localDate: context!.localDate!,
       );
-      if (!mounted) return;
+      if (!mounted || _activeAdContext != context) return;
       final referralRewards = res['referralRewards'];
       final referrer = referralRewards is Map
           ? referralRewards['referrerCoins']
@@ -112,11 +165,22 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
         // dashboard fallback; claimed/ad status is already usable.
         unawaited(_loadReferralRewards(token));
       }
-      await _maybePrepareAd();
+      if (!_offerLive) {
+        _adController.disposeContext(context);
+        if (mounted) setState(() => _adReady = false);
+      } else {
+        await _maybePrepareAd();
+      }
     } catch (_) {
       // Status is progressive enhancement here: without it the hub still
       // shows the referral and daily-spin entries.
-      if (mounted) setState(() => _status = const {});
+      if (mounted && context != null && _activeAdContext == context) {
+        _adController.disposeContext(context);
+        setState(() {
+          _status = const {};
+          _adReady = false;
+        });
+      }
     }
   }
 
@@ -183,23 +247,19 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   Future<void> _maybePrepareAd() async {
     if (!_offerLive || !_adController.isSupported || _pendingGrant) return;
     if (_adLoading) return;
-    final userId = widget.authService.userId;
-    if (userId == null || userId.isEmpty) return;
-    if (!_adController.isReady) {
+    final context = _activeAdContext;
+    if (context == null) return;
+    if (!_adController.isReadyFor(context)) {
       setState(() => _adLoading = true);
       try {
-        // The localDate parameter rides to AdMob as the SSV custom_data; the
-        // "coins:" prefix tells the backend to mint a coin_reward grant
-        // rather than an extra daily spin.
-        await _adController.load(
-          userId: userId,
-          localDate: 'coins:${_todayLocalDate()}',
-        );
+        await _adController.warm(context);
       } finally {
         if (mounted) setState(() => _adLoading = false);
       }
     }
-    if (mounted) setState(() => _adReady = _adController.isReady);
+    if (mounted && _activeAdContext == context) {
+      setState(() => _adReady = _adController.isReadyFor(context));
+    }
   }
 
   // (Optionally) run the rewarded ad, then claim. The server only honors the
@@ -207,25 +267,32 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   // "I watched an ad".
   Future<void> _startWatchAd() async {
     if (_adFlowBusy) return;
+    if (_currentAdContext != _activeAdContext) {
+      _syncContextAndReload();
+      return;
+    }
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
     final pending = _pendingGrant;
+    final adContext = _activeAdContext;
 
     setState(() => _adFlowBusy = true);
     try {
       if (!pending) {
-        if (!_adController.isReady) return;
+        if (adContext == null || !_adController.isReadyFor(adContext)) return;
         setState(() => _adReady = false);
-        final earned = await _adController.showAndAwaitReward();
-        if (!mounted) return;
+        final earned = await _adController.showAndAwaitRewardFor(adContext);
+        if (!_flowStillCurrent(token, adContext)) return;
         if (!earned) {
           // Closed early: nothing to claim; re-arm so the offer stays live.
           await _maybePrepareAd();
           return;
         }
       }
-      final res = await _claimWithRetry(token);
-      if (!mounted) return;
+      final claimDate = adContext?.localDate;
+      if (claimDate == null) return;
+      final res = await _claimWithRetry(token, claimDate, adContext);
+      if (!_flowStillCurrent(token, adContext)) return;
       final coins = res['coins'];
       if (coins is num) widget.authService.updateCoins(coins.toInt());
       setState(() {
@@ -243,10 +310,14 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
           },
         };
       });
+      if (_remainingToday <= 0 && adContext != null) {
+        _adController.disposeContext(adContext);
+      }
       final rawEarnedAmount = res['coinAmount'];
       final earnedAmount = rawEarnedAmount is num
           ? rawEarnedAmount.toInt()
           : _coinAmount;
+      if (!mounted) return;
       showInfoToast(context, '+$earnedAmount coins earned!');
       await _maybePrepareAd();
     } catch (_) {
@@ -264,13 +335,20 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   // AdMob's server-side verification can land a few seconds after the ad
   // closes on-device; the backend answers 409 ("no verified ad reward") until
   // it does. Retry briefly before giving up.
-  Future<Map<String, dynamic>> _claimWithRetry(String token) async {
+  Future<Map<String, dynamic>> _claimWithRetry(
+    String token,
+    String localDate,
+    RewardedAdContext? context,
+  ) async {
     const maxAttempts = 5;
     for (var attempt = 0; ; attempt++) {
       try {
+        if (!_flowStillCurrent(token, context)) {
+          throw StateError('Rewarded-ad context changed');
+        }
         return await _api.claimAdCoinReward(
           identityToken: token,
-          localDate: _todayLocalDate(),
+          localDate: localDate,
         );
       } on ApiException catch (e) {
         final ssvLag =
@@ -281,6 +359,13 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
       }
     }
   }
+
+  bool _flowStillCurrent(String token, RewardedAdContext? context) =>
+      mounted &&
+      context != null &&
+      widget.authService.authToken == token &&
+      _activeAdContext == context &&
+      _currentAdContext == context;
 
   void _openReferral() {
     Navigator.of(context).push(
@@ -308,7 +393,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
               // `coins:<date>` SSV custom_data, and the extra-spin flow showing
               // it would mint coins instead of a spin. Null lets that screen
               // create its own correctly-armed controller.
-              adController: widget.adController,
+              adController: null,
             ),
             transitionsBuilder: (_, animation, _, child) =>
                 FadeTransition(opacity: animation, child: child),

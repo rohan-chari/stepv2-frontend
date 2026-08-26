@@ -75,6 +75,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   // yet used). Drives the EXTRA SPIN button state. Fed by the batch payload's
   // dailyReward.adExtraSpin (new backends) or the standalone status fetch.
   bool _extraSpinAvailable = false;
+  bool _extraSpinPendingGrant = false;
   // One ad controller per chip lifetime so a preloaded rewarded ad survives
   // reopening the daily-reward screen. Constructing it touches no platform
   // channels; ads only load once the screen sees a live offer.
@@ -84,11 +85,13 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
       widget.analytics ?? ActivationAnalyticsService();
   bool _ticketOfferShown = false;
   bool _ticketAdPreparationStarted = false;
+  RewardedAdContext? _ticketAdContext;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.authService.addListener(_handleAuthChanged);
     _consumeBatchOrFetch();
   }
 
@@ -110,15 +113,20 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     // batch from before midnight would resurrect yesterday's claim state.
     if (data != null && data['localDate'] == today) {
       final wasAvailable = _extraSpinAvailable;
+      final extra = _extraSpinBlock(data);
       final available = _extraSpinFrom(data);
       setState(() {
         _unclaimed = data['claimedToday'] != true;
         _extraSpinAvailable = available;
+        _extraSpinPendingGrant = extra?['pendingGrant'] == true;
         _loaded = true;
         _lastFetchedDate = today;
       });
       _recordTicketShownIfNew(wasAvailable: wasAvailable, available: available);
-      _maybePreloadTicketAd(available);
+      _maybePreloadTicketAd(
+        available,
+        pendingGrant: extra?['pendingGrant'] == true,
+      );
     } else if (!widget.awaitingBatch) {
       // Old backend (no embedded dailyReward), stale batch, or batch failure:
       // standalone fetch, same as before the batching change.
@@ -130,6 +138,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.authService.removeListener(_handleAuthChanged);
     // Only dispose a controller the chip created; an injected one is owned by
     // the caller.
     if (widget.adController == null) _adController.dispose();
@@ -140,13 +149,35 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (_lastFetchedDate != _todayLocalDate()) {
+        final previous = _ticketAdContext;
+        if (previous != null) _adController.disposeContext(previous);
+        _ticketAdContext = null;
+        _ticketAdPreparationStarted = false;
         _refresh();
+      } else {
+        _ticketAdPreparationStarted = false;
+        _maybePreloadTicketAd(
+          _extraSpinAvailable,
+          pendingGrant: _extraSpinPendingGrant,
+        );
       }
+    }
+  }
+
+  void _handleAuthChanged() {
+    final previous = _ticketAdContext;
+    final userId = widget.authService.userId;
+    if (previous != null && previous.userId != userId) {
+      _adController.disposeContext(previous);
+      _ticketAdContext = null;
+      _ticketAdPreparationStarted = false;
+      _refresh();
     }
   }
 
   Future<void> _refresh() async {
     final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
     if (token == null || token.isEmpty) {
       if (mounted) setState(() => _loaded = true);
       return;
@@ -157,19 +188,32 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         identityToken: token,
         localDate: localDate,
       );
-      if (!mounted) return;
+      if (!mounted ||
+          widget.authService.authToken != token ||
+          widget.authService.userId != userId) {
+        return;
+      }
       final wasAvailable = _extraSpinAvailable;
+      final extra = _extraSpinBlock(res);
       final available = _extraSpinFrom(res);
       setState(() {
         _unclaimed = res['claimedToday'] != true;
         _extraSpinAvailable = available;
+        _extraSpinPendingGrant = extra?['pendingGrant'] == true;
         _loaded = true;
         _lastFetchedDate = localDate;
       });
       _recordTicketShownIfNew(wasAvailable: wasAvailable, available: available);
-      _maybePreloadTicketAd(available);
+      _maybePreloadTicketAd(
+        available,
+        pendingGrant: extra?['pendingGrant'] == true,
+      );
     } catch (_) {
-      if (mounted) setState(() => _loaded = true);
+      if (mounted &&
+          widget.authService.authToken == token &&
+          widget.authService.userId == userId) {
+        setState(() => _loaded = true);
+      }
     }
   }
 
@@ -180,10 +224,15 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   bool _extraSpinFrom(Map<String, dynamic> payload) {
     if (payload['claimedToday'] != true) return false;
     if (!_adController.isSupported) return false;
-    final extra = payload['adExtraSpin'];
-    if (extra is! Map<String, dynamic>) return false;
+    final extra = _extraSpinBlock(payload);
+    if (extra == null) return false;
     if (extra['used'] == true) return false;
     return extra['available'] == true || extra['pendingGrant'] == true;
+  }
+
+  Map<String, dynamic>? _extraSpinBlock(Map<String, dynamic> payload) {
+    final extra = payload['adExtraSpin'];
+    return extra is Map<String, dynamic> ? extra : null;
   }
 
   void _recordTicketShownIfNew({
@@ -205,20 +254,33 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   /// borrows this same controller, so a ready ad survives navigation. A
   /// failed preload is retried by the sheet, which owns the user-visible
   /// loading state and its associated readiness telemetry.
-  void _maybePreloadTicketAd(bool available) {
+  void _maybePreloadTicketAd(bool available, {required bool pendingGrant}) {
     if (!available ||
+        pendingGrant ||
         _ticketAdPreparationStarted ||
         !_adController.isSupported) {
       return;
     }
     final userId = widget.authService.userId;
     if (userId == null || userId.isEmpty) return;
-    _ticketAdPreparationStarted = true;
-    if (!_adController.isReady) {
-      unawaited(
-        _adController.load(userId: userId, localDate: _todayLocalDate()),
-      );
+    final context = RewardedAdContext.extraSpin(
+      userId: userId,
+      localDate: _todayLocalDate(),
+    );
+    final previous = _ticketAdContext;
+    if (previous != null && previous != context) {
+      _adController.disposeContext(previous);
     }
+    _ticketAdContext = context;
+    _ticketAdPreparationStarted = true;
+    unawaited(() async {
+      if (!_adController.isReadyFor(context)) {
+        await _adController.warm(context);
+      }
+      if (mounted && !_adController.isReadyFor(context)) {
+        _ticketAdPreparationStarted = false;
+      }
+    }());
   }
 
   Future<void> _open() async {

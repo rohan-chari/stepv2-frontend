@@ -78,6 +78,7 @@ class _FakeAdController implements ExtraSpinAdController {
 
   final bool earn;
   String? lastLocalDate;
+  int loads = 0;
   int shows = 0;
   bool _loaded = false;
 
@@ -89,6 +90,7 @@ class _FakeAdController implements ExtraSpinAdController {
 
   @override
   Future<void> load({required String userId, required String localDate}) async {
+    loads++;
     lastLocalDate = localDate;
     _loaded = true;
   }
@@ -556,6 +558,7 @@ void main() {
       await _openAllFromRace(tester);
 
       expect(_rerollAllButton, findsOneWidget);
+      expect(ad.loads, 1, reason: 'Open All summary warms before the tap');
       await tester.tap(_rerollAllButton);
       for (var i = 0; i < 8; i++) {
         await tester.pump(const Duration(milliseconds: 200));

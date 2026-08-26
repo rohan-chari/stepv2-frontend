@@ -66,9 +66,11 @@ class _FakeRacePayoutAdController implements RacePayoutDoubleAdController {
   bool earnReward = true;
   int loadCalls = 0;
   int showCalls = 0;
+  int disposeCalls = 0;
   String? loadedUserId;
   String? loadedOfferId;
   Completer<void>? loadCompleter;
+  Completer<bool>? showCompleter;
 
   @override
   bool get isSupported => true;
@@ -92,11 +94,11 @@ class _FakeRacePayoutAdController implements RacePayoutDoubleAdController {
   Future<bool> showAndAwaitReward() async {
     showCalls++;
     ready = false;
-    return earnReward;
+    return showCompleter?.future ?? earnReward;
   }
 
   @override
-  void dispose() {}
+  void dispose() => disposeCalls++;
 }
 
 class _FakeRacePayoutApi extends BackendApiService {
@@ -173,7 +175,7 @@ Future<AuthService> _auth() async {
   return auth;
 }
 
-Future<void> _pump(
+Future<AuthService> _pump(
   WidgetTester tester, {
   required RacePayoutDoubleOffer? offer,
   _FakeRacePayoutApi? api,
@@ -182,8 +184,22 @@ Future<void> _pump(
   Duration claimRetryDelay = Duration.zero,
   bool canStartNextRace = false,
   bool disableAnimations = false,
+  bool adControllerOwnedByCaller = true,
 }) async {
   final auth = await _auth();
+  if (api != null && offer != null && offer.offerId == null) {
+    api.prepared = <String, dynamic>{
+      'offerId': _offerId,
+      'raceIds': offer.raceIds,
+      'baseCoins': offer.baseCoins,
+      'bonusCoins': offer.bonusCoins,
+      if (offer.maxBonusCoins != null) 'maxBonusCoins': offer.maxBonusCoins,
+      if (offer.rolling24hRemainingBeforeClaim != null)
+        'rolling24hRemainingBeforeClaim': offer.rolling24hRemainingBeforeClaim,
+      'rewardMode': offer.rewardMode,
+      'status': 'PENDING',
+    };
+  }
   await tester.pumpWidget(
     MaterialApp(
       home: MediaQuery(
@@ -195,12 +211,14 @@ Future<void> _pump(
           authService: auth,
           backendApiService: api,
           adController: ads,
+          adControllerOwnedByCaller: adControllerOwnedByCaller,
           claimRetryDelay: claimRetryDelay,
         ),
       ),
     ),
   );
   await tester.pump();
+  return auth;
 }
 
 void main() {
@@ -362,35 +380,36 @@ void main() {
     }
   });
 
-  testWidgets('real result screen places one exact double plaque before CONTINUE', (
-    tester,
-  ) async {
-    final races = _races();
-    final offer = RacePayoutDoubleOffer.tryParse(
-      _offerJson(),
-      popupRaceIds: const ['race-a'],
-    );
-    await _pump(
-      tester,
-      offer: offer,
-      api: _FakeRacePayoutApi(),
-      ads: _FakeRacePayoutAdController(),
-      races: races,
-    );
+  testWidgets(
+    'real result screen places one exact double plaque before CONTINUE',
+    (tester) async {
+      final races = _races();
+      final offer = RacePayoutDoubleOffer.tryParse(
+        _offerJson(),
+        popupRaceIds: const ['race-a'],
+      );
+      await _pump(
+        tester,
+        offer: offer,
+        api: _FakeRacePayoutApi(),
+        ads: _FakeRacePayoutAdController(),
+        races: races,
+      );
 
-    expect(find.byKey(const Key('race-payout-double-panel')), findsOneWidget);
-    expect(find.text('DOUBLE +120 COINS'), findsOneWidget);
-    expect(find.text('Watch one ad to get another 120.'), findsOneWidget);
-    expect(find.text('WATCH AD · +120 COINS'), findsOneWidget);
-    final actionText = tester.widget<Text>(
-      find.text('WATCH AD · +120 COINS'),
-    );
-    expect(actionText.style?.color, Colors.white);
-    expect(
-      tester.getTopLeft(find.byKey(const Key('race-payout-double-panel'))).dy,
-      lessThan(tester.getTopLeft(find.text('CONTINUE')).dy),
-    );
-  });
+      expect(find.byKey(const Key('race-payout-double-panel')), findsOneWidget);
+      expect(find.text('DOUBLE +120 COINS'), findsOneWidget);
+      expect(find.text('Watch one ad to get another 120.'), findsOneWidget);
+      expect(find.text('WATCH AD · +120 COINS'), findsOneWidget);
+      final actionText = tester.widget<Text>(
+        find.text('WATCH AD · +120 COINS'),
+      );
+      expect(actionText.style?.color, Colors.white);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('race-payout-double-panel'))).dy,
+        lessThan(tester.getTopLeft(find.text('CONTINUE')).dy),
+      );
+    },
+  );
 
   testWidgets('legacy capped payout-double values retain their actual copy', (
     tester,
@@ -463,39 +482,112 @@ void main() {
     }
   });
 
-  testWidgets('tap prepares before loading and loading leaves CONTINUE enabled', (
+  testWidgets(
+    'tap prepares before loading and loading leaves CONTINUE enabled',
+    (tester) async {
+      final api = _FakeRacePayoutApi();
+      final ads = _FakeRacePayoutAdController()
+        ..loadCompleter = Completer<void>();
+      final offer = RacePayoutDoubleOffer.tryParse(
+        _offerJson(),
+        popupRaceIds: const ['race-a'],
+      );
+      await _pump(tester, offer: offer, api: api, ads: ads);
+
+      await tester.tap(find.text('WATCH AD · +120 COINS'));
+      await tester.pump();
+
+      expect(api.prepareCalls, 1);
+      expect(api.preparedRaceIds, const ['race-a']);
+      expect(ads.loadCalls, 1);
+      expect(ads.loadedOfferId, _offerId);
+      expect(find.text('LOADING AD…'), findsOneWidget);
+      expect(
+        tester
+            .widget<GestureDetector>(
+              find
+                  .ancestor(
+                    of: find.text('CONTINUE'),
+                    matching: find.byType(GestureDetector),
+                  )
+                  .first,
+            )
+            .onTapUp,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets('missing offer ID prepares and warms after popup render', (
     tester,
   ) async {
     final api = _FakeRacePayoutApi();
-    final ads = _FakeRacePayoutAdController()
-      ..loadCompleter = Completer<void>();
+    final ads = _FakeRacePayoutAdController();
     final offer = RacePayoutDoubleOffer.tryParse(
       _offerJson(),
       popupRaceIds: const ['race-a'],
     );
-    await _pump(tester, offer: offer, api: api, ads: ads);
 
-    await tester.tap(find.text('WATCH AD · +120 COINS'));
+    await _pump(tester, offer: offer, api: api, ads: ads);
     await tester.pump();
 
     expect(api.prepareCalls, 1);
-    expect(api.preparedRaceIds, const ['race-a']);
     expect(ads.loadCalls, 1);
+    expect(ads.loadedUserId, 'user-1');
     expect(ads.loadedOfferId, _offerId);
-    expect(find.text('LOADING AD…'), findsOneWidget);
-    expect(
-      tester
-          .widget<GestureDetector>(
-            find
-                .ancestor(
-                  of: find.text('CONTINUE'),
-                  matching: find.byType(GestureDetector),
-                )
-                .first,
-          )
-          .onTapUp,
-      isNotNull,
+    expect(ads.showCalls, 0, reason: 'preparation must never present the ad');
+  });
+
+  testWidgets(
+    'AD_NOT_VERIFIED recovery finishes before warming the same offer',
+    (tester) async {
+      final api = _FakeRacePayoutApi()
+        ..claimResults = <Object>[
+          for (var i = 0; i < 5; i++)
+            const ApiException(
+              'Not verified',
+              statusCode: 409,
+              code: 'AD_NOT_VERIFIED',
+            ),
+        ];
+      final ads = _FakeRacePayoutAdController();
+      final offer = RacePayoutDoubleOffer.tryParse(
+        _offerJson(offerId: _offerId),
+        popupRaceIds: const ['race-a'],
+      );
+
+      await _pump(tester, offer: offer, api: api, ads: ads);
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+
+      expect(api.claimCalls, 5);
+      expect(ads.loadCalls, 1);
+      expect(ads.loadedOfferId, _offerId);
+      expect(ads.showCalls, 0);
+    },
+  );
+
+  testWidgets('explicit caller-owned payout controller is not disposed', (
+    tester,
+  ) async {
+    final ads = _FakeRacePayoutAdController();
+    final offer = RacePayoutDoubleOffer.tryParse(
+      _offerJson(),
+      popupRaceIds: const ['race-a'],
     );
+    await _pump(
+      tester,
+      offer: offer,
+      api: _FakeRacePayoutApi(),
+      ads: ads,
+      adControllerOwnedByCaller: true,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    expect(ads.disposeCalls, 0);
   });
 
   testWidgets('early close does not claim and reports the exact bonus', (
@@ -518,6 +610,51 @@ void main() {
       find.text('Finish the ad to earn +120 bonus coins.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('account switch during presentation never claims old offer', (
+    tester,
+  ) async {
+    final api = _FakeRacePayoutApi();
+    final ads = _FakeRacePayoutAdController()
+      ..showCompleter = Completer<bool>();
+    final offer = RacePayoutDoubleOffer.tryParse(
+      _offerJson(),
+      popupRaceIds: const ['race-a'],
+    );
+    final auth = await _pump(tester, offer: offer, api: api, ads: ads);
+
+    await tester.tap(find.text('WATCH AD · +120 COINS'));
+    await tester.pump();
+    await auth.updateSessionToken('new-session');
+    await auth.syncFromBackendUser(const {'id': 'user-2'});
+    await tester.pump();
+    ads.showCompleter!.complete(true);
+    await tester.pump();
+
+    expect(api.claimCalls, 0);
+    expect(find.byKey(const Key('race-payout-double-panel')), findsNothing);
+  });
+
+  testWidgets('successful recovery never exposes or shows a second ad', (
+    tester,
+  ) async {
+    final api = _FakeRacePayoutApi()..claimCompleter = Completer<void>();
+    final ads = _FakeRacePayoutAdController();
+    final offer = RacePayoutDoubleOffer.tryParse(
+      _offerJson(offerId: _offerId),
+      popupRaceIds: const ['race-a'],
+    );
+    await _pump(tester, offer: offer, api: api, ads: ads);
+
+    expect(find.text('WATCH AD · +120 COINS'), findsNothing);
+    api.claimCompleter!.complete();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump();
+    }
+
+    expect(api.claimCalls, 1);
+    expect(ads.showCalls, 0);
   });
 
   testWidgets('SSV lag retries five total attempts with the immutable ID', (

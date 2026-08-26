@@ -93,6 +93,7 @@ class MainShell extends StatefulWidget {
     this.notificationService,
     this.reviewPromptService,
     this.racePayoutDoubleAdController,
+    this.getCoinsAdControllerBuilder,
     this.raceResultsAcknowledgementQueue,
     this.forceHomeInviteEligibilityForTesting = false,
   });
@@ -104,6 +105,7 @@ class MainShell extends StatefulWidget {
   final NotificationService? notificationService;
   final ReviewPromptService? reviewPromptService;
   final RacePayoutDoubleAdController? racePayoutDoubleAdController;
+  final ExtraSpinAdController Function()? getCoinsAdControllerBuilder;
   final RaceResultsAcknowledgementQueue? raceResultsAcknowledgementQueue;
   @visibleForTesting
   final bool forceHomeInviteEligibilityForTesting;
@@ -125,6 +127,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final AdminMetricsTelemetryService _adminMetricsTelemetry;
   late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
   late final FriendsSummaryRepository _friendsRepository;
+  ExtraSpinAdController? _getCoinsAdController;
+  int _getCoinsAuthGeneration = 0;
+  String? _getCoinsWarmKey;
+  Future<void>? _getCoinsWarmFuture;
   bool _globalSummaryShowing = false;
   Map<String, dynamic>? _pendingGlobalEventSummary;
 
@@ -649,6 +655,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final nextToken = widget.authService.authToken;
     final userChanged = _homeSuggestionsUserId != nextUserId;
     final tokenChanged = _raceCardAuthToken != nextToken;
+    if (userChanged || tokenChanged) {
+      _invalidateGetCoinsSession();
+    }
     unawaited(
       _adminMetricsTelemetry.authenticatedForeground(
         nextToken,
@@ -703,9 +712,77 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     unawaited(_hydrateAndReplayRaceResultsAcks());
     if (!_isOnboarding) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_coordinateHomeOverlays());
+        if (mounted) {
+          unawaited(_coordinateHomeOverlays());
+          _scheduleGetCoinsWarm();
+        }
       });
     }
+  }
+
+  ExtraSpinAdController get _sessionGetCoinsAdController =>
+      _getCoinsAdController ??=
+          widget.getCoinsAdControllerBuilder?.call() ?? AdService();
+
+  void _invalidateGetCoinsSession() {
+    _getCoinsAuthGeneration++;
+    _getCoinsWarmKey = null;
+    _getCoinsWarmFuture = null;
+    _getCoinsAdController?.dispose();
+    _getCoinsAdController = null;
+  }
+
+  String _getCoinsLocalDate() {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${now.year}-${two(now.month)}-${two(now.day)}';
+  }
+
+  void _scheduleGetCoinsWarm() {
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    if (_isOnboarding ||
+        token == null ||
+        token.isEmpty ||
+        userId == null ||
+        userId.isEmpty) {
+      return;
+    }
+    final generation = _getCoinsAuthGeneration;
+    final localDate = _getCoinsLocalDate();
+    final key = '$generation:$userId:$localDate';
+    if (_getCoinsWarmKey == key) return;
+    _getCoinsWarmKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _isOnboarding ||
+          generation != _getCoinsAuthGeneration ||
+          widget.authService.authToken != token ||
+          widget.authService.userId != userId) {
+        return;
+      }
+      final context = RewardedAdContext.getCoins(
+        userId: userId,
+        localDate: localDate,
+      );
+      _getCoinsWarmFuture = _sessionGetCoinsAdController.warm(context);
+      unawaited(_getCoinsWarmFuture!);
+    });
+  }
+
+  void _resumeGetCoinsWarm() {
+    if (_isOnboarding) return;
+    final userId = widget.authService.userId;
+    if (userId == null || userId.isEmpty) return;
+    final localDate = _getCoinsLocalDate();
+    final expectedKey = '$_getCoinsAuthGeneration:$userId:$localDate';
+    if (_getCoinsWarmKey != expectedKey) {
+      _getCoinsWarmKey = null;
+      _scheduleGetCoinsWarm();
+    }
+    // For the same user/date, GetCoinsScreen owns eligibility-aware rewarming.
+    // Do not resurrect a speculative ad it disposed after the backend omitted
+    // or exhausted the offer.
   }
 
   @override
@@ -783,6 +860,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _jobPollToken += 1; // invalidate any in-flight job polling loop
     _pageController.dispose();
     _bannerHeight.dispose();
+    _getCoinsAdController?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1134,6 +1212,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+        _resumeGetCoinsWarm();
         unawaited(
           _adminMetricsTelemetry.didResume(
             widget.authService.authToken,
@@ -2480,6 +2559,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             adUnitId: AdService.racePayoutDoubleAdUnitId,
                           )
                         : null),
+          adControllerOwnedByCaller:
+              widget.racePayoutDoubleAdController != null,
           onBeforeDismiss: userId == null || userId.isEmpty
               ? null
               : () async {
@@ -4060,6 +4141,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           authService: widget.authService,
           backendApiService: _backendApiService,
           onShopChanged: _onShopCatalogChanged,
+          getCoinsAdController: _sessionGetCoinsAdController,
         ),
       ),
     );
@@ -4118,6 +4200,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _homeReachedRecorded = true;
       unawaited(_activationAnalytics.record('home_reached'));
     }
+    if (!_isOnboarding) _scheduleGetCoinsWarm();
 
     // Once per render-session: the denominator for invite_code_applied /
     // invite_code_skipped. Guarded by a plain bool, like home_reached — a
@@ -4263,6 +4346,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           notificationsState: _notificationsState,
                           displayName: _displayName,
                           authService: widget.authService,
+                          getCoinsAdController: _sessionGetCoinsAdController,
                           onRefresh: _refreshHomeTab,
                           onEnableHealth: _enableHealthData,
                           onEnableNotifications: _enableNotifications,

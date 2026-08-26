@@ -773,6 +773,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       );
     }
     WidgetsBinding.instance.addObserver(this);
+    widget.authService.addListener(_handleRewardedAdAuthChanged);
     _countdownNow = DateTime.now();
     _messageFocus.addListener(_onComposerFocusChanged);
     _loadDetails();
@@ -993,6 +994,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _countdownActive) {
       _startCountdown();
     }
+    if (state == AppLifecycleState.resumed && _rerollAdCtrl != null) {
+      _warmRerollAd();
+    }
   }
 
   // The composer lives inside the page's SingleChildScrollView, so the
@@ -1020,6 +1024,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
     }
     WidgetsBinding.instance.removeObserver(this);
+    widget.authService.removeListener(_handleRewardedAdAuthChanged);
     appRouteObserver.unsubscribe(this);
     // Only dispose a controller we created; an injected one belongs to the
     // caller (tests).
@@ -1640,6 +1645,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               : null;
           _progressState = Loadable.success(resolvedProgress);
         });
+        _disposeRerollIfUnavailable();
       }
 
       if (_powerupData?['enabled'] == true) {
@@ -2754,6 +2760,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               if (entry.key is String) entry.key as String: entry.value,
           };
         });
+        _disposeRerollIfUnavailable();
       }
       return rawParticipants;
     } catch (_) {
@@ -6329,6 +6336,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final total = (slotIds.length + queued).clamp(0, 20);
     if (total < 1) return;
 
+    if (_boxRerollBatchEnabled) _warmRerollAd();
+
     _beginAction(_openAllActionId);
     try {
       await Navigator.of(context).push(
@@ -6457,13 +6466,68 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// and its own SSV customData prefix, so its grants can never be consumed by
   /// the daily-spinner extra spin (and vice versa).
   ExtraSpinAdController? _rerollAdCtrl;
+  String? _rerollBoundUserId;
+  RewardedAdContext? _rerollBoundContext;
 
-  ExtraSpinAdController get _rerollAd => _rerollAdCtrl ??=
-      widget.boxRerollAdController ??
-      AdService(
-        adUnitId: AdService.boxRerollAdUnitId,
-        customDataPrefix: 'box_reroll',
-      );
+  void _handleRewardedAdAuthChanged() {
+    final controller = _rerollAdCtrl;
+    if (controller == null) return;
+    if (_rerollBoundUserId == _myUserId) return;
+    final boundContext = _rerollBoundContext;
+    if (widget.boxRerollAdController != null && boundContext != null) {
+      controller.disposeContext(boundContext);
+    } else {
+      controller.dispose();
+    }
+    _rerollAdCtrl = null;
+    _rerollBoundUserId = null;
+    _rerollBoundContext = null;
+  }
+
+  ExtraSpinAdController get _rerollAd {
+    _rerollBoundUserId = _myUserId;
+    return _rerollAdCtrl ??=
+        widget.boxRerollAdController ??
+        AdService(
+          adUnitId: AdService.boxRerollAdUnitId,
+          customDataPrefix: 'box_reroll',
+        );
+  }
+
+  RewardedAdContext? get _rerollAdContext {
+    final userId = _myUserId;
+    if (userId.isEmpty) return null;
+    return RewardedAdContext.boxReroll(
+      userId: userId,
+      localDate: _todayLocalDate(),
+    );
+  }
+
+  void _warmRerollAd() {
+    if (widget.demoMode || (!_boxRerollEnabled && !_boxRerollBatchEnabled)) {
+      return;
+    }
+    final context = _rerollAdContext;
+    if (context == null) return;
+    _rerollBoundContext = context;
+    unawaited(_rerollAd.warm(context));
+  }
+
+  void _disposeRerollIfUnavailable() {
+    if (_boxRerollEnabled || _boxRerollBatchEnabled) return;
+    final controller = _rerollAdCtrl;
+    final boundContext = _rerollBoundContext;
+    if (controller != null) {
+      if (widget.boxRerollAdController != null && boundContext != null) {
+        controller.disposeContext(boundContext);
+      } else {
+        controller.dispose();
+      }
+    }
+    _rerollAdCtrl = null;
+    _rerollBoundContext = null;
+    _rerollBoundUserId = null;
+  }
 
   static String _todayLocalDate() {
     final now = DateTime.now();
@@ -6483,27 +6547,41 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
 
     final localDate = _todayLocalDate();
+    final adContext = RewardedAdContext.boxReroll(
+      userId: userId,
+      localDate: localDate,
+    );
+    _rerollBoundContext = adContext;
     try {
       if (!_rerollAd.isSupported) return null;
-      if (!_rerollAd.isReady) {
-        await _rerollAd.load(userId: userId, localDate: localDate);
+      if (!_rerollAd.isReadyFor(adContext)) {
+        await _rerollAd.warm(adContext);
       }
-      if (!_rerollAd.isReady) {
+      if (!_rerollAd.isReadyFor(adContext)) {
         if (mounted) {
           showInfoToast(context, 'No ad available right now. Try again later.');
         }
         return null;
       }
 
-      final earned = await _rerollAd.showAndAwaitReward();
+      final earned = await _rerollAd.showAndAwaitRewardFor(adContext);
       // Closed early: no grant was minted, so there is nothing to consume.
       if (!earned) return null;
+      if (widget.authService.authToken != token || _myUserId != userId) {
+        return null;
+      }
 
       // Pass the SAME localDate the ad grant was minted with — never
       // recompute it inside the retry loop, which can span local midnight.
-      final result = await _rerollWithRetry(token, powerupId, localDate);
+      final result = await _rerollWithRetry(
+        token,
+        userId,
+        powerupId,
+        localDate,
+      );
+      if (!_rerollFlowCurrent(token, userId)) return null;
       // Warm the next one up for a second box this session.
-      unawaited(_rerollAd.load(userId: userId, localDate: localDate));
+      unawaited(_rerollAd.warm(adContext));
       // Item 4 (batch 2026-08-10b): do NOT refresh here. The case overlay is
       // non-opaque, so `_loadProgress` swapped the inventory row behind the
       // still-spinning reel to the NEW type and spoiled the reveal — exactly
@@ -6534,18 +6612,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// it without a second ad.
   Future<Map<String, dynamic>> _rerollWithRetry(
     String token,
+    String userId,
     String powerupId,
     String localDate,
   ) async {
     const maxAttempts = 5;
     for (var attempt = 0; ; attempt++) {
       try {
-        return await _api.rerollPowerup(
+        if (!_rerollFlowCurrent(token, userId)) {
+          throw StateError('Rewarded-ad identity changed');
+        }
+        final result = await _api.rerollPowerup(
           identityToken: token,
           raceId: widget.raceId,
           powerupId: powerupId,
           localDate: localDate,
         );
+        if (!_rerollFlowCurrent(token, userId)) {
+          throw StateError('Rewarded-ad identity changed');
+        }
+        return result;
       } on ApiException catch (e) {
         final ssvLag =
             e.statusCode == 409 &&
@@ -6570,31 +6656,41 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (powerupIds.isEmpty) return null;
 
     final localDate = _todayLocalDate();
+    final adContext = RewardedAdContext.boxReroll(
+      userId: userId,
+      localDate: localDate,
+    );
+    _rerollBoundContext = adContext;
     try {
       if (!_rerollAd.isSupported) return null;
-      if (!_rerollAd.isReady) {
-        await _rerollAd.load(userId: userId, localDate: localDate);
+      if (!_rerollAd.isReadyFor(adContext)) {
+        await _rerollAd.warm(adContext);
       }
-      if (!_rerollAd.isReady) {
+      if (!_rerollAd.isReadyFor(adContext)) {
         if (mounted) {
           showInfoToast(context, 'No ad available right now. Try again later.');
         }
         return null;
       }
 
-      final earned = await _rerollAd.showAndAwaitReward();
+      final earned = await _rerollAd.showAndAwaitRewardFor(adContext);
       // Closed early: no grant was minted, so there is nothing to consume.
       if (!earned) return null;
+      if (widget.authService.authToken != token || _myUserId != userId) {
+        return null;
+      }
 
       // Same localDate the grant was minted with, captured BEFORE the retry
       // loop — the loop can span local midnight.
       final response = await _rerollBatchWithRetry(
         token,
+        userId,
         powerupIds,
         localDate,
       );
+      if (!_rerollFlowCurrent(token, userId)) return null;
       // Warm the next ad for a second Open All this session.
-      unawaited(_rerollAd.load(userId: userId, localDate: localDate));
+      unawaited(_rerollAd.warm(adContext));
       // Item 4: NO _loadProgress() here — the reels are about to re-spin over
       // a non-opaque overlay. `_openAllBoxes`'s `finally` refreshes once the
       // overlay closes.
@@ -6648,18 +6744,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// attempt.
   Future<Map<String, dynamic>> _rerollBatchWithRetry(
     String token,
+    String userId,
     List<String> powerupIds,
     String localDate,
   ) async {
     const maxAttempts = 5;
     for (var attempt = 0; ; attempt++) {
       try {
-        return await _api.rerollPowerupBatch(
+        if (!_rerollFlowCurrent(token, userId)) {
+          throw StateError('Rewarded-ad identity changed');
+        }
+        final result = await _api.rerollPowerupBatch(
           identityToken: token,
           raceId: widget.raceId,
           powerupIds: powerupIds,
           localDate: localDate,
         );
+        if (!_rerollFlowCurrent(token, userId)) {
+          throw StateError('Rewarded-ad identity changed');
+        }
+        return result;
       } on ApiException catch (e) {
         final ssvLag =
             e.statusCode == 409 &&
@@ -6671,6 +6775,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
+  bool _rerollFlowCurrent(String token, String userId) =>
+      mounted && widget.authService.authToken == token && _myUserId == userId;
+
   Future<void> _openMysteryBox(String boxId) async {
     if (_isActing) return;
 
@@ -6681,6 +6788,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         setState(() => _isActing = false);
         return;
       }
+
+      if (_boxRerollEnabled) _warmRerollAd();
 
       await Navigator.of(context).push(
         PageRouteBuilder(

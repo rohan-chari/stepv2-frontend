@@ -13,6 +13,7 @@ import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
 import '../../utils/team_race.dart';
 import '../../services/auth_service.dart';
+import '../../services/ad_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/onboarding_state_service.dart';
 import '../../widgets/arcade_fx.dart';
@@ -54,6 +55,7 @@ class HomeTab extends StatelessWidget {
   final String? displayName;
   final AuthService authService;
   final BackendApiService backendApiService;
+  final ExtraSpinAdController? getCoinsAdController;
   final Future<void> Function() onRefresh;
   final VoidCallback onEnableHealth;
   final VoidCallback onEnableNotifications;
@@ -132,6 +134,7 @@ class HomeTab extends StatelessWidget {
     required this.displayName,
     required this.authService,
     required this.backendApiService,
+    this.getCoinsAdController,
     required this.onRefresh,
     required this.onEnableHealth,
     required this.onEnableNotifications,
@@ -1406,6 +1409,7 @@ class HomeTab extends StatelessWidget {
                                         builder: (_) => GetCoinsScreen(
                                           authService: authService,
                                           backendApiService: backendApiService,
+                                          adController: getCoinsAdController,
                                         ),
                                       ),
                                     ),

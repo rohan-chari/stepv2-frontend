@@ -336,6 +336,39 @@ class _FakeRacePayoutDoubleAdController
   void dispose() {}
 }
 
+class _FakeGetCoinsAdController implements ExtraSpinAdController {
+  bool ready = false;
+  int loadCalls = 0;
+  int showCalls = 0;
+  int disposeCalls = 0;
+  String? loadedUserId;
+  String? loadedCustomData;
+
+  @override
+  bool get isReady => ready;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<void> load({required String userId, required String localDate}) async {
+    loadCalls++;
+    loadedUserId = userId;
+    loadedCustomData = localDate;
+    ready = true;
+  }
+
+  @override
+  Future<bool> showAndAwaitReward() async {
+    showCalls++;
+    ready = false;
+    return true;
+  }
+
+  @override
+  void dispose() => disposeCalls++;
+}
+
 Future<AuthService> _authService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -391,6 +424,98 @@ void main() {
       'Profile',
     ]);
     expect(find.byKey(const Key('home-inbox-button')), findsNothing);
+  });
+
+  testWidgets(
+    'authenticated Home warms one session Get Coins ad after first frame',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final ads = _FakeGetCoinsAdController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: _FakeBackendApiService(),
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            getCoinsAdControllerBuilder: () => ads,
+          ),
+        ),
+      );
+
+      expect(ads.loadCalls, 0, reason: 'Home paint must not be blocked');
+      await tester.pump();
+      await tester.pump();
+
+      expect(ads.loadCalls, 1);
+      expect(ads.loadedUserId, 'user-1');
+      expect(ads.loadedCustomData, startsWith('coins:'));
+    },
+  );
+
+  testWidgets('account switch disposes the old Get Coins session cache', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final controllers = <_FakeGetCoinsAdController>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: _FakeBackendApiService(),
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          getCoinsAdControllerBuilder: () {
+            final controller = _FakeGetCoinsAdController();
+            controllers.add(controller);
+            return controller;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(controllers, hasLength(1));
+    expect(controllers.single.loadCalls, 1);
+
+    await authService.syncFromBackendUser(const {'id': 'user-2'});
+    await tester.pump();
+    await tester.pump();
+
+    expect(controllers.first.disposeCalls, 1);
+    expect(controllers, hasLength(2));
+    expect(controllers.last.loadedUserId, 'user-2');
+  });
+
+  testWidgets('onboarding Home never warms or initializes Get Coins ads', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    authService.applyBackendUser(const {
+      'firstRaceOnboardingSeen': false,
+      'tutorialOnboardingSeen': false,
+      'featureFlags': {'onboardingV3Enabled': true},
+    });
+    final ads = _FakeGetCoinsAdController();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: _FakeBackendApiService(completeOnboarding: false),
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          getCoinsAdControllerBuilder: () => ads,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(ads.loadCalls, 0);
   });
 
   testWidgets('Home keeps notification bell visible with no unread badge', (

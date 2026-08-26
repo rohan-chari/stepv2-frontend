@@ -170,6 +170,17 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     return {'claimedToday': false};
   }
 
+  @override
+  Future<Map<String, dynamic>> fetchGetCoinsStatus({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    // Explicit offline path: the real Get Coins route is reachable from the
+    // preview Home HUD, but tutorial gestures must never fall through to the
+    // production transport or advertise a rewarded placement.
+    return const {'claimedToday': false};
+  }
+
   // -- Profile: lifetime stats (_StatsSection) --
   @override
   Future<Map<String, dynamic>> fetchStats({
