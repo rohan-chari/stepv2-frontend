@@ -114,6 +114,34 @@ node-pg timestamp conversion.
 
 ## 1. Coin sources
 
+### 1e. Rewarded-ad surface refresh — verified 2026-08-25
+
+Current code defines six SSV-namespaced rewarded surfaces: `extra_daily_spin`,
+`coin_reward`, `powerup_unlock`, `shop_unlock`, `box_reroll`, and
+`race_payout_double`. The global `OPS_AD_VALUE_ISSUANCE_DISABLED=true` brake
+stops value issuance; otherwise all six paths are enabled subject to their
+endpoint/cap and client/ad-unit gates. Source: `CODE
+src/modules/economy/adRewards.js`, `src/shared/config/operationalControls.js`,
+and FE `lib/services/ad_service.dart`.
+
+The checked production connection is a snapshot whose latest write is
+2026-08-19 (server clock 2026-08-25), so it proves historical live behavior but
+not post-snapshot deployment state. In the trailing snapshot window there were
+349 `coin_reward` grants / 41 users (348 consumed for exactly 8,700 coins =
+**25 coins/watch**), 391 extra spins / 89 users (388 consumed; 14,120 minted
+coins plus non-coin prizes), 694 box rerolls / 67 users (681 consumed), 85
+race-payout grants / 49 users (84 consumed; 6,672 coins), and 8 powerup-unlock
+grants / 4 users (6 consumed). No `shop_unlock` grant appeared. Source: `DB
+ad_reward_grants`, aggregate-only read-only query, 2026-07-26 through
+2026-08-24 with the observed data ending 2026-08-19.
+
+**Code/live drift:** current code specifies uniform random **25–50 coins**
+(EV **37.5**) and **5/day** for capable clients, while the production snapshot
+shows the preceding **25 coins** and at most **3 consumed per watcher-day**.
+Do not use the new 187.5-coin/day ceiling as a live baseline until a fresh
+production connection or deployment check confirms it. Source: `CODE
+adRewards.js`, `getAdCoinRewardStatus.js`; `DB ad_reward_grants`.
+
 ### 1d. IAP planning refresh — 30 days to 2026-08-18 (`DB coin_transactions`)
 
 | Reason | Coins/day | n | Users |
@@ -778,11 +806,11 @@ gain of 3.4–5.1 — less than the 10 it was worth unspent. Simulated coins/box
 Horseshoe is strictly coin-negative and step-positive, which is the correct
 incentive.
 
-### 3.7 Ad-funded mystery-box reroll — `CODE powerups/commands/rerollMysteryBox.js`, verified 2026-08-10
+### 3.7 Ad-funded mystery-box reroll — `CODE powerups/commands/rerollMysteryBox.js`, verified 2026-08-25
 
 | Knob | Value | Source |
 |---|---|---|
-| Kill switch | `ADS_BOX_REROLL_ENABLED === "true"` (defaults **OFF**) | `ENV`, `CODE adRewards.js:56` |
+| Operational brake | enabled unless global `OPS_AD_VALUE_ISSUANCE_DISABLED=true` | `CODE operationalControls.js`, `adRewards.js` |
 | Grant kind | `box_reroll`, SSV custom_data `box_reroll:<userId>:<localDate>` | `CODE grantAdReward.js:30,95` |
 | **Daily cap on reroll ad watches** | **NONE** — unlike `ad_coin_reward` (25×3) and the ad unlock kinds, no cap exists | `CODE` |
 | Cost | 1 verified watch = 1 reroll, consumed CAS | `CODE rerollMysteryBox.js:225-250` |
@@ -795,8 +823,10 @@ incentive.
 **Store purchases carry a null rarity** (all `rainstorm`/`leech`/`quick_rinse`
 rows), so coins can *not* be converted into a box roll via reroll.
 
-**Prod volume since launch (2026-08-10):** 29 `box_reroll` grants / 8 users,
-27 rerolls performed, 27 `POWERUP_REROLLED` events.
+**Production-snapshot volume since launch (2026-08-10 through snapshot cutoff
+2026-08-19):** 694 `box_reroll` grants / 67 users, 681 consumed. The snapshot's
+write stream ends on 2026-08-19, so this is not a current-through-2026-08-25
+counter. Source: `DB ad_reward_grants`, aggregate-only read-only query.
 
 **Simultaneous-box ceiling (bounds any "reroll all" batch).**
 `DEFAULT_POWERUP_SLOTS = 3` + `MAX_QUEUED_BOXES = 1`; further crossings are

@@ -53,7 +53,6 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   /// binary; accepted tradeoff versus bundling the IANA database for one
   /// fixed-rule zone, and it keeps theme selection device-only with no init
   /// step and no data-load failure mode.
-  @visibleForTesting
   static Duration easternOffset(DateTime instant) {
     final utc = instant.toUtc();
     final dstStart = _nthSundayUtc(utc.year, DateTime.march, 2, 7);
