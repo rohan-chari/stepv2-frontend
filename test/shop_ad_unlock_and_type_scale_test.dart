@@ -153,8 +153,9 @@ void main() {
       expect(_styleOf(tester, 'x2').color, AppPalette.light.textLight);
     });
 
-    testWidgets('is cream in the NIGHT palette, not the near-black surface',
-        (tester) async {
+    testWidgets('is cream in the NIGHT palette, not the near-black surface', (
+      tester,
+    ) async {
       await _pump(
         tester,
         coins: 1000,
@@ -177,11 +178,12 @@ void main() {
       expect(_styleOf(tester, '150').fontSize, 13);
     });
 
-    // The grid is four tiles wide, so a tile is only ~68dp across at 320dp.
-    // The name therefore steps down from 13pt only as far as it must — long
+    // The phone grid is two tiles wide, giving merchandise room to breathe.
+    // The name still steps down from 13pt only as far as it must — long
     // two-word names must still render whole, never ellipsised.
-    testWidgets('long names render un-ellipsised at 320dp and 360dp wide',
-        (tester) async {
+    testWidgets('long names render un-ellipsised at 320dp and 360dp wide', (
+      tester,
+    ) async {
       for (final width in const [320.0, 360.0]) {
         tester.view.physicalSize = Size(width * 3, 720 * 3);
         tester.view.devicePixelRatio = 3;
@@ -189,13 +191,13 @@ void main() {
 
         for (final name in const ['Signal Jammer', 'Ghost Pepper']) {
           await _pump(tester, coins: 1000, price: 150, powerupName: name);
-          final paragraph =
-              tester.renderObject<RenderParagraph>(find.text(name).first);
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.text(name).first,
+          );
           expect(
             paragraph.didExceedMaxLines,
             isFalse,
-            reason:
-                '"$name" ellipsised inside the tile name box at ${width}dp',
+            reason: '"$name" ellipsised inside the tile name box at ${width}dp',
           );
         }
       }
@@ -221,8 +223,9 @@ void main() {
 
   // ── §7 / test 15 — the ad-unlock rules come from the server ────────────
   group('§7 ad-unlock is driven by the catalog adUnlock block', () {
-    testWidgets('adUnlock absent → today\'s 150-coin behaviour is preserved',
-        (tester) async {
+    testWidgets('adUnlock absent → today\'s 150-coin behaviour is preserved', (
+      tester,
+    ) async {
       await _pump(tester, coins: 30, price: 150);
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
@@ -230,8 +233,9 @@ void main() {
       expect(find.text('GET MORE COINS'), findsNothing);
     });
 
-    testWidgets('maxShortfall 20 → a 90-short tile routes to Get coins',
-        (tester) async {
+    testWidgets('maxShortfall 20 → a 90-short tile routes to Get coins', (
+      tester,
+    ) async {
       await _pump(
         tester,
         coins: 60,
@@ -250,8 +254,9 @@ void main() {
       expect(find.textContaining('Watch'), findsNothing);
     });
 
-    testWidgets('maxShortfall 20 → a 15-short tile offers one ad',
-        (tester) async {
+    testWidgets('maxShortfall 20 → a 15-short tile offers one ad', (
+      tester,
+    ) async {
       await _pump(
         tester,
         coins: 135,
@@ -269,36 +274,39 @@ void main() {
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
     });
 
-    testWidgets('remainingToday 0 → the ad button is absent, fail before the ad',
-        (tester) async {
-      await _pump(
-        tester,
-        coins: 135,
-        price: 150,
-        adUnlock: {
-          'maxShortfall': 20,
-          'coinsPerAd': 50,
-          'maxAds': 3,
-          'dailyCap': 1,
-          'remainingToday': 0,
-        },
-      );
-      await tester.tap(find.text('Big Bang').first);
-      await tester.pump();
-      expect(find.textContaining('WATCH'), findsNothing);
-      expect(find.text('GET MORE COINS'), findsOneWidget);
+    testWidgets(
+      'remainingToday 0 → the ad button is absent, fail before the ad',
+      (tester) async {
+        await _pump(
+          tester,
+          coins: 135,
+          price: 150,
+          adUnlock: {
+            'maxShortfall': 20,
+            'coinsPerAd': 50,
+            'maxAds': 3,
+            'dailyCap': 1,
+            'remainingToday': 0,
+          },
+        );
+        await tester.tap(find.text('Big Bang').first);
+        await tester.pump();
+        expect(find.textContaining('WATCH'), findsNothing);
+        expect(find.text('GET MORE COINS'), findsOneWidget);
 
-      // The sheet explains WHY, so a cap-reached tile doesn't read as
-      // "this item is simply too expensive".
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(
-        find.text('You’ve used today’s ad unlock. Come back tomorrow.'),
-        findsOneWidget,
-      );
-    });
+        // The sheet explains WHY, so a cap-reached tile doesn't read as
+        // "this item is simply too expensive".
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(
+          find.text('You’ve used today’s ad unlock. Come back tomorrow.'),
+          findsOneWidget,
+        );
+      },
+    );
 
-    testWidgets('a malformed adUnlock block falls back to the legacy rules',
-        (tester) async {
+    testWidgets('a malformed adUnlock block falls back to the legacy rules', (
+      tester,
+    ) async {
       await _pump(
         tester,
         coins: 30,
@@ -343,8 +351,9 @@ void main() {
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
     });
 
-    testWidgets('a cosmetic priced past maxShortfall routes to Get coins',
-        (tester) async {
+    testWidgets('a cosmetic priced past maxShortfall routes to Get coins', (
+      tester,
+    ) async {
       await _pump(
         tester,
         coins: 0,

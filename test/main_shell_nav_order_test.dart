@@ -18,6 +18,7 @@ import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
 import 'package:step_tracker/services/health_service.dart';
 import 'package:step_tracker/services/race_results_ack_queue.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/wooden_tab_bar.dart';
 
 class _FakeHealthService extends HealthService {
@@ -584,58 +585,62 @@ void main() {
     );
   });
 
-  testWidgets('Home header fits long identity and 9+ badge at compact width', (
-    WidgetTester tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 568);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'Home quick actions fit long identity and 9+ badge at compact width',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final authService = await _authService();
-    await authService.updateDisplayName(
-      'A Very Long Trail Walker Display Name That Must Truncate',
-    );
-    await authService.updateCoins(987654321);
-    final api = _FakeBackendApiService(
-      inboxAlerts: const {
-        'alerts': <Map<String, dynamic>>[],
-        'nextCursor': null,
-        'totalUnreadCount': 12,
-      },
-    );
+      final authService = await _authService();
+      await authService.updateDisplayName(
+        'A Very Long Trail Walker Display Name That Must Truncate',
+      );
+      await authService.updateCoins(987654321);
+      final api = _FakeBackendApiService(
+        inboxAlerts: const {
+          'alerts': <Map<String, dynamic>>[],
+          'nextCursor': null,
+          'totalUnreadCount': 12,
+        },
+      );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(1.3)),
-          child: child!,
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
         ),
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
-    final coin = find.byKey(const Key('home-coin-balance'));
-    final bell = find.byKey(const Key('home-notifications-card'));
-    expect(coin, findsOneWidget);
-    expect(bell, findsOneWidget);
-    expect(
-      tester.getRect(coin).right,
-      lessThanOrEqualTo(tester.getRect(bell).left),
-    );
-    expect(tester.getRect(bell).right, lessThanOrEqualTo(320));
-    expect(find.text('9+'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      final daily = find.byKey(const Key('home-daily-reward-button'));
+      final shop = find.byKey(const Key('home-shop-button'));
+      final bell = find.byKey(const Key('home-notifications-card'));
+      expect(daily, findsOneWidget);
+      expect(shop, findsOneWidget);
+      expect(bell, findsOneWidget);
+      expect(tester.getSize(shop), const Size(80, 58));
+      expect(tester.getSize(bell), const Size(80, 58));
+      expect(tester.getRect(shop).top, tester.getRect(bell).top);
+      expect(tester.getRect(shop).right, lessThan(tester.getRect(bell).left));
+      expect(tester.getRect(bell).right, lessThanOrEqualTo(320));
+      expect(find.text('9+'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Home opens Inbox from Notifications when unread count is two', (
     WidgetTester tester,
@@ -702,6 +707,103 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'Home seats Notifications beside Shop as a matching quick action',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(700, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final authService = await _authService();
+      final api = _FakeBackendApiService(
+        inboxAlerts: const {
+          'alerts': <Map<String, dynamic>>[],
+          'nextCursor': null,
+          'totalUnreadCount': 2,
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemeData.light(),
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final shop = find.byKey(const Key('home-shop-button'));
+      final bell = find.byKey(const Key('home-notifications-card'));
+      expect(
+        tester.getRect(bell).left - tester.getRect(shop).right,
+        inInclusiveRange(8, 12),
+      );
+      expect(tester.getSize(shop), const Size(80, 58));
+      expect(tester.getSize(bell), const Size(80, 58));
+      expect(tester.getRect(shop).top, tester.getRect(bell).top);
+      final plateFinder = find.byKey(const Key('home-notifications-backplate'));
+      final plate = tester.widget<Ink>(plateFinder);
+      final colors = AppColors.of(tester.element(bell));
+      final decoration = plate.decoration! as BoxDecoration;
+      expect(decoration.color, colors.pillGold);
+      final icon = tester.widget<Icon>(
+        find.descendant(of: plateFinder, matching: find.byType(Icon)),
+      );
+      expect(icon.color, colors.textDark);
+      var badge = tester.widget<Container>(
+        find.byKey(const Key('home-notifications-badge')),
+      );
+      expect((badge.decoration! as BoxDecoration).color, colors.coinLight);
+      var badgeText = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('home-notifications-badge')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(badgeText.style!.color, colors.roofDark);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          key: const ValueKey('night-bell'),
+          theme: AppThemeData.night(),
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final nightColors = AppColors.of(
+        tester.element(find.byKey(const Key('home-notifications-card'))),
+      );
+      final nightPlate = tester.widget<Ink>(
+        find.byKey(const Key('home-notifications-backplate')),
+      );
+      expect(
+        (nightPlate.decoration! as BoxDecoration).color,
+        nightColors.pillGold,
+      );
+      badge = tester.widget<Container>(
+        find.byKey(const Key('home-notifications-badge')),
+      );
+      expect((badge.decoration! as BoxDecoration).color, nightColors.coinLight);
+      badgeText = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('home-notifications-badge')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(badgeText.style!.color, nightColors.roofDark);
+    },
+  );
 
   testWidgets('mixed net-zero 2x summary remains eligible on Home', (
     WidgetTester tester,

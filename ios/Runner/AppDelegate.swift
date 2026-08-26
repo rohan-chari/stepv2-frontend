@@ -2,6 +2,7 @@ import BackgroundTasks
 import FBAudienceNetwork
 import Flutter
 import HealthKit
+import Security
 import UIKit
 import UserNotifications
 import google_mobile_ads
@@ -13,6 +14,7 @@ import google_mobile_ads
   private var appInfoChannel: FlutterMethodChannel?
   private var referralChannel: FlutterMethodChannel?
   private var metaAdsChannel: FlutterMethodChannel?
+  private lazy var notificationInstallationIDStore = NotificationInstallationIDStore()
   private let healthStore = HKHealthStore()
   private var hasRegisteredHealthObserver = false
   private lazy var backgroundSyncCoordinator = BackgroundStepSyncCoordinator(
@@ -86,6 +88,11 @@ import google_mobile_ads
         self?.getNotificationPermissionStatus(result: result)
       case "registerForRemoteNotifications":
         self?.registerForRemoteNotificationsIfAuthorized(result: result)
+      case "getNotificationInstallationId":
+        // A nil result is intentional fallback: Dart still uploads the current
+        // APNs token through the legacy two-field contract and retries secure
+        // installation binding on a later authenticated session.
+        result(self?.notificationInstallationIDStore.getOrCreateInstallationID())
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -410,6 +417,72 @@ import google_mobile_ads
     }
 
     healthStore.execute(query)
+  }
+}
+
+/// Stores one random, app-scoped notification installation identity.
+///
+/// The generic-password item is scoped by this app's bundle-derived service and
+/// is not shared through a Keychain access group. `AfterFirstUnlockThisDeviceOnly`
+/// keeps it off iCloud/backup restores while allowing normal foreground launch
+/// reads. iOS commonly preserves Keychain items across app deletion/reinstall,
+/// in which case Bara intentionally reuses this UUID. If the item was actually
+/// cleared, the next successful lookup creates a new UUID. Any Keychain read or
+/// write failure returns nil rather than using a hardware ID or insecure local
+/// fallback; Dart then registers the current APNs token through the legacy API.
+final class NotificationInstallationIDStore {
+  private let service: String
+  private let account: String
+
+  init(
+    service: String = "\(Bundle.main.bundleIdentifier ?? "com.rohanchari.steptracker").notifications",
+    account: String = "installation-id"
+  ) {
+    self.service = service
+    self.account = account
+  }
+
+  func getOrCreateInstallationID() -> String? {
+    var item: CFTypeRef?
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    let readStatus = SecItemCopyMatching(query as CFDictionary, &item)
+
+    if readStatus == errSecSuccess {
+      guard
+        let data = item as? Data,
+        let value = String(data: data, encoding: .utf8),
+        UUID(uuidString: value) != nil
+      else {
+        // Do not silently replace an unreadable/corrupt secure identity and
+        // create two active installations. Legacy registration is safer.
+        return nil
+      }
+      return value
+    }
+    guard readStatus == errSecItemNotFound else { return nil }
+
+    let value = UUID().uuidString.lowercased()
+    guard let data = value.data(using: .utf8) else { return nil }
+    let addStatus = SecItemAdd([
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+      kSecValueData as String: data,
+    ] as CFDictionary, nil)
+
+    if addStatus == errSecSuccess { return value }
+    if addStatus == errSecDuplicateItem {
+      // Another overlapping call won creation; converge on its value.
+      return getOrCreateInstallationID()
+    }
+    return nil
   }
 }
 

@@ -122,6 +122,40 @@ void main() {
     expect(api.statusCalls, 0);
   });
 
+  testWidgets('compact claimed reward uses the vertical check action', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+    final api = _FakeDailyRewardApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 58,
+            width: 180,
+            child: StreakChip(
+              compact: true,
+              authService: authService,
+              backendApiService: api,
+              initialData: {
+                'claimedToday': true,
+                'localDate': _todayLocalDate(),
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.check_box_rounded), findsOneWidget);
+    expect(find.bySemanticsLabel('Open daily reward'), findsOneWidget);
+    expect(
+      find.byKey(const Key('home-daily-reward-compact-layout')),
+      findsOneWidget,
+    );
+    expect(api.statusCalls, 0);
+  });
+
   testWidgets(
     'StreakChip falls back to the standalone fetch on an old backend',
     (WidgetTester tester) async {

@@ -102,6 +102,69 @@ void main() {
     // fill state; the verbose status line was removed).
     expect(find.text('FILLED'), findsOneWidget);
     expect(find.text('2/4'), findsOneWidget);
+    final boardRect = tester.getRect(find.byType(TournamentBracketBoard));
+    final championCenter = tester.getCenter(find.text('CHAMPION').first);
+    expect(championCenter.dx, lessThan(boardRect.right - 16));
+    expect(find.byKey(const Key('tournament-info-strip')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('tournament-info-strip'))).height,
+      lessThanOrEqualTo(124),
+    );
+    expect(find.byKey(const Key('tournament-action-bar')), findsOneWidget);
+    final refreshSemantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('tournament-refresh')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(refreshSemantics.properties.button, isTrue);
+    expect(refreshSemantics.properties.label, 'Refresh tournament');
+    expect(refreshSemantics.properties.onTap, isNotNull);
+    await _teardown(tester);
+  });
+
+  testWidgets('compact 2x text keeps the HUD, bracket, and JOIN bar intact', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final auth = await _auth();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: TournamentDetailScreen(
+          authService: auth,
+          tournamentId: 't1',
+          backendApiService: _FakeApi({
+            'id': 't1',
+            'name': '4 Racer Tourney',
+            'status': 'PENDING',
+            'bracketSize': 4,
+            'championPrizeCoins': 150,
+            'acceptedCount': 2,
+            'participants': const [
+              {'userId': 'u1', 'displayName': 'Lauren', 'status': 'ACCEPTED'},
+              {'userId': 'u2', 'displayName': 'Wells', 'status': 'ACCEPTED'},
+            ],
+          }),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('tournament-info-strip')), findsOneWidget);
+    expect(find.byKey(const Key('tournament-action-bar')), findsOneWidget);
+    expect(find.text('JOIN'), findsOneWidget);
     await _teardown(tester);
   });
 

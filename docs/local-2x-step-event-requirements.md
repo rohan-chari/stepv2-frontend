@@ -1,8 +1,11 @@
 # Local-time daily 2x step event
 
-**Status:** Implemented and independently reviewed. The feature remains
-default-off and has not been deployed; production enablement requires the
-rollout prerequisites in this spec and separate owner approval.
+**Status:** Implemented, independently reviewed, and deployed in production.
+Local entitlements were confirmed active on 2026-08-26. The rollout sections
+below remain the historical safety contract; post-deployment activation,
+notification, token-lifecycle, and request-time travel corrections are specified
+in `docs/global-event-reliability-requirements.md` and are not implemented unless
+that consolidated document is approved and shipped.
 
 ## 1. Summary and user story
 

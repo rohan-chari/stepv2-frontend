@@ -62,6 +62,11 @@ void main() {
     // The labeled card is visible on the page (not hidden behind the gear).
     expect(find.text('Auto-join daily & weekly races'), findsWidgets);
     expect(find.byType(CupertinoSwitch), findsWidgets);
+    expect(find.byKey(const Key('public-auto-join-card')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('public-auto-join-card'))).height,
+      lessThanOrEqualTo(84),
+    );
 
     await tester.tap(find.byType(CupertinoSwitch).first);
     await tester.pump();

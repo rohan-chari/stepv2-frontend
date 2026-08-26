@@ -522,7 +522,7 @@ class _StandingCard extends StatelessWidget {
       container: true,
       label: semantics,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+        padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
         decoration: referralContestPanelDecoration(context),
         child: ExcludeSemantics(
           child: Column(
@@ -539,7 +539,7 @@ class _StandingCard extends StatelessWidget {
                   ),
                   Container(
                     width: 1.5,
-                    height: 76,
+                    height: 58,
                     margin: const EdgeInsets.symmetric(horizontal: 12),
                     color: colors.feedGold.withValues(alpha: .72),
                   ),
@@ -552,17 +552,17 @@ class _StandingCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 10,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: colors.roofLight.withValues(alpha: .11),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: colors.roofDark.withValues(alpha: .16),
+                  border: Border(
+                    top: BorderSide(
+                      color: colors.feedGold.withValues(alpha: .35),
+                    ),
                   ),
                 ),
                 child: Column(
@@ -647,7 +647,7 @@ class _StandingMetric extends StatelessWidget {
           fit: BoxFit.scaleDown,
           child: Text(
             value,
-            style: PixelText.display(size: 46, color: colors.textAccent),
+            style: PixelText.display(size: 36, color: colors.textAccent),
           ),
         ),
       ],

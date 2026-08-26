@@ -45,11 +45,15 @@ void main() {
       );
       await tester.pump();
 
-      // Count is rendered inline in the button label.
-      expect(find.text('PUBLIC RACES (3)'), findsOneWidget);
+      final publicAction = find.byKey(const Key('races-public-action'));
+      expect(publicAction, findsOneWidget);
+      expect(
+        find.descendant(of: publicAction, matching: find.text('3')),
+        findsOneWidget,
+      );
 
       // Tapping still pushes the public-races screen.
-      await tester.tap(find.text('PUBLIC RACES (3)'));
+      await tester.tap(publicAction);
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(find.byType(PublicRacesScreen), findsOneWidget);
@@ -76,7 +80,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('PUBLIC RACES (0)'), findsOneWidget);
+    final publicAction = find.byKey(const Key('races-public-action'));
+    expect(
+      find.descendant(of: publicAction, matching: find.text('0')),
+      findsOneWidget,
+    );
   });
 }
 

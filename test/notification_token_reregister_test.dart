@@ -8,23 +8,33 @@ import 'package:step_tracker/services/notification_service.dart';
 /// whose OS permission is granted but whose app never re-registers the APNs
 /// token with the backend (stale prefs cache, missed didRegister callback,
 /// or a registration error that was swallowed). The service must now key off
-/// the real OS permission and re-post the last known token every session.
+/// the real OS permission and ask APNs for a current callback every session,
+/// without reposting a token persisted by an earlier launch.
 class _RecordingApi extends BackendApiService {
   final registered = <Map<String, String>>[];
   Object? throwOnRegister;
+  int registerAttempts = 0;
 
   @override
-  Future<void> registerDeviceToken({
+  Future<DeviceTokenRegistrationResult> registerDeviceToken({
     required String identityToken,
     required String deviceToken,
     required String platform,
+    String? installationId,
+    String? providerEnvironment,
   }) async {
+    registerAttempts++;
     if (throwOnRegister != null) throw throwOnRegister!;
     registered.add({
       'identityToken': identityToken,
       'deviceToken': deviceToken,
       'platform': platform,
+      'installationId': ?installationId,
     });
+    return const DeviceTokenRegistrationResult(
+      registrationVersion: 2,
+      installationAccepted: true,
+    );
   }
 }
 
@@ -53,7 +63,10 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     api = _RecordingApi();
-    service = NotificationService(backendApiService: api);
+    service = NotificationService(
+      backendApiService: api,
+      isIosForTesting: true,
+    );
     nativeCalls = [];
     permissionStatus = 'authorized';
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -63,6 +76,8 @@ void main() {
           return permissionStatus;
         case 'registerForRemoteNotifications':
           return true;
+        case 'getNotificationInstallationId':
+          return 'installation-1';
         case 'requestPermission':
           return true;
       }
@@ -101,47 +116,51 @@ void main() {
   });
 
   group('ensureTokenRegistered', () {
-    test('re-posts the cached token even when no fresh APNs callback fires',
-        () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('notif_device_token', 'cached-apns-token');
+    test(
+      'never re-posts a cached token when no fresh APNs callback fires',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('notif_device_token', 'cached-apns-token');
 
-      final outcome = await service.ensureTokenRegistered('auth-123');
+        final outcome = await service.ensureTokenRegistered('auth-123');
 
-      expect(outcome, 'registered_cached');
-      expect(nativeCalls, contains('registerForRemoteNotifications'));
-      expect(api.registered, hasLength(1));
-      expect(api.registered.single['deviceToken'], 'cached-apns-token');
-      expect(api.registered.single['identityToken'], 'auth-123');
-      expect(api.registered.single['platform'], 'ios');
-    });
-
-    test('marks the cached permission granted so the settings UI agrees',
-        () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('notif_device_token', 'cached-apns-token');
-
-      await service.ensureTokenRegistered('auth-123');
-
-      expect(await service.getPermissionState(), isTrue);
-    });
+        expect(outcome, 'registration_requested');
+        expect(nativeCalls, contains('registerForRemoteNotifications'));
+        expect(api.registered, isEmpty);
+        expect(prefs.getString('notif_device_token'), isNull);
+      },
+    );
 
     test(
-        'still asks the OS to register when no token is cached, and a later '
-        'native token delivery reaches the backend with the pending auth',
-        () async {
-      final outcome = await service.ensureTokenRegistered('auth-456');
+      'marks the cached permission granted so the settings UI agrees',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('notif_device_token', 'cached-apns-token');
 
-      expect(outcome, 'no_cached_token');
-      expect(nativeCalls, contains('registerForRemoteNotifications'));
-      expect(api.registered, isEmpty);
+        await service.ensureTokenRegistered('auth-123');
 
-      await simulateNativeCall('onDeviceToken', 'fresh-apns-token');
+        expect(await service.getPermissionState(), isTrue);
+      },
+    );
 
-      expect(api.registered, hasLength(1));
-      expect(api.registered.single['deviceToken'], 'fresh-apns-token');
-      expect(api.registered.single['identityToken'], 'auth-456');
-    });
+    test(
+      'still asks the OS to register when no token is cached, and a later '
+      'native token delivery reaches the backend with the pending auth',
+      () async {
+        final outcome = await service.ensureTokenRegistered('auth-456');
+
+        expect(outcome, 'registration_requested');
+        expect(nativeCalls, contains('registerForRemoteNotifications'));
+        expect(api.registered, isEmpty);
+
+        await simulateNativeCall('onDeviceToken', 'fresh-apns-token');
+
+        expect(api.registered, hasLength(1));
+        expect(api.registered.single['deviceToken'], 'fresh-apns-token');
+        expect(api.registered.single['identityToken'], 'auth-456');
+        expect(api.registered.single['installationId'], 'installation-1');
+      },
+    );
 
     test('skips without auth', () async {
       final outcome = await service.ensureTokenRegistered(null);
@@ -149,34 +168,39 @@ void main() {
       expect(api.registered, isEmpty);
     });
 
-    test('reports a backend failure instead of swallowing it', () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('notif_device_token', 'cached-apns-token');
+    test('contains an async APNs callback backend failure', () async {
       api.throwOnRegister = Exception('boom');
 
       final outcome = await service.ensureTokenRegistered('auth-123');
-
-      expect(outcome, startsWith('failed'));
-    });
-
-    test('surfaces the last native registration error when no token exists',
-        () async {
-      await simulateNativeCall('onDeviceTokenError', 'no APNs connection');
-
-      final outcome = await service.ensureTokenRegistered('auth-123');
-
-      expect(outcome, 'register_failed:no APNs connection');
-    });
-
-    test('a successful token delivery clears the stored native error',
-        () async {
-      await simulateNativeCall('onDeviceTokenError', 'transient');
       await simulateNativeCall('onDeviceToken', 'fresh-apns-token');
-      await service.ensureTokenRegistered('auth-123');
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('notif_last_register_error'), isNull);
+      expect(outcome, 'registration_requested');
+      expect(api.registerAttempts, 1);
+      expect(api.registered, isEmpty);
     });
+
+    test(
+      'surfaces the last native registration error when no token exists',
+      () async {
+        await simulateNativeCall('onDeviceTokenError', 'no APNs connection');
+
+        final outcome = await service.ensureTokenRegistered('auth-123');
+
+        expect(outcome, 'register_failed:no APNs connection');
+      },
+    );
+
+    test(
+      'a successful token delivery clears the stored native error',
+      () async {
+        await simulateNativeCall('onDeviceTokenError', 'transient');
+        await simulateNativeCall('onDeviceToken', 'fresh-apns-token');
+        await service.ensureTokenRegistered('auth-123');
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('notif_last_register_error'), isNull);
+      },
+    );
   });
 
   group('clearCachedPermission', () {

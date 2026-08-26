@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/loadable.dart';
@@ -138,14 +140,14 @@ Map<String, dynamic> _validBanner({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('Home contest card source contains no gradient, shimmer, or motion', () {
+  test('Home contest card source keeps its attention treatment restrained', () {
     final source = File(
       'lib/widgets/home_giveaway_banner.dart',
     ).readAsStringSync();
     expect(source, isNot(contains('Gradient')));
     expect(source.toLowerCase(), isNot(contains('shimmer')));
-    expect(source, isNot(contains('AnimationController')));
-    expect(source, isNot(contains('AnimatedBuilder')));
+    expect(source, contains('MediaQuery.disableAnimationsOf'));
+    expect(source, isNot(contains('BoxShadow')));
   });
 
   testWidgets('renders a valid automatic active contest banner', (
@@ -165,6 +167,17 @@ void main() {
     expect(find.text('VIEW'), findsOneWidget);
     expect(find.textContaining('US\$'), findsNothing);
     expect(find.byKey(const Key('home-service-banner')), findsNothing);
+    final semantics = tester.getSemantics(
+      find.byKey(const Key('home-giveaway-banner-tap')),
+    );
+    expect(semantics.label, contains('View contest'));
+    expect(semantics.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+
+    expect(
+      tester.getSize(find.byKey(const Key('home-giveaway-banner'))).height,
+      lessThan(100),
+      reason: 'the Home contest promotion should read as a compact notice',
+    );
 
     final shopY = tester
         .getTopLeft(find.byKey(const Key('home-shop-button')))
@@ -177,41 +190,62 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('contest banner uses the night event palette in dark mode', (
+  testWidgets('contest banner uses a gold outline in both themes', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppThemeData.light(),
-        darkTheme: AppThemeData.night(),
-        themeMode: ThemeMode.dark,
-        home: Scaffold(
-          body: HomeGiveawayBanner(
-            message: 'Bara Referral Contest is open now.',
-            coinPrize: 5000,
-            endsAt: DateTime.now().add(const Duration(days: 2)),
-            onTap: () {},
-          ),
+    Widget bannerFor(ThemeMode themeMode) => MaterialApp(
+      theme: AppThemeData.light(),
+      darkTheme: AppThemeData.night(),
+      themeMode: themeMode,
+      home: Scaffold(
+        body: HomeGiveawayBanner(
+          message: 'Bara Referral Contest is open now.',
+          coinPrize: 5000,
+          endsAt: DateTime.now().add(const Duration(days: 2)),
+          onTap: () {},
         ),
       ),
     );
 
-    final banner = tester.widget<Container>(
+    await tester.pumpWidget(bannerFor(ThemeMode.light));
+    var banner = tester.widget<Container>(
       find.byKey(const Key('home-giveaway-banner')),
     );
-    final decoration = banner.decoration! as BoxDecoration;
+    var decoration = banner.decoration! as BoxDecoration;
+    expect((decoration.border! as Border).top.color, AppPalette.light.coinMid);
+
+    await tester.pumpWidget(bannerFor(ThemeMode.dark));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    banner = tester.widget<Container>(
+      find.byKey(const Key('home-giveaway-banner')),
+    );
+    decoration = banner.decoration! as BoxDecoration;
     expect(decoration.color, AppPalette.night.pillGold);
+    expect(decoration.border, isA<Border>());
+    expect((decoration.border! as Border).top.color, AppPalette.night.coinMid);
 
     final chip = tester.widget<Container>(
       find.byKey(const Key('home-giveaway-fact-5,000 COINS')),
     );
-    final chipDecoration = chip.decoration! as BoxDecoration;
-    expect(chipDecoration.color, AppPalette.night.parchmentDark);
+    expect(chip.decoration, isNull);
 
     final headline = tester.widget<Text>(
       find.text('Bara Referral Contest is open now.'),
     );
     expect(headline.style?.color, AppPalette.night.textDark);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.emoji_events_rounded)).color,
+      AppPalette.night.textDark,
+    );
+    expect(
+      tester.widget<Text>(find.text('5,000 COINS')).style?.color,
+      AppPalette.night.textDark,
+    );
+    expect(
+      tester.widget<Text>(find.text('VIEW')).style?.color,
+      AppPalette.night.textDark,
+    );
   });
 
   testWidgets('ignores missing or malformed automatic banner data', (
@@ -310,7 +344,7 @@ void main() {
     expect(find.byType(GiveawayScreen, skipOffstage: false), findsOneWidget);
   });
 
-  testWidgets('card has no motion in any mode and tutorial suppresses banner', (
+  testWidgets('card seesaws briefly, rests, and honors reduced motion', (
     tester,
   ) async {
     final auth = await _auth();
@@ -323,19 +357,54 @@ void main() {
 
     await tester.pumpWidget(_home(auth, banner: _validBanner()));
     await tester.pump();
-    expect(find.byKey(const Key('home-giveaway-banner-motion')), findsNothing);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('home-giveaway-banner')),
-        matching: find.byType(AnimatedBuilder),
-      ),
-      findsNothing,
+    final motion = find.byKey(const Key('home-giveaway-banner-motion'));
+    expect(motion, findsOneWidget);
+    final atStart = List<double>.of(
+      tester.widget<Transform>(motion).transform.storage,
     );
+    await tester.pump(const Duration(milliseconds: 180));
+    final duringBeat = List<double>.of(
+      tester.widget<Transform>(motion).transform.storage,
+    );
+    expect(duringBeat, isNot(atStart));
+    final angle = math.atan2(duringBeat[1], duringBeat[0]).abs();
+    expect(angle, lessThanOrEqualTo(.0121));
+    await tester.pump(const Duration(milliseconds: 700));
+    final atRest = tester.widget<Transform>(motion).transform;
+    expect(atRest, Matrix4.identity());
+    await tester.pump(const Duration(milliseconds: 6200));
+    await tester.pump(const Duration(milliseconds: 180));
+    final secondBeat = tester.widget<Transform>(motion).transform;
+    expect(secondBeat, isNot(Matrix4.identity()));
 
     await tester.pumpWidget(
       _home(auth, banner: _validBanner(), tutorial: true),
     );
     await tester.pump();
     expect(find.byKey(const Key('home-giveaway-banner')), findsNothing);
+  });
+
+  testWidgets('motion stays stopped when mounted paused and resumes safely', (
+    tester,
+  ) async {
+    final auth = await _auth();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    try {
+      await tester.pumpWidget(_home(auth, banner: _validBanner()));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('home-giveaway-banner-motion')),
+        findsNothing,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(
+        find.byKey(const Key('home-giveaway-banner-motion')),
+        findsOneWidget,
+      );
+    } finally {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    }
   });
 }

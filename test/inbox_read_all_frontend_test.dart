@@ -269,6 +269,55 @@ void main() {
     expect(find.text('DECLINE'), findsNothing);
   });
 
+  testWidgets('320dp large text stacks join actions without clipping', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 568));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _readAllAuth();
+    final api = _ReadAllInboxApi(
+      readAllResult: _readAllSuccess,
+      withApproval: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.night(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: InboxScreen(
+          hostMode: InboxHostMode.embedded,
+          authService: auth,
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final accept = find.byKey(const Key('join-request-accept-request-private'));
+    final decline = find.byKey(
+      const Key('join-request-decline-request-private'),
+    );
+    for (var i = 0; i < 3 && decline.evaluate().isEmpty; i++) {
+      await tester.drag(find.byType(ListView), const Offset(0, -260));
+      await tester.pump();
+    }
+    expect(decline, findsOneWidget);
+    await tester.ensureVisible(decline);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(accept).height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(decline).height, greaterThanOrEqualTo(44));
+    expect(
+      tester.getTopLeft(decline).dy,
+      greaterThan(tester.getTopLeft(accept).dy),
+    );
+  });
+
   testWidgets(
     'read-all racing load-more marks only stale alerts, never staff replies',
     (tester) async {

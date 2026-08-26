@@ -6,6 +6,7 @@ import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 
 /// Batch 2026-07-26 — shop items 1 (one filter/sort dropdown), 2 (price always
 /// visible), 6 (synthetic Capybara inventory tile) and 7 (the "weird rectangle"
@@ -24,6 +25,7 @@ class _FakeShopApi extends BackendApiService {
   final int coins;
 
   final List<({String slot, String? itemId})> equipCalls = [];
+  int powerupPurchaseCalls = 0;
 
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
@@ -55,6 +57,17 @@ class _FakeShopApi extends BackendApiService {
   }) async {
     equipCalls.add((slot: slot, itemId: itemId));
     return <String, dynamic>{};
+  }
+
+  @override
+  Future<Map<String, dynamic>> purchasePowerupItem({
+    required String identityToken,
+    String? sku,
+    String? powerupType,
+    required String idempotencyKey,
+  }) async {
+    powerupPurchaseCalls++;
+    return {'coins': 990, 'inventory': <Map<String, dynamic>>[]};
   }
 }
 
@@ -111,13 +124,26 @@ Future<void> _pump(
   BackendApiService api, {
   int coins = 1000,
   Size surface = const Size(360, 900),
+  ThemeData? theme,
+  TextScaler textScaler = TextScaler.noScaling,
 }) async {
   await tester.binding.setSurfaceSize(surface);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final auth = await _auth(coins: coins);
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: auth, backendApiService: api),
+      theme: theme,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(size: surface, textScaler: textScaler),
+        child: child!,
+      ),
+      home: ShopTab(
+        key: ValueKey(api),
+        authService: auth,
+        backendApiService: api,
+      ),
     ),
   );
   await tester.pump();
@@ -133,6 +159,135 @@ Future<void> _openFilterSortSheet(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => PowerupCopy.resetForTest());
+
+  group('mobile Taste shop redesign', () {
+    testWidgets('the live Bara stage leads a breathable two-column catalog', (
+      tester,
+    ) async {
+      await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
+
+      final preview = find.byKey(const Key('shop-character-preview'));
+      expect(tester.getSize(preview).height, greaterThanOrEqualTo(88));
+
+      final grid = tester.widget<GridView>(
+        find.byKey(const Key('shop-product-grid')),
+      );
+      final delegate =
+          grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(delegate.crossAxisCount, 2);
+      expect(delegate.childAspectRatio, greaterThan(0.78));
+    });
+
+    testWidgets('merchandise cards are flat and art-led', (tester) async {
+      await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
+
+      final card = tester.widget<DecoratedBox>(
+        find.byKey(const Key('shop-product-card')).first,
+      );
+      final decoration = card.decoration as BoxDecoration;
+      expect(decoration.boxShadow, isNull);
+      expect(decoration.border, isA<Border>());
+      expect((decoration.border! as Border).top.width, 1);
+    });
+
+    testWidgets('tablet and loading grids keep the same four-column geometry', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _FakeShopApi(powerupCatalog: _powerupCatalog()),
+        surface: const Size(700, 900),
+      );
+      final live = tester.widget<GridView>(
+        find.byKey(const Key('shop-product-grid')),
+      );
+      final liveDelegate =
+          live.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(liveDelegate.crossAxisCount, 4);
+
+      await _pump(tester, _StalledApi(), surface: const Size(700, 900));
+      final loading = tester.widget<GridView>(
+        find.byKey(const Key('shop-loading-grid')).first,
+      );
+      final loadingDelegate =
+          loading.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(loadingDelegate.crossAxisCount, liveDelegate.crossAxisCount);
+      expect(loadingDelegate.childAspectRatio, liveDelegate.childAspectRatio);
+      expect(loadingDelegate.mainAxisSpacing, liveDelegate.mainAxisSpacing);
+      expect(loadingDelegate.crossAxisSpacing, liveDelegate.crossAxisSpacing);
+    });
+
+    testWidgets('category controls expose selection and a 48dp target', (
+      tester,
+    ) async {
+      await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
+      final category = find.byKey(const Key('shop-category-POWERUPS'));
+      expect(tester.getSize(category).height, greaterThanOrEqualTo(48));
+      final semantics = tester.widget<Semantics>(
+        find.byKey(const Key('shop-category-semantics-POWERUPS')),
+      );
+      expect(semantics.properties.button, isTrue);
+      expect(semantics.properties.selected, isTrue);
+    });
+
+    testWidgets(
+      'enabled action strips use readable night text and 48dp target',
+      (tester) async {
+        await _pump(
+          tester,
+          _FakeShopApi(powerupCatalog: _powerupCatalog()),
+          theme: AppThemeData.night(),
+        );
+        final label = find.text('10').first;
+        expect(
+          tester.widget<Text>(label).style!.color,
+          AppPalette.night.textDark,
+        );
+        final strip = find.ancestor(
+          of: label,
+          matching: find.byType(Container),
+        );
+        expect(tester.getSize(strip.first).height, greaterThanOrEqualTo(48));
+      },
+    );
+
+    testWidgets('small large-text item sheet scrolls to an active CTA', (
+      tester,
+    ) async {
+      final api = _FakeShopApi(powerupCatalog: _powerupCatalog());
+      await _pump(
+        tester,
+        api,
+        surface: const Size(320, 568),
+        textScaler: const TextScaler.linear(2.5),
+      );
+      final powerups = find.byKey(const Key('shop-category-POWERUPS'));
+      await tester.ensureVisible(powerups);
+      await tester.pump();
+      await tester.tap(powerups);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.text('Zap'));
+      await tester.pump(const Duration(milliseconds: 400));
+      final cta = find.text('BUY · 10');
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('shop-item-sheet')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scrollable.position.viewportDimension, lessThanOrEqualTo(410));
+      expect(scrollable.position.maxScrollExtent, greaterThan(0));
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pump();
+      final button = tester.widget<PillButton>(
+        find.ancestor(of: cta, matching: find.byType(PillButton)),
+      );
+      expect(button.onPressed, isNotNull);
+      button.onPressed!();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(api.powerupPurchaseCalls, 1);
+    });
+  });
 
   group('live Bara preview', () {
     testWidgets('renders above the catalog and previews a tapped cosmetic', (
@@ -237,12 +392,14 @@ void main() {
       tester,
     ) async {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
-      // Alphabetical default: Anchor left of Zap in the grid.
-      expect(
-        tester.getTopLeft(find.text('Anchor')).dx <
-            tester.getTopLeft(find.text('Zap')).dx,
-        isTrue,
-      );
+      bool appearsBefore(String first, String second) {
+        final a = tester.getTopLeft(find.text(first));
+        final b = tester.getTopLeft(find.text(second));
+        return a.dy < b.dy || ((a.dy - b.dy).abs() < 1 && a.dx < b.dx);
+      }
+
+      // Alphabetical default: Anchor precedes Zap in reading order.
+      expect(appearsBefore('Anchor', 'Zap'), isTrue);
 
       await _openFilterSortSheet(tester);
       await tester.tap(find.byKey(const Key('shop-sort-option-Price ↑')));
@@ -255,11 +412,7 @@ void main() {
             .data,
         'All · Price ↑',
       );
-      expect(
-        tester.getTopLeft(find.text('Zap')).dx <
-            tester.getTopLeft(find.text('Anchor')).dx,
-        isTrue,
-      );
+      expect(appearsBefore('Zap', 'Anchor'), isTrue);
     });
 
     testWidgets('the control fits a 320dp phone without overflowing', (

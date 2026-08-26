@@ -322,18 +322,46 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     // CLAIM/EXTRA SPIN label made the same tap target feel like two unrelated
     // systems; availability is communicated by the icon and attention beat.
     if (_extraSpinAvailable) {
+      void openExtraSpin() {
+        unawaited(
+          _analytics.record(
+            'extra_spin_cta_tapped',
+            context: const {'surface': 'home'},
+          ),
+        );
+        _open();
+      }
+
+      if (widget.compact) {
+        return _DailyRewardAttention(
+          active: !_opening,
+          child: _CompactDailyRewardButton(
+            label: 'DAILY REWARD',
+            semanticsLabel: 'Daily reward. One more spin is ready.',
+            icon: Icons.card_giftcard_rounded,
+            onPressed: openExtraSpin,
+          ),
+        );
+      }
       return ExtraSpinRewardTicket(
         label: 'DAILY REWARD',
         semanticsLabel: 'Daily reward. One more spin is ready.',
-        onPressed: () {
-          unawaited(
-            _analytics.record(
-              'extra_spin_cta_tapped',
-              context: const {'surface': 'home'},
-            ),
-          );
-          _open();
-        },
+        onPressed: openExtraSpin,
+      );
+    }
+    if (widget.compact) {
+      return _DailyRewardAttention(
+        active: _unclaimed && !_opening,
+        child: _CompactDailyRewardButton(
+          label: _unclaimed ? 'CLAIM REWARD' : 'DAILY REWARD',
+          semanticsLabel: _unclaimed
+              ? 'Claim daily reward'
+              : 'Open daily reward',
+          icon: _unclaimed
+              ? Icons.card_giftcard_rounded
+              : Icons.check_box_rounded,
+          onPressed: _open,
+        ),
       );
     }
     return _DailyRewardAttention(
@@ -346,6 +374,75 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         variant: PillButtonVariant.secondary,
         fullWidth: true,
         onPressed: _open,
+      ),
+    );
+  }
+}
+
+/// Home's wide quick action uses the same icon-over-label rhythm as the two
+/// square destinations beside it. Non-compact StreakChip callers keep their
+/// existing PillButton / ticket composition.
+class _CompactDailyRewardButton extends StatelessWidget {
+  const _CompactDailyRewardButton({
+    required this.label,
+    required this.semanticsLabel,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final String semanticsLabel;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: semanticsLabel,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            key: const Key('home-daily-reward-compact-layout'),
+            width: double.infinity,
+            height: 58,
+            decoration: BoxDecoration(
+              color: colors.pillGold,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: colors.pillGoldDark, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.pillGoldDark.withValues(alpha: 0.24),
+                  offset: const Offset(3, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20, color: colors.textDark),
+                const SizedBox(height: 2),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: PixelText.pill(size: 14, color: colors.textDark),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

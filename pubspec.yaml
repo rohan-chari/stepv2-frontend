@@ -51,6 +51,9 @@ dependencies:
   app_links: ^6.3.0
   package_info_plus: ^8.1.2
   firebase_core: ^4.10.0
+  # Pinned to the FlutterFire generation already used by firebase_core and
+  # firebase_messaging; provides Android's app-installation identity.
+  firebase_app_installations: 0.4.2+3
   firebase_messaging: ^16.3.0
   google_sign_in: ^6.2.1
   confetti: ^0.8.0

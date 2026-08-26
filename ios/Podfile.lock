@@ -21,9 +21,16 @@ PODS:
   - FBAudienceNetwork (6.21.1)
   - Firebase/CoreOnly (12.14.0):
     - FirebaseCore (~> 12.14.0)
+  - Firebase/Installations (12.14.0):
+    - Firebase/CoreOnly
+    - FirebaseInstallations (~> 12.14.0)
   - Firebase/Messaging (12.14.0):
     - Firebase/CoreOnly
     - FirebaseMessaging (~> 12.14.0)
+  - firebase_app_installations (0.4.2-3):
+    - Firebase/Installations (= 12.14.0)
+    - firebase_core
+    - Flutter
   - firebase_core (4.10.0):
     - Firebase/CoreOnly (= 12.14.0)
     - Flutter
@@ -178,6 +185,7 @@ DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - app_tracking_transparency (from `.symlinks/plugins/app_tracking_transparency/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
+  - firebase_app_installations (from `.symlinks/plugins/firebase_app_installations/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
@@ -241,6 +249,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/app_tracking_transparency/ios"
   device_info_plus:
     :path: ".symlinks/plugins/device_info_plus/ios"
+  firebase_app_installations:
+    :path: ".symlinks/plugins/firebase_app_installations/ios"
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
   firebase_messaging:
@@ -291,6 +301,7 @@ SPEC CHECKSUMS:
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   FBAudienceNetwork: 85d18a65c9e35bc426bd4664cf3ae2a1172d7b60
   Firebase: 7cc10425300768ec86292688af5cb228f0604bde
+  firebase_app_installations: 712766fe34f3cd41af300191735ddb4396242075
   firebase_core: 383e19b49a08df5d7a6cf5017616de6a357ed7af
   firebase_messaging: ab03d6090864c0fb8136521231df6a66cb13be49
   FirebaseCore: 4939b340b9c598dc1f965d68f8fe57e630b65407

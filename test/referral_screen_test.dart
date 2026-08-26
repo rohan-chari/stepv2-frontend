@@ -35,11 +35,7 @@ class _FakeReferralApi extends BackendApiService {
       'completedCount': 1,
       'coinsEarned': 300,
       'friends': const [
-        {
-          'displayName': 'Alice',
-          'profilePhotoUrl': null,
-          'stage': 'completed',
-        },
+        {'displayName': 'Alice', 'profilePhotoUrl': null, 'stage': 'completed'},
         {'displayName': 'Bob', 'profilePhotoUrl': null, 'stage': 'joined'},
       ],
     };
@@ -72,7 +68,9 @@ void main() {
     tester,
   ) async {
     final auth = await _createAuthService();
-    await tester.pumpWidget(_build(auth, _FakeReferralApi(_Mode.withReferrals)));
+    await tester.pumpWidget(
+      _build(auth, _FakeReferralApi(_Mode.withReferrals)),
+    );
     await tester.pump(); // resolve the fetch future
 
     expect(find.text('INVITE FRIENDS'), findsOneWidget);
@@ -86,6 +84,18 @@ void main() {
     expect(find.text('@Bob'), findsOneWidget);
     expect(find.text('COMPLETED'), findsOneWidget);
     expect(find.text('JOINED'), findsOneWidget);
+
+    final primary = find.byKey(const Key('referral-primary-card'));
+    expect(primary, findsOneWidget);
+    expect(
+      find.descendant(of: primary, matching: find.text('SHARE YOUR INVITE')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: primary, matching: find.text('Your code: BARA-7F3K')),
+      findsOneWidget,
+    );
+    expect(tester.getSize(primary).height, lessThanOrEqualTo(220));
   });
 
   testWidgets('empty state invites the user to share', (tester) async {
@@ -94,10 +104,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('SHARE YOUR INVITE'), findsOneWidget);
-    expect(
-      find.textContaining('No invites yet'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('No invites yet'), findsOneWidget);
   });
 
   testWidgets('older backend (404) shows a friendly error with retry', (

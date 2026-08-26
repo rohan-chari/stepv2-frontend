@@ -309,40 +309,54 @@ class _ReferralScreenState extends State<ReferralScreen> {
     }
 
     return [
-      StaggerIn(index: 0, child: _buildStatsCard()),
-      const SizedBox(height: 16),
       StaggerIn(
-        index: 1,
-        child: PulseGlow(
-          child: PillButton(
-            label: 'SHARE YOUR INVITE',
-            icon: Icons.ios_share_rounded,
-            // Gold — the primary green pill vanishes on the green checker.
-            variant: PillButtonVariant.secondary,
-            fullWidth: true,
-            onPressed: (_code != null && _url != null) ? _share : null,
+        index: 0,
+        child: Container(
+          key: const Key('referral-primary-card'),
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+          decoration: _referralCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildStatsRow(),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: AppColors.of(context).parchmentBorder),
+              const SizedBox(height: 12),
+              PulseGlow(
+                child: PillButton(
+                  label: 'SHARE YOUR INVITE',
+                  icon: Icons.ios_share_rounded,
+                  variant: PillButtonVariant.secondary,
+                  fullWidth: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  onPressed: (_code != null && _url != null) ? _share : null,
+                ),
+              ),
+              if (_code != null) ...[
+                const SizedBox(height: 9),
+                Text(
+                  'Your code: $_code',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textMid,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ],
           ),
         ),
       ),
-      if (_code != null) ...[
-        const SizedBox(height: 10),
-        Center(
-          child: Text(
-            'Your code: $_code',
-            style: PixelText.body(
-              size: 14,
-              color: AppColors.of(context).textLight.withValues(alpha: 0.92),
-            ).copyWith(shadows: _textShadows),
-          ),
-        ),
-      ],
       if (_giveaway case final giveaway?) ...[
         const SizedBox(height: 16),
-        StaggerIn(index: 2, child: _buildContestCard(giveaway)),
+        StaggerIn(index: 1, child: _buildContestCard(giveaway)),
       ],
       const SizedBox(height: 20),
       StaggerIn(
-        index: 3,
+        index: 2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -538,19 +552,15 @@ class _ReferralScreenState extends State<ReferralScreen> {
     );
   }
 
-  Widget _buildStatsCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: _referralCardDecoration(),
-      child: Row(
-        children: [
-          Expanded(child: _buildStat('$_referredCount', 'Invited')),
-          _divider(),
-          Expanded(child: _buildStat('$_completedCount', 'Completed')),
-          _divider(),
-          Expanded(child: _buildCoinStat()),
-        ],
-      ),
+  Widget _buildStatsRow() {
+    return Row(
+      children: [
+        Expanded(child: _buildStat('$_referredCount', 'Invited')),
+        _divider(),
+        Expanded(child: _buildStat('$_completedCount', 'Completed')),
+        _divider(),
+        Expanded(child: _buildCoinStat()),
+      ],
     );
   }
 

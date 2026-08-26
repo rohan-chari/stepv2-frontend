@@ -81,7 +81,7 @@ const _weeklyShowdownTournament = <String, dynamic>{
   'acceptedCount': 3,
   'buyInAmount': 0,
   'potCoins': 0,
-  'prizePool': null,
+  'prizePool': {'coins': 800},
   'powerupsEnabled': false,
   'powerupStepInterval': null,
   'createdAt': '2026-08-11T20:00:00.000Z',
@@ -453,7 +453,7 @@ void main() {
     testWidgets('renders strict order, semantics, and partial next card', (
       tester,
     ) async {
-      await tester.binding.setSurfaceSize(const Size(390, 1600));
+      await tester.binding.setSurfaceSize(const Size(320, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final auth = await _auth();
       final suggestions = [_daily, _public, _tournament]
@@ -506,6 +506,17 @@ void main() {
         findsOneWidget,
       );
       expect(
+        tester
+            .getSize(
+              find.byKey(
+                const Key('home-suggestion-surface-FEATURED_RACE-daily'),
+              ),
+            )
+            .height,
+        136,
+        reason: 'suggested race tickets should not frame empty vertical space',
+      );
+      expect(
         find.bySemanticsLabel(RegExp('Daily.*Daily 10K.*Join Daily 10K')),
         findsOneWidget,
       );
@@ -522,28 +533,38 @@ void main() {
       )!;
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: HomeTab(
-              stepData: StepData(steps: 4000, date: DateTime(2026, 8, 11)),
-              isLoading: false,
-              error: null,
-              healthAuthorized: true,
-              notificationsState: true,
-              displayName: 'Walker',
-              authService: auth,
-              backendApiService: _Api(),
-              onRefresh: () async {},
-              onEnableHealth: () {},
-              onEnableNotifications: () {},
-              onDisplayNameChanged: () {},
-              friendsSteps: const [],
-              raceCard: const {'state': 'EMPTY'},
-              suggestedRacesState: Loadable.success([suggestion]),
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(320, 1600),
+              textScaler: TextScaler.linear(2),
+            ),
+            child: Scaffold(
+              body: HomeTab(
+                stepData: StepData(steps: 4000, date: DateTime(2026, 8, 11)),
+                isLoading: false,
+                error: null,
+                healthAuthorized: true,
+                notificationsState: true,
+                displayName: 'Walker',
+                authService: auth,
+                backendApiService: _Api(),
+                onRefresh: () async {},
+                onEnableHealth: () {},
+                onEnableNotifications: () {},
+                onDisplayNameChanged: () {},
+                friendsSteps: const [],
+                raceCard: const {'state': 'EMPTY'},
+                suggestedRacesState: Loadable.success([suggestion]),
+              ),
             ),
           ),
         ),
       );
       await tester.pump(const Duration(milliseconds: 500));
+      // Other fixed Home chrome predates this carousel and overflows at 2x.
+      // Clear that known frame-level exception so this assertion isolates the
+      // newly revealed prize-bearing suggestion ticket.
+      tester.takeException();
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
       await tester.pump();
 
@@ -555,6 +576,7 @@ void main() {
       );
       expect(find.text('8 RACER TOURNEY'), findsOneWidget);
       expect(find.text('2-DAY MATCHUPS · 3/8 IN'), findsOneWidget);
+      expect(find.text('800 COIN PRIZE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

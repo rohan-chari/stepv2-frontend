@@ -5,6 +5,7 @@ import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/leaderboard_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/home_course_track.dart'
     show AnimatedCapybaraWithAccessories;
 
@@ -93,6 +94,52 @@ class _FakeBackendApiService extends BackendApiService {
   }
 }
 
+class _LargeStepsApi extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchLeaderboard({
+    required String identityToken,
+    String type = 'steps',
+    String period = 'today',
+    String scope = 'global',
+  }) async => const {
+    'top100': [
+      {'rank': 1, 'userId': 'one', 'displayName': 'One', 'totalSteps': 2400000},
+      {'rank': 2, 'userId': 'two', 'displayName': 'Two', 'totalSteps': 999999},
+      {
+        'rank': 3,
+        'userId': 'three',
+        'displayName': 'Three',
+        'totalSteps': 99949,
+      },
+      {
+        'rank': 4,
+        'userId': 'user-1',
+        'displayName': 'Trail Walker',
+        'totalSteps': 1983700,
+      },
+      {
+        'rank': 5,
+        'userId': 'five',
+        'displayName': 'Five',
+        'totalSteps': 100000,
+      },
+      {'rank': 6, 'userId': 'six', 'displayName': 'Six', 'totalSteps': 999499},
+      {
+        'rank': 7,
+        'userId': 'seven',
+        'displayName': 'Seven',
+        'totalSteps': 99950,
+      },
+    ],
+    'currentUser': {
+      'rank': 4,
+      'displayName': 'Trail Walker',
+      'totalSteps': 1983700,
+      'inTop100': true,
+    },
+  };
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -145,8 +192,8 @@ void main() {
         (type: 'steps', period: 'today'),
       ]);
       expect(find.text('TODAY'), findsOneWidget);
-      expect(find.text('LEADERBOARD'), findsOneWidget);
-      expect(find.text('12.0k'), findsOneWidget);
+      expect(find.text('BOARDS'), findsOneWidget);
+      expect(find.text('12.0K'), findsOneWidget);
     },
   );
 
@@ -166,7 +213,10 @@ void main() {
 
       expect(find.text('RACES'), findsNothing);
       expect(find.text('TODAY'), findsOneWidget);
-      expect(find.byKey(const Key('leaderboard-race-podiums-AtlasRun')), findsNothing);
+      expect(
+        find.byKey(const Key('leaderboard-race-podiums-AtlasRun')),
+        findsNothing,
+      );
     },
   );
 
@@ -237,5 +287,36 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  testWidgets('large step totals stay compact and my dark row is readable', (
+    tester,
+  ) async {
+    final authService = await _createAuthService();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.night(),
+        home: Scaffold(
+          body: LeaderboardTab(
+            authService: authService,
+            backendApiService: _LargeStepsApi(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('2.4M'), findsOneWidget);
+    expect(find.text('1.0M'), findsOneWidget);
+    expect(find.text('99.9K'), findsOneWidget);
+    expect(find.text('100K'), findsNWidgets(2));
+    expect(find.text('999K'), findsOneWidget);
+    expect(find.text('2.0M'), findsOneWidget);
+
+    final me = tester.widget<Text>(find.text('@Trail Walker'));
+    final myValue = tester.widget<Text>(find.text('2.0M'));
+    final colors = AppColors.of(tester.element(find.text('@Trail Walker')));
+    expect(me.style?.color, colors.textLight);
+    expect(myValue.style?.color, colors.textLight);
   });
 }

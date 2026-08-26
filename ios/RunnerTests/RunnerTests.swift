@@ -1,9 +1,60 @@
 import Flutter
+import Security
 import UIKit
 import XCTest
 @testable import Runner
 
 class RunnerTests: XCTestCase {
+  func testNotificationInstallationIDIsStableAndAppScoped() {
+    let service = "com.rohanchari.steptracker.tests.\(UUID().uuidString)"
+    let account = "notification-installation-id"
+    let store = NotificationInstallationIDStore(service: service, account: account)
+    defer {
+      SecItemDelete([
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+      ] as CFDictionary)
+    }
+
+    let first = store.getOrCreateInstallationID()
+    let second = store.getOrCreateInstallationID()
+
+    XCTAssertNotNil(first)
+    XCTAssertEqual(first, second)
+    XCTAssertNotNil(first.flatMap(UUID.init(uuidString:)))
+  }
+
+  func testNotificationInstallationIDUsesThisDeviceOnlyAccessibility() {
+    let service = "com.rohanchari.steptracker.tests.\(UUID().uuidString)"
+    let account = "notification-installation-id"
+    let store = NotificationInstallationIDStore(service: service, account: account)
+    defer {
+      SecItemDelete([
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+      ] as CFDictionary)
+    }
+
+    XCTAssertNotNil(store.getOrCreateInstallationID())
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching([
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnAttributes as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ] as CFDictionary, &item)
+    let attributes = item as? [String: Any]
+
+    XCTAssertEqual(status, errSecSuccess)
+    XCTAssertEqual(
+      attributes?[kSecAttrAccessible as String] as? String,
+      kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String
+    )
+  }
+
   func testCombinedV2RequestCarriesImmutableBodyHeadersAndCapabilityMarker() {
     let state = MockStateStore(
       sessionToken: "session-token",

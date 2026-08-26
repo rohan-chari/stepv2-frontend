@@ -20,9 +20,9 @@ import '../../widgets/arcade_fx.dart';
 import '../../widgets/coach_tip.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/coin_glyph.dart';
-import '../../widgets/feedback_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/global_event_banner.dart';
+import '../../widgets/feedback_sheet.dart';
 import '../../widgets/home_giveaway_banner.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
@@ -281,16 +281,6 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (serviceBanner case final banner?)
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  12,
-                                  16,
-                                  0,
-                                ),
-                                child: banner,
-                              ),
                             // Streak + shop live just under the hero scene so the
                             // world stays clean; they're the first card to bounce in.
                             StaggerIn(
@@ -305,138 +295,120 @@ class HomeTab extends StatelessWidget {
                                 child: _buildQuickActionsRow(context),
                               ),
                             ),
-                            // Keep the contest promotion directly below the
-                            // daily reward and shop actions so those daily
-                            // actions remain the first thing users see.
-                            if (giveawayBanner case final banner?)
-                              Padding(padding: EdgeInsets.zero, child: banner),
-                            // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
-                            // every user while a step-multiplier window is live. The
-                            // shared widget self-ticks the countdown and collapses on
-                            // its own once the window ends.
-                            if (_buildGlobalEventBanner() case final banner?)
-                              StaggerIn(
-                                index: 1,
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    16,
-                                    16,
-                                    0,
-                                  ),
-                                  child: banner,
-                                ),
-                              ),
-                            // SETUP leads the page: finishing setup is a
-                            // prerequisite for everything below it, and a user
+                            // Another person waiting is Home's highest-priority
+                            // interruption. Keep it ahead of setup and promotional
+                            // notices, but below the user's repeatable daily action.
+                            ?_buildPendingInviteSection(),
+                            // SETUP follows person-to-person invitations:
+                            // finishing it improves every race below, and a user
                             // with no name or photo is worse off in every race
                             // they join. It collapses to a zero-
                             // height SizedBox.shrink when there's nothing to
-                            // do, so a finished user sees no gap here. The
-                            // stagger indices below must stay in visual order
-                            // or the bounce-in cascade plays out of sequence.
-                            StaggerIn(
-                              index: 2,
-                              child: _SetupPromptsSection(
-                                displayName: displayName,
-                                hasProfilePhoto: hasProfilePhoto,
-                                authService: authService,
-                                backendApiService: backendApiService,
-                                onDisplayNameChanged: onDisplayNameChanged,
-                                onAddProfilePhoto: onAddProfilePhoto,
-                                onDismissProfilePhotoPrompt:
-                                    onDismissProfilePhotoPrompt,
-                                showRenameChip:
-                                    authService.onboardingV3Enabled &&
-                                    !authService.supportsDiscoverableIdentity,
-                                // Only an actually-loaded, actually-empty
-                                // friends list counts. A null state (tutorial
-                                // preview) or an in-flight/failed fetch must
-                                // never accuse a user with friends of having
-                                // none.
-                                hasNoFriends:
-                                    friendsStepsState?.isSuccess == true &&
-                                    friendsSteps.isEmpty,
-                                onFindFriends: onOpenFriendsTab,
-                                showInviteCodePrompt:
-                                    showInviteCodePrompt && !isTutorialPreview,
-                                onEnterInviteCode: onEnterInviteCode,
-                                onSkipInviteCode: onSkipInviteCode,
-                              ),
+                            // do, so a finished user sees no gap here.
+                            _SetupPromptsSection(
+                              compact: _buildPendingInviteSection() != null,
+                              displayName: displayName,
+                              hasProfilePhoto: hasProfilePhoto,
+                              authService: authService,
+                              backendApiService: backendApiService,
+                              onDisplayNameChanged: onDisplayNameChanged,
+                              onAddProfilePhoto: onAddProfilePhoto,
+                              onDismissProfilePhotoPrompt:
+                                  onDismissProfilePhotoPrompt,
+                              showRenameChip:
+                                  authService.onboardingV3Enabled &&
+                                  !authService.supportsDiscoverableIdentity,
+                              // Only an actually-loaded, actually-empty
+                              // friends list counts. A null state (tutorial
+                              // preview) or an in-flight/failed fetch must
+                              // never accuse a user with friends of having
+                              // none.
+                              hasNoFriends:
+                                  friendsStepsState?.isSuccess == true &&
+                                  friendsSteps.isEmpty,
+                              onFindFriends: onOpenFriendsTab,
+                              showInviteCodePrompt:
+                                  showInviteCodePrompt && !isTutorialPreview,
+                              onEnterInviteCode: onEnterInviteCode,
+                              onSkipInviteCode: onSkipInviteCode,
                             ),
-                            // A pending race invite outranks everything below
-                            // SETUP: it expires, and it is the only block here
-                            // that another person is waiting on. It renders as
-                            // its own block and is suppressed inside RACES.
-                            if (_buildPendingInviteSection() case final invite?)
-                              StaggerIn(index: 3, child: invite),
-                            if (nextRace?.visible == true)
-                              StaggerIn(
-                                index: 4,
-                                child: _NextRaceSection(
-                                  state: nextRace!,
-                                  shareFirst:
-                                      nextRace.createEnabled &&
-                                      friendsStepsState?.isSuccess == true &&
-                                      friendsSteps.length < 5,
-                                  onStart: onStartQuickRace,
-                                  onJoin:
-                                      onJoinDiscoveredRace ??
-                                      onJoinRaceFromCard,
-                                  // Row body previews; the "+" still joins.
-                                  // Null inside the tutorial's fake home so a
-                                  // tap can never navigate out of it.
-                                  onPreview:
-                                      isTutorialPreview || onOpenRace == null
-                                      ? null
-                                      : (raceId) => onOpenRace!(raceId),
+                            // Time-bound notices remain reachable, but sit below
+                            // direct person-to-person and setup work. They use
+                            // compact banner geometry instead of competing with
+                            // the primary action above.
+                            if (_buildGlobalEventBanner() case final banner?)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  0,
                                 ),
+                                child: banner,
+                              ),
+                            if (giveawayBanner case final banner?)
+                              Padding(padding: EdgeInsets.zero, child: banner)
+                            else if (serviceBanner case final banner?)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  0,
+                                ),
+                                child: banner,
+                              ),
+                            if (nextRace?.visible == true)
+                              _NextRaceSection(
+                                state: nextRace!,
+                                shareFirst:
+                                    nextRace.createEnabled &&
+                                    friendsStepsState?.isSuccess == true &&
+                                    friendsSteps.length < 5,
+                                onStart: onStartQuickRace,
+                                onJoin:
+                                    onJoinDiscoveredRace ?? onJoinRaceFromCard,
+                                // Row body previews; the "+" still joins.
+                                // Null inside the tutorial's fake home so a
+                                // tap can never navigate out of it.
+                                onPreview:
+                                    isTutorialPreview || onOpenRace == null
+                                    ? null
+                                    : (raceId) => onOpenRace!(raceId),
                               ),
                             // Today's coins sits above the races: it's the one
                             // section that moves every single day whether or not
                             // the user is in a race, so it earns the higher
-                            // slot. The stagger index moves with it — the
-                            // cascade is ordered by index, not by position.
-                            StaggerIn(
-                              index: 5,
-                              child: KeyedSubtree(
-                                key: tutorialMilestonesKey,
-                                child: CoachTipHost(
-                                  tip: CoachTipId.milestoneClaim,
-                                  store: coachTipStore,
-                                  // The tutorial no longer teaches milestones;
-                                  // this fires the first time the user actually
-                                  // has one to claim, which is when the sentence
-                                  // is finally useful.
-                                  enabled:
-                                      authService.onboardingV3Enabled &&
-                                      (stepData?.steps ?? 0) >= 5000,
-                                  child: StepMilestonesSection(
-                                    key: stepMilestonesKey,
-                                    authService: authService,
-                                    backendApiService: backendApiService,
-                                    currentSteps: stepData?.steps,
-                                    // Fed by the home batch so the claim card lands
-                                    // with everything else; falls back to its own
-                                    // fetch on old backends.
-                                    initialData:
-                                        raceCard?['stepMilestones']
-                                            as Map<String, dynamic>?,
-                                    awaitingBatch: raceCardLoading,
-                                  ),
+                            // slot.
+                            KeyedSubtree(
+                              key: tutorialMilestonesKey,
+                              child: CoachTipHost(
+                                tip: CoachTipId.milestoneClaim,
+                                store: coachTipStore,
+                                // The tutorial no longer teaches milestones;
+                                // this fires the first time the user actually
+                                // has one to claim, which is when the sentence
+                                // is finally useful.
+                                enabled:
+                                    authService.onboardingV3Enabled &&
+                                    (stepData?.steps ?? 0) >= 5000,
+                                child: StepMilestonesSection(
+                                  key: stepMilestonesKey,
+                                  authService: authService,
+                                  backendApiService: backendApiService,
+                                  currentSteps: stepData?.steps,
+                                  // Fed by the home batch so the claim card lands
+                                  // with everything else; falls back to its own
+                                  // fetch on old backends.
+                                  initialData:
+                                      raceCard?['stepMilestones']
+                                          as Map<String, dynamic>?,
+                                  awaitingBatch: raceCardLoading,
                                 ),
                               ),
                             ),
-                            StaggerIn(
-                              index: 6,
-                              child: _buildRaceSection(context),
-                            ),
-                            // Last block on the page: the ask, once the user
-                            // has seen everything the app has to show them.
-                            StaggerIn(
-                              index: 8,
-                              child: _buildFeedbackSection(context),
-                            ),
+                            _buildRaceSection(context),
+                            _buildFeedbackSection(context),
                           ],
                         ),
                       ),
@@ -477,6 +449,7 @@ class HomeTab extends StatelessWidget {
       key: const Key('home-global-event-banner'),
       multiplier: multiplier,
       endsAt: endsAt,
+      compact: true,
     );
   }
 
@@ -610,7 +583,7 @@ class HomeTab extends StatelessWidget {
   }
 
   /// A pending race invite, promoted out of the RACES section to its own block
-  /// directly under SETUP (batch 2026-08-10b item 3). Returns null — and so
+  /// directly above SETUP (batch 2026-08-10b item 3). Returns null — and so
   /// renders nothing at all, no gap — for every other card state.
   ///
   /// This is a MOVE, not a redesign: it reuses `_buildRaceOpportunityRow`'s
@@ -644,6 +617,67 @@ class HomeTab extends StatelessWidget {
           _HomeRaceHeader(onViewAll: () => _openPublicRaces(context)),
           _buildSuggestedRacesBody(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFeedbackSection(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      key: const Key('home-feedback-card'),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: GameContainer(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        surfaceColor: colors.roofDark,
+        frameColor: colors.textLight.withValues(alpha: 0.24),
+        child: Row(
+          children: [
+            Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 22,
+              color: colors.textLight.withValues(alpha: 0.82),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'FEEDBACK',
+                    style: PixelText.title(size: 15, color: colors.textLight),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Help us make Bara better.',
+                    style: PixelText.body(
+                      size: 12,
+                      color: colors.textLight.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: PillButton(
+                key: const Key('home-feedback-button'),
+                label: 'SEND',
+                variant: PillButtonVariant.secondary,
+                fontSize: 12,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
+                onPressed: () => showFeedbackSheet(
+                  context: context,
+                  authService: authService,
+                  backendApiService: backendApiService,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -698,8 +732,12 @@ class HomeTab extends StatelessWidget {
     }
     final suggestions = state.data;
     if (suggestions != null && suggestions.isNotEmpty) {
+      final requestedTextScale =
+          MediaQuery.textScalerOf(homeContext).scale(12) / 12;
+      final textScale = requestedTextScale < 1 ? 1.0 : requestedTextScale;
+      final railHeight = 144.0 + ((textScale - 1) * 96);
       return SizedBox(
-        height: 170,
+        height: railHeight,
         child: Padding(
           padding: const EdgeInsets.only(left: 16),
           child: LayoutBuilder(
@@ -724,13 +762,14 @@ class HomeTab extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final suggestion = suggestions[index];
                   return Padding(
-                    padding: const EdgeInsets.only(right: gutter),
+                    padding: const EdgeInsets.only(right: gutter, bottom: 8),
                     child: _HomeSuggestionTicket(
                       key: Key(
                         'home-suggestion-${suggestion.wireKind}-${suggestion.id}',
                       ),
                       suggestion: suggestion,
                       width: width,
+                      height: railHeight - 8,
                       joining: joiningSuggestionKeys.contains(
                         suggestion.stableKey,
                       ),
@@ -850,63 +889,6 @@ class HomeTab extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  /// Batch 2026-08-10b item 5 — the feedback ask, last block on Home.
-  ///
-  /// Renders unconditionally: the endpoint is already live, and there is no
-  /// backend field to feature-detect. The tutorial preview renders this card
-  /// too (it looks intentional there), and is prevented from actually
-  /// submitting by `TutorialPreviewBackendApiService.submitSuggestion` being a
-  /// no-op — NOT by the spotlight overlay, which is incidental.
-  Widget _buildFeedbackSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const _HomeSectionHeader(title: 'FEEDBACK'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: GameContainer(
-            key: const Key('home-feedback-card'),
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Found a bug? Have an idea? Let us know',
-                  style: PixelText.title(
-                    size: 14,
-                    color: AppColors.of(context).textDark,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Builder(
-                  builder: (btnContext) => PillButton(
-                    key: const Key('home-feedback-button'),
-                    label: 'SEND FEEDBACK',
-                    icon: Icons.chat_bubble_outline_rounded,
-                    variant: PillButtonVariant.secondary,
-                    fontSize: 13,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    onPressed: () => showFeedbackSheet(
-                      context: btnContext,
-                      authService: authService,
-                      backendApiService: backendApiService,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -1366,69 +1348,59 @@ class HomeTab extends StatelessWidget {
               top: topInset + 12,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // Keep both trailing actions inside the viewport. The name
-                  // yields first, while the coin control scales down inside a
-                  // bounded allocation for large balances and text scales.
+                  // Keep the identity line focused on the user and balance.
+                  // Notifications live with the quick actions below the hero,
+                  // safely away from the fixed moon/sun artwork.
                   final coinMaxWidth = (constraints.maxWidth * 0.34)
                       .clamp(88.0, 136.0)
                       .toDouble();
                   return SizedBox(
                     height: 44,
-                    child: Stack(
+                    child: Row(
                       children: [
-                        Positioned(
-                          left: 0,
-                          right: 50,
-                          top: 0,
-                          bottom: 0,
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: MediaQuery.withClampedTextScaling(
-                                  maxScaleFactor: 1.3,
-                                  child: Text(
-                                    atName(displayName ?? 'You'),
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: PixelText.title(
-                                      size: 24,
-                                      color: AppColors.of(context).textLight,
-                                    ).copyWith(shadows: _heroShadows),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
+                        Flexible(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: 1,
+                            child: MediaQuery.withClampedTextScaling(
+                              maxScaleFactor: 1.3,
+                              child: Text(
+                                atName(displayName ?? 'You'),
+                                maxLines: 1,
+                                softWrap: false,
+                                style: PixelText.title(
+                                  size: 24,
+                                  color: AppColors.of(context).textLight,
+                                ).copyWith(shadows: _heroShadows),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                key: const Key('home-coin-balance'),
-                                width: coinMaxWidth,
-                                height: 44,
-                                child: FittedBox(
-                                  alignment: Alignment.centerLeft,
-                                  fit: BoxFit.scaleDown,
-                                  child: CoinBalanceBadge(
-                                    coins: authService.coins,
-                                    coinSize: 16,
-                                    // "+" = earn more coins -> the Get Coins hub
-                                    // (watch an ad, invite friends, daily box).
-                                    onAddTap: () => Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => GetCoinsScreen(
-                                          authService: authService,
-                                          backendApiService: backendApiService,
-                                          adController: getCoinsAdController,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildNotificationHudButton(context),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          key: const Key('home-coin-balance'),
+                          width: coinMaxWidth,
+                          height: 44,
+                          child: FittedBox(
+                            alignment: Alignment.centerLeft,
+                            fit: BoxFit.scaleDown,
+                            child: CoinBalanceBadge(
+                              coins: authService.coins,
+                              coinSize: 16,
+                              // "+" = earn more coins -> the Get Coins hub
+                              // (watch an ad, invite friends, daily box).
+                              onAddTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => GetCoinsScreen(
+                                    authService: authService,
+                                    backendApiService: backendApiService,
+                                    adController: getCoinsAdController,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1471,8 +1443,7 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  /// Streak + shop, first row under the hero. Same widgets and wiring as the
-  /// old in-hero row — only their home moved.
+  /// Daily reward plus the two compact destinations, first row under the hero.
   Widget _buildQuickActionsRow(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1497,22 +1468,22 @@ class HomeTab extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Expanded(
-          child: SizedBox(
-            height: 58,
-            child: KeyedSubtree(
-              key: tutorialShopKey,
-              child: PillButton(
-                key: const Key('home-shop-button'),
-                label: 'SHOP',
-                icon: Icons.storefront_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 15,
-                fullWidth: true,
-                onPressed: onOpenShop,
-              ),
+        SizedBox(
+          width: 80,
+          height: 58,
+          child: KeyedSubtree(
+            key: tutorialShopKey,
+            child: _HomeShopButton(
+              key: const Key('home-shop-button'),
+              onPressed: onOpenShop,
             ),
           ),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 80,
+          height: 58,
+          child: _buildNotificationHudButton(context),
         ),
       ],
     );
@@ -1532,7 +1503,7 @@ class HomeTab extends StatelessWidget {
     final badgeLabel = unreadCount > 9 ? '9+' : '$unreadCount';
     final backplate = colors.pillGold;
     final borderColor = colors.pillGoldDark;
-    final iconColor = colors.pillGreenShadow;
+    final iconColor = colors.textDark;
 
     return Semantics(
       container: true,
@@ -1541,73 +1512,102 @@ class HomeTab extends StatelessWidget {
       label: semanticsLabel,
       onTap: onOpenNotifications,
       child: ExcludeSemantics(
-        child: GestureDetector(
-          key: const Key('home-notifications-card'),
-          onTap: onOpenNotifications,
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox.square(
-            dimension: 44,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: SizedBox.square(
-                    dimension: 34,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: backplate,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: borderColor, width: 1.25),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colors.pillGoldShadow,
-                            offset: const Offset(0, 1),
-                            blurRadius: 0,
+        child: Tooltip(
+          message: 'Notifications',
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const Key('home-notifications-card'),
+              onTap: onOpenNotifications,
+              borderRadius: BorderRadius.circular(8),
+              child: Ink(
+                key: const Key('home-notifications-backplate'),
+                width: 80,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: backplate,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: borderColor, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: borderColor.withValues(alpha: 0.24),
+                      offset: const Offset(3, 3),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.notifications_rounded,
+                            size: 22,
+                            color: iconColor,
+                          ),
+                          const SizedBox(height: 2),
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 2,
+                              ),
+                              child: Text(
+                                'ALERTS',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.visible,
+                                textAlign: TextAlign.center,
+                                textScaler: TextScaler.noScaling,
+                                style: PixelText.pill(
+                                  size: 14,
+                                  color: iconColor,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: Icon(
-                        Icons.notifications_rounded,
-                        size: 22,
-                        color: iconColor,
-                      ),
                     ),
-                  ),
-                ),
-                if (unreadCount > 0)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: Container(
-                      key: const Key('home-notifications-badge'),
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: unreadCount > 9 ? 3 : 2,
-                      ),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: colors.error,
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(color: colors.textLight, width: 1.5),
-                      ),
-                      child: MediaQuery.withClampedTextScaling(
-                        maxScaleFactor: 1,
-                        child: Text(
-                          badgeLabel,
-                          maxLines: 1,
-                          style: PixelText.number(
-                            size: 9,
-                            color: colors.textLight,
-                          ).copyWith(height: 1),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: -5,
+                        right: -5,
+                        child: Container(
+                          key: const Key('home-notifications-badge'),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: unreadCount > 9 ? 3 : 2,
+                          ),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: colors.coinLight,
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: colors.textLight,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: MediaQuery.withClampedTextScaling(
+                            maxScaleFactor: 1,
+                            child: Text(
+                              badgeLabel,
+                              maxLines: 1,
+                              style: PixelText.number(
+                                size: 9,
+                                color: colors.roofDark,
+                              ).copyWith(height: 1),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -1636,6 +1636,76 @@ class HomeTab extends StatelessWidget {
   }
 }
 
+/// Compact secondary destination beside the wider daily action.
+///
+/// The visible label is intentional: the tutorial teaches this control, and
+/// an icon-only storefront is less recognizable than it is space-efficient.
+class _HomeShopButton extends StatelessWidget {
+  const _HomeShopButton({super.key, required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: 'Shop',
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: 'Shop',
+        excludeFromSemantics: true,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            excludeFromSemantics: true,
+            borderRadius: BorderRadius.circular(8),
+            child: Ink(
+              width: 80,
+              height: 58,
+              decoration: BoxDecoration(
+                color: colors.pillGold,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.pillGoldDark, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.pillGoldDark.withValues(alpha: 0.24),
+                    offset: const Offset(3, 3),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.storefront_rounded,
+                    size: 22,
+                    color: colors.textDark,
+                  ),
+                  const SizedBox(height: 2),
+                  Flexible(
+                    child: Text(
+                      'SHOP',
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      textScaler: TextScaler.noScaling,
+                      style: PixelText.pill(size: 14, color: colors.textDark),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The SETUP board: one parchment panel carrying every outstanding setup ask,
 /// stacked and separated by a hairline rule.
 ///
@@ -1643,9 +1713,10 @@ class HomeTab extends StatelessWidget {
 /// a short question with two answers — and a user with a name prompt AND a
 /// photo prompt used to see two competing panels with a gap between them.
 class _SetupBoard extends StatelessWidget {
-  const _SetupBoard({required this.entries});
+  const _SetupBoard({required this.entries, required this.compact});
 
   final List<_SetupEntry> entries;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1673,10 +1744,10 @@ class _SetupBoard extends StatelessWidget {
           color: colors.parchment,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: colors.roofDark.withValues(alpha: 0.4),
-            width: 2,
+            color: colors.roofDark.withValues(alpha: compact ? 0.18 : 0.4),
+            width: compact ? 1 : 2,
           ),
-          boxShadow: _homeCardShadow,
+          boxShadow: compact ? const [] : _homeCardShadow,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1763,6 +1834,7 @@ class _SetupEntry extends StatelessWidget {
 
 class _SetupPromptsSection extends StatefulWidget {
   const _SetupPromptsSection({
+    required this.compact,
     required this.displayName,
     required this.hasProfilePhoto,
     required this.authService,
@@ -1778,6 +1850,7 @@ class _SetupPromptsSection extends StatefulWidget {
     this.onSkipInviteCode,
   });
 
+  final bool compact;
   final String? displayName;
   final bool hasProfilePhoto;
   final AuthService authService;
@@ -2175,7 +2248,8 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _HomeSectionHeader(title: 'SETUP'),
-        if (entries.isNotEmpty) _SetupBoard(entries: entries),
+        if (entries.isNotEmpty)
+          _SetupBoard(entries: entries, compact: widget.compact),
         if (showDismissedConfirmation)
           Padding(
             key: const Key('profile-photo-dismissed-confirmation'),
@@ -2294,7 +2368,7 @@ class _NextRaceSectionState extends State<_NextRaceSection> {
                       'OR JOIN ONE',
                       textAlign: TextAlign.center,
                       style: PixelText.body(
-                        size: 11,
+                        size: 12,
                         color: AppColors.of(context).textMid,
                       ),
                     ),
@@ -2326,7 +2400,7 @@ class _NextRaceSectionState extends State<_NextRaceSection> {
                                   Text(
                                     '${race.participantCount} in',
                                     style: PixelText.body(
-                                      size: 11,
+                                      size: 12,
                                       color: AppColors.of(context).textMid,
                                     ),
                                   ),
@@ -2439,7 +2513,7 @@ class _HomeRaceHeader extends StatelessWidget {
                   child: Text(
                     'VIEW ALL',
                     style: PixelText.title(
-                      size: 11,
+                      size: 12,
                       color: AppColors.of(
                         context,
                       ).textLight.withValues(alpha: 0.9),
@@ -2459,6 +2533,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
     super.key,
     required this.suggestion,
     required this.width,
+    required this.height,
     required this.joining,
     required this.onJoin,
     this.onPreview,
@@ -2466,6 +2541,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
 
   final HomeRaceSuggestion suggestion;
   final double width;
+  final double height;
   final bool joining;
   final VoidCallback? onJoin;
 
@@ -2561,12 +2637,15 @@ class _HomeSuggestionTicket extends StatelessWidget {
         onTap: onPreview,
         child: ExcludeSemantics(
           child: SizedBox(
+            key: Key(
+              'home-suggestion-surface-${suggestion.wireKind}-${suggestion.id}',
+            ),
             width: width,
-            height: 152,
+            height: height,
             child: DecoratedBox(
               decoration: raceCardDecoration(context),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment:
@@ -2596,7 +2675,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                             label: 'PUBLIC',
                             background: AppColors.of(context).pillGreen,
                             foreground: Colors.white,
-                            fontSize: 9,
+                            fontSize: 12,
                           ),
                         ],
                       )
@@ -2604,7 +2683,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       Pill(
                         label: suggestion.eyebrow,
                         background: AppColors.of(context).pillGold,
-                        fontSize: 10.5,
+                        fontSize: 12,
                       ),
                       const SizedBox(height: 5),
                       Text(
@@ -2628,7 +2707,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(
-                        size: 11.5,
+                        size: 12,
                         color: AppColors.of(context).textMid,
                       ),
                     ),
@@ -2640,7 +2719,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: PixelText.title(
-                          size: 10.5,
+                          size: 12,
                           color: AppColors.of(context).successText,
                         ),
                       ),
@@ -2659,7 +2738,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: PixelText.title(
-                                size: 11,
+                                size: 12,
                                 color: AppColors.of(context).coinDark,
                               ),
                             ),
@@ -3044,7 +3123,7 @@ class _HomeRaceActionRow extends StatelessWidget {
                   Text(
                     label,
                     style: PixelText.title(
-                      size: 10,
+                      size: 12,
                       // `successText`, not `roofMid`: roofMid is a SURFACE
                       // green, and at night (#214637 on the #1B2A34 parchment
                       // card) the eyebrow — INVITE / ACTIVE / LIVE / FINISHED
@@ -3160,7 +3239,7 @@ class _SmallRaceButton extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: PixelText.title(
-                size: 10,
+                size: 12,
                 color: muted
                     ? AppColors.of(context).textMid
                     : AppColors.of(context).textDark,

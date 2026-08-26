@@ -15,7 +15,6 @@ import '../theme_controller.dart';
 import '../tutorial/tutorial_screen.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
-import '../widgets/feedback_sheet.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/invite_code_sheet.dart';
 import '../widgets/pill_button.dart';
@@ -161,19 +160,6 @@ class _SettingsContentState extends State<_SettingsContent> {
     }
   }
 
-  /// Item 7 — the suggestion box. The sheet itself lives in
-  /// `lib/widgets/feedback_sheet.dart` so Home can offer the same one
-  /// (batch 2026-08-10b item 5); this screen's behaviour is unchanged.
-  Future<void> _openFeedbackSheet() async {
-    final api = widget.backendApiService;
-    if (api == null) return;
-    await showFeedbackSheet(
-      context: context,
-      authService: widget.authService,
-      backendApiService: api,
-    );
-  }
-
   Future<void> _openInviteCodeSheet() async {
     final api = widget.backendApiService;
     if (api == null) return;
@@ -301,15 +287,10 @@ class _SettingsContentState extends State<_SettingsContent> {
             title: 'PROFILE & PRIVACY',
             icon: Icons.person_rounded,
             children: [
-              PillButton(
+              _SettingsActionTile(
+                key: const Key('settings-edit-display-name'),
                 label: 'EDIT DISPLAY NAME',
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+                icon: Icons.badge_rounded,
                 onPressed: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
@@ -322,17 +303,10 @@ class _SettingsContentState extends State<_SettingsContent> {
               ),
               if (widget.backendApiService != null) ...[
                 const SizedBox(height: 10),
-                PillButton(
+                _SettingsActionTile(
                   key: const Key('settings-enter-invite-code'),
                   label: 'ENTER INVITE CODE',
                   icon: Icons.card_giftcard_rounded,
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
                   onPressed: _openInviteCodeSheet,
                 ),
               ],
@@ -399,15 +373,10 @@ class _SettingsContentState extends State<_SettingsContent> {
               title: 'ADMIN',
               icon: Icons.admin_panel_settings_rounded,
               children: [
-                PillButton(
+                _SettingsActionTile(
+                  key: const Key('settings-admin-tools'),
                   label: 'ADMIN TOOLS',
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
+                  icon: Icons.admin_panel_settings_rounded,
                   onPressed: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -426,15 +395,10 @@ class _SettingsContentState extends State<_SettingsContent> {
             title: 'HELP & LEGAL',
             icon: Icons.help_rounded,
             children: [
-              PillButton(
+              _SettingsActionTile(
+                key: const Key('settings-view-tutorial'),
                 label: 'VIEW TUTORIAL',
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+                icon: Icons.school_rounded,
                 onPressed: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
@@ -445,41 +409,16 @@ class _SettingsContentState extends State<_SettingsContent> {
                   );
                 },
               ),
-              // Item 7: above SUPPORT — catch the feedback before it becomes
-              // a one-star review. Needs the API service to post anywhere.
-              if (widget.backendApiService != null)
-                PillButton(
-                  key: const Key('settings-send-feedback'),
-                  label: 'SEND FEEDBACK',
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  onPressed: _openFeedbackSheet,
-                ),
-              PillButton(
+              _SettingsActionTile(
+                key: const Key('settings-support'),
                 label: 'SUPPORT',
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+                icon: Icons.support_agent_rounded,
                 onPressed: () => _openUrl('/support.html'),
               ),
-              PillButton(
+              _SettingsActionTile(
+                key: const Key('settings-privacy-policy'),
                 label: 'PRIVACY POLICY',
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+                icon: Icons.verified_user_rounded,
                 onPressed: () => _openUrl('/privacy.html'),
               ),
             ],
@@ -516,17 +455,10 @@ class _SettingsContentState extends State<_SettingsContent> {
             title: 'ABOUT US',
             icon: Icons.info_outline_rounded,
             children: [
-              PillButton(
+              _SettingsActionTile(
                 key: const Key('settings-buy-us-a-coffee'),
                 label: 'BUY US A COFFEE',
                 icon: Icons.local_cafe_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
                 onPressed: () =>
                     showInfoToast(context, 'Donation link coming soon'),
               ),
@@ -819,16 +751,17 @@ class _SettingsSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, size: 16, color: colors.textAccent),
+            Icon(icon, size: 18, color: colors.textAccent),
             const SizedBox(width: 7),
-            Text(
-              title,
-              style: PixelText.title(size: 12, color: colors.textAccent),
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 2,
+                style: PixelText.title(size: 14, color: colors.textAccent),
+              ),
             ),
             const SizedBox(width: 10),
-            Expanded(
-              child: Container(height: 1, color: colors.parchmentBorder),
-            ),
+            Container(width: 24, height: 1, color: colors.parchmentBorder),
           ],
         ),
         const SizedBox(height: 10),
@@ -837,6 +770,70 @@ class _SettingsSection extends StatelessWidget {
           children[index],
         ],
       ],
+    );
+  }
+}
+
+class _SettingsActionTile extends StatelessWidget {
+  const _SettingsActionTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: colors.parchmentLight,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: colors.parchmentBorder, width: 1.5),
+          ),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(11),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 52),
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colors.textAccent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, size: 18, color: colors.textAccent),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 2,
+                      style: PixelText.title(size: 13, color: colors.textDark),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, color: colors.textMid),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

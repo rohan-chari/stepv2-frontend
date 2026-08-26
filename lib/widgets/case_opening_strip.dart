@@ -19,6 +19,8 @@ class CaseOpeningReel extends StatefulWidget {
   final VoidCallback onComplete;
   final double height;
   final double itemWidth;
+  final bool sleek;
+  final Key? surfaceKey;
 
   /// Async gate between the swipe and the spin. The server roll happens HERE —
   /// not before — so backing out of the screen without swiping never consumes
@@ -45,6 +47,8 @@ class CaseOpeningReel extends StatefulWidget {
     required this.onComplete,
     this.height = 116,
     this.itemWidth = 86.0,
+    this.sleek = false,
+    this.surfaceKey,
     this.onSpinRequested,
     this.spinTrigger,
     this.hideSwipeHint = false,
@@ -201,23 +205,57 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
           _totalItemWidth = totalItemWidth;
 
           return GameContainer(
-            padding: const EdgeInsets.fromLTRB(10, 12, 10, 14),
+            key: widget.surfaceKey,
+            flat: widget.sleek,
+            borderRadius: widget.sleek ? 10 : 14,
+            padding: widget.sleek
+                ? const EdgeInsets.fromLTRB(10, 10, 10, 11)
+                : const EdgeInsets.fromLTRB(10, 12, 10, 14),
             frameColor: AppColors.of(context).textDark,
-            surfaceColor: AppColors.of(context).parchment,
+            surfaceColor: widget.sleek
+                ? AppColors.of(context).parchmentDark
+                : AppColors.of(context).parchment,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _requestingSpin
-                      ? 'PREPARING...'
-                      : _waitingForSwipe
-                      ? (widget.hideSwipeHint ? 'READY' : 'SWIPE OR TAP')
-                      : 'OPENING...',
-                  style: PixelText.title(
-                    size: 14,
-                    color: AppColors.of(context).textMid,
+                if (widget.sleek)
+                  Row(
+                    children: [
+                      Icon(
+                        _requestingSpin
+                            ? Icons.hourglass_top_rounded
+                            : _waitingForSwipe
+                            ? Icons.swipe_rounded
+                            : Icons.auto_awesome_rounded,
+                        size: 17,
+                        color: AppColors.of(context).textDark,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        _requestingSpin
+                            ? 'PREPARING...'
+                            : _waitingForSwipe
+                            ? (widget.hideSwipeHint ? 'READY' : 'SWIPE OR TAP')
+                            : 'OPENING...',
+                        style: PixelText.title(
+                          size: 13,
+                          color: AppColors.of(context).textDark,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    _requestingSpin
+                        ? 'PREPARING...'
+                        : _waitingForSwipe
+                        ? (widget.hideSwipeHint ? 'READY' : 'SWIPE OR TAP')
+                        : 'OPENING...',
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 8),
                 Stack(
                   alignment: Alignment.center,
@@ -251,6 +289,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                         );
                       },
                       child: Container(
+                        key: const Key('case-opening-reel-viewport'),
                         height: widget.height,
                         width: viewportWidth,
                         // Dark machine window: tiles glow against the deep
@@ -371,7 +410,9 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                     ),
                   ],
                 ),
-                if (_waitingForSwipe && !widget.hideSwipeHint) ...[
+                if (!widget.sleek &&
+                    _waitingForSwipe &&
+                    !widget.hideSwipeHint) ...[
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -421,6 +462,7 @@ class CaseReelTile extends StatelessWidget {
   final double width;
   final double height;
   final Widget child;
+  final bool sleek;
 
   const CaseReelTile({
     super.key,
@@ -428,6 +470,7 @@ class CaseReelTile extends StatelessWidget {
     required this.width,
     required this.height,
     required this.child,
+    this.sleek = false,
   });
 
   @override
@@ -437,16 +480,20 @@ class CaseReelTile extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.of(context).parchment,
-        border: Border.all(color: borderColor, width: 2.5),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: borderColor.withValues(alpha: 0.18),
-            offset: const Offset(3, 3),
-            blurRadius: 0,
-          ),
-        ],
+        color: sleek
+            ? AppColors.of(context).parchmentDark
+            : AppColors.of(context).parchment,
+        border: Border.all(color: borderColor, width: sleek ? 1.5 : 2.5),
+        borderRadius: BorderRadius.circular(sleek ? 6 : 8),
+        boxShadow: sleek
+            ? const []
+            : [
+                BoxShadow(
+                  color: borderColor.withValues(alpha: 0.18),
+                  offset: const Offset(3, 3),
+                  blurRadius: 0,
+                ),
+              ],
       ),
       child: Stack(
         children: [

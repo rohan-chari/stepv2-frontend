@@ -425,22 +425,20 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
               children: [
                 _buildHeader(),
                 Expanded(
-                  child: ColoredBox(
-                    color: AppColors.of(context).parchment,
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                      children: [
-                        if (_adCoinReward != null &&
-                            _adController.isSupported) ...[
-                          _buildWatchAdCard(),
-                          const SizedBox(height: 12),
-                        ],
-                        _buildReferralCard(),
+                  child: ListView(
+                    key: const Key('get-coins-earn-list'),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                    children: [
+                      if (_adCoinReward != null &&
+                          _adController.isSupported) ...[
+                        _buildWatchAdCard(),
                         const SizedBox(height: 12),
-                        _buildDailySpinCard(),
                       ],
-                    ),
+                      _buildReferralCard(),
+                      const SizedBox(height: 12),
+                      _buildDailySpinCard(),
+                    ],
                   ),
                 ),
                 const AdBannerSlot(withBottomSafeArea: true),
@@ -503,20 +501,29 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   }
 
   Widget _buildCard({
+    required Key key,
     required IconData icon,
     required String title,
     required String subtitle,
     required Widget action,
   }) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      key: key,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: AppColors.of(context).parchmentLight,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.of(context).parchment,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.of(context).parchmentBorder,
-          width: 1.5,
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
+          width: 2,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            offset: Offset(0, 4),
+            blurRadius: 0,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -576,6 +583,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
     }
 
     return _buildCard(
+      key: const Key('get-coins-watch-ad-card'),
       icon: Icons.play_circle_outline_rounded,
       title: 'WATCH AN AD',
       subtitle: exhausted
@@ -592,6 +600,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
 
   Widget _buildReferralCard() {
     return _buildCard(
+      key: const Key('get-coins-referral-card'),
       icon: Icons.group_add_rounded,
       title: 'INVITE FRIENDS',
       subtitle: referralInviteRowCopy(
@@ -610,6 +619,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   Widget _buildDailySpinCard() {
     final claimed = _status?['claimedToday'] == true;
     return _buildCard(
+      key: const Key('get-coins-daily-card'),
       icon: Icons.card_giftcard_rounded,
       title: 'DAILY BOX',
       subtitle: claimed

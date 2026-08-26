@@ -667,6 +667,11 @@ void main() {
     expect(find.text('Rival took the lead'), findsOneWidget);
     expect(find.text('ACTIVITY'), findsNothing);
     expect(find.text('CHAT'), findsNothing);
+    expect(
+      tester.getCenter(find.text('Catch me if you can')).dy,
+      greaterThan(tester.getCenter(find.text('Rival took the lead')).dy),
+      reason: 'the newest timeline entry belongs nearest the composer',
+    );
   });
 
   testWidgets('missing timeline marker preserves the legacy tabs', (

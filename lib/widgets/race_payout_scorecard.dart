@@ -137,7 +137,8 @@ class RacePayoutPresentation {
     if (placement == null || tiers.isEmpty) return null;
     final amount = viewerAmount;
     if (amount != null) {
-      return 'YOU: ${payoutPlacementLabel(placement)} · ${formatPrizeCoins(amount)} PROJECTED';
+      final coinLabel = amount == 1 ? 'COIN' : 'COINS';
+      return 'YOU: ${payoutPlacementLabel(placement)} · ${formatPrizeCoins(amount)} $coinLabel PROJECTED';
     }
     return 'YOU: ${payoutPlacementLabel(placement)} · OUTSIDE CUT';
   }
@@ -188,10 +189,12 @@ class RacePayoutScorecard extends StatelessWidget {
     super.key,
     required this.presentation,
     required this.onOpenPayouts,
+    this.showPayoutAction = true,
   });
 
   final RacePayoutPresentation presentation;
   final VoidCallback? onOpenPayouts;
+  final bool showPayoutAction;
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +270,7 @@ class RacePayoutScorecard extends StatelessWidget {
                   value: 'UNAVAILABLE',
                 ),
               ),
-            if (p.hasPrize) ...[
+            if (p.hasPrize && showPayoutAction) ...[
               SizedBox(
                 height: 38,
                 child: VerticalDivider(

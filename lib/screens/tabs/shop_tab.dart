@@ -96,6 +96,12 @@ extension on _ShopCategory {
     _ShopCategory.characters => 'CHARACTERS',
     _ShopCategory.accessories => 'ACCESSORIES',
   };
+
+  IconData get icon => switch (this) {
+    _ShopCategory.powerups => Icons.bolt_rounded,
+    _ShopCategory.characters => Icons.pets_rounded,
+    _ShopCategory.accessories => Icons.checkroom_rounded,
+  };
 }
 
 /// Powerup store sub-filter (item 9). Matches the additive `category` field on
@@ -973,36 +979,61 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   Widget _categoryPill(_ShopCategory category, bool selected) {
-    return GestureDetector(
-      key: Key('shop-category-${category.label}'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _category = category),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.of(context).pillGold
-              : Colors.black.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
+    return Semantics(
+      key: Key('shop-category-semantics-${category.label}'),
+      button: true,
+      selected: selected,
+      label: '${category.label} category',
+      child: GestureDetector(
+        key: Key('shop-category-${category.label}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _category = category),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
             color: selected
-                ? AppColors.of(context).pillGoldDark
-                : Colors.black.withValues(alpha: 0.12),
-            width: 1.5,
+                ? AppColors.of(context).parchment
+                : Colors.black.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? AppColors.of(context).pillGoldDark
+                  : AppColors.of(context).textLight.withValues(alpha: 0.14),
+              width: selected ? 1.5 : 1,
+            ),
           ),
-        ),
-        child: Text(
-          category.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: PixelText.title(
-            size: 11,
-            color: selected
-                ? AppColors.of(context).textDark
-                : AppColors.of(context).textLight.withValues(alpha: 0.88),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                category.icon,
+                size: 15,
+                color: selected
+                    ? AppColors.of(context).coinDark
+                    : AppColors.of(context).textLight.withValues(alpha: 0.82),
+              ),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  category.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(
+                    size: 10.5,
+                    color: selected
+                        ? AppColors.of(context).textDark
+                        : AppColors.of(
+                            context,
+                          ).textLight.withValues(alpha: 0.88),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1093,43 +1124,71 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return Container(
       key: const Key('shop-character-preview'),
       margin: const EdgeInsets.only(top: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: _shopCardDecoration(),
+      constraints: const BoxConstraints(minHeight: 92),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1,
+        ),
+      ),
       child: Row(
         children: [
-          Transform.scale(
-            scale: 1.25,
-            child: RacerAvatar(
-              key: ValueKey(
-                'shop-preview-${animal ?? kDefaultAnimal}-${accessories.map((e) => e['assetKey']).join('-')}',
+          SizedBox.square(
+            dimension: 66,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.of(context).parchmentDark,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.of(context).parchmentBorder,
+                ),
               ),
-              rank: 1,
-              size: 28,
-              showMedalRing: false,
-              animal: animal,
-              accessories: accessories,
+              child: Center(
+                child: Transform.scale(
+                  scale: 1.45,
+                  child: RacerAvatar(
+                    key: ValueKey(
+                      'shop-preview-${animal ?? kDefaultAnimal}-${accessories.map((e) => e['assetKey']).join('-')}',
+                    ),
+                    rank: 1,
+                    size: 30,
+                    showMedalRing: false,
+                    animal: animal,
+                    accessories: accessories,
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          Text(
-            'YOUR BARA',
-            style: PixelText.title(
-              size: 10.5,
-              color: AppColors.of(context).textDark,
-            ),
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              draft == null
-                  ? 'Your equipped look'
-                  : 'Previewing ${draft['name'] is String ? draft['name'] : 'this item'}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PixelText.body(
-                size: 9.5,
-                color: AppColors.of(context).textMid,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'YOUR BARA',
+                  style: PixelText.title(
+                    size: 13,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  draft == null
+                      ? 'Your equipped look'
+                      : 'Previewing ${draft['name'] is String ? draft['name'] : 'this item'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1156,25 +1215,26 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     );
   }
 
-  /// A Clash-style grid of item tiles for the active category. The category
+  /// An art-led grid of item tiles for the active category. The category
   /// name lives in the pill row now, so the grid carries no header of its own.
   Widget _buildSectionGroup(List<Widget> tiles, {required int staggerIndex}) {
     return StaggerIn(
       index: staggerIndex,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          GridView.count(
-            crossAxisCount: 4,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 600;
+          return GridView.count(
+            key: const Key('shop-product-grid'),
+            crossAxisCount: wide ? 4 : 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 10,
-            childAspectRatio: 0.66,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.82,
             children: tiles,
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1191,6 +1251,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }) {
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.of(context).parchment,
       // Explicit constraints pin the sheet edge-to-edge; without them the M3
       // defaults float it as an inset card, unlike every other sheet here.
@@ -1198,31 +1259,44 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         maxHeight: MediaQuery.of(context).size.height * 0.72,
       ),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+        child: SingleChildScrollView(
+          key: const Key('shop-item-sheet'),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 96,
-                height: 96,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).parchmentDark,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppColors.of(
-                      context,
-                    ).roofDark.withValues(alpha: 0.4),
-                    width: 2,
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).parchmentBorder,
+                    borderRadius: BorderRadius.circular(99),
                   ),
                 ),
-                child: art,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 18),
+              Center(
+                child: Container(
+                  width: 112,
+                  height: 112,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).parchmentDark,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.of(context).parchmentBorder,
+                      width: 1,
+                    ),
+                  ),
+                  child: art,
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 name,
                 textAlign: TextAlign.center,
@@ -1232,27 +1306,26 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 ),
               ),
               if (slotLabel != null || badge != null) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (slotLabel != null)
-                      _sheetChip(slotLabel, AppColors.of(context).textMid),
-                    if (slotLabel != null && badge != null)
-                      const SizedBox(width: 6),
-                    if (badge != null)
-                      // textAccent, not accent: identical in daylight, but the
-                      // night palette keeps textAccent legible on parchment
-                      // where the night accent green sinks into it.
-                      _sheetChip(badge, AppColors.of(context).textAccent),
-                  ],
+                const SizedBox(height: 8),
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (slotLabel != null)
+                        _sheetChip(slotLabel, AppColors.of(context).textMid),
+                      if (slotLabel != null && badge != null)
+                        const SizedBox(width: 6),
+                      if (badge != null)
+                        _sheetChip(badge, AppColors.of(context).textAccent),
+                    ],
+                  ),
                 ),
               ],
               if (description != null && description.isNotEmpty) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 Text(
                   description,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                   style: PixelText.body(
                     size: 15,
                     color: AppColors.of(context).textMid,
@@ -1260,7 +1333,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 ),
               ],
               if (actions.isNotEmpty) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 ...actions,
               ],
             ],
@@ -1290,7 +1363,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     'CHARACTER': 'CHARACTER',
   };
 
-  Widget _cosmeticArt(Map<String, dynamic> item, {double iconSize = 28}) {
+  Widget _cosmeticArt(Map<String, dynamic> item, {double iconSize = 44}) {
     final assetKey = item['assetKey'] as String? ?? '';
     final isCharacter = item['slot'] == 'CHARACTER';
     final equipped = item['equipped'] == true;
@@ -1636,8 +1709,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: colors.parchment,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: colors.parchmentBorder, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colors.parchmentBorder, width: 1),
         ),
         child: Row(
           children: [
@@ -2391,10 +2464,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 }
 
-/// Loading placeholder for the store. Mirrors the real layout — titled
-/// sections over a 3-column grid of tile skeletons, each tile a game-piece
-/// card with the art box, name line, and price strip in the real tile's
-/// proportions (childAspectRatio 0.66).
+/// Loading placeholder for the store. Mirrors the real two-column merchandise
+/// grid so the catalog does not visibly reflow when data lands.
 class _ShopLoadingSkeleton extends StatelessWidget {
   const _ShopLoadingSkeleton();
 
@@ -2404,16 +2475,9 @@ class _ShopLoadingSkeleton extends StatelessWidget {
         color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
-          width: 2,
+          color: AppColors.of(context).parchmentBorder,
+          width: 1,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66000000),
-            offset: Offset(0, 4),
-            blurRadius: 0,
-          ),
-        ],
       ),
       // Item 7: the skeleton had drifted from the real tile — a 12 clip against
       // a 14 container, a 0.6-alpha art fill, and a 34dp name band where the
@@ -2450,13 +2514,13 @@ class _ShopLoadingSkeleton extends StatelessWidget {
             ),
             // Price strip
             Container(
-              height: 34,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppColors.of(context).parchmentDark,
                 border: Border(
                   top: BorderSide(
                     color: AppColors.of(context).parchmentBorder,
-                    width: 1.5,
+                    width: 1,
                   ),
                 ),
               ),
@@ -2470,15 +2534,21 @@ class _ShopLoadingSkeleton extends StatelessWidget {
   }
 
   Widget _section(BuildContext context, int tileCount) {
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 10,
-      childAspectRatio: 0.66,
-      children: [for (var i = 0; i < tileCount; i++) _tile(context)],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 600;
+        return GridView.count(
+          key: const Key('shop-loading-grid'),
+          crossAxisCount: wide ? 4 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.82,
+          children: [for (var i = 0; i < tileCount; i++) _tile(context)],
+        );
+      },
     );
   }
 
@@ -2495,9 +2565,8 @@ class _ShopLoadingSkeleton extends StatelessWidget {
   }
 }
 
-/// Clash-style shop tile: art-dominant game-piece card with the name and a
-/// bottom action strip (price / EQUIP / quantity). Tapping the tile opens the
-/// detail sheet with the full description.
+/// Art-led merchandise card with the name and one quiet footer action. Tapping
+/// the card opens the detail sheet with the full description.
 class _ShopTile extends StatelessWidget {
   const _ShopTile({
     super.key,
@@ -2576,22 +2645,16 @@ class _ShopTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: DecoratedBox(
+        key: const Key('shop-product-card'),
         decoration: BoxDecoration(
           color: AppColors.of(context).parchment,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: highlighted
                 ? AppColors.of(context).pillGoldDark
-                : AppColors.of(context).roofDark.withValues(alpha: 0.55),
-            width: 2,
+                : AppColors.of(context).parchmentBorder,
+            width: 1,
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x66000000),
-              offset: Offset(0, 4),
-              blurRadius: 0,
-            ),
-          ],
         ),
         // Item 7 — the "weird rectangle". The clip was 12 while the container
         // was 14, so a 2px ring of the OUTER parchment showed inside the border
@@ -2626,7 +2689,7 @@ class _ShopTile extends StatelessWidget {
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(16),
                           child: Center(child: art),
                         ),
                       ),
@@ -2655,13 +2718,8 @@ class _ShopTile extends StatelessWidget {
               // of 13pt pixel type need ~38dp, and under-sizing the box is what
               // clips the second line.
               //
-              // The grid is four tiles wide, so a tile is only ~68–85dp across.
-              // Pinning every name at 13pt would push two-word names like
-              // "Ghost Pepper" and "Signal Jammer" into an ellipsis on a 360dp
-              // phone — a regression on the 11pt they fit at today. So the name
-              // takes 13pt when it fits and steps down toward the old size only
-              // as far as it must: short names get the bigger type, long ones
-              // are never worse off than before.
+              // The two-column layout gives product names enough width to read
+              // as merchandise instead of inventory abbreviations.
               Container(
                 height: 38,
                 alignment: Alignment.center,
@@ -2675,19 +2733,19 @@ class _ShopTile extends StatelessWidget {
               GestureDetector(
                 onTap: stripEnabled ? onStrip : null,
                 child: Container(
-                  height: 34,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: onStrip == null
                         ? AppColors.of(context).parchmentDark
-                        : AppColors.of(
-                            context,
-                          ).pillGold.withValues(alpha: stripEnabled ? 1 : 0.5),
+                        : AppColors.of(context).pillGold.withValues(
+                            alpha: stripEnabled ? 0.22 : 0.10,
+                          ),
                     border: Border(
                       top: BorderSide(
                         color: onStrip == null
                             ? AppColors.of(context).parchmentBorder
                             : AppColors.of(context).pillGoldDark,
-                        width: 1.5,
+                        width: 1,
                       ),
                     ),
                   ),
@@ -2700,7 +2758,7 @@ class _ShopTile extends StatelessWidget {
                             size: 13,
                             color: onStrip == null
                                 ? AppColors.of(context).textMid
-                                : AppColors.of(context).pillGoldShadow,
+                                : AppColors.of(context).textDark,
                           ),
                       const SizedBox(width: 4),
                       Flexible(
@@ -2730,9 +2788,8 @@ class _ShopTile extends StatelessWidget {
 
 /// The tile's item name at the largest size that still fits two lines.
 ///
-/// Spec §8 raised the nominal name size to 13pt, but the shop grid is four
-/// tiles wide (a ~68dp tile on a 320dp phone), so a fixed 13pt would ellipsise
-/// names that fit today. This picks the biggest size from [_sizes] whose
+/// The two-column redesign supports a larger nominal name size while this
+/// still picks the biggest size from [_sizes] whose
 /// two-line layout fits the tile, so the type gets bigger wherever there's room
 /// and never smaller than what shipped.
 class _FittedTileName extends StatelessWidget {

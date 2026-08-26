@@ -340,6 +340,9 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
                                       runner: runner.runner,
                                       capybaraSize: runner.capybaraSize,
                                       frameIndex: runner.frameIndex,
+                                      nameplateShiftX: runner.nameplateShiftX(
+                                        layout.courseWidth,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -651,11 +654,13 @@ class _CapybaraRunnerMarker extends StatelessWidget {
     required this.runner,
     required this.capybaraSize,
     required this.frameIndex,
+    required this.nameplateShiftX,
   });
 
   final GoalTrackRunner runner;
   final double capybaraSize;
   final int frameIndex;
+  final double nameplateShiftX;
 
   @override
   Widget build(BuildContext context) {
@@ -668,25 +673,31 @@ class _CapybaraRunnerMarker extends StatelessWidget {
     final teamColor = runner.teamColor;
 
     return SizedBox(
+      key: ValueKey('course-runner-marker-${runner.name}'),
       width: 96,
-      height: capybaraSize + 38,
+      height: capybaraSize + 42,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // TR-804: team pennant beside the name — UI chrome, not artwork.
-          if (teamColor != null)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.flag_rounded, size: 11, color: teamColor),
-                const SizedBox(width: 2),
-                Flexible(
-                  child: _RunnerNameTag(label: name, isUser: runner.isUser),
-                ),
-              ],
-            )
-          else
-            _RunnerNameTag(label: name, isUser: runner.isUser),
+          Transform.translate(
+            offset: Offset(nameplateShiftX, 0),
+            child: teamColor != null
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.flag_rounded, size: 11, color: teamColor),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: _RunnerNameTag(
+                          label: name,
+                          isUser: runner.isUser,
+                        ),
+                      ),
+                    ],
+                  )
+                : _RunnerNameTag(label: name, isUser: runner.isUser),
+          ),
           Icon(
             Icons.arrow_drop_down_rounded,
             size: 18,
@@ -1537,7 +1548,9 @@ class _RunnerNameTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      key: isUser ? const Key('course-user-name-tag') : null,
+      key: isUser
+          ? const Key('course-user-name-tag')
+          : ValueKey('course-runner-name-tag-$label'),
       decoration: BoxDecoration(
         color: isUser
             ? AppColors.of(context).woodDarker
@@ -1722,7 +1735,15 @@ class _RunnerLayout {
   final Size shadowSize;
 
   double get markerWidth => 96;
-  double get markerHeight => capybaraSize + 38;
+  double get markerHeight => capybaraSize + 42;
+
+  double nameplateShiftX(double courseWidth) {
+    final left = center.dx - markerWidth / 2;
+    if (left < 0) return -left;
+    final right = left + markerWidth;
+    if (right > courseWidth) return courseWidth - right;
+    return 0;
+  }
 }
 
 class _RunnerHitTarget {

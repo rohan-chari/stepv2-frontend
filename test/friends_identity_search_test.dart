@@ -100,10 +100,7 @@ void main() {
     );
     await _pump(tester, api);
 
-    expect(
-      find.widgetWithText(TextField, 'Search names or race names'),
-      findsOneWidget,
-    );
+    expect(find.widgetWithText(TextField, 'Search friends'), findsOneWidget);
     await _search(tester, 'Nathan');
 
     expect(find.text('Nathan Chari'), findsOneWidget);

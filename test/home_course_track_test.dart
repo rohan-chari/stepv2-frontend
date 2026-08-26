@@ -39,6 +39,53 @@ void main() {
     );
   });
 
+  testWidgets('keeps edge runner nameplates inside the visible course', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 500));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: HomeCourseTrack(
+            runners: [
+              GoalTrackRunner(name: 'LongStartRunner', progress: 0),
+              GoalTrackRunner(name: 'SecondStartRunner', progress: 0),
+              GoalTrackRunner(name: 'LongFinishRunner', progress: 1),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 3));
+
+    final viewport = tester.getRect(
+      find.byKey(const Key('home-course-track-scroll')),
+    );
+    final startTag = tester.getRect(
+      find.byKey(const Key('course-runner-name-tag-@LongStartRunner')),
+    );
+    expect(startTag.left, greaterThanOrEqualTo(viewport.left));
+
+    final firstMarker = tester.getCenter(
+      find.byKey(const Key('course-runner-marker-LongStartRunner')),
+    );
+    final secondMarker = tester.getCenter(
+      find.byKey(const Key('course-runner-marker-SecondStartRunner')),
+    );
+    expect(firstMarker.dx, isNot(secondMarker.dx));
+
+    await tester.drag(
+      find.byKey(const Key('home-course-track-scroll')),
+      const Offset(-1000, 0),
+    );
+    await tester.pumpAndSettle();
+    final finishTag = tester.getRect(
+      find.byKey(const Key('course-runner-name-tag-@LongFinishRunner')),
+    );
+    expect(finishTag.right, lessThanOrEqualTo(viewport.right));
+  });
+
   testWidgets('renders the horizontal course track with user and friends', (
     WidgetTester tester,
   ) async {

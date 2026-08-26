@@ -28,6 +28,21 @@ import '../models/step_sync_v2_result.dart';
 /// ordinary token/user rotation do not probe a known-missing route again.
 enum EndpointSupport { unknown, supported, unsupported }
 
+/// Capability metadata returned by the additive device-registration endpoint.
+///
+/// Old or version-skewed backends may omit either field or return an unexpected
+/// JSON type. Those responses are deliberately treated as the legacy v1
+/// contract so logout never assumes installation-only deletion is supported.
+class DeviceTokenRegistrationResult {
+  const DeviceTokenRegistrationResult({
+    this.registrationVersion = 1,
+    this.installationAccepted = false,
+  });
+
+  final int registrationVersion;
+  final bool installationAccepted;
+}
+
 /// Screen-facing result of the additive race-open endpoint. Maps are kept raw
 /// because the existing race widgets already own defensive field parsing.
 class RaceBootstrapResult {
@@ -2869,19 +2884,38 @@ class BackendApiService {
     return error is String && error.isNotEmpty ? error : null;
   }
 
-  Future<void> registerDeviceToken({
+  Future<DeviceTokenRegistrationResult> registerDeviceToken({
     required String identityToken,
     required String deviceToken,
     required String platform,
+    String? installationId,
+    String? providerEnvironment,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/notifications/device-token',
-      body: {'deviceToken': deviceToken, 'platform': platform},
+      body: {
+        'deviceToken': deviceToken,
+        'platform': platform,
+        'installationId': ?installationId,
+        'providerEnvironment': ?providerEnvironment,
+      },
       identityToken: identityToken,
     );
 
-    await _decodeJsonResponse(response);
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+
+    final rawVersion = raw.json?['registrationVersion'];
+    final rawAccepted = raw.json?['installationAccepted'];
+    return DeviceTokenRegistrationResult(
+      registrationVersion: rawVersion is int && rawVersion >= 1
+          ? rawVersion
+          : 1,
+      installationAccepted: rawAccepted is bool ? rawAccepted : false,
+    );
   }
 
   // -- Races --
@@ -5538,16 +5572,20 @@ class BackendApiService {
 
   Future<void> unregisterDeviceToken({
     required String identityToken,
-    required String deviceToken,
+    String? deviceToken,
+    String? installationId,
   }) async {
     final response = await _sendJsonRequest(
       method: 'DELETE',
       path: '/notifications/device-token',
-      body: {'deviceToken': deviceToken},
+      body: {'deviceToken': ?deviceToken, 'installationId': ?installationId},
       identityToken: identityToken,
     );
 
-    await _decodeJsonResponse(response);
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
   }
 
   Future<HttpClientResponse> _sendGetRequest({
@@ -5686,6 +5724,18 @@ class BackendApiService {
     final rawCode = json?['code'];
     final code = rawCode is String && rawCode.isNotEmpty ? rawCode : null;
     return _RawResponse(response.statusCode, json, code, decodeFailed);
+  }
+
+  Never _throwRawResponseError(_RawResponse raw) {
+    final message = raw.json?['error'];
+    throw ApiException(
+      message is String && message.isNotEmpty
+          ? message
+          : 'Something went wrong. Please try again.',
+      statusCode: raw.statusCode,
+      code: raw.code,
+      details: raw.json,
+    );
   }
 
   String _formatDate(DateTime date) {

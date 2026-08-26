@@ -264,10 +264,25 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   String _formatSteps(int steps) {
+    if (steps >= 999500) {
+      return '${(steps / 1000000).toStringAsFixed(1)}M';
+    }
+    if (steps >= 100000) {
+      return '${(steps / 1000).round()}K';
+    }
+    if (steps >= 99950) {
+      return '100K';
+    }
     if (steps >= 1000) {
-      return '${(steps / 1000).toStringAsFixed(1)}k';
+      return '${(steps / 1000).toStringAsFixed(1)}K';
     }
     return '$steps';
+  }
+
+  Color _rowTextColor(_LeaderboardRow row) {
+    final colors = AppColors.of(context);
+    if (!row.isMe) return colors.textDark;
+    return colors.isDark ? colors.textLight : colors.accent;
   }
 
   static Map<String, dynamic> _stringKeyedMap(Map raw) => {
@@ -290,12 +305,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   Widget _buildValueContent(_LeaderboardRow row) {
     return Text(
       row.valueLabel,
-      style: PixelText.title(
-        size: 16,
-        color: row.isMe
-            ? AppColors.of(context).accent
-            : AppColors.of(context).textDark,
-      ),
+      style: PixelText.title(size: 16, color: _rowTextColor(row)),
       textAlign: TextAlign.right,
     );
   }
@@ -355,22 +365,28 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   /// after scrolling it.
   Widget _buildVisibilityControl() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
-            child: Text(
-              'PRIVACY',
-              style: PixelText.title(
-                size: 13,
-                color: AppColors.of(context).textLight,
-              ).copyWith(shadows: _textShadows),
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+      child: LeaderboardVisibilityToggle(authService: widget.authService),
+    );
+  }
+
+  Widget _buildCompactBoardTitle() {
+    return Expanded(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FittedBox(
+          key: const Key('boards-header-title'),
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'BOARDS',
+            maxLines: 1,
+            style: PixelText.title(
+              size: 30,
+              color: AppColors.of(context).textLight,
             ),
           ),
-          LeaderboardVisibilityToggle(authService: widget.authService),
-        ],
+        ),
       ),
     );
   }
@@ -497,26 +513,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 15, 16, 13),
-          child: Column(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'LEADERBOARD',
-                  style: PixelText.title(
-                    size: 30,
-                    color: AppColors.of(context).textLight,
-                  ),
+              _buildCompactBoardTitle(),
+              const SizedBox(width: 12),
+              SizedBox(
+                key: const Key('boards-period-filter'),
+                width: 132,
+                child: FilterDropdown<String>(
+                  value: _selectedPeriod,
+                  options: [for (final (val, label) in _periods) (val, label)],
+                  onChanged: (val) {
+                    if (val != null) _selectPeriod(val);
+                  },
                 ),
-              ),
-              const SizedBox(height: 12),
-              FilterDropdown<String>(
-                value: _selectedPeriod,
-                options: [for (final (val, label) in _periods) (val, label)],
-                onChanged: (val) {
-                  if (val != null) _selectPeriod(val);
-                },
               ),
             ],
           ),
@@ -784,12 +795,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: PixelText.body(
-            size: nameSize,
-            color: row.isMe
-                ? AppColors.of(context).accent
-                : AppColors.of(context).textDark,
-          ),
+          style: PixelText.body(size: nameSize, color: _rowTextColor(row)),
         ),
         const SizedBox(height: 3),
         _buildPodiumValue(row, valueSize: valueSize),
@@ -806,12 +812,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       row.valueLabel,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: PixelText.title(
-        size: valueSize,
-        color: row.isMe
-            ? AppColors.of(context).accent
-            : AppColors.of(context).textDark,
-      ),
+      style: PixelText.title(size: valueSize, color: _rowTextColor(row)),
       textAlign: TextAlign.center,
     );
   }
@@ -865,12 +866,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ? AppColors.of(context).accent.withValues(alpha: 0.16)
         : stripeColor;
 
-    final nameStyle = PixelText.body(
-      size: 16,
-      color: row.isMe
-          ? AppColors.of(context).accent
-          : AppColors.of(context).textDark,
-    );
+    final nameStyle = PixelText.body(size: 16, color: _rowTextColor(row));
 
     final content = Container(
       key: row.isMe ? (widget.tutorialMyRowKey ?? _myRowKey) : null,
@@ -911,7 +907,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     '(you)',
                     style: PixelText.pill(
                       size: 10.5,
-                      color: AppColors.of(context).accent,
+                      color: _rowTextColor(row),
                     ),
                   ),
                 ],

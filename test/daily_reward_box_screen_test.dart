@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/daily_reward_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/game_container.dart';
 
 class _BoxModeApi extends BackendApiService {
   _BoxModeApi({
@@ -120,11 +122,27 @@ Future<AuthService> _authService() async {
 Future<void> _pumpScreen(
   WidgetTester tester,
   BackendApiService api,
-  AuthService auth,
-) async {
+  AuthService auth, {
+  ThemeMode themeMode = ThemeMode.light,
+  Size? surfaceSize,
+  TextScaler textScaler = TextScaler.noScaling,
+}) async {
+  if (surfaceSize != null) {
+    await tester.binding.setSurfaceSize(surfaceSize);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
   await tester.pumpWidget(
     MaterialApp(
-      home: DailyRewardScreen(authService: auth, backendApiService: api),
+      theme: AppThemeData.light(),
+      darkTheme: AppThemeData.night(),
+      themeMode: themeMode,
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: surfaceSize ?? const Size(390, 844),
+          textScaler: textScaler,
+        ),
+        child: DailyRewardScreen(authService: auth, backendApiService: api),
+      ),
     ),
   );
   await tester.pump();
@@ -133,6 +151,70 @@ Future<void> _pumpScreen(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Taste redesign', () {
+    testWidgets('claimed night state uses flat metadata and confirmation', (
+      tester,
+    ) async {
+      final auth = await _authService();
+      await _pumpScreen(
+        tester,
+        _BoxModeApi(claimedToday: true),
+        auth,
+        themeMode: ThemeMode.dark,
+      );
+
+      expect(find.byKey(const Key('daily-reward-header')), findsOneWidget);
+      expect(find.byKey(const Key('daily-reward-streak-line')), findsOneWidget);
+      expect(
+        find.byKey(const Key('daily-reward-claimed-status')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('daily-reward-streak-pill')), findsNothing);
+      for (final label in <String>[
+        'How daily rewards work',
+        'Close daily reward',
+      ]) {
+        final action = find.bySemanticsLabel(label);
+        expect(action, findsOneWidget);
+        final size = tester.getSize(action);
+        expect(size.width, greaterThanOrEqualTo(44));
+        expect(size.height, greaterThanOrEqualTo(44));
+      }
+      final claimed = tester.widget<Text>(
+        find
+            .descendant(
+              of: find.byKey(const Key('daily-reward-claimed-status')),
+              matching: find.byType(Text),
+            )
+            .first,
+      );
+      expect(claimed.style?.color, AppPalette.night.textDark);
+    });
+
+    testWidgets('night reel is a flat focal surface and fits narrow text', (
+      tester,
+    ) async {
+      final auth = await _authService();
+      await _pumpScreen(
+        tester,
+        _BoxModeApi(),
+        auth,
+        themeMode: ThemeMode.dark,
+        surfaceSize: const Size(320, 700),
+        textScaler: const TextScaler.linear(1.3),
+      );
+
+      final reel = find.byKey(const Key('daily-reward-reel-surface'));
+      expect(reel, findsOneWidget);
+      expect(tester.widget<GameContainer>(reel).flat, isTrue);
+      expect(
+        find.byKey(const Key('case-opening-reel-viewport')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
 
   testWidgets('box mode goes straight to the reel WITHOUT claiming', (
     WidgetTester tester,

@@ -156,7 +156,7 @@ void main() {
       Key('public-filter-races'),
     ]) {
       final label = tester.widget<Text>(
-        find.descendant(of: find.byKey(key), matching: find.byType(Text)),
+        find.descendant(of: find.byKey(key), matching: find.byType(Text)).first,
       );
       expect(label.style?.color, AppPalette.night.textLight);
     }
@@ -203,6 +203,15 @@ void main() {
     );
     expect(btn.label, 'JOIN');
     expect(btn.onPressed, isNotNull);
+  });
+
+  testWidgets('featured lobby uses a compact section header', (tester) async {
+    await _pump(tester, _FakeApi(featured: [_featured()]));
+
+    final header = find.byKey(const Key('public-featured-header'));
+    expect(header, findsOneWidget);
+    expect(tester.getSize(header).height, lessThanOrEqualTo(56));
+    expect(find.byKey(const Key('public-featured-settings')), findsOneWidget);
   });
 
   testWidgets('8-person featured seed uses the generic tournament card', (

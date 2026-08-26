@@ -369,7 +369,6 @@ class _FriendsTabState extends State<FriendsTab> {
                     SliverToBoxAdapter(
                       child: _buildFriendsHeader(showBackButton: canPop),
                     ),
-                    SliverToBoxAdapter(child: _buildInviteButton()),
                     SliverToBoxAdapter(child: _buildBody(state: state)),
                   ],
                 ),
@@ -423,23 +422,7 @@ class _FriendsTabState extends State<FriendsTab> {
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                'Find your crew and watch them climb the leaderboard.',
-                style: PixelText.body(
-                  size: 15,
-                  color: AppColors.of(
-                    context,
-                  ).textLight.withValues(alpha: 0.92),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _FriendsHeaderMetrics(
-                friendCount: _friends.length,
-                incomingCount: _incomingRequests.length,
-                outgoingCount: _outgoingRequests.length,
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               // Friend search is no longer taught by the tutorial (two of its
               // ten steps were near-duplicates about exactly this); it is
               // taught here, once, the first time the tab is actually opened.
@@ -454,57 +437,73 @@ class _FriendsTabState extends State<FriendsTab> {
                 margin: const EdgeInsets.only(bottom: 12),
                 child: const SizedBox.shrink(),
               ),
-              Material(
-                key: widget.tutorialSearchKey,
-                color: Colors.transparent,
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  style: PixelText.body(
-                    size: 16,
-                    color: AppColors.of(context).textDark,
-                  ),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: AppColors.of(context).parchmentLight,
-                    hintText: _legacyRaceNameSearch
-                        ? 'Search race names'
-                        : 'Search names or race names',
-                    hintStyle: PixelText.body(
-                      size: 16,
-                      color: AppColors.of(context).parchmentBorder,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: AppColors.of(context).textMid,
-                    ),
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.of(context).parchmentBorder,
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Material(
+                        key: widget.tutorialSearchKey,
+                        color: Colors.transparent,
+                        child: TextField(
+                          key: const Key('friends-search-control'),
+                          controller: _searchController,
+                          onChanged: _onSearchChanged,
+                          style: PixelText.body(
+                            size: 16,
+                            color: AppColors.of(context).textDark,
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: AppColors.of(context).parchmentLight,
+                            hintText: _legacyRaceNameSearch
+                                ? 'Search race names'
+                                : 'Search friends',
+                            hintStyle: PixelText.body(
+                              size: 16,
+                              color: AppColors.of(context).parchmentBorder,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              color: AppColors.of(context).textMid,
+                            ),
+                            border: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: AppColors.of(context).parchmentBorder,
+                              ),
+                              borderRadius: searchBorderRadius,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: AppColors.of(context).parchmentBorder,
+                              ),
+                              borderRadius: searchBorderRadius,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: AppColors.of(context).accent,
+                                width: 2,
+                              ),
+                              borderRadius: searchBorderRadius,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
                       ),
-                      borderRadius: searchBorderRadius,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.of(context).parchmentBorder,
-                      ),
-                      borderRadius: searchBorderRadius,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.of(context).accent,
-                        width: 2,
-                      ),
-                      borderRadius: searchBorderRadius,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                  ),
+                    const SizedBox(width: 10),
+                    _buildInviteButton(),
+                  ],
                 ),
               ),
-              if (_showDropdown) _buildSearchDropdown(),
+              if (_showDropdown)
+                Padding(
+                  padding: const EdgeInsets.only(right: 68),
+                  child: _buildSearchDropdown(),
+                ),
             ],
           ),
         ),
@@ -512,33 +511,84 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  /// Invite CTA (moved here from Profile). Gold pill so it reads on the green
-  /// checker backdrop, PulseGlow to draw the eye, and it carries the tutorial
-  /// spotlight anchor for the invite step.
+  /// Compact invite action beside search. It keeps referral discovery in the
+  /// header without making a second full-width banner compete with search.
   Widget _buildInviteButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
-      child: KeyedSubtree(
-        key: widget.tutorialInviteKey,
-        child: PulseGlow(
-          child: PillButton(
-            label: 'INVITE FRIENDS & EARN COINS',
-            icon: Icons.group_add_rounded,
-            variant: PillButtonVariant.secondary,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ReferralScreen(
-                    authService: widget.authService,
-                    backendApiService: _backendApiService,
+    final colors = AppColors.of(context);
+    return KeyedSubtree(
+      key: widget.tutorialInviteKey,
+      child: PulseGlow(
+        child: Semantics(
+          button: true,
+          label: 'Invite friends and earn coins',
+          onTap: _openReferral,
+          excludeSemantics: true,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _openReferral,
+              excludeFromSemantics: true,
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                key: const Key('friends-invite-action'),
+                constraints: const BoxConstraints(
+                  minWidth: 58,
+                  maxWidth: 58,
+                  minHeight: 48,
+                ),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: colors.pillGold,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: colors.pillGoldDark, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.pillGoldShadow.withValues(alpha: 0.65),
+                        offset: const Offset(3, 3),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.group_add_rounded,
+                        size: 18,
+                        color: colors.textDark,
+                      ),
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'INVITE',
+                              maxLines: 1,
+                              style: PixelText.pill(
+                                size: 12,
+                                color: colors.textDark,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            },
+              ),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openReferral() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ReferralScreen(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
         ),
       ),
     );
@@ -1234,91 +1284,5 @@ class _FriendsTabState extends State<FriendsTab> {
       if (!mounted) return;
       showErrorToast(context, 'Couldn’t cancel request. Please try again.');
     }
-  }
-}
-
-class _FriendsHeaderMetrics extends StatelessWidget {
-  const _FriendsHeaderMetrics({
-    required this.friendCount,
-    required this.incomingCount,
-    required this.outgoingCount,
-  });
-
-  final int friendCount;
-  final int incomingCount;
-  final int outgoingCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
-          ),
-          bottom: BorderSide(
-            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          _FriendMetricText(label: 'FRIENDS', count: friendCount),
-          _FriendMetricDivider(),
-          _FriendMetricText(label: 'INCOMING', count: incomingCount),
-          _FriendMetricDivider(),
-          _FriendMetricText(label: 'SENT', count: outgoingCount),
-        ],
-      ),
-    );
-  }
-}
-
-class _FriendMetricText extends StatelessWidget {
-  const _FriendMetricText({required this.label, required this.count});
-
-  final String label;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$count',
-            style: PixelText.title(
-              size: 18,
-              color: AppColors.of(context).textLight,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PixelText.title(
-                size: 10,
-                color: AppColors.of(context).textLight.withValues(alpha: 0.82),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FriendMetricDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 18,
-      color: AppColors.of(context).textLight.withValues(alpha: 0.22),
-    );
   }
 }

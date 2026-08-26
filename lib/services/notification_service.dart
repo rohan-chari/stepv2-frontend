@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_app_installations/firebase_app_installations.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,8 +54,16 @@ class NotificationService {
   NotificationService({
     BackendApiService? backendApiService,
     bool? isIosForTesting,
+    bool? isAndroidForTesting,
+    Future<String?> Function()? androidTokenProvider,
+    Future<String?> Function()? installationIdProvider,
   }) : _backendApiService = backendApiService ?? BackendApiService(),
-       _isIos = isIosForTesting ?? Platform.isIOS;
+       _isIos = isIosForTesting ?? Platform.isIOS,
+       _isAndroid =
+           isAndroidForTesting ??
+           (isIosForTesting == false ? true : Platform.isAndroid),
+       _androidTokenProvider = androidTokenProvider,
+       _installationIdProvider = installationIdProvider;
 
   static const _channel = MethodChannel('com.steptracker/notifications');
   static const _keyDeviceToken = 'notif_device_token';
@@ -74,19 +83,35 @@ class NotificationService {
 
   final BackendApiService _backendApiService;
   final bool _isIos;
+  final bool _isAndroid;
+  final Future<String?> Function()? _androidTokenProvider;
+  final Future<String?> Function()? _installationIdProvider;
   final ValueNotifier<NotificationAction?> pendingAction = ValueNotifier(null);
 
   String? _pendingAuthToken;
+  String? _currentDeviceToken;
+  String? _currentInstallationId;
+  String? _installationV2AuthToken;
+  int _notificationAccountGeneration = 0;
+  Future<void> _notificationMutationTail = Future<void>.value();
   String? _pendingUserId;
   int _openReceiptAccountGeneration = 0;
   Future<void>? _openReceiptFlushInFlight;
   FlutterLocalNotificationsPlugin? _localNotifications;
 
   Future<void> initialize() async {
+    // Migration cleanup only. APNs/FCM tokens are OS-owned and may rotate, so
+    // a persisted token is never treated as current or reposted.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyDeviceToken);
+    } catch (_) {
+      // Local preference failure cannot block notification initialization.
+    }
     // iOS device token + tap routing flow over the native APNs bridge.
     _channel.setMethodCallHandler(_handleMethodCall);
     // Android uses FCM instead; iOS never touches Firebase.
-    if (Platform.isAndroid) {
+    if (_isAndroid) {
       await _initAndroidMessaging();
     }
   }
@@ -174,10 +199,16 @@ class NotificationService {
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onDeviceToken':
-        final token = call.arguments as String;
-        await _onDeviceToken(token, _pendingAuthToken);
+        final token = call.arguments;
+        if (token is String && token.isNotEmpty) {
+          await _onDeviceToken(token, _pendingAuthToken);
+        }
         break;
       case 'onDeviceTokenError':
+        // A failed current registration callback means no APNs token is known
+        // to be current. Keep only installation identity for a capability-
+        // gated same-session logout.
+        _currentDeviceToken = null;
         // APNs registration failed natively. Persist the reason so the next
         // ensureTokenRegistered() can surface it to analytics instead of the
         // failure staying invisible (this is how a user silently loses ALL
@@ -202,8 +233,8 @@ class NotificationService {
   }
 
   Future<bool> requestPermission(String? authToken) async {
-    _pendingAuthToken = authToken;
-    if (Platform.isAndroid) {
+    _setPendingAuthToken(authToken);
+    if (_isAndroid) {
       return _requestAndroidPermission(authToken);
     }
     try {
@@ -228,7 +259,7 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_keyPermissionGranted, granted);
       if (granted) {
-        final token = await FirebaseMessaging.instance.getToken();
+        final token = await _getAndroidToken();
         if (token != null && token.isNotEmpty) {
           await _onDeviceToken(token, authToken);
         }
@@ -258,7 +289,7 @@ class NotificationService {
   /// value if the platform query fails.
   Future<bool?> getSystemPermissionState() async {
     try {
-      if (Platform.isAndroid) {
+      if (_isAndroid) {
         final settings = await FirebaseMessaging.instance
             .getNotificationSettings();
         switch (settings.authorizationStatus) {
@@ -300,83 +331,220 @@ class NotificationService {
   /// OS permission is granted: tokens rotate (reinstall, restore, new phone)
   /// and a registration that failed once used to fail silently forever.
   ///
-  /// iOS: asks the OS to re-deliver the APNs token (lands async in
-  /// [_onDeviceToken]) AND re-posts the last known token immediately as a
-  /// backstop for sessions where the async callback never fires.
+  /// iOS: asks the OS to re-deliver the APNs token and uploads only the token
+  /// supplied by that current callback. A persisted token is never reposted.
   /// Android: fetches the FCM token and posts it directly.
   ///
   /// Returns a short outcome label for activation analytics.
   Future<String> ensureTokenRegistered(String? authToken) async {
-    _pendingAuthToken = authToken;
+    _setPendingAuthToken(authToken);
     if (authToken == null || authToken.isEmpty) return 'no_auth';
     final prefs = await SharedPreferences.getInstance();
+    // Remove the legacy cache even when this service was created before the
+    // migration cleanup in initialize() completed.
+    await prefs.remove(_keyDeviceToken);
     // The OS said granted — keep the cached flag in agreement so the settings
     // toggle and opt-in gating don't contradict reality.
     await prefs.setBool(_keyPermissionGranted, true);
     try {
-      if (Platform.isAndroid) {
-        final token = await FirebaseMessaging.instance.getToken();
+      if (_isAndroid) {
+        final token = await _getAndroidToken();
         if (token == null || token.isEmpty) return 'no_token';
-        await _onDeviceToken(token, authToken);
-        return 'registered';
+        final registered = await _onDeviceToken(token, authToken);
+        return registered ? 'registered' : 'failed:registration';
       }
-      // Fire-and-forget: the fresh token arrives via onDeviceToken.
-      await _channel.invokeMethod('registerForRemoteNotifications');
-      final cached = prefs.getString(_keyDeviceToken);
-      if (cached == null || cached.isEmpty) {
-        final lastError = prefs.getString(_keyLastRegisterError);
-        return lastError == null
-            ? 'no_cached_token'
-            : 'register_failed:$lastError';
-      }
-      await _backendApiService.registerDeviceToken(
-        identityToken: authToken,
-        deviceToken: cached,
-        platform: 'ios',
+      // The fresh token arrives asynchronously via onDeviceToken. Never fill
+      // this gap with a token persisted by an earlier launch.
+      final started = await _channel.invokeMethod<bool>(
+        'registerForRemoteNotifications',
       );
-      return 'registered_cached';
+      final lastError = prefs.getString(_keyLastRegisterError);
+      if (lastError != null && lastError.isNotEmpty) {
+        return 'register_failed:$lastError';
+      }
+      return started == true
+          ? 'registration_requested'
+          : 'registration_not_started';
     } catch (e) {
       return 'failed:${e.runtimeType}';
     }
   }
 
-  Future<void> _onDeviceToken(String token, String? authToken) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyDeviceToken, token);
-    // The OS handed us a token, so any stored registration error is stale.
-    await prefs.remove(_keyLastRegisterError);
+  Future<String?> _getAndroidToken() {
+    final provider = _androidTokenProvider;
+    return provider != null
+        ? provider()
+        : FirebaseMessaging.instance.getToken();
+  }
 
-    if (authToken == null || authToken.isEmpty) return;
-
+  Future<String?> _getInstallationId() async {
     try {
-      await _backendApiService.registerDeviceToken(
-        identityToken: authToken,
-        deviceToken: token,
-        // The backend routes APNs vs FCM by this label (see ANDROID.md §G2).
-        platform: Platform.isAndroid ? 'android' : 'ios',
+      final provider = _installationIdProvider;
+      final value = provider != null
+          ? await provider()
+          : _isAndroid
+          ? await FirebaseInstallations.instance.getId()
+          : await _channel.invokeMethod<String>(
+              'getNotificationInstallationId',
+            );
+      if (value == null ||
+          value.isEmpty ||
+          value.length > 128 ||
+          !RegExp(r'^[A-Za-z0-9._:-]+$').hasMatch(value)) {
+        return null;
+      }
+      _currentInstallationId = value;
+      return value;
+    } catch (error) {
+      debugPrint(
+        'Notification installation ID unavailable: ${error.runtimeType}',
       );
-    } catch (e) {
-      debugPrint('Failed to register device token: $e');
+      return null;
     }
   }
 
-  Future<void> unregisterDeviceToken(String? authToken) async {
+  Future<bool> _onDeviceToken(String token, String? authToken) async {
+    final accountGeneration = _notificationAccountGeneration;
+    _currentDeviceToken = token;
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_keyDeviceToken);
+    // The OS handed us a token, so any stored registration error is stale.
+    await prefs.remove(_keyLastRegisterError);
 
-    if (token == null || authToken == null || authToken.isEmpty) return;
+    if (authToken == null || authToken.isEmpty) return false;
 
+    final installationId = await _getInstallationId();
+    // Logout or account switching may have happened while secure/Firebase
+    // identity lookup was in flight. Never register against a stale session.
+    if (!_isCurrentNotificationAccount(authToken, accountGeneration)) {
+      return false;
+    }
+
+    return _enqueueNotificationMutation(() async {
+      // The account can change while this registration waits behind an older
+      // notification mutation. Skip it if no request has started yet.
+      if (!_isCurrentNotificationAccount(authToken, accountGeneration)) {
+        return false;
+      }
+      try {
+        final result = await _backendApiService.registerDeviceToken(
+          identityToken: authToken,
+          deviceToken: token,
+          // The backend routes APNs vs FCM by this label (see ANDROID.md §G2).
+          platform: _isAndroid ? 'android' : 'ios',
+          installationId: installationId,
+        );
+        // A POST can reach the backend before logout/account switching changes
+        // the local session, yet return after that session's DELETE. Compensate
+        // inside this serialized mutation. Any newer registration waits behind
+        // the cleanup, so re-login to the same account also finishes correctly.
+        if (!_isCurrentNotificationAccount(authToken, accountGeneration)) {
+          await _unregisterStaleRegistration(
+            authToken: authToken,
+            deviceToken: token,
+            installationId: installationId,
+          );
+          return false;
+        }
+        _installationV2AuthToken =
+            result.registrationVersion >= 2 && result.installationAccepted
+            ? authToken
+            : null;
+        return true;
+      } catch (e) {
+        if (!_isCurrentNotificationAccount(authToken, accountGeneration)) {
+          await _unregisterStaleRegistration(
+            authToken: authToken,
+            deviceToken: token,
+            installationId: installationId,
+          );
+        }
+        debugPrint('Failed to register device token: $e');
+        return false;
+      }
+    });
+  }
+
+  bool _isCurrentNotificationAccount(String authToken, int generation) =>
+      _pendingAuthToken == authToken &&
+      _notificationAccountGeneration == generation;
+
+  Future<void> _unregisterStaleRegistration({
+    required String authToken,
+    required String deviceToken,
+    required String? installationId,
+  }) async {
     try {
       await _backendApiService.unregisterDeviceToken(
         identityToken: authToken,
-        deviceToken: token,
+        deviceToken: deviceToken,
+        installationId: installationId,
       );
-    } catch (e) {
-      debugPrint('Failed to unregister device token: $e');
+    } catch (error) {
+      debugPrint(
+        'Failed to compensate stale notification registration: '
+        '${error.runtimeType}',
+      );
     }
+  }
 
+  Future<T> _enqueueNotificationMutation<T>(Future<T> Function() mutation) {
+    final completer = Completer<T>();
+    _notificationMutationTail = _notificationMutationTail.then((_) async {
+      try {
+        completer.complete(await mutation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> unregisterDeviceToken(String? authToken) async {
+    final prefsFuture = SharedPreferences.getInstance();
+    final token = _currentDeviceToken;
+    final supportsInstallationDelete =
+        authToken != null && _installationV2AuthToken == authToken;
+
+    // Clear session state before installation lookup or network I/O so a
+    // concurrent APNs callback or FCM refresh cannot re-register the account
+    // being logged out.
+    _setPendingAuthToken(null);
+    _currentDeviceToken = null;
+    final remoteCleanup = _enqueueNotificationMutation(() async {
+      final installationId =
+          _currentInstallationId ?? await _getInstallationId();
+
+      if (authToken != null && authToken.isNotEmpty) {
+        final canDeleteByToken = token != null && token.isNotEmpty;
+        final canDeleteByInstallation =
+            installationId != null && installationId.isNotEmpty;
+        if (canDeleteByToken ||
+            (supportsInstallationDelete && canDeleteByInstallation)) {
+          try {
+            await _backendApiService.unregisterDeviceToken(
+              identityToken: authToken,
+              deviceToken: canDeleteByToken ? token : null,
+              installationId: canDeleteByInstallation ? installationId : null,
+            );
+          } catch (e) {
+            debugPrint('Failed to unregister device token: $e');
+          }
+        }
+      }
+    });
+
+    final prefs = await prefsFuture;
+    await remoteCleanup;
     await prefs.remove(_keyDeviceToken);
     await prefs.remove(_keyPermissionGranted);
+  }
+
+  void _setPendingAuthToken(String? authToken) {
+    if (_pendingAuthToken != authToken) {
+      _installationV2AuthToken = null;
+      _notificationAccountGeneration++;
+    }
+    _pendingAuthToken = authToken;
   }
 
   void _handleIosNotificationTap(Map<String, dynamic> payload) {
@@ -498,7 +666,7 @@ class NotificationService {
     String? authToken, {
     String? userId,
   }) async {
-    _pendingAuthToken = authToken;
+    _setPendingAuthToken(authToken);
     if (!_isIos) return;
     if (authToken == null ||
         authToken.isEmpty ||

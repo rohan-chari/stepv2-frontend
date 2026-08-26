@@ -462,7 +462,11 @@ void main() {
 
       await _tapTab(tester, 1); // Races tab.
 
-      expect(find.text('PUBLIC RACES (0)'), findsOneWidget);
+      final publicAction = find.byKey(const Key('races-public-action'));
+      expect(
+        find.descendant(of: publicAction, matching: find.text('0')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -474,7 +478,11 @@ void main() {
 
     await _tapTab(tester, 1); // Races tab.
 
-    expect(find.text('PUBLIC RACES (2)'), findsOneWidget);
+    final publicAction = find.byKey(const Key('races-public-action'));
+    expect(
+      find.descendant(of: publicAction, matching: find.text('2')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('PUBLIC RACES count includes featured and browse tournaments', (
@@ -489,7 +497,11 @@ void main() {
       ),
     );
     await _tapTab(tester, 1);
-    expect(find.text('PUBLIC RACES (6)'), findsOneWidget);
+    final publicAction = find.byKey(const Key('races-public-action'));
+    expect(
+      find.descendant(of: publicAction, matching: find.text('6')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

@@ -45,6 +45,9 @@ void main() {
     );
 
     expect(find.byKey(const Key('races-loading-skeleton')), findsOneWidget);
+    expect(find.byKey(const Key('personal-state-active')), findsOneWidget);
+    expect(find.byKey(const Key('personal-state-pending')), findsOneWidget);
+    expect(find.byKey(const Key('personal-state-completed')), findsOneWidget);
     expect(find.text('No races yet'), findsNothing);
   });
 
@@ -72,6 +75,41 @@ void main() {
     expect(find.text('Couldn’t load races'), findsOneWidget);
     expect(find.text('TRY AGAIN'), findsOneWidget);
     expect(find.text('No races yet'), findsNothing);
+  });
+
+  testWidgets('state pills do not disappear when loading becomes success', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+
+    Widget screen(Loadable<Map<String, dynamic>> state) => MaterialApp(
+      home: Scaffold(
+        body: RacesTab(
+          authService: authService,
+          racesState: state,
+          friendsSteps: const [],
+          onRacesChanged: _noop,
+          displayName: 'Trail Walker',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(screen(const Loadable.loading()));
+    final active = find.byKey(const Key('personal-state-active'));
+    final loadingTop = tester.getTopLeft(active).dy;
+
+    await tester.pumpWidget(
+      screen(
+        const Loadable.success({'active': [], 'pending': [], 'completed': []}),
+      ),
+    );
+
+    expect(active, findsOneWidget);
+    expect(tester.getTopLeft(active).dy, loadingTop);
+    final opacity = find.ancestor(of: active, matching: find.byType(Opacity));
+    for (final widget in tester.widgetList<Opacity>(opacity)) {
+      expect(widget.opacity, 1);
+    }
   });
 
   testWidgets(

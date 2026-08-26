@@ -816,24 +816,18 @@ class _InboxScreenState extends State<InboxScreen>
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'INBOX',
-                style: PixelText.title(
-                  size: 28,
-                  color: AppColors.of(context).textLight,
-                ),
+          child: FittedBox(
+            alignment: Alignment.centerLeft,
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'NOTIFICATIONS',
+              key: const Key('notifications-header-title'),
+              maxLines: 1,
+              style: PixelText.title(
+                size: 28,
+                color: AppColors.of(context).textLight,
               ),
-              Text(
-                'The things that need your attention.',
-                style: PixelText.body(
-                  size: 10,
-                  color: AppColors.of(context).textLight.withValues(alpha: .78),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ],
@@ -849,25 +843,20 @@ class _InboxScreenState extends State<InboxScreen>
       16,
       12,
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'INBOX',
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          'NOTIFICATIONS',
+          key: const Key('notifications-header-title'),
+          maxLines: 1,
           style: PixelText.title(
             size: 28,
             color: AppColors.of(context).textLight,
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          'The things that need your attention.',
-          style: PixelText.body(
-            size: 10,
-            color: AppColors.of(context).textLight.withValues(alpha: .78),
-          ),
-        ),
-      ],
+      ),
     ),
   );
 
@@ -892,14 +881,8 @@ class _InboxScreenState extends State<InboxScreen>
     ];
     return Container(
       key: const ValueKey('inbox-dispatch-board'),
-      margin: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-      decoration: BoxDecoration(
-        color: colors.parchmentLight,
-        border: Border.all(color: colors.parchmentBorder, width: 2),
-        boxShadow: [
-          BoxShadow(color: colors.woodShadow, offset: const Offset(0, 4)),
-        ],
-      ),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 18),
+      decoration: BoxDecoration(color: colors.parchment),
       child: _loading
           ? const Center(
               key: ValueKey('inbox-loading'),
@@ -919,10 +902,9 @@ class _InboxScreenState extends State<InboxScreen>
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
+              padding: const EdgeInsets.fromLTRB(2, 4, 2, 16),
               itemCount: visibleRows.length + (hasMore ? 1 : 0),
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: colors.parchmentBorder),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 if (index == visibleRows.length) {
                   return Padding(
@@ -941,20 +923,24 @@ class _InboxScreenState extends State<InboxScreen>
                 if (heading is String) {
                   return Padding(
                     key: const Key('inbox-staff-replies-heading'),
-                    padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+                    padding: const EdgeInsets.fromLTRB(4, 12, 4, 2),
                     child: Row(
                       children: [
                         Icon(
                           Icons.mark_email_unread_rounded,
-                          size: 16,
+                          size: 15,
                           color: colors.coinDark,
                         ),
                         const SizedBox(width: 7),
-                        Text(
-                          heading,
-                          style: PixelText.title(
-                            size: 11,
-                            color: colors.coinDark,
+                        Flexible(
+                          child: Text(
+                            heading,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: PixelText.title(
+                              size: 12,
+                              color: colors.textAccent,
+                            ),
                           ),
                         ),
                       ],
@@ -1005,179 +991,232 @@ class _InboxScreenState extends State<InboxScreen>
                   button: true,
                   label:
                       '$title${fullTimestamp == null ? '' : ', $fullTimestamp'}${unread ? ', unread' : ''}',
-                  child: InkWell(
+                  child: DecoratedBox(
                     key: ValueKey(
-                      'inbox-row-${isSupport ? 'support' : 'alert'}-${row['id']}',
+                      'inbox-message-card-${isSupport ? 'support' : 'alert'}-${row['id']}',
                     ),
-                    onTap: () => _openAlert(row),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 72),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 8,
+                    decoration: BoxDecoration(
+                      color: unread
+                          ? colors.coinLight.withValues(alpha: 0.14)
+                          : colors.parchmentLight,
+                      border: Border.all(
+                        color: unread
+                            ? colors.coinDark.withValues(alpha: 0.42)
+                            : colors.parchmentBorder,
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        key: ValueKey(
+                          'inbox-row-${isSupport ? 'support' : 'alert'}-${row['id']}',
                         ),
-                        child: Row(
+                        onTap: () => _openAlert(row),
+                        child: Stack(
                           children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: unread
-                                    ? colors.coinLight
-                                    : colors.parchmentDark,
-                                border: Border.all(
-                                  color: colors.parchmentBorder,
+                            if (unread)
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Container(
+                                  key: ValueKey('inbox-unread-${row['id']}'),
+                                  width: 3,
+                                  decoration: BoxDecoration(
+                                    color: colors.textAccent,
+                                    borderRadius: const BorderRadius.horizontal(
+                                      left: Radius.circular(10),
+                                    ),
+                                  ),
                                 ),
                               ),
-                              child: Icon(
-                                _categoryIcon(row['type'], isSupport),
-                                size: 19,
-                                color: colors.textDark,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        category,
-                                        style: PixelText.title(
-                                          size: 9,
-                                          color: unread
-                                              ? colors.coinDark
-                                              : colors.textMid,
-                                        ),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 80),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  13,
+                                  12,
+                                  12,
+                                  12,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: unread
+                                            ? colors.coinLight
+                                            : colors.parchmentDark,
+                                        shape: BoxShape.circle,
                                       ),
-                                      if (timestamp != null) ...[
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          timestamp,
-                                          style: PixelText.body(
-                                            size: 9,
-                                            color: colors.textMid,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: PixelText.title(
-                                      size: 13,
-                                      color: colors.textDark,
+                                      child: Icon(
+                                        _categoryIcon(row['type'], isSupport),
+                                        size: 17,
+                                        color: unread
+                                            ? colors.roofDark
+                                            : colors.textDark,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    body,
-                                    maxLines: isJoinApproval ? 2 : 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: PixelText.body(
-                                      size: 11,
-                                      color: colors.textMid,
-                                    ),
-                                  ),
-                                  if (isJoinApproval) ...[
-                                    const SizedBox(height: 8),
-                                    if (requestStatus != null &&
-                                        requestStatus != 'PENDING')
-                                      Text(
-                                        requestStatus,
-                                        key: ValueKey(
-                                          'join-request-status-$requestId',
-                                        ),
-                                        style: PixelText.title(
-                                          size: 11,
-                                          color: requestStatus == 'ACCEPTED'
-                                              ? colors.success
-                                              : colors.textMid,
-                                        ),
-                                      )
-                                    else if (responding)
-                                      Text(
-                                        'UPDATING…',
-                                        style: PixelText.title(
-                                          size: 10,
-                                          color: colors.coinDark,
-                                        ),
-                                      )
-                                    else
-                                      Row(
+                                    const SizedBox(width: 11),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Expanded(
-                                            child: KeyedSubtree(
-                                              key: ValueKey(
-                                                'join-request-accept-$requestId',
-                                              ),
-                                              child: _InboxActionButton(
-                                                label: 'ACCEPT',
-                                                compact: true,
-                                                onPressed: () =>
-                                                    _respondToJoinRequest(
-                                                      row,
-                                                      'ACCEPT',
-                                                    ),
-                                              ),
+                                          Text(
+                                            category,
+                                            style: PixelText.title(
+                                              size: 10,
+                                              color: unread
+                                                  ? colors.textAccent
+                                                  : colors.textMid,
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: KeyedSubtree(
-                                              key: ValueKey(
-                                                'join-request-decline-$requestId',
-                                              ),
-                                              child: _InboxActionButton(
-                                                label: 'DECLINE',
-                                                compact: true,
-                                                onPressed: () =>
-                                                    _respondToJoinRequest(
-                                                      row,
-                                                      'DECLINE',
-                                                    ),
+                                          if (timestamp != null) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              timestamp,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: PixelText.body(
+                                                size: 10,
+                                                color: colors.textMid,
                                               ),
                                             ),
+                                          ],
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: PixelText.title(
+                                              size: 15,
+                                              color: colors.textDark,
+                                            ),
                                           ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            body,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: PixelText.body(
+                                              size: 12.5,
+                                              color: colors.textDark.withValues(
+                                                alpha: 0.78,
+                                              ),
+                                            ).copyWith(height: 1.18),
+                                          ),
+                                          if (isJoinApproval) ...[
+                                            const SizedBox(height: 10),
+                                            if (requestStatus != null &&
+                                                requestStatus != 'PENDING')
+                                              Text(
+                                                requestStatus,
+                                                key: ValueKey(
+                                                  'join-request-status-$requestId',
+                                                ),
+                                                style: PixelText.title(
+                                                  size: 11,
+                                                  color:
+                                                      requestStatus ==
+                                                          'ACCEPTED'
+                                                      ? colors.success
+                                                      : colors.textMid,
+                                                ),
+                                              )
+                                            else if (responding)
+                                              Text(
+                                                'UPDATING…',
+                                                style: PixelText.title(
+                                                  size: 10,
+                                                  color: colors.textAccent,
+                                                ),
+                                              )
+                                            else
+                                              LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final stackActions =
+                                                      constraints.maxWidth <
+                                                          260 ||
+                                                      MediaQuery.textScalerOf(
+                                                            context,
+                                                          ).scale(12) >
+                                                          16;
+                                                  final accept = KeyedSubtree(
+                                                    key: ValueKey(
+                                                      'join-request-accept-$requestId',
+                                                    ),
+                                                    child: _InboxActionButton(
+                                                      label: 'ACCEPT',
+                                                      compact: true,
+                                                      onPressed: () =>
+                                                          _respondToJoinRequest(
+                                                            row,
+                                                            'ACCEPT',
+                                                          ),
+                                                    ),
+                                                  );
+                                                  final decline = KeyedSubtree(
+                                                    key: ValueKey(
+                                                      'join-request-decline-$requestId',
+                                                    ),
+                                                    child: _InboxActionButton(
+                                                      label: 'DECLINE',
+                                                      compact: true,
+                                                      onPressed: () =>
+                                                          _respondToJoinRequest(
+                                                            row,
+                                                            'DECLINE',
+                                                          ),
+                                                    ),
+                                                  );
+                                                  if (stackActions) {
+                                                    return Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .stretch,
+                                                      children: [
+                                                        accept,
+                                                        const SizedBox(
+                                                          height: 8,
+                                                        ),
+                                                        decline,
+                                                      ],
+                                                    );
+                                                  }
+                                                  return Row(
+                                                    children: [
+                                                      Expanded(child: accept),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(child: decline),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            if (responseError != null) ...[
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                responseError,
+                                                style: PixelText.body(
+                                                  size: 9,
+                                                  color: colors.error,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ],
                                       ),
-                                    if (responseError != null) ...[
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        responseError,
-                                        style: PixelText.body(
-                                          size: 9,
-                                          color: colors.error,
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ],
-                                ],
-                              ),
-                            ),
-                            if (unread)
-                              Container(
-                                key: ValueKey('inbox-unread-${row['id']}'),
-                                width: 6,
-                                height: 6,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colors.coinDark,
-                                  shape: BoxShape.circle,
                                 ),
                               ),
-                            Icon(
-                              Icons.chevron_right,
-                              color: colors.textMid,
-                              size: 20,
                             ),
                           ],
                         ),
@@ -1282,7 +1321,7 @@ class _InboxActionButton extends StatelessWidget {
           highlightColor: colors.accent,
           child: Container(
             constraints: BoxConstraints(
-              minHeight: compact ? 40 : 48,
+              minHeight: compact ? 44 : 48,
               minWidth: compact ? 0 : 112,
             ),
             padding: EdgeInsets.symmetric(

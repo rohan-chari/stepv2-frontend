@@ -876,6 +876,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         : null;
 
     return Container(
+      key: const Key('tournament-info-strip'),
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.of(context).roofLight,
@@ -886,7 +887,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Column(
             children: [
               // Top row: the two headline tiles + a full-height refresh tile.
@@ -931,24 +932,33 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   /// A full-height dark refresh tile matching the hero tiles (via IntrinsicHeight
   /// stretch), instead of a short square.
   Widget _refreshTile() {
-    return GestureDetector(
-      onTap: () => _load(),
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: _tileFill,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.18),
-            width: 2,
-          ),
-        ),
-        child: Center(
-          child: Icon(
-            Icons.refresh_rounded,
-            size: 22,
-            color: Colors.white.withValues(alpha: 0.85),
+    void refresh() => _load();
+    return Semantics(
+      button: true,
+      label: 'Refresh tournament',
+      onTap: refresh,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          key: const Key('tournament-refresh'),
+          onTap: refresh,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: _tileFill,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.18),
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.refresh_rounded,
+                size: 22,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
           ),
         ),
       ),
@@ -966,7 +976,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final settled = _hasSettled(ends);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: _tileFill,
         borderRadius: BorderRadius.circular(12),
@@ -1049,7 +1059,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (leading != null) ...[leading, const SizedBox(width: 9)],
+          if (leading != null) ...[leading, const SizedBox(width: 7)],
           // Flexible so the tile behaves inside an Expanded slot and long values
           // (e.g. a champion's name) ellipsize instead of overflowing.
           Flexible(
@@ -1071,7 +1081,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: PixelText.title(size: 24, color: valueColor),
+                  style: PixelText.title(size: 22, color: valueColor),
                 ),
               ],
             ),
@@ -1087,7 +1097,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final pool = Tournament.prizePool(t);
     if (pool != null && pool.coins > 0 && !Tournament.isFeatured(t)) {
       return _heroTile(
-        leading: const SpinningCoin(size: 28),
+        leading: const SpinningCoin(size: 24),
         label: 'PRIZE POOL',
         value: pool.formattedCoins,
         valueColor: _tileGold,
@@ -1095,7 +1105,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     }
     if (Tournament.hasPrize(t)) {
       return _heroTile(
-        leading: const SpinningCoin(size: 28),
+        leading: const SpinningCoin(size: 24),
         label: 'CHAMPION WINS',
         value: '${Tournament.championWinnings(t)}',
         valueColor: _tileGold,
@@ -1200,6 +1210,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (content == null) return const SizedBox.shrink();
 
     return Container(
+      key: const Key('tournament-action-bar'),
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.of(context).parchmentLight,
@@ -1213,7 +1224,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          padding: const EdgeInsets.fromLTRB(14, 9, 14, 7),
           child: content,
         ),
       ),

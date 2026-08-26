@@ -101,31 +101,34 @@ Future<AuthService> _auth() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('FriendsTab renders the invite button and it opens ReferralScreen',
-      (tester) async {
-    final auth = await _auth();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: FriendsTab(
-          authService: auth,
-          onFriendsChanged: () {},
-          backendApiService: _FriendsBackend(),
-          displayName: 'Trail Walker',
+  testWidgets(
+    'FriendsTab renders the invite button and it opens ReferralScreen',
+    (tester) async {
+      final auth = await _auth();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FriendsTab(
+            authService: auth,
+            onFriendsChanged: () {},
+            backendApiService: _FriendsBackend(),
+            displayName: 'Trail Walker',
+          ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    expect(find.text(_inviteLabel), findsOneWidget);
+      expect(find.byKey(const Key('friends-invite-action')), findsOneWidget);
+      expect(find.text('INVITE'), findsOneWidget);
 
-    await tester.tap(find.text(_inviteLabel));
-    // PulseGlow animates forever, so pumpAndSettle would time out; pump a few
-    // frames to let the navigation push complete instead.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byKey(const Key('friends-invite-action')));
+      // PulseGlow animates forever, so pumpAndSettle would time out; pump a few
+      // frames to let the navigation push complete instead.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.byType(ReferralScreen), findsOneWidget);
-  });
+      expect(find.byType(ReferralScreen), findsOneWidget);
+    },
+  );
 
   testWidgets('ProfileTab no longer renders the invite button', (tester) async {
     final auth = await _auth();

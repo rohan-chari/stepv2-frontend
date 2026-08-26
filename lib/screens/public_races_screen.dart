@@ -73,6 +73,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   List<Map<String, dynamic>> _featuredRaces = const [];
   String? _joiningFeaturedRaceKey;
   final Set<String> _locallyElectedBucketKeys = <String>{};
+  late final PageController _featuredPageController;
 
   DiscoveryJoinCoordinator get _joinCoordinator => DiscoveryJoinCoordinator(
     authService: widget.authService,
@@ -82,7 +83,14 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   @override
   void initState() {
     super.initState();
+    _featuredPageController = PageController(viewportFraction: 0.88);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _featuredPageController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -380,12 +388,16 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      'PUBLIC RACES',
-                      style: PixelText.title(
-                        size: 22,
-                        color: AppColors.of(context).textLight,
-                      ).copyWith(shadows: _textShadows),
+                    Expanded(
+                      child: Text(
+                        'PUBLIC RACES',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PixelText.title(
+                          size: 22,
+                          color: AppColors.of(context).textLight,
+                        ).copyWith(shadows: _textShadows),
+                      ),
                     ),
                   ],
                 ),
@@ -610,70 +622,126 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   int get _racesAvailableCount =>
       (_racesState.data ?? _races).where((race) => !_raceIsJoined(race)).length;
 
-  String _filterLabel(String label, int availableCount) =>
-      '$label ($availableCount)';
-
   /// The FEATURED / TOURNEYS / RACES segmented control — the same dark
   /// ink pill (gold-selected) built for the races tab.
   Widget _buildContentFilterPills() {
-    Widget seg(String label, _PublicFilter value, Key key) {
+    Widget seg(String label, int availableCount, _PublicFilter value, Key key) {
       final selected = _filter == value;
-      return Expanded(
-        child: GestureDetector(
-          key: key,
-          onTap: () => setState(() => _filter = value),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
-            decoration: BoxDecoration(
-              gradient: selected
-                  ? LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.of(context).pillGold,
-                        AppColors.of(context).pillGoldDark,
-                      ],
-                    )
-                  : null,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: selected
-                    ? AppColors.of(context).pillGoldShadow
-                    : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: AppColors.of(context).pillGoldShadow,
-                        offset: Offset(0, 2),
-                      ),
-                    ]
-                  : null,
-            ),
-            alignment: Alignment.center,
-            // FittedBox so the three labels always
-            // show in full, scaling down a touch on the narrowest phones rather
-            // than truncating.
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                style: PixelText.title(
-                  size: 12,
+      void select() => setState(() => _filter = value);
+      return Semantics(
+        button: true,
+        selected: selected,
+        label: '$label, $availableCount available',
+        onTap: select,
+        child: ExcludeSemantics(
+          child: GestureDetector(
+            key: key,
+            onTap: select,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
+              decoration: BoxDecoration(
+                gradient: selected
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppColors.of(context).pillGold,
+                          AppColors.of(context).pillGoldDark,
+                        ],
+                      )
+                    : null,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
                   color: selected
-                      ? AppColors.of(context).textDark
-                      : AppColors.of(context).textLight,
+                      ? AppColors.of(context).pillGoldShadow
+                      : Colors.transparent,
+                  width: 2,
                 ),
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: AppColors.of(context).pillGoldShadow,
+                          offset: Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    style: PixelText.title(
+                      size: 12,
+                      color: selected
+                          ? AppColors.of(context).textDark
+                          : AppColors.of(context).textLight,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.of(
+                              context,
+                            ).textDark.withValues(alpha: 0.16)
+                          : AppColors.of(
+                              context,
+                            ).textLight.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$availableCount',
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(
+                        size: 10,
+                        color: selected
+                            ? AppColors.of(context).textDark
+                            : AppColors.of(context).textLight,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       );
     }
+
+    final segments = <Widget>[
+      seg(
+        'FEATURED',
+        _featuredAvailableCount,
+        _PublicFilter.featured,
+        const Key('public-filter-featured'),
+      ),
+      seg(
+        'TOURNEYS',
+        _tournamentsAvailableCount,
+        _PublicFilter.tournaments,
+        const Key('public-filter-tournaments'),
+      ),
+      seg(
+        'RACES',
+        _racesAvailableCount,
+        _PublicFilter.races,
+        const Key('public-filter-races'),
+      ),
+    ];
+
+    final scaledLabelSize = MediaQuery.textScalerOf(context).scale(12);
+    final usesScrollableSegments = scaledLabelSize > 16;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
@@ -684,27 +752,26 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.of(context).roofDark, width: 1.5),
         ),
-        child: Row(
-          children: [
-            seg(
-              _filterLabel('FEATURED', _featuredAvailableCount),
-              _PublicFilter.featured,
-              const Key('public-filter-featured'),
-            ),
-            const SizedBox(width: 4),
-            seg(
-              _filterLabel('TOURNEYS', _tournamentsAvailableCount),
-              _PublicFilter.tournaments,
-              const Key('public-filter-tournaments'),
-            ),
-            const SizedBox(width: 4),
-            seg(
-              _filterLabel('RACES', _racesAvailableCount),
-              _PublicFilter.races,
-              const Key('public-filter-races'),
-            ),
-          ],
-        ),
+        child: usesScrollableSegments
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < segments.length; i++) ...[
+                      SizedBox(width: 260, child: segments[i]),
+                      if (i != segments.length - 1) const SizedBox(width: 4),
+                    ],
+                  ],
+                ),
+              )
+            : Row(
+                children: [
+                  for (var i = 0; i < segments.length; i++) ...[
+                    Expanded(child: segments[i]),
+                    if (i != segments.length - 1) const SizedBox(width: 4),
+                  ],
+                ],
+              ),
       ),
     );
   }
@@ -729,7 +796,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   /// stays reachable from the FEATURED header for parity.
   Widget _buildAutoJoinCard() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      key: const Key('public-auto-join-card'),
+      padding: const EdgeInsets.only(bottom: 10),
       child: _FeaturedAutoJoinToggle(authService: widget.authService),
     );
   }
@@ -738,7 +806,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   /// gear that used to sit on the races-tab strip.
   Widget _featuredSectionHeader() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 4, left: 2),
+      key: const Key('public-featured-header'),
+      padding: const EdgeInsets.fromLTRB(2, 2, 0, 6),
       child: Row(
         children: [
           Text(
@@ -750,13 +819,14 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           ),
           const Spacer(),
           IconButton(
+            key: const Key('public-featured-settings'),
             icon: Icon(
               Icons.settings_rounded,
               size: 20,
               color: AppColors.of(context).textMid,
             ),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: _openFeaturedSettings,
           ),
         ],
@@ -781,21 +851,32 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   /// The horizontal strip of seeded daily/weekly race cards, exactly as it
   /// rendered on the Races tab.
   Widget _buildFeaturedRacesStrip() {
+    final scaledBodySize = MediaQuery.textScalerOf(context).scale(12);
+    final textScale = (scaledBodySize / 12).clamp(1.0, 2.0);
     return SizedBox(
       // Keep enough vertical room for the reward, countdown, participant line,
       // and CTA at the card's readable text sizes on narrow phones.
-      height: 250,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
+      height: 222 + ((textScale - 1) * 170),
+      child: PageView.builder(
+        controller: _featuredPageController,
         physics: const BouncingScrollPhysics(),
+        padEnds: false,
         itemCount: _featuredRaces.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => _buildFeaturedRaceCard(_featuredRaces[i]),
+        itemBuilder: (context, i) => Padding(
+          padding: const EdgeInsets.only(right: 10, bottom: 4),
+          child: _buildFeaturedRaceCard(
+            _featuredRaces[i],
+            width: double.infinity,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildFeaturedRaceCard(Map<String, dynamic> race) {
+  Widget _buildFeaturedRaceCard(
+    Map<String, dynamic> race, {
+    double width = 250,
+  }) {
     final raceId = race['raceId'];
     final safeRaceId = raceId is String && raceId.isNotEmpty ? raceId : null;
     final seedKind = race['seedKind'] as String?;
@@ -843,6 +924,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           ? privateVirtual && seedKind != null && seedKind.isNotEmpty
           : safeRaceId != null,
       showParticipantCount: !bucketPrivate || privateAssigned,
+      width: width,
       onJoin: () => _joinFeaturedRace(race),
       onView: () {
         if (safeRaceId != null) _viewFeaturedRace(safeRaceId);
@@ -1193,51 +1275,60 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).parchmentLight,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.of(context).parchmentBorder,
-          width: 1.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Auto-join daily & weekly races',
-                  style: PixelText.body(
-                    size: 13,
-                    color: AppColors.of(context).textDark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  // Auto-enrollment is conditional server-side: a user with no
-                  // steps on either of the last two days is skipped (and
-                  // pruned at race start), so the toggle must not promise an
-                  // unconditional entry.
-                  'Auto-enters you into each new challenge while you’re active.',
-                  style: PixelText.body(
-                    size: 11,
-                    color: AppColors.of(context).textMid,
-                  ),
-                ),
-              ],
+    final enabled = widget.authService.autoJoinFeaturedRaces;
+    return Semantics(
+      toggled: enabled,
+      label: 'Auto-join daily and weekly races while active',
+      onTap: () => _toggle(!enabled),
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          decoration: BoxDecoration(
+            color: AppColors.of(context).parchmentLight,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.of(context).parchmentBorder,
+              width: 1.5,
             ),
           ),
-          const SizedBox(width: 12),
-          CupertinoSwitch(
-            value: widget.authService.autoJoinFeaturedRaces,
-            activeTrackColor: AppColors.of(context).accent,
-            onChanged: _toggle,
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Auto-join daily & weekly races',
+                      style: PixelText.body(
+                        size: 12,
+                        color: AppColors.of(context).textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      // Auto-enrollment is conditional server-side: a user with no
+                      // steps on either of the last two days is skipped (and
+                      // pruned at race start), so the toggle must not promise an
+                      // unconditional entry.
+                      'Daily & weekly, while you’re active',
+                      style: PixelText.body(
+                        size: 10,
+                        color: AppColors.of(context).textMid,
+                      ),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              CupertinoSwitch(
+                value: enabled,
+                activeTrackColor: AppColors.of(context).accent,
+                onChanged: _toggle,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

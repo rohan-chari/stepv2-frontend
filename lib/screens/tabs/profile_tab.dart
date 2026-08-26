@@ -59,7 +59,8 @@ class _ProfileTabState extends State<ProfileTab> {
 
   void _onRacePodiumsChanged(Map<String, int>? podiums) {
     final current = _racePodiums;
-    final unchanged = current == null && podiums == null ||
+    final unchanged =
+        current == null && podiums == null ||
         current != null &&
             podiums != null &&
             current['first'] == podiums['first'] &&
@@ -255,9 +256,7 @@ class _ProfileTabState extends State<ProfileTab> {
     final hasPhoto = widget.authService.profilePhotoUrl != null;
 
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -292,17 +291,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
-              const SizedBox(height: 5),
-              Text(
-                'Your streak, your stats, and a quick way to manage the basics.',
-                style: PixelText.body(
-                  size: 15,
-                  color: AppColors.of(
-                    context,
-                  ).textLight.withValues(alpha: 0.92),
-                ),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -316,7 +305,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         AppAvatar(
                           name: displayName ?? 'You',
                           imageUrl: widget.authService.profilePhotoUrl,
-                          size: 72,
+                          size: 64,
                           isUser: true,
                           borderColor: AppColors.of(context).parchment,
                           borderWidth: 2.5,
@@ -380,28 +369,65 @@ class _ProfileTabState extends State<ProfileTab> {
                       ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: PillButton(
-                      label: 'SETTINGS',
-                      icon: Icons.settings_rounded,
-                      variant: PillButtonVariant.secondary,
-                      fontSize: 13,
-                      fullWidth: true,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      onPressed: _openSettings,
-                    ),
-                  ),
+                  const SizedBox(width: 10),
+                  _buildSettingsAction(),
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsAction() {
+    final colors = AppColors.of(context);
+    return Semantics(
+      button: true,
+      label: 'Settings',
+      onTap: _openSettings,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openSettings,
+          excludeFromSemantics: true,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            key: const Key('profile-settings-action'),
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: colors.pillGold,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: colors.pillGoldDark, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.pillGoldShadow.withValues(alpha: 0.65),
+                  offset: const Offset(3, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.settings_rounded, size: 22, color: colors.textDark),
+                const SizedBox(height: 2),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'SETTINGS',
+                        maxLines: 1,
+                        style: PixelText.pill(size: 14, color: colors.textDark),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -521,7 +547,7 @@ class _ProfileTabState extends State<ProfileTab> {
   Widget _buildSectionHeader(String title) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 7),
       child: Row(
         children: [
           Container(
@@ -684,6 +710,7 @@ class _StatsSectionState extends State<_StatsSection> {
       final parsed = value.toInt();
       return parsed < 0 ? null : parsed;
     }
+
     final first = read('first');
     final second = read('second');
     final third = read('third');
@@ -752,11 +779,7 @@ class _StatsSectionState extends State<_StatsSection> {
           2,
         ),
         _buildStatRow('All Time', _formatSteps(_allTime), 3),
-        _buildStatRow(
-          'Streak',
-          '$_streak day${_streak == 1 ? '' : 's'}',
-          4,
-        ),
+        _buildStatRow('Streak', '$_streak day${_streak == 1 ? '' : 's'}', 4),
       ],
     );
   }

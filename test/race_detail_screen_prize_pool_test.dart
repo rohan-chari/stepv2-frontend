@@ -195,6 +195,28 @@ Future<void> _teardown(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('projected viewer payout names the coin unit', (tester) async {
+    final race = _fundedRace(status: 'ACTIVE');
+    race['payoutTiers'] = const [
+      {'placement': 11, 'amount': 10},
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RacePayoutScorecard(
+            presentation: RacePayoutPresentation.fromRace(
+              race,
+              viewerPlacement: 11,
+            ),
+            onOpenPayouts: null,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('YOU: 11TH · 10 COINS PROJECTED'), findsOneWidget);
+  });
+
   testWidgets('compact payout row fits a narrow phone with larger text', (
     tester,
   ) async {
@@ -397,10 +419,10 @@ void main() {
       // real button callback after confirming the production control exists.
       final button = tester.widget<PillButton>(
         find.ancestor(of: editSettings, matching: find.byType(PillButton)),
-    );
-    button.onPressed!.call();
-    await tester.pump();
-    await tester.pump();
+      );
+      button.onPressed!.call();
+      await tester.pump();
+      await tester.pump();
 
       expect(find.byType(EditRaceScreen), findsOneWidget);
       expect(find.byKey(const Key('edit-prize-pool-preview')), findsNothing);

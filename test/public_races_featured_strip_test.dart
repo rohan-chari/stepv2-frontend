@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction, Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,6 +64,64 @@ void main() {
     expect(find.text('Daily Challenge'), findsOneWidget);
     // Not joined yet → the one-tap JOIN CTA.
     expect(find.text('JOIN'), findsWidgets);
+  });
+
+  testWidgets('compact 2x text keeps cards readable and filters accessible', (
+    tester,
+  ) async {
+    final semanticsHandle = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final auth = await signedInAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: PublicRacesScreen(
+          authService: auth,
+          backendApiService: _FakeApi(
+            featuredRaces: [
+              _featuredRace(),
+              {
+                ..._featuredRace(),
+                'raceId': 'weekly-2',
+                'seedKind': 'WEEKLY_50K',
+              },
+            ],
+          ),
+        ),
+      ),
+    );
+    await pumpFrames(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(FeaturedRaceCard), findsWidgets);
+    expect(find.text('JOIN'), findsWidgets);
+
+    final featuredSemantics = tester.getSemantics(
+      find.bySemanticsLabel(RegExp(r'^FEATURED,')),
+    );
+    final featuredData = featuredSemantics.getSemanticsData();
+    expect(featuredData.flagsCollection.isButton, isTrue);
+    expect(featuredData.flagsCollection.isSelected, Tristate.isTrue);
+    expect(featuredData.hasAction(SemanticsAction.tap), isTrue);
+
+    final secondCard = find.byType(FeaturedRaceCard).at(1);
+    final beforeSwipe = tester.getTopLeft(secondCard).dx;
+    await tester.drag(find.byType(PageView), const Offset(-240, 0));
+    await pumpFrames(tester);
+    expect(tester.takeException(), isNull);
+    expect(tester.getTopLeft(secondCard).dx, lessThan(beforeSwipe));
+
+    tester.semantics.tap(find.semantics.byLabel(RegExp(r'^TOURNEYS,')));
+    await pumpFrames(tester);
+    expect(find.byKey(const Key('public-auto-join-card')), findsNothing);
+    semanticsHandle.dispose();
   });
 
   testWidgets('older backend without /races/featured → no strip, no crash', (

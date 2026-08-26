@@ -4461,14 +4461,31 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             left: 12,
             right: 12,
             top: 12,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < chips.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  chips[i],
-                ],
-              ],
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.15,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 360) {
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final chip in chips)
+                          if (chip is! Spacer) chip,
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < chips.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        chips[i],
+                      ],
+                    ],
+                  );
+                },
+              ),
             ),
           ),
       ],
@@ -4868,18 +4885,49 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  Widget _buildRaceInfoCard() => RacePayoutScorecard(
-    presentation: _payoutPresentation,
-    onOpenPayouts: _hasPrizeDisplay ? _showPrizePoolSheet : null,
-  );
+  Widget _buildRaceInfoCard({bool showPayoutAction = true}) =>
+      RacePayoutScorecard(
+        presentation: _payoutPresentation,
+        onOpenPayouts: _payoutPresentation.hasPrize
+            ? _showPrizePoolSheet
+            : null,
+        showPayoutAction: showPayoutAction,
+      );
+
+  Widget? _payoutHeaderAction() {
+    if (!_payoutPresentation.hasPrize) return null;
+    return Semantics(
+      button: true,
+      label: 'Open payout details',
+      child: InkWell(
+        key: const Key('race-payouts-open'),
+        onTap: _showPrizePoolSheet,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.of(context).woodDark,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.of(context).roofEdge, width: 2),
+          ),
+          child: Text(
+            'VIEW PAYOUTS',
+            style: PixelText.title(size: 10, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildPayoutSection() => Column(
     key: const Key('race-payout-section'),
     children: [
-      _checkerSectionHeader('PAYOUT'),
+      _checkerSectionHeader('PAYOUT', trailing: _payoutHeaderAction()),
       _sectionCard(
-        padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
-        child: _buildRaceInfoCard(),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: _buildRaceInfoCard(showPayoutAction: false),
       ),
     ],
   );
@@ -6115,58 +6163,68 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildSpectatorBanner() {
     final canJoin = _canJoinFromPreview;
     return Container(
+      key: const Key('race-spectator-banner'),
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
       decoration: BoxDecoration(
         color: AppColors.of(context).woodDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.of(context).roofEdge, width: 2),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final status = Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 Icons.visibility_rounded,
                 size: 16,
                 color: Colors.white.withValues(alpha: 0.9),
               ),
-              const SizedBox(width: 8),
-              Text(
-                'SPECTATING · READ-ONLY',
-                style: PixelText.title(
-                  size: 12,
-                  color: Colors.white.withValues(alpha: 0.92),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  'SPECTATING · READ-ONLY',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(
+                    size: 11.5,
+                    color: Colors.white.withValues(alpha: 0.92),
+                  ),
                 ),
               ),
             ],
-          ),
-          // Public, non-tournament races get the way in. Tournament matchups
-          // never do — that JOIN would be rejected server-side.
-          if (canJoin) ...[
-            const SizedBox(height: 4),
-            Text(
-              'You’re not in this one yet.',
-              textAlign: TextAlign.center,
-              style: PixelText.body(
-                size: 11.5,
-                color: Colors.white.withValues(alpha: 0.75),
-              ),
-            ),
-            const SizedBox(height: 9),
-            PillButton(
+          );
+          if (!canJoin) return Center(child: status);
+
+          final join = SizedBox(
+            width: 154,
+            height: 44,
+            child: PillButton(
               key: const Key('race-preview-join-cta'),
               label: _joiningFromPreview ? 'JOINING…' : 'JOIN THIS RACE',
               variant: PillButtonVariant.accent,
-              fontSize: 13,
+              fontSize: 11,
               fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               onPressed: _joiningFromPreview ? null : _joinFromPreview,
             ),
-          ],
-        ],
+          );
+          if (constraints.maxWidth < 310 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [status, const SizedBox(height: 7), join],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: status),
+              const SizedBox(width: 8),
+              join,
+            ],
+          );
+        },
       ),
     );
   }
@@ -7854,6 +7912,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       body = ListView(
         key: const Key('race-timeline-list'),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        // Chat-room chronology: the coordinator keeps newest first, so a
+        // reversed list anchors that newest entry immediately above the
+        // composer and leaves older history upward.
+        reverse: true,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         children: [
           for (final message in messages)

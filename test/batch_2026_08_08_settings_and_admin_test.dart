@@ -2,7 +2,7 @@
 //
 //  * Item 3 (client half) — milestone reminder toggle, hidden when the backend
 //    preferences payload lacks the field.
-//  * Item 7 — SEND FEEDBACK sheet (offline keeps the text + retry).
+//  * Item 7 — SEND FEEDBACK has moved from Settings to Home.
 //  * Item 10 — COMMUNITY section.
 //  * Item 9 (client half) — admin VERSIONS + RACES sections, hidden when the
 //    fields are absent.
@@ -21,13 +21,9 @@ import 'package:step_tracker/theme_controller.dart';
 import 'package:step_tracker/widgets/pixel_switch.dart';
 
 class _PrefsApi extends BackendApiService {
-  _PrefsApi({required this.prefsPayload, this.throwOnSubmit = false});
+  _PrefsApi({required this.prefsPayload});
 
   final Map<String, dynamic> prefsPayload;
-  final bool throwOnSubmit;
-
-  int submitCalls = 0;
-  String? lastSubmittedText;
 
   /// Review fix 6: both toggles used to fetch preferences independently, so
   /// opening Settings fired this twice.
@@ -49,18 +45,6 @@ class _PrefsApi extends BackendApiService {
   }) async {
     legacyDailyRewardFetches++;
     return true;
-  }
-
-  @override
-  Future<void> submitSuggestion({
-    required String identityToken,
-    required String text,
-  }) async {
-    submitCalls++;
-    lastSubmittedText = text;
-    if (throwOnSubmit) {
-      throw const ApiException('offline');
-    }
   }
 
   @override
@@ -110,9 +94,12 @@ Future<void> _pumpSettings(
   HealthService? healthService,
   ActivationAnalyticsService? activationAnalyticsService,
   AppThemeController? themeController,
+  Size physicalSize = const Size(1170, 2532),
+  double devicePixelRatio = 3,
+  double textScaleFactor = 1,
 }) async {
-  tester.view.physicalSize = const Size(1170, 2532);
-  tester.view.devicePixelRatio = 3;
+  tester.view.physicalSize = physicalSize;
+  tester.view.devicePixelRatio = devicePixelRatio;
   addTearDown(tester.view.reset);
 
   final auth = await _authService();
@@ -126,6 +113,12 @@ Future<void> _pumpSettings(
   );
   await tester.pumpWidget(
     MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScaleFactor)),
+        child: child!,
+      ),
       home: themeController == null
           ? settings
           : AppThemeScope(controller: themeController, child: settings),
@@ -170,6 +163,39 @@ void main() {
       expect(find.text('Donation link coming soon'), findsOneWidget);
     },
   );
+
+  testWidgets('primary settings actions use compact navigable rows', (
+    tester,
+  ) async {
+    await _pumpSettings(tester, _PrefsApi(prefsPayload: const {}));
+
+    for (final key in [
+      const Key('settings-edit-display-name'),
+      const Key('settings-enter-invite-code'),
+    ]) {
+      final row = find.byKey(key);
+      expect(row, findsOneWidget);
+      expect(tester.getSize(row).height, inInclusiveRange(44, 58));
+    }
+  });
+
+  testWidgets('settings labels remain readable at 320dp and 2x text', (
+    tester,
+  ) async {
+    await _pumpSettings(
+      tester,
+      _PrefsApi(prefsPayload: const {}),
+      physicalSize: const Size(640, 1600),
+      devicePixelRatio: 2,
+      textScaleFactor: 2,
+    );
+
+    expect(tester.takeException(), isNull);
+    final edit = find.byKey(const Key('settings-edit-display-name'));
+    expect(edit, findsOneWidget);
+    expect(tester.getSize(edit).height, greaterThanOrEqualTo(52));
+    expect(find.text('EDIT DISPLAY NAME'), findsOneWidget);
+  });
 
   testWidgets('Appearance explains the device-local 8 PM to 7 AM schedule', (
     tester,
@@ -375,78 +401,9 @@ void main() {
   });
 
   group('Item 7 — SEND FEEDBACK', () {
-    testWidgets('sits in HELP & LEGAL and opens the sheet', (tester) async {
+    testWidgets('has moved out of Settings', (tester) async {
       await _pumpSettings(tester, _PrefsApi(prefsPayload: const {}));
-
-      final button = find.byKey(const Key('settings-send-feedback'));
-      expect(button, findsOneWidget);
-
-      await tester.ensureVisible(button);
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(button);
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      expect(find.byKey(const Key('feedback-sheet')), findsOneWidget);
-      expect(find.byKey(const Key('feedback-input')), findsOneWidget);
-    });
-
-    testWidgets('submits the typed text', (tester) async {
-      final api = _PrefsApi(prefsPayload: const {});
-      await _pumpSettings(tester, api);
-
-      final button = find.byKey(const Key('settings-send-feedback'));
-      await tester.ensureVisible(button);
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(button);
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      await tester.enterText(
-        find.byKey(const Key('feedback-input')),
-        '  more capybara hats  ',
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(find.byKey(const Key('feedback-submit')));
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      expect(api.submitCalls, 1);
-      expect(api.lastSubmittedText, 'more capybara hats');
-      // Sheet closed on success.
-      expect(find.byKey(const Key('feedback-sheet')), findsNothing);
-    });
-
-    testWidgets('offline keeps the text and offers a retry', (tester) async {
-      final api = _PrefsApi(prefsPayload: const {}, throwOnSubmit: true);
-      await _pumpSettings(tester, api);
-
-      final button = find.byKey(const Key('settings-send-feedback'));
-      await tester.ensureVisible(button);
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(button);
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      await tester.enterText(
-        find.byKey(const Key('feedback-input')),
-        'please fix the thing',
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(find.byKey(const Key('feedback-submit')));
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      // Sheet stays open, text preserved, error shown, button offers RETRY.
-      expect(find.byKey(const Key('feedback-sheet')), findsOneWidget);
-      expect(find.byKey(const Key('feedback-error')), findsOneWidget);
-      expect(find.text('please fix the thing'), findsOneWidget);
-      expect(find.text('RETRY'), findsOneWidget);
+      expect(find.byKey(const Key('settings-send-feedback')), findsNothing);
     });
   });
 

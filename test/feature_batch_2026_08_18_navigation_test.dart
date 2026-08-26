@@ -308,6 +308,132 @@ void main() {
     expect(updates, [4, 3]);
   });
 
+  group('mobile Taste Inbox redesign', () {
+    testWidgets('uses a quiet flat ledger with readable message hierarchy', (
+      tester,
+    ) async {
+      final auth = await _auth();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemeData.light(),
+          home: InboxScreen(
+            hostMode: InboxHostMode.embedded,
+            authService: auth,
+            backendApiService: _InboxApi(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+
+      final board = tester.widget<Container>(
+        find.byKey(const ValueKey('inbox-dispatch-board')),
+      );
+      final boardDecoration = board.decoration! as BoxDecoration;
+      expect(boardDecoration.boxShadow, isNull);
+      expect(boardDecoration.border, isNull);
+
+      final row = tester.widget<DecoratedBox>(
+        find.byKey(const ValueKey('inbox-message-card-alert-alert-1')),
+      );
+      expect((row.decoration as BoxDecoration).boxShadow, isNull);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+
+      final title = tester.widget<Text>(find.text('Race ready'));
+      final body = tester.widget<Text>(find.text('Go!'));
+      expect(title.style!.fontSize, greaterThanOrEqualTo(15));
+      expect(body.style!.fontSize, greaterThanOrEqualTo(12));
+      expect(body.maxLines, 2);
+
+      final unread = find.byKey(const ValueKey('inbox-unread-alert-1'));
+      expect(tester.getSize(unread).width, 3);
+      expect(tester.getSize(unread).height, greaterThanOrEqualTo(72));
+    });
+
+    testWidgets('standalone header says Notifications without extra copy', (
+      tester,
+    ) async {
+      final auth = await _auth();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemeData.night(),
+          home: InboxScreen(authService: auth, backendApiService: _InboxApi()),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('NOTIFICATIONS'), findsOneWidget);
+      expect(find.text('INBOX'), findsNothing);
+      expect(find.text('The things that need your attention.'), findsNothing);
+    });
+
+    testWidgets('unread accents stay theme-safe by day and night', (
+      tester,
+    ) async {
+      final auth = await _auth();
+      for (final theme in [AppThemeData.light(), AppThemeData.night()]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey(theme.brightness),
+            theme: theme,
+            home: InboxScreen(
+              hostMode: InboxHostMode.embedded,
+              authService: auth,
+              backendApiService: _InboxApi(),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+        final context = tester.element(find.text('RACE'));
+        final colors = AppColors.of(context);
+        expect(
+          tester.widget<Text>(find.text('RACE')).style!.color,
+          colors.textAccent,
+        );
+        final card = find.byKey(
+          const ValueKey('inbox-message-card-alert-alert-1'),
+        );
+        final icon = tester.widget<Icon>(
+          find.descendant(of: card, matching: find.byType(Icon)),
+        );
+        expect(icon.color, colors.roofDark);
+      }
+    });
+
+    testWidgets('Notifications heading fits 320dp at 2x text in both hosts', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(320, 568));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final auth = await _auth();
+      for (final mode in InboxHostMode.values) {
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey(mode),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: InboxScreen(
+              hostMode: mode,
+              authService: auth,
+              backendApiService: _InboxApi(),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+        final title = find.byKey(const Key('notifications-header-title'));
+        expect(title, findsOneWidget);
+        expect(tester.getRect(title).left, greaterThanOrEqualTo(0));
+        expect(tester.getRect(title).right, lessThanOrEqualTo(320));
+        expect(tester.takeException(), isNull);
+      }
+    });
+  });
+
   testWidgets(
     'Inbox prefers combined totalUnreadCount and falls back to legacy unreadCount',
     (tester) async {

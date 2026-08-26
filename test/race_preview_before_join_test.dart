@@ -20,12 +20,7 @@ import 'package:step_tracker/widgets/team_lobby_board.dart';
 /// parallel "preview" state — and must not touch chat, the activity feed, the
 /// share-link endpoint, or the 30s progress poll while in it.
 
-const _pagination = {
-  'total': 2,
-  'offset': 0,
-  'limit': 10,
-  'hasMore': false,
-};
+const _pagination = {'total': 2, 'offset': 0, 'limit': 10, 'hasMore': false};
 
 /// Financial fields are REDACTED (explicit nulls) for a preview viewer — the
 /// screen must not print "null" or crash on any of them.
@@ -56,6 +51,7 @@ class _PreviewApi extends BackendApiService {
     this.isTeamRace = false,
     this.participants = _previewParticipants,
     this.detailsStatusCode,
+    this.fundedPool = false,
   });
 
   final String status;
@@ -67,6 +63,7 @@ class _PreviewApi extends BackendApiService {
   /// When set, `fetchRaceDetails` throws with this status (the unchanged 403
   /// path).
   final int? detailsStatusCode;
+  final bool fundedPool;
 
   int detailsCalls = 0;
   int progressCalls = 0;
@@ -100,6 +97,23 @@ class _PreviewApi extends BackendApiService {
       'potCoins': 0,
       'heldPotCoins': 0,
       'projectedPotCoins': 240,
+      if (fundedPool)
+        'prizePool': const {
+          'coins': 240,
+          'projected': true,
+          'atMax': false,
+          'playerCount': 2,
+          'durationDays': 1,
+          'durationPoints': 1,
+          'coinUnit': 20,
+          'maxCoins': 3200,
+          'funded': true,
+        },
+      if (fundedPool)
+        'payoutTiers': const [
+          {'placement': 1, 'amount': 168},
+          {'placement': 2, 'amount': 72},
+        ],
       'payoutPreset': 'TOP3_70_20_10',
       'targetSteps': 20000,
       // The preview contract: no participant row of my own.
@@ -212,15 +226,23 @@ Future<AuthService> _auth() async {
   return auth;
 }
 
-Future<void> _pump(WidgetTester tester, BackendApiService api) async {
-  await tester.binding.setSurfaceSize(const Size(600, 3000));
+Future<void> _pump(
+  WidgetTester tester,
+  BackendApiService api, {
+  double width = 600,
+  TextScaler textScaler = TextScaler.noScaling,
+}) async {
+  await tester.binding.setSurfaceSize(Size(width, 3000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
-      home: RaceDetailScreen(
-        authService: await _auth(),
-        raceId: 'race-public-1',
-        backendApiService: api,
+      home: MediaQuery(
+        data: MediaQueryData(size: Size(width, 3000), textScaler: textScaler),
+        child: RaceDetailScreen(
+          authService: await _auth(),
+          raceId: 'race-public-1',
+          backendApiService: api,
+        ),
       ),
     ),
   );
@@ -283,14 +305,27 @@ void main() {
       expect(find.text('SPECTATING · READ-ONLY'), findsOneWidget);
       expect(find.byKey(const Key('race-preview-join-cta')), findsOneWidget);
 
+      // The preview state is a compact conversion rail, not another tall card
+      // between the payout summary and standings.
+      final spectatorRail = tester.getSize(
+        find.byKey(const Key('race-spectator-banner')),
+      );
+      expect(spectatorRail.height, lessThanOrEqualTo(64));
+      expect(
+        tester.getSize(find.byKey(const Key('race-preview-join-cta'))).height,
+        greaterThanOrEqualTo(44),
+      );
+
       // Write surfaces stay hidden.
       expect(find.text('POWERUPS'), findsNothing);
       expect(find.byIcon(Icons.ios_share), findsNothing);
       expect(find.byIcon(Icons.more_vert), findsNothing);
 
       // Chat/activity are locked rather than fetched.
-      expect(find.byKey(const Key('race-preview-locked-activity')),
-          findsOneWidget);
+      expect(
+        find.byKey(const Key('race-preview-locked-activity')),
+        findsOneWidget,
+      );
       expect(api.feedOrChatCalls, 0);
       expect(api.shareLinkCalls, 0);
 
@@ -302,29 +337,62 @@ void main() {
     },
   );
 
-  testWidgets('preview mode fires no chat/feed calls and never polls progress', (
+  testWidgets(
+    'preview mode fires no chat/feed calls and never polls progress',
+    (tester) async {
+      final api = _PreviewApi();
+      await _pump(tester, api);
+
+      expect(api.progressCalls, 1, reason: 'single fetch, no poll');
+      expect(api.feedOrChatCalls, 0);
+
+      // Well past several 30s poll intervals.
+      await tester.pump(const Duration(seconds: 120));
+      await tester.pump();
+
+      expect(api.progressCalls, 1, reason: '_startPolling must not run');
+      expect(api.feedOrChatCalls, 0);
+
+      // Switching to the CHAT tab must not initialise the chat stream either.
+      await tester.tap(find.text('CHAT'));
+      await tester.pump();
+      expect(find.byKey(const Key('race-preview-locked-chat')), findsOneWidget);
+      expect(api.feedOrChatCalls, 0);
+      expect(tester.takeException(), isNull);
+
+      await _teardown(tester);
+    },
+  );
+
+  testWidgets('390pt preview keeps the spectator rail compact', (tester) async {
+    await _pump(tester, _PreviewApi(), width: 390);
+
+    expect(
+      tester.getSize(find.byKey(const Key('race-spectator-banner'))).height,
+      lessThanOrEqualTo(64),
+    );
+    expect(tester.takeException(), isNull);
+    await _teardown(tester);
+  });
+
+  testWidgets('narrow large-text payout action opens its detail sheet', (
     tester,
   ) async {
-    final api = _PreviewApi();
-    await _pump(tester, api);
+    await _pump(
+      tester,
+      _PreviewApi(fundedPool: true),
+      width: 320,
+      textScaler: const TextScaler.linear(1.2),
+    );
 
-    expect(api.progressCalls, 1, reason: 'single fetch, no poll');
-    expect(api.feedOrChatCalls, 0);
-
-    // Well past several 30s poll intervals.
-    await tester.pump(const Duration(seconds: 120));
+    final payouts = find.byKey(const Key('race-payouts-open'));
+    expect(payouts, findsOneWidget);
+    expect(tester.getSize(payouts).height, greaterThanOrEqualTo(44));
+    await tester.tap(payouts);
     await tester.pump();
-
-    expect(api.progressCalls, 1, reason: '_startPolling must not run');
-    expect(api.feedOrChatCalls, 0);
-
-    // Switching to the CHAT tab must not initialise the chat stream either.
-    await tester.tap(find.text('CHAT'));
-    await tester.pump();
-    expect(find.byKey(const Key('race-preview-locked-chat')), findsOneWidget);
-    expect(api.feedOrChatCalls, 0);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('race-prize-pool-sheet')), findsOneWidget);
     expect(tester.takeException(), isNull);
-
     await _teardown(tester);
   });
 
@@ -341,20 +409,21 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('a tournament matchup spectator gets the banner but NO JOIN CTA', (
-    tester,
-  ) async {
-    // myStatus is null here too — proof the CTA is gated on
-    // tournamentId == null && isPublic == true, not on myStatus.
-    final api = _PreviewApi(tournamentId: 'tour-1');
-    await _pump(tester, api);
+  testWidgets(
+    'a tournament matchup spectator gets the banner but NO JOIN CTA',
+    (tester) async {
+      // myStatus is null here too — proof the CTA is gated on
+      // tournamentId == null && isPublic == true, not on myStatus.
+      final api = _PreviewApi(tournamentId: 'tour-1');
+      await _pump(tester, api);
 
-    expect(find.text('SPECTATING · READ-ONLY'), findsOneWidget);
-    expect(find.byKey(const Key('race-preview-join-cta')), findsNothing);
-    expect(tester.takeException(), isNull);
+      expect(find.text('SPECTATING · READ-ONLY'), findsOneWidget);
+      expect(find.byKey(const Key('race-preview-join-cta')), findsNothing);
+      expect(tester.takeException(), isNull);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 
   testWidgets('a private race with myStatus null gets no JOIN CTA', (
     tester,

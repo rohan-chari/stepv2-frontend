@@ -8,9 +8,7 @@ import 'package:step_tracker/widgets/tournament_bracket_board.dart';
 // empty model, and fires the callback when the viewer taps their live matchup.
 
 Widget _host(Widget child) => MaterialApp(
-  home: Scaffold(
-    body: SizedBox(width: 420, height: 760, child: child),
-  ),
+  home: Scaffold(body: SizedBox(width: 420, height: 760, child: child)),
 );
 
 Map<String, dynamic> _active16() {
@@ -36,7 +34,11 @@ Map<String, dynamic> _active16() {
               'status': 'ACTIVE',
               'players': [
                 {'userId': 'u${2 * i}', 'totalSteps': 10, 'forfeited': false},
-                {'userId': 'u${2 * i + 1}', 'totalSteps': 5, 'forfeited': false},
+                {
+                  'userId': 'u${2 * i + 1}',
+                  'totalSteps': 5,
+                  'forfeited': false,
+                },
               ],
             },
         ],
@@ -45,11 +47,23 @@ Map<String, dynamic> _active16() {
   };
 }
 
+Map<String, dynamic> _pendingBracket(int size) => {
+  'id': 'pending-$size',
+  'status': 'PENDING',
+  'bracketSize': size,
+  'acceptedCount': 2,
+  'participants': const [
+    {'userId': 'me', 'displayName': 'Me', 'status': 'ACCEPTED'},
+    {'userId': 'b', 'displayName': 'Bee', 'status': 'ACCEPTED'},
+  ],
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('16-bracket lays out with every round label, no exception',
-      (tester) async {
+  testWidgets('16-bracket lays out with every round label, no exception', (
+    tester,
+  ) async {
     final model = buildTournamentBracket(_active16(), 'u0');
     await tester.pumpWidget(_host(TournamentBracketBoard(model: model)));
     await tester.pump();
@@ -65,6 +79,72 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('4 is balanced while 8 and 16 remain horizontally pannable', (
+    tester,
+  ) async {
+    for (final size in const [4, 8, 16]) {
+      final model = buildTournamentBracket(_pendingBracket(size), 'me');
+      await tester.pumpWidget(_host(TournamentBracketBoard(model: model)));
+      await tester.pump();
+      await tester.pump();
+
+      final board = tester.getRect(find.byType(TournamentBracketBoard));
+      final viewer = tester.widget<InteractiveViewer>(
+        find.byType(InteractiveViewer),
+      );
+      expect(
+        viewer.transformationController!.value.getMaxScaleOnAxis(),
+        greaterThanOrEqualTo(0.9),
+      );
+      final champion = find.text('CHAMPION').first;
+      final before = tester.getCenter(champion).dx;
+      if (size == 4) {
+        expect(before, inInclusiveRange(board.left + 16, board.right - 16));
+      } else {
+        await tester.drag(
+          find.byType(InteractiveViewer),
+          const Offset(-180, 0),
+        );
+        await tester.pump();
+        expect(tester.getCenter(champion).dx, lessThan(before));
+      }
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('reframes when its viewport height changes', (tester) async {
+    final height = ValueNotifier<double>(760);
+    addTearDown(height.dispose);
+    final model = buildTournamentBracket(_pendingBracket(4), 'me');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder<double>(
+            valueListenable: height,
+            builder: (context, value, _) => SizedBox(
+              width: 420,
+              height: value,
+              child: TournamentBracketBoard(model: model),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final before = tester.getCenter(find.text('SEMIFINALS')).dy;
+
+    height.value = 480;
+    await tester.pump();
+    await tester.pump();
+    final after = tester.getCenter(find.text('SEMIFINALS')).dy;
+
+    expect(after, lessThan(before));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('empty model renders nothing (no crash)', (tester) async {
     final model = buildTournamentBracket(const {}, 'me');
     await tester.pumpWidget(_host(TournamentBracketBoard(model: model)));
@@ -73,8 +153,9 @@ void main() {
     expect(find.byType(InteractiveViewer), findsNothing);
   });
 
-  testWidgets('tapping my live matchup fires the callback with its raceId',
-      (tester) async {
+  testWidgets('tapping my live matchup fires the callback with its raceId', (
+    tester,
+  ) async {
     String? tapped;
     final t = {
       'id': 't1',
@@ -105,10 +186,12 @@ void main() {
     };
     final model = buildTournamentBracket(t, 'me');
     await tester.pumpWidget(
-      _host(TournamentBracketBoard(
-        model: model,
-        onTapMyMatchup: (id) => tapped = id,
-      )),
+      _host(
+        TournamentBracketBoard(
+          model: model,
+          onTapMyMatchup: (id) => tapped = id,
+        ),
+      ),
     );
     await tester.pump();
 
@@ -119,8 +202,9 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('tapping another live matchup fires the spectate callback',
-      (tester) async {
+  testWidgets('tapping another live matchup fires the spectate callback', (
+    tester,
+  ) async {
     String? watched;
     final t = {
       'id': 't1',
@@ -162,11 +246,13 @@ void main() {
     };
     final model = buildTournamentBracket(t, 'me');
     await tester.pumpWidget(
-      _host(TournamentBracketBoard(
-        model: model,
-        onTapMyMatchup: (_) {},
-        onTapMatchup: (id) => watched = id,
-      )),
+      _host(
+        TournamentBracketBoard(
+          model: model,
+          onTapMyMatchup: (_) {},
+          onTapMatchup: (id) => watched = id,
+        ),
+      ),
     );
     await tester.pump();
 

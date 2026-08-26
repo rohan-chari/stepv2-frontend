@@ -18,6 +18,7 @@ class GlobalEventBanner extends StatefulWidget {
     super.key,
     required this.multiplier,
     required this.endsAt,
+    this.compact = false,
   });
 
   /// Step multiplier for the active window (e.g. 2 for "2x STEPS").
@@ -25,6 +26,9 @@ class GlobalEventBanner extends StatefulWidget {
 
   /// When the event window ends. Once this passes, the banner collapses.
   final DateTime endsAt;
+
+  /// Removes elevation when this notice follows a more important Home action.
+  final bool compact;
 
   @override
   State<GlobalEventBanner> createState() => _GlobalEventBannerState();
@@ -76,14 +80,23 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
       decoration: BoxDecoration(
         color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.of(context).woodDark, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.of(context).woodShadow.withValues(alpha: 0.22),
-            offset: const Offset(4, 4),
-            blurRadius: 0,
-          ),
-        ],
+        border: Border.all(
+          color: AppColors.of(
+            context,
+          ).woodDark.withValues(alpha: widget.compact ? 0.28 : 1),
+          width: widget.compact ? 1 : 2,
+        ),
+        boxShadow: widget.compact
+            ? const []
+            : [
+                BoxShadow(
+                  color: AppColors.of(
+                    context,
+                  ).woodShadow.withValues(alpha: 0.22),
+                  offset: const Offset(4, 4),
+                  blurRadius: 0,
+                ),
+              ],
       ),
       child: Row(
         children: [

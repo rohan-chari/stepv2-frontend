@@ -205,6 +205,19 @@ void main() {
     expect(find.textContaining('random 25–50 coins'), findsOneWidget);
     expect(find.text('INVITE FRIENDS'), findsOneWidget);
     expect(find.text('OPEN DAILY BOX'), findsOneWidget);
+    for (final key in [
+      const Key('get-coins-watch-ad-card'),
+      const Key('get-coins-referral-card'),
+      const Key('get-coins-daily-card'),
+    ]) {
+      expect(find.byKey(key), findsOneWidget);
+    }
+    expect(
+      tester.getTopLeft(find.byKey(const Key('get-coins-watch-ad-card'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('get-coins-referral-card'))).dy,
+      ),
+    );
     expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
     // SSV custom_data carries the coins: prefix so the backend mints a
     // coin_reward grant, not an extra spin.

@@ -56,6 +56,7 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
   final TransformationController _controller = TransformationController();
   bool _centered = false;
   bool _showHint = true;
+  Size? _lastViewport;
 
   @override
   void dispose() {
@@ -132,10 +133,21 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
   }
 
   void _centerOn(Offset target, Size viewport) {
-    // Slightly zoomed out so the surrounding bracket gives context.
-    const scale = 0.92;
-    final tx = viewport.width / 2 - target.dx * scale;
-    final ty = viewport.height / 2 - target.dy * scale;
+    // Frame small brackets as one balanced stage instead of pinning the first
+    // matchup to center. Never shrink below 0.9: fitting a 620px four-player
+    // canvas into a phone would make names and round labels unreadably tiny.
+    // Larger brackets still center the viewer's matchup and remain pannable.
+    final widthFit = (viewport.width - 24) / _canvasSize.width;
+    final scale = widthFit.clamp(0.9, 1.08).toDouble();
+    final scaledWidth = _canvasSize.width * scale;
+    final scaledHeight = _canvasSize.height * scale;
+    final centerWholeStage = widget.model.bracketSize <= 4;
+    final tx = centerWholeStage || scaledWidth <= viewport.width
+        ? (viewport.width - scaledWidth) / 2
+        : viewport.width / 2 - target.dx * scale;
+    final ty = scaledHeight <= viewport.height
+        ? (viewport.height - scaledHeight) / 2
+        : viewport.height / 2 - target.dy * scale;
     // Compose screen = scale * point + translation directly (avoids the
     // deprecated Matrix4.translate/scale helpers).
     _controller.value = Matrix4.identity()
@@ -157,7 +169,11 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewport = Size(constraints.maxWidth, constraints.maxHeight);
-        if (!_centered && viewport.width > 0 && viewport.height > 0) {
+        final viewportChanged = _lastViewport != viewport;
+        _lastViewport = viewport;
+        if ((!_centered || viewportChanged) &&
+            viewport.width > 0 &&
+            viewport.height > 0) {
           _centered = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _centerOn(_initialFocus(), viewport);
@@ -637,30 +653,39 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
   }
 
   Widget _dragHint() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofDark.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.of(context).roofEdge, width: 1.5),
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 32,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.pan_tool_rounded,
-            size: 13,
-            color: AppColors.of(context).textLight,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Drag to explore the bracket',
-            style: PixelText.body(
-              size: 12,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.of(context).roofEdge, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.pan_tool_rounded,
+              size: 13,
               color: AppColors.of(context).textLight,
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Drag to explore the bracket',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textLight,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

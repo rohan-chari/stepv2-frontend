@@ -549,6 +549,12 @@ void main() {
     expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
     expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
     expect(find.textContaining('#8'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('contest-dashboard-standing')))
+          .height,
+      lessThanOrEqualTo(185),
+    );
     await tester.tap(find.byKey(const Key('contest-trail-landmark-leaders')));
     await tester.pump();
     expect(

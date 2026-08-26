@@ -119,10 +119,6 @@ Future<void> _flush(WidgetTester tester) async {
   }
 }
 
-Finder _staggerAt(int index) => find.byWidgetPredicate(
-  (widget) => widget is StaggerIn && widget.index == index,
-);
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -166,8 +162,8 @@ void main() {
       );
     });
 
-    // 1b. The stagger indices still run top-to-bottom.
-    testWidgets('the SETUP stagger index precedes the race stagger index', (
+    // 1b. Below-fold sections now land directly in their final positions.
+    testWidgets('SETUP precedes Today\'s Coins without a stagger wrapper', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(800, 1600));
@@ -182,10 +178,10 @@ void main() {
       await tester.pumpWidget(_buildHome(authService, api));
       await _flush(tester);
 
-      // Today's Coins is index 5 after the pending-invite and NEXT RACE slots.
+      expect(find.byType(StaggerIn), findsOneWidget);
       expect(
-        tester.getTopLeft(_staggerAt(2)).dy,
-        lessThan(tester.getTopLeft(_staggerAt(5)).dy),
+        tester.getTopLeft(find.text('SETUP')).dy,
+        lessThan(tester.getTopLeft(find.text("Today's coins")).dy),
       );
     });
 
@@ -209,9 +205,13 @@ void main() {
 
       expect(find.text('SETUP'), findsNothing);
       expect(find.byKey(const Key('home-rename-chip')), findsNothing);
+      final quickActionsBottom = tester
+          .getRect(find.byKey(const Key('home-daily-reward-button')))
+          .bottom;
+      final coinsTop = tester.getRect(find.text("Today's coins")).top;
       expect(
-        tester.getSize(_staggerAt(2)).height,
-        0.0,
+        coinsTop - quickActionsBottom,
+        lessThan(32),
         reason: 'an empty SETUP section must not add padding above the races',
       );
     });

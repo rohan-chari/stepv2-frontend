@@ -1,8 +1,7 @@
-// Feature batch 2026-08-10 (part 2) — Item 3 (pending race invite moves above
-// Today's Coins) and Item 5 (feedback entry point on home).
+// Feature batch 2026-08-10 (part 2) — pending-race placement and Home's
+// bottom feedback entry point.
 //
-// Pumps the REAL HomeTab and asserts vertical order, the stagger cascade, and
-// the extracted feedback sheet.
+// Pumps the REAL HomeTab and asserts vertical order and stable content.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -17,7 +16,11 @@ import 'package:step_tracker/widgets/arcade_fx.dart';
 import 'package:step_tracker/widgets/step_milestones_section.dart';
 
 class _FakeApi extends BackendApiService {
+  _FakeApi({this.throwOnSuggestion = false});
+
+  final bool throwOnSuggestion;
   int suggestions = 0;
+  String? lastSuggestion;
 
   @override
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
@@ -31,6 +34,8 @@ class _FakeApi extends BackendApiService {
     required String text,
   }) async {
     suggestions++;
+    lastSuggestion = text;
+    if (throwOnSuggestion) throw const ApiException('offline');
   }
 }
 
@@ -240,13 +245,7 @@ void main() {
       await _flush(tester);
 
       final indices = _staggerIndicesTopToBottom(tester);
-      for (var i = 1; i < indices.length; i++) {
-        expect(
-          indices[i],
-          greaterThan(indices[i - 1]),
-          reason: 'StaggerIn indices must ascend down the page: $indices',
-        );
-      }
+      expect(indices, [0]);
     });
 
     testWidgets('the suggested-races skeleton branch shifted too', (
@@ -263,15 +262,7 @@ void main() {
       await _flush(tester);
 
       final indices = _staggerIndicesTopToBottom(tester);
-      for (var i = 1; i < indices.length; i++) {
-        expect(
-          indices[i],
-          greaterThan(indices[i - 1]),
-          reason:
-              'the loading-frame cascade must ascend too: $indices — the '
-              'raceCardLoading skeleton branch is easy to miss',
-        );
-      }
+      expect(indices, [0]);
     });
 
     // The spotlight anchor sits at the index the invite block now occupies;
@@ -287,8 +278,8 @@ void main() {
     });
   });
 
-  group('Item 5 — home feedback card', () {
-    testWidgets('renders as the last block and opens the extracted sheet', (
+  group('Home feedback entry point', () {
+    testWidgets('is the final Home section and opens the shared sheet', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
@@ -302,23 +293,14 @@ void main() {
       await _flush(tester);
 
       final card = find.byKey(const Key('home-feedback-card'));
+      final button = find.byKey(const Key('home-feedback-button'));
       expect(card, findsOneWidget);
-      final header = find.text('FEEDBACK');
-      expect(header, findsOneWidget);
-      expect(
-        find.text('Found a bug? Have an idea? Let us know'),
-        findsOneWidget,
-      );
-      expect(
-        tester.getTopLeft(header).dy,
-        lessThan(tester.getTopLeft(card).dy),
-      );
+      expect(button, findsOneWidget);
       expect(
         tester.getTopLeft(card).dy,
         greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
       );
 
-      final button = find.byKey(const Key('home-feedback-button'));
       await tester.ensureVisible(button);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(button);
@@ -326,12 +308,50 @@ void main() {
 
       expect(find.byKey(const Key('feedback-sheet')), findsOneWidget);
       expect(find.byKey(const Key('feedback-input')), findsOneWidget);
-      expect(find.byKey(const Key('feedback-submit')), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('feedback-input')),
+        '  more capybara hats  ',
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('feedback-submit')));
+      await _flush(tester);
+      expect(api.suggestions, 1);
+      expect(api.lastSuggestion, 'more capybara hats');
+      expect(find.byKey(const Key('feedback-sheet')), findsNothing);
     });
 
-    testWidgets('it renders below the SUGGESTED RACES rail while loading', (
-      tester,
-    ) async {
+    testWidgets('offline keeps the text and offers a retry', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final api = _FakeApi(throwOnSuggestion: true);
+      final auth = await _authService(api);
+      await tester.pumpWidget(
+        _buildHome(auth, api, raceCard: const {'state': 'EMPTY'}),
+      );
+      await _flush(tester);
+
+      final button = find.byKey(const Key('home-feedback-button'));
+      await tester.ensureVisible(button);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(button);
+      await _flush(tester);
+      await tester.enterText(
+        find.byKey(const Key('feedback-input')),
+        'please fix the thing',
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('feedback-submit')));
+      await _flush(tester);
+
+      expect(find.byKey(const Key('feedback-sheet')), findsOneWidget);
+      expect(find.byKey(const Key('feedback-error')), findsOneWidget);
+      expect(find.text('please fix the thing'), findsOneWidget);
+      expect(find.text('RETRY'), findsOneWidget);
+    });
+
+    testWidgets('remains stable while Home content is loading', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -342,10 +362,8 @@ void main() {
       );
       await _flush(tester);
 
-      expect(
-        tester.getTopLeft(find.byKey(const Key('home-feedback-card'))).dy,
-        greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
-      );
+      expect(find.byKey(const Key('home-feedback-card')), findsOneWidget);
+      expect(find.byKey(const Key('home-feedback-button')), findsOneWidget);
     });
 
     // ui-test-planner / architect R4: the tutorial preview service extends the

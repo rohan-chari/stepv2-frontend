@@ -162,18 +162,16 @@ class _PersonalGroupHeader extends StatelessWidget {
               label,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
-              style: PixelText.display(
-                size: 20,
-                color: colors.textLight,
-              ).copyWith(
-                shadows: const [
-                  Shadow(
-                    color: Color(0x40000000),
-                    blurRadius: 4,
-                    offset: Offset(0, 1),
+              style: PixelText.display(size: 20, color: colors.textLight)
+                  .copyWith(
+                    shadows: const [
+                      Shadow(
+                        color: Color(0x40000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
                   ),
-                ],
-              ),
             ),
           ),
         ],
@@ -494,12 +492,7 @@ class _RacesTabState extends State<RacesTab> {
       SliverToBoxAdapter(
         child: Column(
           children: [
-            _buildRacesHeader(
-              activeCount: _countFor(_PersonalState.active),
-              inviteCount: invites.length + tournamentInvites.length,
-              waitingCount: _countFor(_PersonalState.pending),
-              potKey: widget.tutorialPotKey,
-            ),
+            _buildRacesHeader(potKey: widget.tutorialPotKey),
             // The FEATURED strip (seeded daily/weekly races + seeded brackets)
             // moved to the Public Races screen — discovery lives there now;
             // this tab is purely the user's own races.
@@ -662,12 +655,7 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
-  Widget _buildRacesHeader({
-    required int activeCount,
-    required int inviteCount,
-    required int waitingCount,
-    GlobalKey? potKey,
-  }) {
+  Widget _buildRacesHeader({GlobalKey? potKey}) {
     return DecoratedBox(
       decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
@@ -675,7 +663,7 @@ class _RacesTabState extends State<RacesTab> {
         child: KeyedSubtree(
           key: potKey,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 15, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -686,54 +674,32 @@ class _RacesTabState extends State<RacesTab> {
                     color: AppColors.of(context).textLight,
                   ).copyWith(shadows: _textShadows),
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  'Race friends, climb the board, and turn daily steps into wins.',
-                  style: PixelText.body(
-                    size: 15,
-                    color: AppColors.of(
-                      context,
-                    ).textLight.withValues(alpha: 0.92),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                _RaceHeaderMetrics(
-                  activeCount: activeCount,
-                  inviteCount: inviteCount,
-                  waitingCount: waitingCount,
-                ),
                 if (widget.displayName != null) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
-                        child: PillButton(
-                          label: 'NEW RACE',
-                          icon: Icons.add_rounded,
-                          variant: PillButtonVariant.secondary,
-                          fontSize: 13,
-                          fullWidth: true,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                        child: SizedBox(
+                          key: const Key('races-new-action'),
+                          height: 58,
+                          child: PillButton(
+                            label: 'NEW RACE',
+                            icon: Icons.add_rounded,
+                            variant: PillButtonVariant.secondary,
+                            fontSize: 14,
+                            fullWidth: true,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            onPressed: _navigateToCreateRace,
                           ),
-                          onPressed: _navigateToCreateRace,
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(
-                        child: PillButton(
-                          label: 'PUBLIC RACES (${widget.publicRacesCount})',
-                          icon: Icons.travel_explore_rounded,
-                          variant: PillButtonVariant.accent,
-                          fontSize: 13,
-                          fullWidth: true,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          onPressed: _navigateToPublicRaces,
-                        ),
+                      _PublicRacesAction(
+                        count: widget.publicRacesCount,
+                        onPressed: _navigateToPublicRaces,
                       ),
                     ],
                   ),
@@ -758,8 +724,9 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final state = _effectiveRacesState;
     if (state.shouldShowInitialLoading) {
-      return const [
-        SliverToBoxAdapter(
+      return [
+        SliverToBoxAdapter(child: _buildStatePills()),
+        const SliverToBoxAdapter(
           child: KeyedSubtree(
             key: Key('races-loading-skeleton'),
             child: _RacesLoadingSkeleton(),
@@ -770,6 +737,7 @@ class _RacesTabState extends State<RacesTab> {
 
     if (state.isError && !state.hasData) {
       return [
+        SliverToBoxAdapter(child: _buildStatePills()),
         // Full-bleed: race blocks run edge to edge (batch 2026-07-27 #17).
         SliverToBoxAdapter(
           child: LoadErrorPanel(
@@ -804,7 +772,7 @@ class _RacesTabState extends State<RacesTab> {
         ),
       // Invites are pinned ABOVE the pills and omitted entirely at zero.
       if (totalInvites > 0) ..._invitesStripSlivers(invites, tournamentInvites),
-      SliverToBoxAdapter(child: StaggerIn(index: 1, child: _buildStatePills())),
+      SliverToBoxAdapter(child: _buildStatePills()),
       ..._selectedStateSlivers(),
     ];
   }
@@ -1338,9 +1306,7 @@ class _RacesTabState extends State<RacesTab> {
                                   context,
                                 ).pillGold.withValues(alpha: 0.30),
                                 textColor: AppColors.of(context).textDark,
-                                borderColor: AppColors.of(
-                                  context,
-                                ).pillGoldDark,
+                                borderColor: AppColors.of(context).pillGoldDark,
                               ),
                             ),
                           ],
@@ -2090,88 +2056,100 @@ class _RacesLoadingSkeleton extends StatelessWidget {
   }
 }
 
-class _RaceHeaderMetrics extends StatelessWidget {
-  const _RaceHeaderMetrics({
-    required this.activeCount,
-    required this.inviteCount,
-    required this.waitingCount,
-  });
+class _PublicRacesAction extends StatelessWidget {
+  const _PublicRacesAction({required this.count, required this.onPressed});
 
-  final int activeCount;
-  final int inviteCount;
-  final int waitingCount;
+  final int count;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
-          ),
-          bottom: BorderSide(
-            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
+    final colors = AppColors.of(context);
+    return Semantics(
+      button: true,
+      label: 'Public races, $count available',
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          excludeFromSemantics: true,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            key: const Key('races-public-action'),
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: colors.pillGold,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: colors.pillGoldDark, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.pillGoldShadow.withValues(alpha: 0.65),
+                  offset: const Offset(3, 3),
+                ),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.travel_explore_rounded,
+                        size: 22,
+                        color: colors.textDark,
+                      ),
+                      const SizedBox(height: 2),
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'PUBLIC',
+                              maxLines: 1,
+                              style: PixelText.pill(
+                                size: 14,
+                                color: colors.textDark,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  top: -5,
+                  right: -5,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 19),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colors.coinLight,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: colors.coinDark, width: 1.5),
+                    ),
+                    child: Text(
+                      '$count',
+                      maxLines: 1,
+                      style: PixelText.title(size: 10, color: colors.roofDark),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      child: Row(
-        children: [
-          _RaceMetricText(label: 'ACTIVE', count: activeCount),
-          _MetricDivider(),
-          _RaceMetricText(label: 'INVITES', count: inviteCount),
-          _MetricDivider(),
-          _RaceMetricText(label: 'PENDING', count: waitingCount),
-        ],
-      ),
-    );
-  }
-}
-
-class _RaceMetricText extends StatelessWidget {
-  const _RaceMetricText({required this.label, required this.count});
-
-  final String label;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$count',
-            style: PixelText.title(
-              size: 18,
-              color: AppColors.of(context).textLight,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PixelText.title(
-                size: 10,
-                color: AppColors.of(context).textLight.withValues(alpha: 0.82),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 18,
-      color: AppColors.of(context).textLight.withValues(alpha: 0.22),
     );
   }
 }
