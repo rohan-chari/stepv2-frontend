@@ -302,6 +302,14 @@ void main() {
       expect(find.text('UNBOXED'), findsOneWidget);
       expect(_rerollButton, findsOneWidget);
       expect(find.text('REROLL · WATCH AD'), findsOneWidget);
+      final button = tester.widget<PillButton>(_rerollButton);
+      expect(button.variant, PillButtonVariant.rewardedAd);
+      expect(
+        button.icon,
+        isNull,
+        reason: 'the video glyph must not lead the copy',
+      );
+      expect(button.trailing, isA<Icon>());
     });
 
     testWidgets('flag off (onReroll null) → no button ever', (tester) async {

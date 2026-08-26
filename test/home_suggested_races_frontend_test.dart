@@ -492,6 +492,15 @@ void main() {
       final dailyX = tester.getTopLeft(find.text('DAILY')).dx;
       final publicX = tester.getTopLeft(find.text('PUBLIC')).dx;
       expect(dailyX, lessThan(publicX));
+      final publicName = find.text('LUNCH BREAK SPRINT');
+      expect(publicName, findsOneWidget);
+      expect(
+        (tester.getTopLeft(find.text('PUBLIC')).dy -
+                tester.getTopLeft(publicName).dy)
+            .abs(),
+        lessThan(10),
+        reason: 'PUBLIC belongs inline with the race name, not in its own row',
+      );
       expect(
         find.byKey(const Key('home-suggestion-FEATURED_RACE-daily')),
         findsOneWidget,

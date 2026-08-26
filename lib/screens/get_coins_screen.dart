@@ -583,7 +583,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
           : 'Earn a random $_coinRewardMin–$_coinRewardMax coins per ad · $_remainingToday of $_dailyCap left today',
       action: PillButton(
         label: label,
-        variant: PillButtonVariant.primary,
+        variant: PillButtonVariant.rewardedAd,
         fullWidth: true,
         onPressed: onPressed,
       ),

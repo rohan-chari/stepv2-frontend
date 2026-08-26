@@ -26,6 +26,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
     required this.onCopyCode,
     required this.onCopyUrl,
     required this.onToggleLeaderboard,
+    required this.onRules,
     required this.leaderboard,
     this.statusNotice,
   });
@@ -38,6 +39,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
   final VoidCallback? onCopyCode;
   final VoidCallback? onCopyUrl;
   final VoidCallback onToggleLeaderboard;
+  final VoidCallback onRules;
   final Widget leaderboard;
   final Widget? statusNotice;
 
@@ -46,6 +48,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final notice = statusNotice;
     return AppRefreshIndicator(
+      key: const Key('contest-trail-scene'),
       onRefresh: onRefresh,
       child: SingleChildScrollView(
         key: const Key('giveaway-content-scroll'),
@@ -56,10 +59,19 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
           children: [
             _ContestSummary(data: data),
             if (notice != null) ...[const SizedBox(height: 15), notice],
+            const SizedBox(height: 14),
+            _TrailLandmarks(
+              shareEnabled: shareEnabled,
+              onLeaders: onToggleLeaderboard,
+              onWhatCounts: () => _showWhatCounts(context),
+            ),
             const SizedBox(height: 18),
             const _SectionTitle(label: 'YOUR STANDING'),
             const SizedBox(height: 11),
-            _StandingCard(data: data),
+            KeyedSubtree(
+              key: const Key('contest-trail-hud'),
+              child: _StandingCard(data: data),
+            ),
             const SizedBox(height: 16),
             _LeaderboardPreview(
               data: data,
@@ -79,7 +91,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _InviteCard(
-              share: data.share,
+              share: shareEnabled ? data.share : null,
               enabled: shareEnabled,
               onShare: onShare,
               onCopyCode: onCopyCode,
@@ -91,6 +103,154 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showWhatCounts(BuildContext context) {
+    final colors = AppColors.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.grassDark,
+      builder: (sheetContext) => SafeArea(
+        child: Semantics(
+          key: const Key('contest-trail-what-counts-drawer'),
+          container: true,
+          label: 'What counts drawer',
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'WHAT COUNTS',
+                  textAlign: TextAlign.center,
+                  style: PixelText.display(size: 18, color: colors.textLight),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'A friend must use your invite and finish a qualifying race with another real player. Positions remain subject to review.',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 13, color: colors.textLight),
+                ),
+                const SizedBox(height: 10),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: colors.textLight,
+                    minimumSize: const Size.fromHeight(44),
+                  ),
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    onRules();
+                  },
+                  child: const Text('OFFICIAL RULES'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrailLandmarks extends StatelessWidget {
+  const _TrailLandmarks({
+    required this.shareEnabled,
+    required this.onLeaders,
+    required this.onWhatCounts,
+  });
+
+  final bool shareEnabled;
+  final VoidCallback onLeaders;
+  final VoidCallback onWhatCounts;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    Widget passive(String key, IconData icon, String label) => Semantics(
+      enabled: false,
+      child: Container(
+        key: Key(key),
+        width: 58,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 21, color: colors.textLight),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: PixelText.title(size: 8, color: colors.textLight),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    Widget action(String key, IconData icon, String label, VoidCallback tap) =>
+        Semantics(
+          button: true,
+          child: InkWell(
+            key: Key(key),
+            onTap: tap,
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 64,
+              height: 52,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 21, color: colors.pillGold),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: PixelText.title(size: 8, color: colors.textLight),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      decoration: BoxDecoration(
+        color: colors.grassDark.withValues(alpha: .44),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.pillGold.withValues(alpha: .52)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          passive('contest-trail-landmark-start', Icons.flag_rounded, 'START'),
+          passive(
+            'contest-trail-landmark-race',
+            Icons.directions_run_rounded,
+            'RACE',
+          ),
+          action(
+            'contest-trail-landmark-leaders',
+            Icons.leaderboard_rounded,
+            'LEADERS',
+            onLeaders,
+          ),
+          action(
+            'contest-trail-landmark-what-counts',
+            Icons.help_outline_rounded,
+            'WHAT COUNTS',
+            onWhatCounts,
+          ),
+          passive('contest-trail-landmark-win', Icons.emoji_events, 'WIN'),
+          if (shareEnabled)
+            const SizedBox(
+              key: Key('contest-trail-landmark-share'),
+              width: 1,
+              height: 1,
+            ),
+        ],
       ),
     );
   }
@@ -203,6 +363,12 @@ class _ContestSummaryState extends State<_ContestSummary> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  data.contest.title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(size: 10, color: colors.textMid),
+                ),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
@@ -213,7 +379,7 @@ class _ContestSummaryState extends State<_ContestSummary> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  formatReferralContestTimeLeft(data.contest),
+                  '${_shortContestDate(data.contest.startsAt)} · ${formatReferralContestTimeLeft(data.contest)}',
                   style: PixelText.body(
                     size: 14,
                     color: colors.textDark,
@@ -227,6 +393,24 @@ class _ContestSummaryState extends State<_ContestSummary> {
         ],
       ),
     );
+  }
+
+  static String _shortContestDate(DateTime date) {
+    const months = <String>[
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
   }
 }
 
@@ -389,6 +573,7 @@ class _StandingCard extends StatelessWidget {
                       spacing: 14,
                       runSpacing: 5,
                       children: [
+                        _ContextLabel(label: '$verified VERIFIED'),
                         if (percentile != null)
                           _ContextLabel(label: 'TOP $percentile%'),
                         _ContextLabel(label: '$pending PENDING REVIEW'),
@@ -751,21 +936,24 @@ class _InviteCard extends StatelessWidget {
                   onCopyUrl: onCopyUrl,
                 ),
                 const SizedBox(height: 10),
-                Semantics(
-                  button: enabled,
-                  label: 'Share your referral contest invite',
-                  child: PillButton(
-                    key: const Key('contest-dashboard-share'),
-                    label: enabled ? 'SHARE YOUR INVITE' : 'SHARING CLOSED',
-                    icon: enabled ? Icons.ios_share_rounded : null,
-                    variant: PillButtonVariant.secondary,
-                    fontSize: 16,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
+                KeyedSubtree(
+                  key: const Key('contest-trail-share'),
+                  child: Semantics(
+                    button: enabled,
+                    label: 'Share your referral contest invite',
+                    child: PillButton(
+                      key: const Key('contest-dashboard-share'),
+                      label: enabled ? 'SHARE YOUR INVITE' : 'SHARING CLOSED',
+                      icon: enabled ? Icons.ios_share_rounded : null,
+                      variant: PillButtonVariant.secondary,
+                      fontSize: 16,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      onPressed: enabled ? onShare : null,
                     ),
-                    onPressed: enabled ? onShare : null,
                   ),
                 ),
               ],

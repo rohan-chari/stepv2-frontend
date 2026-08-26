@@ -42,6 +42,8 @@ class _ShareApi extends BackendApiService {
   final Map<String, dynamic> preview;
   String? joinedWithTeam;
   bool plainJoinCalled = false;
+  int approvalRequestCalls = 0;
+  String? requestedTeam;
 
   @override
   Future<Map<String, dynamic>> fetchSharedRace({
@@ -68,6 +70,23 @@ class _ShareApi extends BackendApiService {
   }) async {
     joinedWithTeam = team;
     return {'raceId': preview['id']};
+  }
+
+  @override
+  Future<Map<String, dynamic>> requestPrivateRaceJoin({
+    required String identityToken,
+    required String token,
+    String? team,
+  }) async {
+    approvalRequestCalls += 1;
+    requestedTeam = team;
+    return {
+      'joinRequest': {
+        'id': 'request-1',
+        'raceId': preview['id'],
+        'status': 'PENDING',
+      },
+    };
   }
 
   @override
@@ -242,5 +261,46 @@ void main() {
     expect(find.text('PICK YOUR SIDE'), findsNothing);
     expect(api.plainJoinCalled, isTrue);
     expect(api.joinedWithTeam, isNull);
+  });
+
+  testWidgets(
+    'strict approvalRequired asks before creating a pending request',
+    (tester) async {
+      final api = _ShareApi(
+        preview: const {
+          'id': 'race-private',
+          'name': 'Private Friends Race',
+          'status': 'PENDING',
+          '_shareApprovalRequired': true,
+        },
+      );
+      await _pumpShell(tester, api);
+
+      expect(find.text('APPROVAL REQUIRED'), findsOneWidget);
+      expect(api.approvalRequestCalls, 0);
+      await tester.tap(find.byKey(const Key('private-share-request-join')));
+      await _settle(tester);
+
+      expect(api.approvalRequestCalls, 1);
+      expect(api.plainJoinCalled, isFalse);
+      expect(find.text('REQUEST PENDING'), findsOneWidget);
+    },
+  );
+
+  testWidgets('approvalRequired false preserves legacy direct join', (
+    tester,
+  ) async {
+    final api = _ShareApi(
+      preview: const {
+        'id': 'race-private',
+        'name': 'Legacy Private Race',
+        'status': 'PENDING',
+        '_shareApprovalRequired': false,
+      },
+    );
+    await _pumpShell(tester, api);
+
+    expect(api.plainJoinCalled, isTrue);
+    expect(api.approvalRequestCalls, 0);
   });
 }

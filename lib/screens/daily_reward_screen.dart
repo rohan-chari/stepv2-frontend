@@ -789,7 +789,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
             // this view is reached from the home button's EXTRA SPIN state.
             PillButton(
               label: _extraSpinCtaLabel,
-              variant: PillButtonVariant.primary,
+              variant: PillButtonVariant.rewardedAd,
               fullWidth: true,
               onPressed: (_adFlowBusy || _adLoading)
                   ? null
@@ -1720,7 +1720,7 @@ class _RewardRevealState extends State<_RewardReveal> {
                 widget.extraSpinLabel != null) ...[
               PillButton(
                 label: widget.extraSpinLabel!,
-                variant: PillButtonVariant.primary,
+                variant: PillButtonVariant.rewardedAd,
                 fullWidth: true,
                 onPressed: widget.onExtraSpin,
               ),

@@ -69,6 +69,7 @@ void main() {
       initializeCalls = 0;
       initializer = RewardedAdSdkInitializer(() async {
         initializeCalls++;
+        return true;
       });
       loader = _FakeLoader();
     });
@@ -111,6 +112,7 @@ void main() {
         initializer = RewardedAdSdkInitializer(() async {
           initializeCalls++;
           await initGate.future;
+          return true;
         });
         final first = service();
         final second = service();
@@ -146,6 +148,7 @@ void main() {
         initializeCalls++;
         attempts++;
         if (attempts == 1) throw StateError('first initialization failed');
+        return true;
       });
       final ads = service();
       final context = RewardedAdContext.getCoins(

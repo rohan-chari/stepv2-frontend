@@ -102,7 +102,7 @@ class _ExtraSpinRewardTicketState extends State<ExtraSpinRewardTicket>
         child: PillButton(
           label: widget.label,
           icon: Icons.replay_rounded,
-          variant: PillButtonVariant.secondary,
+          variant: PillButtonVariant.rewardedAd,
           fullWidth: true,
           onPressed: widget.onPressed,
         ),

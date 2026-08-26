@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import '../styles.dart';
 
-enum PillButtonVariant { primary, secondary, accent, decision, destructive }
+enum PillButtonVariant {
+  primary,
+  secondary,
+  rewardedAd,
+  accent,
+  decision,
+  destructive,
+}
 
 class PillButton extends StatefulWidget {
   final String label;
@@ -73,6 +80,7 @@ class _PillButtonState extends State<PillButton> {
           AppColors.of(context).pillGreenShadow,
         );
       case PillButtonVariant.secondary:
+      case PillButtonVariant.rewardedAd:
         return (
           AppColors.of(context).pillGold,
           AppColors.of(context).pillGoldDark,
@@ -190,6 +198,7 @@ class _PillButtonState extends State<PillButton> {
 
     final bool darkText =
         widget.variant == PillButtonVariant.secondary ||
+        widget.variant == PillButtonVariant.rewardedAd ||
         widget.variant == PillButtonVariant.decision;
     final textColor = _enabled
         ? (darkText ? AppColors.of(context).textDark : Colors.white)

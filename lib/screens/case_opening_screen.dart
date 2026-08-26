@@ -585,8 +585,8 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               PillButton(
                 key: const Key('case-reroll-button'),
                 label: 'REROLL · WATCH AD',
-                icon: Icons.ondemand_video_rounded,
-                variant: PillButtonVariant.primary,
+                trailing: const Icon(Icons.ondemand_video_rounded, size: 15),
+                variant: PillButtonVariant.rewardedAd,
                 fontSize: 13,
                 fullWidth: true,
                 loading: _rerolling,

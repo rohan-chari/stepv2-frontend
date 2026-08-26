@@ -16,7 +16,10 @@ import '../services/ad_service.dart';
 /// loads, so lists never show a gap or stray divider for a missing ad. Part
 /// of the ad layer alongside AdService: no screen touches the ads SDK.
 class AdInlineCard extends StatefulWidget {
-  const AdInlineCard({super.key});
+  const AdInlineCard({super.key, this.sdkInitializer});
+
+  @visibleForTesting
+  final Future<bool> Function()? sdkInitializer;
 
   @override
   State<AdInlineCard> createState() => _AdInlineCardState();
@@ -34,46 +37,72 @@ class _AdInlineCardState extends State<AdInlineCard> {
   Future<void> _load() async {
     final generation = _loadGeneration;
     if (!AdService.nativeAdsEnabled) return;
-    await AdService.ensureInitialized();
-    if (!mounted || generation != _loadGeneration || !AdService.nativeAdsEnabled) {
+    bool initialized;
+    try {
+      initialized =
+          await (widget.sdkInitializer?.call() ??
+              AdService.ensureInitialized());
+    } catch (error) {
+      debugPrint('Ad SDK bootstrap threw: $error');
+      return;
+    }
+    if (!initialized) {
+      return;
+    }
+    if (!mounted ||
+        generation != _loadGeneration ||
+        !AdService.nativeAdsEnabled) {
       return;
     }
 
-    final ad = NativeAd(
-      adUnitId: AdService.nativeAdUnitId,
-      request: const AdRequest(),
-      // Custom layout registered in AppDelegate — replaces the stock
-      // NativeTemplateStyle so the media view can be 120x120 (video-eligible)
-      // and the row blends with the race list.
-      factoryId: 'raceFeedAd',
-      nativeAdOptions: NativeAdOptions(
-        adChoicesPlacement: AdChoicesPlacement.topRightCorner,
-        videoOptions: VideoOptions(startMuted: true),
-      ),
-      listener: NativeAdListener(
-        onAdLoaded: (ad) {
-          if (!mounted || generation != _loadGeneration || !AdService.nativeAdsEnabled) {
+    NativeAd? ad;
+    try {
+      ad = NativeAd(
+        adUnitId: AdService.nativeAdUnitId,
+        request: const AdRequest(),
+        // Custom layout registered in AppDelegate — replaces the stock
+        // NativeTemplateStyle so the media view can be 120x120 (video-eligible)
+        // and the row blends with the race list.
+        factoryId: 'raceFeedAd',
+        nativeAdOptions: NativeAdOptions(
+          adChoicesPlacement: AdChoicesPlacement.topRightCorner,
+          videoOptions: VideoOptions(startMuted: true),
+        ),
+        listener: NativeAdListener(
+          onAdLoaded: (ad) {
+            if (!mounted ||
+                generation != _loadGeneration ||
+                !AdService.nativeAdsEnabled) {
+              ad.dispose();
+              return;
+            }
+            setState(() => _adLoaded = true);
+          },
+          onAdFailedToLoad: (ad, error) {
+            debugPrint('Inline native ad failed to load: $error');
             ad.dispose();
-            return;
-          }
-          setState(() => _adLoaded = true);
-        },
-        onAdFailedToLoad: (ad, error) {
-          // No fill / error: stay collapsed and the list closes up normally.
-          debugPrint('Inline native ad failed to load: $error');
-          ad.dispose();
-          if (generation != _loadGeneration) return;
-          if (mounted) {
-            setState(() {
-              _ad = null;
-              _adLoaded = false;
-            });
-          }
-        },
-      ),
-    );
-    _ad = ad;
-    await ad.load();
+            if (generation != _loadGeneration) return;
+            if (mounted) {
+              setState(() {
+                _ad = null;
+                _adLoaded = false;
+              });
+            }
+          },
+        ),
+      );
+      _ad = ad;
+      await ad.load();
+    } catch (error) {
+      debugPrint('Inline native ad construction/load threw: $error');
+      ad?.dispose();
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _ad = null;
+          _adLoaded = false;
+        });
+      }
+    }
   }
 
   @override
@@ -87,7 +116,7 @@ class _AdInlineCardState extends State<AdInlineCard> {
 
   void _onBannerGateChanged() {
     if (!mounted) return;
-    if (AdService.bannerAdsRuntimeEnabled) {
+    if (AdService.nativeAdsEnabled) {
       _loadGeneration++;
       _load();
     } else {

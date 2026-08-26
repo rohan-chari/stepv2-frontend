@@ -69,6 +69,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   Future<void> refresh() => _refresh();
 
   bool _unclaimed = false;
+  bool _opening = false;
   bool _loaded = false;
   String _lastFetchedDate = '';
   // Rewarded-ad extra spin is live for today (claimed the free box, extra not
@@ -284,6 +285,8 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   }
 
   Future<void> _open() async {
+    if (_opening) return;
+    setState(() => _opening = true);
     final claimed = await Navigator.of(context).push<bool>(
       PageRouteBuilder(
         opaque: false,
@@ -303,6 +306,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
       setState(() => _unclaimed = false);
       widget.onClaimedToday?.call();
     }
+    if (mounted) setState(() => _opening = false);
     // Always re-fetch: a claim just changed today's state (the extra-spin
     // offer appears right after the free claim and disappears once used),
     // and a dismissed sheet may still have consumed the extra spin.
@@ -333,9 +337,9 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
       );
     }
     return _DailyRewardAttention(
-      active: _unclaimed,
+      active: _unclaimed && !_opening,
       child: PillButton(
-        label: 'DAILY REWARD',
+        label: _unclaimed ? 'CLAIM REWARD' : 'DAILY REWARD',
         icon: _unclaimed
             ? Icons.card_giftcard_rounded
             : Icons.check_box_rounded,
@@ -361,11 +365,24 @@ class _DailyRewardAttention extends StatefulWidget {
 }
 
 class _DailyRewardAttentionState extends State<_DailyRewardAttention>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 7),
   );
+  bool _foregrounded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foregrounded = state == AppLifecycleState.resumed;
+    if (mounted) _syncMotion();
+  }
 
   @override
   void didChangeDependencies() {
@@ -381,7 +398,7 @@ class _DailyRewardAttentionState extends State<_DailyRewardAttention>
 
   void _syncMotion() {
     final reduced = MediaQuery.disableAnimationsOf(context);
-    if (!widget.active || reduced) {
+    if (!widget.active || reduced || !_foregrounded) {
       _controller.stop();
       _controller.value = 0;
     } else if (!_controller.isAnimating) {
@@ -391,6 +408,7 @@ class _DailyRewardAttentionState extends State<_DailyRewardAttention>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }

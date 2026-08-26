@@ -271,15 +271,12 @@ void main() {
       races: _races(payout: 600),
     );
 
-    expect(find.text('FLAT +50 COINS'), findsOneWidget);
-    expect(
-      find.text('Watch one ad to earn a flat 50-coin bonus.'),
-      findsOneWidget,
-    );
+    expect(find.text('+50 BONUS COINS'), findsOneWidget);
+    expect(find.text('Watch one ad to earn 50 bonus coins.'), findsOneWidget);
     expect(find.text('WATCH AD · +50 COINS'), findsOneWidget);
     expect(
       tester.widget<Text>(find.text('WATCH AD · +50 COINS')).style?.color,
-      Colors.white,
+      const Color(0xFF213128),
     );
     expect(find.textContaining('DOUBLE'), findsNothing);
     expect(find.textContaining('qualifying race prizes'), findsNothing);
@@ -322,7 +319,7 @@ void main() {
       races: races,
     );
 
-    expect(find.text('FLAT +50 COINS PER RACE'), findsOneWidget);
+    expect(find.text('+50 COINS PER RACE'), findsOneWidget);
     expect(find.text('WATCH AD · +50 COINS PER RACE'), findsOneWidget);
     await tester.tap(find.text('WATCH AD · +50 COINS PER RACE'));
     await tester.pump();
@@ -403,7 +400,7 @@ void main() {
       final actionText = tester.widget<Text>(
         find.text('WATCH AD · +120 COINS'),
       );
-      expect(actionText.style?.color, Colors.white);
+      expect(actionText.style?.color, const Color(0xFF213128));
       expect(
         tester.getTopLeft(find.byKey(const Key('race-payout-double-panel'))).dy,
         lessThan(tester.getTopLeft(find.text('CONTINUE')).dy),

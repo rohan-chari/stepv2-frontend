@@ -20,6 +20,7 @@ class RacePayoutPresentation {
     required this.acceptedCount,
     required this.viewerPlacement,
     required this.isTeamRace,
+    required this.payoutAvailable,
   });
 
   factory RacePayoutPresentation.fromRace(
@@ -38,6 +39,14 @@ class RacePayoutPresentation {
         ? race!['payoutPreset'] as String
         : null;
     final pool = RacePrizePool.fromRace(race);
+    final hasLegacyPot =
+        race?['projectedPotCoins'] is num ||
+        (race?['projectedPotCoins'] is String &&
+            int.tryParse(race?['projectedPotCoins'] as String) != null);
+    final hasLegacyBuyIn =
+        race?['buyInAmount'] is num ||
+        (race?['buyInAmount'] is String &&
+            int.tryParse(race?['buyInAmount'] as String) != null);
     // The details payload's `participants` may be a server-side PAGE
     // (race-details participants pagination), so counting it under-reports the
     // field and prints the wrong "of N" cut line. The additive `acceptedCount`
@@ -76,6 +85,8 @@ class RacePayoutPresentation {
       acceptedCount: accepted,
       viewerPlacement: viewerPlacement,
       isTeamRace: isTeamRace,
+      payoutAvailable:
+          pool != null || hasLegacyPot || hasLegacyBuyIn || tiers.isNotEmpty,
     );
   }
 
@@ -89,6 +100,7 @@ class RacePayoutPresentation {
   final int acceptedCount;
   final int? viewerPlacement;
   final bool isTeamRace;
+  final bool payoutAvailable;
 
   bool get hasFundedPool => pool != null && (pool!.funded || pool!.coins > 0);
   bool get hasPrize => hasFundedPool || buyInAmount > 0;
@@ -213,6 +225,16 @@ class RacePayoutScorecard extends StatelessWidget {
                   tag: p.statusTag,
                 ),
               )
+            else if (p.pool != null)
+              Expanded(
+                child: _Metric(
+                  key: const Key('race-info-prize-pool'),
+                  label: 'PRIZE POOL',
+                  value: formatPrizeCoins(p.prizeCoins),
+                  valueColor: colors.coinDark,
+                  tag: p.statusTag,
+                ),
+              )
             else if (p.buyInAmount > 0) ...[
               Expanded(
                 child: _Metric(
@@ -228,7 +250,23 @@ class RacePayoutScorecard extends StatelessWidget {
                   valueColor: colors.coinDark,
                 ),
               ),
-            ],
+            ] else if (p.payoutAvailable)
+              Expanded(
+                child: _Metric(
+                  key: const Key('race-info-legacy-payout'),
+                  label: 'PRIZE POOL',
+                  value: formatPrizeCoins(p.legacyPotCoins),
+                  valueColor: colors.coinDark,
+                ),
+              )
+            else
+              const Expanded(
+                child: _Metric(
+                  key: Key('race-payout-unavailable'),
+                  label: 'PAYOUT',
+                  value: 'UNAVAILABLE',
+                ),
+              ),
             if (p.hasPrize) ...[
               SizedBox(
                 height: 38,

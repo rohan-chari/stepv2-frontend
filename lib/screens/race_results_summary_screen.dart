@@ -315,9 +315,8 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       if (!earned) {
         setState(() {
           _flowState = _PayoutDoubleFlowState.ready;
-          _message = current!.isFlat50
-              ? 'Finish the ad to earn +${current.bonusCoins} flat bonus coins.'
-              : 'Finish the ad to earn +${current.bonusCoins} bonus coins.';
+          _message =
+              'Finish the ad to earn +${current!.bonusCoins} bonus coins.';
         });
         return;
       }
@@ -441,26 +440,17 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       return;
     }
     final bonus = _offer?.bonusCoins ?? 0;
-    final flat = _offer?.isFlat50 ?? false;
     setState(() {
       _flowState = _PayoutDoubleFlowState.ready;
       if (error.code == 'CLAIMS_DISABLED') {
         _earnedCallbackReceived = true;
-        _message = flat
-            ? 'Flat bonus verification is temporarily unavailable. Try again.'
-            : 'Bonus verification is temporarily unavailable. Try again.';
+        _message = 'Bonus verification is temporarily unavailable. Try again.';
       } else if (error.code == 'AD_NOT_VERIFIED') {
-        _message = flat
-            ? _earnedCallbackReceived
-                  ? 'Still verifying +$bonus flat bonus coins. Try again.'
-                  : 'Finish an ad to earn +$bonus flat bonus coins.'
-            : _earnedCallbackReceived
+        _message = _earnedCallbackReceived
             ? 'Still verifying +$bonus bonus coins. Try again.'
             : 'Finish an ad to earn +$bonus bonus coins.';
       } else {
-        _message = flat
-            ? 'Flat bonus unavailable right now. Your coins are unchanged.'
-            : 'Bonus unavailable right now. Your coins are unchanged.';
+        _message = 'Bonus unavailable right now. Your coins are unchanged.';
       }
     });
   }
@@ -631,13 +621,13 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     if (flat) {
       if (earned) {
         title = '+$bonus COINS EARNED';
-        body = 'Your verified flat bonus is in your coin balance.';
+        body = 'Your verified bonus is in your coin balance.';
       } else {
         final perRace = offer.raceIds.length > 1;
-        title = perRace ? 'FLAT +50 COINS PER RACE' : 'FLAT +50 COINS';
+        title = perRace ? '+50 COINS PER RACE' : '+50 BONUS COINS';
         body = perRace
-            ? 'Watch one ad to earn a flat 50-coin bonus for each race.'
-            : 'Watch one ad to earn a flat 50-coin bonus.';
+            ? 'Watch one ad to earn 50 bonus coins for each race.'
+            : 'Watch one ad to earn 50 bonus coins.';
       }
     } else if (earned) {
       title = qualifyingDiffers
@@ -662,21 +652,13 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final actionSemanticsLabel = switch (_flowState) {
-      _PayoutDoubleFlowState.loading =>
-        flat
-            ? 'Loading ad for $bonus flat bonus coins.'
-            : 'Loading ad for $bonus bonus coins.',
-      _PayoutDoubleFlowState.verifying =>
-        flat
-            ? 'Verifying $bonus flat bonus coins.'
-            : 'Verifying $bonus bonus coins.',
+      _PayoutDoubleFlowState.loading => 'Loading ad for $bonus bonus coins.',
+      _PayoutDoubleFlowState.verifying => 'Verifying $bonus bonus coins.',
       _PayoutDoubleFlowState.ready when _earnedCallbackReceived =>
-        flat
-            ? 'Retry verification for $bonus flat bonus coins.'
-            : 'Retry verification for $bonus bonus coins.',
+        'Retry verification for $bonus bonus coins.',
       _ =>
         flat
-            ? 'Watch an ad to earn $bonus flat bonus coins.'
+            ? 'Watch an ad to earn $bonus bonus coins.'
             : 'Watch an ad to earn $bonus bonus coins on your qualifying race prizes.',
     };
     final announceActionState =
@@ -769,7 +751,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                 // This is the primary action on the results screen. The
                 // gold decision treatment made the label difficult to read
                 // and did not match the app-wide action hierarchy.
-                variant: PillButtonVariant.primary,
+                variant: PillButtonVariant.rewardedAd,
                 fullWidth: true,
                 onPressed: _presentationStarted ? null : _startPayoutDouble,
               ),
@@ -802,7 +784,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       excludeSemantics: earned,
       label: earned
           ? flat
-                ? '+$bonus flat bonus coins awarded.'
+                ? '$bonus bonus coins awarded.'
                 : '$base qualifying race prize coins plus $bonus ad bonus coins awarded.'
           : null,
       child: panel,

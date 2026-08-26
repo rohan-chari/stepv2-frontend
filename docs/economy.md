@@ -66,6 +66,24 @@ math uses the database's tz-naive `steps.date` and
 | Total positive / negative ledger | **+14,807.7 / −6,079.7 per day**; net **+8,728.0** | `DB coin_transactions` (n=9,784 positive and 3,723 negative rows) |
 | Active purchasable powerup / cosmetic minimum | **75 / 250 coins** | `DB powerup_shop_items`, `DB shop_items` (active, non-test-only) |
 
+### 0f. Feature-batch refresh — verified 2026-08-26 (prod, read-only)
+
+Trailing 30 complete calendar days (`2026-07-27` through `2026-08-25`). Date
+math uses the database's tz-naive `steps.date` and
+`coin_transactions.created_at::date`; review accounts are excluded.
+
+| Metric | Value | Source |
+|---|---:|---|
+| Step-active users / user-days | 967 / 8,828 | `DB steps × users` |
+| Per-user mean steps / active day | p10 1,766 · **p50 5,886** · p90 11,408 | `DB steps` (n=967 users) |
+| Recurring positive coins / active day | p10 0 · **p50 10.46** · p90 75.08 · mean 30.59 | `DB steps × coin_transactions` (excludes tutorial, referral, admin/manual, refunds and redistributed buy-in payouts) |
+| Total positive / negative ledger | **+19,520.87 / −7,738.30 per day**; net **+11,782.57** | `DB coin_transactions` (894 retained ledger users) |
+| Daily-reward / funded-race-payout issuance | **1,888.50 / 7,019.17 coins/day** | `DB coin_transactions` |
+| Powerup purchase / upgrade sinks | **−2,990.83 / −3,295.17 coins/day** | `DB coin_transactions` |
+
+The current median makes a 150-coin item **14.3 active days** of recurring
+income (p10 cannot afford it from recurring income; p90 takes 2.0 active days).
+
 ### 0c. Refresh — verified 2026-08-12 (prod, read-only)
 
 | Metric | Value | Source |
@@ -297,6 +315,39 @@ Enum labels are lowercase. Active, non-test-only rows are:
 
 There are six currently purchasable types. This supersedes the 2026-08-13
 snapshot below; the DB remains runtime authority.
+
+### 3.1b Hitchhike availability/value touchpoint — verified 2026-08-26
+
+The authoritative prod row is **150 coins, `active=false`, `test_only=false`**.
+The seed says 150, active, test-only, while its upsert deliberately preserves
+the live admin-tuned availability fields. Lifetime retained-account history is
+one successful 150-coin purchase by one user and one use; current global
+inventory is zero. Sources: `DB powerup_shop_items`,
+`powerup_purchase_requests`, `user_powerup_items`, `race_powerups`; `SEED
+prisma/seed.js`.
+
+Hitchhike copies one target's eligible effective steps 1:1 for 60 minutes; the
+target loses nothing. One link may be active per caster and per target, but
+there is no per-race or per-day purchase/use cap. Positive hourly step buckets
+over the latest 30 complete days were p10 **19**, p50 **240**, p90 **1,404**,
+p99 **4,343**, max **15,487** (n=110,286 user-hours; mean 548). At 150 coins
+those observations correspond to 0.13 / 1.6 / 9.36 / 28.95 / 103.25 copied
+steps per coin before any targeting advantage. Sources: `CODE
+powerups/hitchhikeCopies.js`, `powerups/commands/usePowerup.js`; `DB
+step_samples × users`.
+
+The current daily-spinner implementation builds its powerup pool from the
+active visible shop catalog. Therefore activating Hitchhike also makes it a
+daily-spin prize for `powerups3`-capable clients; the balance-config
+`storeOnlyTypes` list excludes it only from in-race mystery boxes. With the
+current six-item pool (three 75-coin and three 200-coin items), adding the
+150-coin Hitchhike gives it conditional powerup-hit probability **10.81% at
+streak 1** and **6.81% at streak 30** under inverse-price weighting. Its
+unconditional per-free-spin probability is 0.27%→1.53% when accessories
+remain, or 0.54%→3.06% when the powerup pool receives the whole RARE slice.
+Sources: `CODE economy/dailyBoxOdds.js`,
+`powerups/queries/getEligiblePowerupPool.js`; `DB balance_config` v4 and
+`powerup_shop_items`.
 
 ### 3.1 Store catalog — `DB powerup_shop_items`, verified 2026-08-13
 
@@ -855,6 +906,21 @@ falls like `1/√N` for an all-or-nothing batch; per-**ad** gain rises like `√
 
 ---
 
+### 3.8 Pinecone zero-floor touchpoint — verified 2026-08-26
+
+Live balance config v4 makes Pinecone Toss COMMON, with magnitudes
+`[750,1000,1500,2250]` and upgrade costs `[0,5,15,45]`. The latest 30 days
+contain 5,490 Pinecone feed events from 277 casters. The newer immutable impact
+ledger covers 881 recipient impacts: 8 (0.91%) had fewer steps available than
+the nominal penalty, so the durable displayed delta was clipped. Mean nominal
+penalty was 1,041.7 steps and mean applied delta 1,037.0; the floor prevented
+4,129 overkill steps total (516 per clipped cast). Six clipped casts are still
+active and two completed; the two completed recipients received zero payout.
+No current participant has a negative persisted `total_steps`, although 1,304
+rows have a negative diagnostic `bonus_steps`. Sources: `DB balance_config`,
+`race_powerup_events`, `race_impact_events`, `race_participants`; `CODE
+powerups/powerupUpgrades.js`.
+
 ## 4. Race payouts
 
 ### 4.1 App-funded prize pool (current default)
@@ -1133,6 +1199,24 @@ race_participants × races × coin_transactions`; `CODE joinRaceCore.js` stamps
 active public paid joins `HELD` without increasing `potCoins`, whereas the
 invite-accept path commits and increases the pot.
 
+### 4.7 Payout-presence touchpoint — verified 2026-08-26
+
+Six currently active funded team races have payout-rounding version 1 and hit
+the current `buildRaceMoneyView` branch that deliberately returns a null
+pre-settlement prize projection. They contain 42 accepted memberships; their
+already-stamped projected pools total **2,900 coins** (min 80, p50 480, max
+900). Rendering those existing projections changes no settlement or ledger EV.
+Sources: `DB races × race_participants`; `CODE races/racePrizePool.js`.
+
+Separately, 14 active tournament matchup races are intentionally
+`funded_prize=false`, free, and zero-pot because their tournament pays the
+champion rather than each matchup. One other open free non-funded race has only
+one accepted no-show, so the funded formula would currently produce zero.
+These rows are not missing-payout evidence by themselves: a response-level
+payout representation must not silently convert a tournament matchup into a
+second funded race settlement. Source: `DB races × race_participants ×
+tournaments`.
+
 ---
 
 ## 5. Daily spinner (daily reward box) — verified 2026-08-19
@@ -1176,6 +1260,31 @@ it was removed as an authority on 2026-07-28 (`balanceConfig.js:264`,
 `getEligiblePowerupPool.js:8`). The rule is now: **visible in the store ⟺
 winnable from the spin.** Consequently the spinner remains a free source of the
 most expensive active powerups (currently the 200-coin tier).
+
+### 5.1 Unclaimed-reward reminder touchpoint — verified 2026-08-26
+
+Current production sends daily-box reminders at 17:00 and 21:00 local. The
+durable Inbox rows began on 2026-08-24 and currently contain 462 slot-17 and
+467 slot-21 reminders, so there is not yet enough post-launch history for a
+causal conversion estimate. Source: `CODE notifications/dailyRewardReminder.js`;
+`DB inbox_alerts`.
+
+Over the latest 30 complete days, 2,302 free daily claims by 489 retained users
+minted 56,655 coins (**24.61 coins/claim**) plus 101 powerups and 116
+accessories. Local-time claim timing was 1,602 before 17:00, 437 from
+17:00–20:59, and 263 (11.4%) at/after 21:00; the late group minted 5,110 coins.
+Config EV with both prize pools stocked is **17 coins at streak 1** and **34
+coins at streak 30**, before valuing a RARE non-coin prize. Sources: `DB
+daily_reward_claims × users`; `DB balance_config` v4.
+
+At the verification instant, 537 users held 2,170 unopened mystery boxes in
+open races (p50 3, p90 7, max 13). Among reminder-enabled non-review accounts,
+491 had both a currently unclaimed daily reward and at least one unopened race
+box, 38 box-only, 449 daily-only, and 48 neither. Opening an already-minted box
+does not mint coins; the latest 30-day observed downstream rates were 1.97
+coins of upgrade spend and 0.17 coins of discard issuance per box minted
+(50,108 boxes). Sources: `DB users × race_powerups × races ×
+coin_transactions`.
 
 ---
 

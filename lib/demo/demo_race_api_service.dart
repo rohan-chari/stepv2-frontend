@@ -586,6 +586,23 @@ class DemoRaceApiService extends BackendApiService {
   }) async => engine.messages(kind);
 
   @override
+  Future<Map<String, dynamic>> fetchRaceTimeline({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int limit = 30,
+  }) async {
+    final system = engine.messages('SYSTEM')['messages'];
+    final user = engine.messages('USER')['messages'];
+    final messages = <Map<String, dynamic>>[
+      if (system is List)
+        ...system.whereType<Map>().map(Map<String, dynamic>.from),
+      if (user is List) ...user.whereType<Map>().map(Map<String, dynamic>.from),
+    ]..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
+    return {'messages': messages, 'nextCursor': null, 'timelineVersion': 1};
+  }
+
+  @override
   Future<RaceMessageStreamsResult> fetchRaceMessageStreams({
     required String identityToken,
     required String raceId,

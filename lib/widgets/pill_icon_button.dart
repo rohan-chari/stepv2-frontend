@@ -34,6 +34,7 @@ class _PillIconButtonState extends State<PillIconButton> {
           AppColors.of(context).pillGreenShadow,
         );
       case PillButtonVariant.secondary:
+      case PillButtonVariant.rewardedAd:
         return (
           AppColors.of(context).pillGold,
           AppColors.of(context).pillGoldDark,
@@ -63,7 +64,9 @@ class _PillIconButtonState extends State<PillIconButton> {
   @override
   Widget build(BuildContext context) {
     final (face, dark, _) = _colors();
-    final bool darkIcon = widget.variant == PillButtonVariant.secondary;
+    final bool darkIcon =
+        widget.variant == PillButtonVariant.secondary ||
+        widget.variant == PillButtonVariant.rewardedAd;
     final iconColor = _enabled
         ? (darkIcon ? AppColors.of(context).textDark : Colors.white)
         : (darkIcon

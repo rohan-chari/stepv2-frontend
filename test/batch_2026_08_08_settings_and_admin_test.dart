@@ -17,6 +17,7 @@ import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/services/health_service.dart';
 import 'package:step_tracker/services/notification_service.dart';
+import 'package:step_tracker/theme_controller.dart';
 import 'package:step_tracker/widgets/pixel_switch.dart';
 
 class _PrefsApi extends BackendApiService {
@@ -108,22 +109,26 @@ Future<void> _pumpSettings(
   _PrefsApi api, {
   HealthService? healthService,
   ActivationAnalyticsService? activationAnalyticsService,
+  AppThemeController? themeController,
 }) async {
   tester.view.physicalSize = const Size(1170, 2532);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
 
   final auth = await _authService();
+  final settings = SettingsScreen(
+    authService: auth,
+    notificationService: _GrantedNotificationService(),
+    backendApiService: api,
+    healthService: healthService,
+    activationAnalyticsService: activationAnalyticsService,
+    onSettingsChanged: () {},
+  );
   await tester.pumpWidget(
     MaterialApp(
-      home: SettingsScreen(
-        authService: auth,
-        notificationService: _GrantedNotificationService(),
-        backendApiService: api,
-        healthService: healthService,
-        activationAnalyticsService: activationAnalyticsService,
-        onSettingsChanged: () {},
-      ),
+      home: themeController == null
+          ? settings
+          : AppThemeScope(controller: themeController, child: settings),
     ),
   );
   for (var i = 0; i < 5; i++) {
@@ -143,6 +148,49 @@ void main() {
       buildNumber: '1',
       buildSignature: '',
     );
+  });
+
+  testWidgets(
+    'About Us placeholder is immediately followed by donation action',
+    (tester) async {
+      await _pumpSettings(tester, _PrefsApi(prefsPayload: const {}));
+
+      final about = find.byKey(const Key('settings-section-about-us'));
+      final coffee = find.byKey(const Key('settings-buy-us-a-coffee'));
+      expect(about, findsOneWidget);
+      expect(coffee, findsOneWidget);
+      expect(
+        tester.getTopLeft(about).dy,
+        lessThan(tester.getTopLeft(coffee).dy),
+      );
+
+      await tester.ensureVisible(coffee);
+      await tester.tap(coffee);
+      await tester.pump();
+      expect(find.text('Donation link coming soon'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Appearance explains the device-local 8 PM to 7 AM schedule', (
+    tester,
+  ) async {
+    final controller = AppThemeController(
+      preference: AppThemePreference.light,
+      clock: () => DateTime(2026, 8, 26, 12),
+    );
+    addTearDown(controller.dispose);
+    await _pumpSettings(
+      tester,
+      _PrefsApi(prefsPayload: const {}),
+      themeController: controller,
+    );
+
+    expect(
+      find.text('Automatic uses dark mode from 8 PM to 7 AM local time.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Eastern'), findsNothing);
+    expect(find.textContaining('10 PM'), findsNothing);
   });
 
   testWidgets('successful Settings HealthKit connection emits telemetry', (

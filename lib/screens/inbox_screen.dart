@@ -17,6 +17,7 @@ enum InboxDestinationRoute {
   raceDetail,
   tournamentDetail,
   supportThread,
+  raceJoinRequest,
 }
 
 /// Parses only the server's allowlisted Inbox destination shape. This model is
@@ -28,12 +29,14 @@ class InboxDestination {
     this.raceId,
     this.tournamentId,
     this.threadId,
+    this.requestId,
   });
 
   final InboxDestinationRoute route;
   final String? raceId;
   final String? tournamentId;
   final String? threadId;
+  final String? requestId;
 
   static InboxDestination? tryParse(Object? raw) {
     if (raw is! Map) return null;
@@ -73,6 +76,19 @@ class InboxDestination {
             ? InboxDestination._(
                 InboxDestinationRoute.supportThread,
                 threadId: id,
+              )
+            : null;
+      case 'raceJoinRequest':
+        final raceId = raw['raceId'];
+        final requestId = raw['requestId'];
+        return raceId is String &&
+                raceId.isNotEmpty &&
+                requestId is String &&
+                requestId.isNotEmpty
+            ? InboxDestination._(
+                InboxDestinationRoute.raceJoinRequest,
+                raceId: raceId,
+                requestId: requestId,
               )
             : null;
     }
@@ -132,6 +148,9 @@ class _InboxScreenState extends State<InboxScreen>
   bool _readBatchSawAuthoritativeCount = false;
   bool _readAllAttempted = false;
   int? _lastSuccessfulReadAllMutationGeneration;
+  final Map<String, String> _joinRequestStatuses = <String, String>{};
+  final Set<String> _respondingJoinRequests = <String>{};
+  final Map<String, String> _joinRequestErrors = <String, String>{};
 
   @override
   bool get wantKeepAlive => widget.hostMode == InboxHostMode.embedded;
@@ -208,9 +227,10 @@ class _InboxScreenState extends State<InboxScreen>
     }
     final unread = _nonnegativeInt(rawUnreadCount);
     if (unread != null) {
+      final changed = _lastKnownUnreadCount != unread;
       _lastAppliedUnreadFetchGeneration = fetchGeneration;
       _lastKnownUnreadCount = unread;
-      widget.onUnreadCountChanged?.call(unread);
+      if (changed) widget.onUnreadCountChanged?.call(unread);
     }
   }
 
@@ -303,9 +323,7 @@ class _InboxScreenState extends State<InboxScreen>
     if (token == null || token.isEmpty) return;
     final mutationGeneration = ++_unreadMutationGeneration;
     try {
-      final result = await widget.backendApiService.markInboxReadAll(
-        identityToken: token,
-      );
+      await widget.backendApiService.markInboxAlertsRead(identityToken: token);
       if (!mounted ||
           token != widget.authService.authToken ||
           userId != widget.authService.userId ||
@@ -318,20 +336,24 @@ class _InboxScreenState extends State<InboxScreen>
       _unreadMutationGeneration++;
       _lastSuccessfulReadAllMutationGeneration = _unreadMutationGeneration;
       final readAt = DateTime.now().toIso8601String();
+      var markedAlerts = 0;
       for (final row in _rows) {
         if (row['_inboxKind'] == 'alert' && row['readAt'] == null) {
           row['readAt'] = readAt;
-        }
-        if (row['_inboxKind'] == 'support') {
-          if (row.containsKey('unread')) row['unread'] = false;
-          if (row.containsKey('unreadByUser')) {
-            row['unreadByUser'] = false;
-          }
+          markedAlerts++;
         }
       }
-      _lastKnownUnreadCount = result.totalUnreadCount;
-      widget.onUnreadCountChanged?.call(result.totalUnreadCount);
+      final previous = _lastKnownUnreadCount;
+      if (previous != null) {
+        final next = (previous - markedAlerts).clamp(0, previous);
+        _lastKnownUnreadCount = next;
+        widget.onUnreadCountChanged?.call(next);
+      }
       setState(() {});
+      // The alert-read endpoint intentionally does not clear staff replies.
+      // Re-fetch the additive combined count so the shell badge reflects any
+      // unread staff replies that remain on the authoritative backend.
+      await _refreshUnreadCount();
     } catch (_) {
       // A missing endpoint, transport error, or malformed total is a
       // recoverable clear failure. Keep the existing badge and row state.
@@ -389,10 +411,6 @@ class _InboxScreenState extends State<InboxScreen>
         final readAt = DateTime.now().toIso8601String();
         for (final row in incoming) {
           if (row['_inboxKind'] == 'alert') row['readAt'] = readAt;
-          if (row['_inboxKind'] == 'support') {
-            row['unread'] = false;
-            row['unreadByUser'] = false;
-          }
         }
       }
       if (mounted) {
@@ -520,6 +538,60 @@ class _InboxScreenState extends State<InboxScreen>
     _openDestination(alert['destination']);
   }
 
+  Future<void> _respondToJoinRequest(
+    Map<String, dynamic> alert,
+    String action,
+  ) async {
+    final token = widget.authService.authToken;
+    final raceId = alert['raceId'];
+    final requestId = alert['requestId'];
+    if (token == null ||
+        token.isEmpty ||
+        raceId is! String ||
+        raceId.isEmpty ||
+        requestId is! String ||
+        requestId.isEmpty ||
+        _respondingJoinRequests.contains(requestId)) {
+      return;
+    }
+    setState(() {
+      _respondingJoinRequests.add(requestId);
+      _joinRequestErrors.remove(requestId);
+    });
+    try {
+      final payload = await widget.backendApiService
+          .respondToPrivateRaceJoinRequest(
+            identityToken: token,
+            raceId: raceId,
+            requestId: requestId,
+            action: action,
+          );
+      final rawRequest = payload['joinRequest'];
+      final status = rawRequest is Map ? rawRequest['status'] : null;
+      if (!mounted || token != widget.authService.authToken) return;
+      setState(() {
+        _respondingJoinRequests.remove(requestId);
+        _joinRequestStatuses[requestId] = status is String && status.isNotEmpty
+            ? status
+            : action == 'ACCEPT'
+            ? 'ACCEPTED'
+            : 'DECLINED';
+      });
+    } on ApiException catch (error) {
+      if (!mounted || token != widget.authService.authToken) return;
+      setState(() {
+        _respondingJoinRequests.remove(requestId);
+        _joinRequestErrors[requestId] = error.message;
+      });
+    } catch (_) {
+      if (!mounted || token != widget.authService.authToken) return;
+      setState(() {
+        _respondingJoinRequests.remove(requestId);
+        _joinRequestErrors[requestId] = 'Couldn’t update this request.';
+      });
+    }
+  }
+
   void _openDestination(Object? rawDestination) {
     if (!mounted ||
         rawDestination is! Map ||
@@ -568,7 +640,8 @@ class _InboxScreenState extends State<InboxScreen>
           final normalized = _stringKeyedMap(row);
           normalized['_inboxKind'] = kind;
           if (kind == 'support' && normalized['createdAt'] == null) {
-            normalized['createdAt'] = normalized['lastMessageAt'];
+            normalized['createdAt'] =
+                normalized['lastStaffReplyAt'] ?? normalized['lastMessageAt'];
           }
           return normalized;
         })
@@ -577,8 +650,58 @@ class _InboxScreenState extends State<InboxScreen>
             return false;
           }
           if (kind != 'alert') return true;
-          return _visibleAlertTypes.contains(row['type']) &&
-              InboxDestination.tryParse(row['destination']) != null;
+          if (!_visibleAlertTypes.contains(row['type'])) return false;
+          if (row['type'] == 'PRIVATE_RACE_JOIN_APPROVAL') {
+            final rawDestination = row['destination'];
+            if (rawDestination is Map) {
+              final destination = _stringKeyedMap(rawDestination);
+              final parsed = InboxDestination.tryParse(destination);
+              if (parsed?.route != InboxDestinationRoute.raceJoinRequest) {
+                return false;
+              }
+              row['destination'] = destination;
+              row['raceId'] = parsed!.raceId;
+              row['requestId'] = parsed.requestId;
+              return true;
+            }
+            // Mixed-version fallback for the earlier additive flat shape.
+            // It is accepted only when every required identifier is present,
+            // then normalized into the same allowlisted nested destination.
+            final raceId = row['raceId'];
+            final requestId = row['requestId'];
+            if (rawDestination == 'RACE_JOIN_REQUEST' &&
+                raceId is String &&
+                raceId.isNotEmpty &&
+                requestId is String &&
+                requestId.isNotEmpty) {
+              row['destination'] = {
+                'route': 'raceJoinRequest',
+                'raceId': raceId,
+                'requestId': requestId,
+              };
+              return true;
+            }
+            return false;
+          }
+          if (row['type'] == 'PRIVATE_RACE_JOIN_RESULT' &&
+              row['destination'] == 'RACE' &&
+              row['raceId'] is String) {
+            row['destination'] = {
+              'route': 'raceDetail',
+              'raceId': row['raceId'],
+            };
+          }
+          if (row['type'] == 'UNCLAIMED_REWARD') {
+            if (row['destination'] == 'RACE' && row['raceId'] is String) {
+              row['destination'] = {
+                'route': 'raceDetail',
+                'raceId': row['raceId'],
+              };
+            } else if (row['destination'] == 'DAILY_REWARD') {
+              row['destination'] = const {'route': 'dailyReward'};
+            }
+          }
+          return InboxDestination.tryParse(row['destination']) != null;
         })
         .toList();
   }
@@ -605,6 +728,9 @@ class _InboxScreenState extends State<InboxScreen>
     'TOURNAMENT_COMPLETED',
     'TOURNAMENT_CANCELLED',
     'HIGH_MULTIPLIER_ALERT',
+    'PRIVATE_RACE_JOIN_APPROVAL',
+    'PRIVATE_RACE_JOIN_RESULT',
+    'UNCLAIMED_REWARD',
   };
 
   static String _categoryLabel(Object? type) {
@@ -619,8 +745,12 @@ class _InboxScreenState extends State<InboxScreen>
   }
 
   static int _compareRows(Map<String, dynamic> a, Map<String, dynamic> b) {
-    final aDate = DateTime.tryParse('${a['createdAt'] ?? ''}');
-    final bDate = DateTime.tryParse('${b['createdAt'] ?? ''}');
+    final aDate = DateTime.tryParse(
+      '${a['sortAt'] ?? a['lastStaffReplyAt'] ?? a['lastMessageAt'] ?? a['createdAt'] ?? ''}',
+    );
+    final bDate = DateTime.tryParse(
+      '${b['sortAt'] ?? b['lastStaffReplyAt'] ?? b['lastMessageAt'] ?? b['createdAt'] ?? ''}',
+    );
     if (aDate == null && bDate == null) return 0;
     if (aDate == null) return 1;
     if (bDate == null) return -1;
@@ -744,6 +874,22 @@ class _InboxScreenState extends State<InboxScreen>
   Widget _body(BuildContext context) {
     final colors = AppColors.of(context);
     final hasMore = _alertsCursor != null || _threadsCursor != null;
+    final pinned = _rows
+        .where(
+          (row) =>
+              row['_inboxKind'] == 'support' &&
+              row['hasUnreadStaffReply'] == true,
+        )
+        .toList(growable: false);
+    final pinnedIds = pinned.map((row) => row['id']).toSet();
+    final visibleRows = <Map<String, dynamic>>[
+      if (pinned.isNotEmpty) const {'_inboxHeading': 'REPLIES FROM BARA'},
+      ...pinned,
+      ..._rows.where(
+        (row) =>
+            row['_inboxKind'] != 'support' || !pinnedIds.contains(row['id']),
+      ),
+    ];
     return Container(
       key: const ValueKey('inbox-dispatch-board'),
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 18),
@@ -774,11 +920,11 @@ class _InboxScreenState extends State<InboxScreen>
             )
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
-              itemCount: _rows.length + (hasMore ? 1 : 0),
+              itemCount: visibleRows.length + (hasMore ? 1 : 0),
               separatorBuilder: (_, _) =>
                   Divider(height: 1, color: colors.parchmentBorder),
               itemBuilder: (context, index) {
-                if (index == _rows.length) {
+                if (index == visibleRows.length) {
                   return Padding(
                     padding: const EdgeInsets.only(top: 10),
                     child: Center(
@@ -790,7 +936,31 @@ class _InboxScreenState extends State<InboxScreen>
                     ),
                   );
                 }
-                final row = _rows[index];
+                final row = visibleRows[index];
+                final heading = row['_inboxHeading'];
+                if (heading is String) {
+                  return Padding(
+                    key: const Key('inbox-staff-replies-heading'),
+                    padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.mark_email_unread_rounded,
+                          size: 16,
+                          color: colors.coinDark,
+                        ),
+                        const SizedBox(width: 7),
+                        Text(
+                          heading,
+                          style: PixelText.title(
+                            size: 11,
+                            color: colors.coinDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
                 final isSupport = row['_inboxKind'] == 'support';
                 final title = isSupport
                     ? 'BARA SUPPORT'
@@ -814,11 +984,27 @@ class _InboxScreenState extends State<InboxScreen>
                           ? row['unread'] == true
                           : row['readAt'] == null
                     : row['readAt'] == null;
-                final timestamp = _compactTimestamp(row['createdAt']);
+                final timestampRaw = isSupport
+                    ? row['lastStaffReplyAt'] ??
+                          row['lastMessageAt'] ??
+                          row['createdAt']
+                    : row['createdAt'];
+                final timestamp = _compactTimestamp(context, timestampRaw);
+                final fullTimestamp = _fullTimestamp(context, timestampRaw);
+                final isJoinApproval =
+                    row['type'] == 'PRIVATE_RACE_JOIN_APPROVAL';
+                final requestId = row['requestId'] is String
+                    ? row['requestId'] as String
+                    : '';
+                final requestStatus =
+                    _joinRequestStatuses[requestId] ??
+                    (row['status'] is String ? row['status'] as String : null);
+                final responding = _respondingJoinRequests.contains(requestId);
+                final responseError = _joinRequestErrors[requestId];
                 return Semantics(
                   button: true,
                   label:
-                      '$title${timestamp == null ? '' : ', $timestamp'}${unread ? ', unread' : ''}',
+                      '$title${fullTimestamp == null ? '' : ', $fullTimestamp'}${unread ? ', unread' : ''}',
                   child: InkWell(
                     key: ValueKey(
                       'inbox-row-${isSupport ? 'support' : 'alert'}-${row['id']}',
@@ -892,13 +1078,86 @@ class _InboxScreenState extends State<InboxScreen>
                                   const SizedBox(height: 2),
                                   Text(
                                     body,
-                                    maxLines: 1,
+                                    maxLines: isJoinApproval ? 2 : 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: PixelText.body(
                                       size: 11,
                                       color: colors.textMid,
                                     ),
                                   ),
+                                  if (isJoinApproval) ...[
+                                    const SizedBox(height: 8),
+                                    if (requestStatus != null &&
+                                        requestStatus != 'PENDING')
+                                      Text(
+                                        requestStatus,
+                                        key: ValueKey(
+                                          'join-request-status-$requestId',
+                                        ),
+                                        style: PixelText.title(
+                                          size: 11,
+                                          color: requestStatus == 'ACCEPTED'
+                                              ? colors.success
+                                              : colors.textMid,
+                                        ),
+                                      )
+                                    else if (responding)
+                                      Text(
+                                        'UPDATING…',
+                                        style: PixelText.title(
+                                          size: 10,
+                                          color: colors.coinDark,
+                                        ),
+                                      )
+                                    else
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: KeyedSubtree(
+                                              key: ValueKey(
+                                                'join-request-accept-$requestId',
+                                              ),
+                                              child: _InboxActionButton(
+                                                label: 'ACCEPT',
+                                                compact: true,
+                                                onPressed: () =>
+                                                    _respondToJoinRequest(
+                                                      row,
+                                                      'ACCEPT',
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: KeyedSubtree(
+                                              key: ValueKey(
+                                                'join-request-decline-$requestId',
+                                              ),
+                                              child: _InboxActionButton(
+                                                label: 'DECLINE',
+                                                compact: true,
+                                                onPressed: () =>
+                                                    _respondToJoinRequest(
+                                                      row,
+                                                      'DECLINE',
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    if (responseError != null) ...[
+                                      const SizedBox(height: 5),
+                                      Text(
+                                        responseError,
+                                        style: PixelText.body(
+                                          size: 9,
+                                          color: colors.error,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ],
                               ),
                             ),
@@ -936,60 +1195,71 @@ class _InboxScreenState extends State<InboxScreen>
     final type = raw is String ? raw : '';
     if (type.startsWith('FRIEND_REQUEST') ||
         type.startsWith('FRIEND_ACCEPTED')) {
-        return Icons.person_add_alt_1_rounded;
+      return Icons.person_add_alt_1_rounded;
     }
     if (type.startsWith('RACE_') ||
         type.startsWith('TEAM_') ||
         type == 'RACE_COMPLETED') {
-        return Icons.flag_rounded;
+      return Icons.flag_rounded;
     }
     if (type.startsWith('TOURNAMENT') || type == 'TOURNAMENT') {
-        return Icons.emoji_events_rounded;
+      return Icons.emoji_events_rounded;
     }
     if (type.startsWith('REWARD') || type == 'REFERRAL_REWARDED') {
-        return Icons.card_giftcard_rounded;
+      return Icons.card_giftcard_rounded;
     }
     return Icons.notifications_rounded;
   }
 
-  static String? _compactTimestamp(Object? raw) {
+  static DateTime? _timestamp(Object? raw) {
     if (raw is! String) return null;
     final date = DateTime.tryParse(raw);
-    if (date == null) return null;
-    final local = date.toLocal();
+    return date?.toLocal();
+  }
+
+  static String? _compactTimestamp(BuildContext context, Object? raw) {
+    final local = _timestamp(raw);
+    if (local == null) return null;
     final now = DateTime.now();
-    if (local.year == now.year &&
-        local.month == now.month &&
-        local.day == now.day) {
-      final hour = local.hour == 0
-          ? 12
-          : (local.hour > 12 ? local.hour - 12 : local.hour);
-      final minute = local.minute.toString().padLeft(2, '0');
-      return '$hour:$minute ${local.hour >= 12 ? 'PM' : 'AM'}';
+    final age = now.difference(local);
+    if (!age.isNegative && age < const Duration(hours: 24)) {
+      if (age.inMinutes < 1) return 'NOW';
+      if (age.inHours < 1) return '${age.inMinutes}M';
+      return '${age.inHours}H';
     }
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[local.month - 1]} ${local.day}';
+    final localizations = MaterialLocalizations.of(context);
+    final date = local.year == now.year
+        ? localizations.formatShortMonthDay(local)
+        : localizations.formatMediumDate(local);
+    final time = localizations.formatTimeOfDay(
+      TimeOfDay.fromDateTime(local),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return '$date · $time';
+  }
+
+  static String? _fullTimestamp(BuildContext context, Object? raw) {
+    final local = _timestamp(raw);
+    if (local == null) return null;
+    final localizations = MaterialLocalizations.of(context);
+    final time = localizations.formatTimeOfDay(
+      TimeOfDay.fromDateTime(local),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return '${localizations.formatFullDate(local)}, $time';
   }
 }
 
 class _InboxActionButton extends StatelessWidget {
-  const _InboxActionButton({required this.label, required this.onPressed});
+  const _InboxActionButton({
+    required this.label,
+    required this.onPressed,
+    this.compact = false,
+  });
 
   final String label;
   final VoidCallback? onPressed;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1011,8 +1281,14 @@ class _InboxActionButton extends StatelessWidget {
           focusColor: colors.coinLight.withValues(alpha: 0.28),
           highlightColor: colors.accent,
           child: Container(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 112),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            constraints: BoxConstraints(
+              minHeight: compact ? 40 : 48,
+              minWidth: compact ? 0 : 112,
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 6 : 16,
+              vertical: compact ? 7 : 10,
+            ),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(9),

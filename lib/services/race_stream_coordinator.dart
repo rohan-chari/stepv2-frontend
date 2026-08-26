@@ -46,9 +46,20 @@ class RaceStreamCoordinator extends ChangeNotifier {
   bool _initialReadAcknowledged = false;
   bool _chatHasUnread = false;
   final Set<String> _seenWatermarkIds = {};
+  bool _timelineMode = false;
+  final List<RaceChatMessage> _timelineMessages = <RaceChatMessage>[];
+  String? _timelineCursor;
+  bool _timelineLoading = false;
+  Object? _timelineError;
 
   bool get chatHasUnread => _chatHasUnread || (_chat?.hasUnread ?? false);
   bool get legacyMode => _legacy;
+  bool get timelineMode => _timelineMode;
+  List<RaceChatMessage> get timelineMessages =>
+      List.unmodifiable(_timelineMessages);
+  bool get timelineLoading => _timelineLoading;
+  Object? get timelineError => _timelineError;
+  bool get timelineHasMore => _timelineCursor != null;
 
   String? get _token => authService.authToken;
 
@@ -56,6 +67,11 @@ class RaceStreamCoordinator extends ChangeNotifier {
     _live = live;
     _eligible = true;
     _initialPending = true;
+    if (await _initializeTimeline(muted: muted)) {
+      if (_disposed || !_eligible) return;
+      if (live) _startTimer();
+      return;
+    }
     feed.beginCombinedLoad();
     await _refresh(includeUser: false, initial: true, muted: muted);
     if (!_legacy && !_disposed && _eligible) {
@@ -74,6 +90,11 @@ class RaceStreamCoordinator extends ChangeNotifier {
     _chatHasUnread = false;
     final chat = _ensureChat(muted);
     chat.clearUnread();
+    if (_timelineMode) {
+      unawaited(chat.markRead());
+      notifyListeners();
+      return;
+    }
     final token = _token;
     if (_initialPending && token != null && token.isNotEmpty) {
       _acknowledgeInitialRead(token);
@@ -94,6 +115,10 @@ class RaceStreamCoordinator extends ChangeNotifier {
 
   Future<void> refreshNow() async {
     if (!_eligible || _disposed) return;
+    if (_timelineMode) {
+      await _refreshTimeline();
+      return;
+    }
     final existing = _inFlight;
     if (existing != null) {
       _refreshQueued = true;
@@ -121,6 +146,117 @@ class RaceStreamCoordinator extends ChangeNotifier {
   /// Removes active synced snapshots before loading terminal authoritative
   /// impact rows from the same private endpoint.
   Future<void> replacePrivateActivity() => feed.replacePrivateImpactStream();
+
+  Future<bool> _initializeTimeline({required bool muted}) async {
+    final token = _token;
+    if (token == null || token.isEmpty) return false;
+    try {
+      final payload = await api.fetchRaceTimeline(
+        identityToken: token,
+        raceId: raceId,
+      );
+      if (_disposed || !_eligible) return false;
+      if (payload['timelineVersion'] != 1) return false;
+      _timelineMode = true;
+      _ensureChat(muted);
+      _applyTimelinePage(payload, replace: true);
+      _initialPending = false;
+      _acknowledgeInitialRead(token);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      // A network/404/older-server failure keeps the established two-tab path.
+      return false;
+    }
+  }
+
+  void _applyTimelinePage(
+    Map<String, dynamic> payload, {
+    required bool replace,
+  }) {
+    final rawMessages = payload['messages'];
+    if (rawMessages is! List) {
+      _timelineError = const ApiException(
+        'Couldn’t load the timeline. Please try again.',
+      );
+      if (replace) _timelineMessages.clear();
+      _timelineCursor = null;
+      return;
+    }
+    final parsed = rawMessages
+        .map(RaceChatMessage.tryFromJson)
+        .whereType<RaceChatMessage>()
+        .where((message) => message.kind == 'USER' || message.kind == 'SYSTEM')
+        .toList();
+    if (replace) {
+      _timelineMessages
+        ..clear()
+        ..addAll(parsed);
+    } else {
+      final existing = _timelineMessages.map((message) => message.id).toSet();
+      _timelineMessages.addAll(
+        parsed.where((message) => existing.add(message.id)),
+      );
+    }
+    _timelineMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final cursor = payload['nextCursor'];
+    _timelineCursor = cursor is String && cursor.isNotEmpty ? cursor : null;
+    _timelineError = null;
+  }
+
+  Future<void> _refreshTimeline() async {
+    if (_timelineLoading || _disposed || !_eligible) return;
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+    _timelineLoading = true;
+    notifyListeners();
+    try {
+      final payload = await api.fetchRaceTimeline(
+        identityToken: token,
+        raceId: raceId,
+      );
+      if (_disposed || !_eligible) return;
+      if (payload['timelineVersion'] != 1) return;
+      final older = List<RaceChatMessage>.from(_timelineMessages);
+      _applyTimelinePage(payload, replace: true);
+      final ids = _timelineMessages.map((message) => message.id).toSet();
+      _timelineMessages.addAll(older.where((message) => ids.add(message.id)));
+      _timelineMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } catch (error) {
+      if (_timelineMessages.isEmpty) _timelineError = error;
+    } finally {
+      _timelineLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> loadOlderTimeline() async {
+    final cursor = _timelineCursor;
+    final token = _token;
+    if (!_timelineMode ||
+        _timelineLoading ||
+        cursor == null ||
+        token == null ||
+        token.isEmpty) {
+      return;
+    }
+    _timelineLoading = true;
+    notifyListeners();
+    try {
+      final payload = await api.fetchRaceTimeline(
+        identityToken: token,
+        raceId: raceId,
+        cursor: cursor,
+      );
+      if (_disposed || !_eligible || payload['timelineVersion'] != 1) return;
+      _applyTimelinePage(payload, replace: false);
+    } catch (error) {
+      _timelineError = error;
+    } finally {
+      _timelineLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
 
   Future<void> _refresh({
     required bool includeUser,
@@ -333,7 +469,10 @@ class RaceStreamCoordinator extends ChangeNotifier {
     _chatVisible = chatVisible;
     if (chatVisible) _chatHasUnread = false;
     _visibilityGeneration += 1;
-    if (_legacy) {
+    if (_timelineMode) {
+      await _refreshTimeline();
+      if (_live) _startTimer();
+    } else if (_legacy) {
       final chat = _chat;
       await Future.wait([
         feed.refreshTop(),

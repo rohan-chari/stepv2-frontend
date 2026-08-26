@@ -2569,35 +2569,62 @@ class _HomeSuggestionTicket extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment:
+                      suggestion.kind == HomeRaceSuggestionKind.publicRace
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.center,
                   children: [
-                    Pill(
-                      label: suggestion.eyebrow,
-                      background:
-                          suggestion.kind == HomeRaceSuggestionKind.publicRace
-                          ? AppColors.of(context).pillGreen
-                          : AppColors.of(context).pillGold,
-                      foreground:
-                          suggestion.kind == HomeRaceSuggestionKind.publicRace
-                          ? Colors.white
-                          : null,
-                      fontSize: 10.5,
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      suggestion.name.toUpperCase(),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: PixelText.title(
-                        size: 16,
-                        color: AppColors.of(context).textDark,
+                    if (suggestion.kind == HomeRaceSuggestionKind.publicRace)
+                      Row(
+                        key: const Key('home-public-name-line'),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              suggestion.name.toUpperCase(),
+                              textAlign: TextAlign.left,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: PixelText.title(
+                                size: 15,
+                                color: AppColors.of(context).textDark,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Pill(
+                            label: 'PUBLIC',
+                            background: AppColors.of(context).pillGreen,
+                            foreground: Colors.white,
+                            fontSize: 9,
+                          ),
+                        ],
+                      )
+                    else ...[
+                      Pill(
+                        label: suggestion.eyebrow,
+                        background: AppColors.of(context).pillGold,
+                        fontSize: 10.5,
                       ),
-                    ),
+                      const SizedBox(height: 5),
+                      Text(
+                        suggestion.name.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PixelText.title(
+                          size: 16,
+                          color: AppColors.of(context).textDark,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 3),
                     Text(
                       '$_timeLine · $_populationLine',
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          suggestion.kind == HomeRaceSuggestionKind.publicRace
+                          ? TextAlign.left
+                          : TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(

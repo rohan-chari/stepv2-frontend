@@ -179,7 +179,7 @@ void main() {
     );
   });
 
-  testWidgets('Home always calls its reward entry DAILY REWARD', (
+  testWidgets('Home calls an unclaimed reward entry CLAIM REWARD', (
     tester,
   ) async {
     final auth = await _auth();
@@ -195,8 +195,7 @@ void main() {
       ),
     );
 
-    expect(find.text('DAILY REWARD'), findsOneWidget);
-    expect(find.text('CLAIM'), findsNothing);
+    expect(find.text('CLAIM REWARD'), findsOneWidget);
   });
 
   testWidgets('an unavailable extra ad remains actionable as retry', (

@@ -411,7 +411,7 @@ class _RacePodiumState extends State<RacePodium>
   }
 
   static String _formatSteps(int steps) {
-    final s = steps.toString();
+    final s = (steps < 0 ? 0 : steps).toString();
     final buffer = StringBuffer();
     for (var i = 0; i < s.length; i++) {
       if (i > 0 && (s.length - i) % 3 == 0) buffer.write(',');

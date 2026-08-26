@@ -211,23 +211,89 @@ typedef RewardedAdLoader =
 class RewardedAdSdkInitializer {
   RewardedAdSdkInitializer(this._initialize);
 
-  final Future<void> Function() _initialize;
-  Future<void>? _inFlight;
+  final Future<bool> Function() _initialize;
+  Future<bool>? _inFlight;
   bool _initialized = false;
 
-  Future<void> ensureInitialized() {
-    if (_initialized) return Future.value();
+  Future<bool> ensureInitialized() {
+    if (_initialized) return Future.value(true);
     final existing = _inFlight;
     if (existing != null) return existing;
 
-    late final Future<void> flight;
-    flight = Future<void>.sync(_initialize)
-        .then((_) => _initialized = true)
+    late final Future<bool> flight;
+    flight = Future<bool>.sync(_initialize)
+        .then((initialized) {
+          if (initialized) _initialized = true;
+          return initialized;
+        })
         .whenComplete(() {
           if (identical(_inFlight, flight)) _inFlight = null;
         });
     _inFlight = flight;
     return flight;
+  }
+}
+
+/// Independently guarded SDK bootstrap seams. Privacy/configuration failures
+/// must never prevent the app shell or later independent steps from loading.
+/// Mobile Ads itself is the terminal capability check: its failure returns
+/// false so no caller constructs SDK ad objects or exposes an unusable CTA.
+@visibleForTesting
+class AdSdkInitializationSteps {
+  const AdSdkInitializationSteps({
+    required this.isIos,
+    required this.resolveTrackingAuthorization,
+    required this.setMetaTrackingEnabled,
+    required this.setUnityGdprConsent,
+    required this.setUnityCcpaConsent,
+    required this.updateRequestConfiguration,
+    required this.initializeMobileAds,
+  });
+
+  final bool isIos;
+  final Future<bool> Function() resolveTrackingAuthorization;
+  final Future<void> Function(bool enabled) setMetaTrackingEnabled;
+  final Future<void> Function() setUnityGdprConsent;
+  final Future<void> Function() setUnityCcpaConsent;
+  final Future<void> Function() updateRequestConfiguration;
+  final Future<void> Function() initializeMobileAds;
+
+  Future<bool> run() async {
+    var trackingAuthorized = false;
+    if (isIos) {
+      try {
+        trackingAuthorized = await resolveTrackingAuthorization();
+      } catch (error) {
+        debugPrint('ATT initialization failed: $error');
+      }
+      try {
+        await setMetaTrackingEnabled(trackingAuthorized);
+      } catch (error) {
+        debugPrint('Meta privacy initialization failed: $error');
+      }
+    }
+    try {
+      await setUnityGdprConsent();
+    } catch (error) {
+      debugPrint('Unity GDPR initialization failed: $error');
+    }
+    try {
+      await setUnityCcpaConsent();
+    } catch (error) {
+      debugPrint('Unity CCPA initialization failed: $error');
+    }
+    try {
+      await updateRequestConfiguration();
+    } catch (error) {
+      debugPrint('Ad request configuration failed: $error');
+    }
+    try {
+      await initializeMobileAds();
+      return true;
+    } catch (error) {
+      debugPrint('Mobile Ads initialization failed: $error');
+      return false;
+    }
   }
 }
 
@@ -392,6 +458,7 @@ class AdService
 
   static final ValueNotifier<bool> _bannerAdsEnabledNotifier =
       ValueNotifier<bool>(true);
+  static bool _sdkOperational = true;
   static bool? _testStandardBannerUnitAvailable;
   static bool? _testBoxTopBannerUnitAvailable;
   static bool? _testNativeUnitAvailable;
@@ -509,15 +576,22 @@ class AdService
   /// (and web) show nothing at all. When off, [AdBannerSlot] collapses to zero
   /// size.
   static bool get bannersEnabled =>
-      bannerAdsRuntimeEnabled && !kIsWeb && _platformBannerUnitId.isNotEmpty;
+      _sdkOperational &&
+      bannerAdsRuntimeEnabled &&
+      !kIsWeb &&
+      _platformBannerUnitId.isNotEmpty;
 
   static bool get boxTopBannerEnabled =>
+      _sdkOperational &&
       bannerAdsRuntimeEnabled &&
       !kIsWeb &&
       _platformBoxTopBannerUnitId.isNotEmpty;
 
   static bool get nativeAdsEnabled =>
-      bannerAdsRuntimeEnabled && !kIsWeb && _platformNativeUnitId.isNotEmpty;
+      _sdkOperational &&
+      bannerAdsRuntimeEnabled &&
+      !kIsWeb &&
+      _platformNativeUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner for this platform (only reached in
@@ -556,54 +630,47 @@ class AdService
   static final RewardedAdSdkInitializer _productionSdkInitializer =
       RewardedAdSdkInitializer(_initializeProductionSdk);
 
-  static Future<void> ensureInitialized() =>
-      _productionSdkInitializer.ensureInitialized();
+  static Future<bool> ensureInitialized() async {
+    if (!_sdkOperational) return false;
+    final initialized = await _productionSdkInitializer.ensureInitialized();
+    if (!initialized && _sdkOperational) {
+      _sdkOperational = false;
+      // Every banner/native surface listens to this gate and disposes or
+      // collapses immediately when SDK bootstrap is unavailable.
+      _bannerAdsEnabledNotifier.value = false;
+    }
+    return initialized;
+  }
 
-  static Future<void> _initializeProductionSdk() async {
-    // ATT first (iOS): with tracking denied the SDK serves non-personalized
-    // ads, which is fine — the reward/banner flows are identical.
-    if (!kIsWeb && Platform.isIOS) {
-      try {
+  static Future<bool> _initializeProductionSdk() async {
+    final unityPrivacy = UnityPrivacyApi();
+    return AdSdkInitializationSteps(
+      isIos: !kIsWeb && Platform.isIOS,
+      resolveTrackingAuthorization: () async {
         var status = await AppTrackingTransparency.trackingAuthorizationStatus;
         if (status == TrackingStatus.notDetermined) {
           status = await AppTrackingTransparency.requestTrackingAuthorization();
         }
-        // Meta Audience Network requires this explicit flag before AdMob
-        // initializes. Never infer consent: only ATT "authorized" maps to true.
-        await _metaAdsChannel.invokeMethod<void>(
-          'setAdvertiserTrackingEnabled',
-          status == TrackingStatus.authorized,
+        return status == TrackingStatus.authorized;
+      },
+      setMetaTrackingEnabled: (enabled) => _metaAdsChannel.invokeMethod<void>(
+        'setAdvertiserTrackingEnabled',
+        enabled,
+      ),
+      setUnityGdprConsent: () => unityPrivacy.setGDPRConsent(false),
+      setUnityCcpaConsent: () => unityPrivacy.setCCPAConsent(false),
+      updateRequestConfiguration: () async {
+        if (!kDebugMode) return;
+        await MobileAds.instance.updateRequestConfiguration(
+          RequestConfiguration(
+            testDeviceIds: ['9e7526f59bde4aeb8cdc4910cf702487'],
+          ),
         );
-      } catch (_) {
-        // ATT or the optional Meta bridge is unavailable — proceed without
-        // personalized tracking rather than blocking every ad source.
-      }
-    }
-    // This app currently has no UMP/consent-provider integration. Explicitly
-    // pass the conservative no-consent values before any mediated request;
-    // ATT authorization is not GDPR/US-state consent and must not be reused
-    // for it. A future consent flow can replace these values at this single
-    // mediation boundary before SDK initialization.
-    // Use the generated API directly because the package's convenience
-    // wrapper does not await its platform-channel calls in 1.9.0.
-    final unityPrivacy = UnityPrivacyApi();
-    await unityPrivacy.setGDPRConsent(false);
-    await unityPrivacy.setCCPAConsent(false);
-    // Debug builds only: mark our own devices as AdMob test devices so we can
-    // watch the REAL ad units without generating invalid traffic (impressions/
-    // clicks Google would otherwise penalize). The value is the hashed
-    // identifier the SDK prints to the console ("testDeviceIdentifiers = …"),
-    // NOT the raw IDFA. Stripped from release builds by kDebugMode, so real
-    // users are never flagged as test — for release/TestFlight testing,
-    // register the device's IDFA in the AdMob console instead.
-    if (kDebugMode) {
-      await MobileAds.instance.updateRequestConfiguration(
-        RequestConfiguration(
-          testDeviceIds: ['9e7526f59bde4aeb8cdc4910cf702487'], // Rohan iPhone
-        ),
-      );
-    }
-    await MobileAds.instance.initialize();
+      },
+      initializeMobileAds: () async {
+        await MobileAds.instance.initialize();
+      },
+    ).run();
   }
 
   final String? _adUnitIdOverride;
@@ -631,6 +698,7 @@ class AdService
   Future<void>? _loadLoop;
   int _generation = 0;
   bool _disposed = false;
+  bool _sdkAvailable = true;
 
   String get _adUnitId {
     final override = _adUnitIdOverride;
@@ -643,7 +711,7 @@ class AdService
     final platformSupported =
         _supportedOverride ??
         (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
-    if (!platformSupported) return false;
+    if (!platformSupported || !_sdkAvailable) return false;
     return !_requireConfiguredAdUnit || _adUnitId.isNotEmpty;
   }
 
@@ -735,7 +803,14 @@ class AdService
   Future<void> _loadOne(RewardedAdContext context, int generation) async {
     if (isReadyFor(context)) return;
     try {
-      await _sdkInitializer.ensureInitialized().timeout(_loadTimeout);
+      final initialized = await _sdkInitializer.ensureInitialized().timeout(
+        _loadTimeout,
+      );
+      if (!initialized) {
+        _sdkAvailable = false;
+        _disposeReadyAd();
+        return;
+      }
       if (!_accepts(context, generation)) return;
 
       final loadFuture = _rewardedAdLoader(

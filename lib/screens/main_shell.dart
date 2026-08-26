@@ -973,13 +973,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         );
       } catch (_) {}
 
+      final approvalRequired = preview?['_shareApprovalRequired'] == true;
+      if (approvalRequired) {
+        if (!mounted) return;
+        final confirmed = await _confirmPrivateJoinRequest(preview);
+        if (confirmed != true) return;
+      }
+
       String? team;
       if (preview != null && TeamRace.isTeamRace(preview)) {
-        final status = preview['status'] as String?;
+        final status = preview['status'] is String
+            ? preview['status'] as String
+            : null;
         if (status != null && status != 'PENDING') {
           // TR-204: locked at start — land them on the race with a friendly
           // note instead of a failed join.
-          raceId = preview['id'] as String?;
+          raceId = preview['id'] is String ? preview['id'] as String : null;
           errorMessage = raceId == null
               ? teamRaceErrorCopy('RACE_ALREADY_STARTED')
               : null;
@@ -993,27 +1002,46 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (team == null) {
           // Dismissed the side picker: leave them where they are. The token is
           // still consumed below so the drain can't loop.
-          raceId = preview['id'] as String?;
+          raceId = preview['id'] is String ? preview['id'] as String : null;
           return;
         }
       }
 
-      final result = team != null
-          ? await _backendApiService.joinRaceByShareTokenOnTeam(
-              identityToken: identityToken,
-              token: token,
-              team: team,
-              onboarding: true,
-            )
-          : await _backendApiService.joinRaceByShareToken(
-              identityToken: identityToken,
-              token: token,
-              // Server-gated one-time welcome boxes: a fresh share-link user
-              // gets them; anyone already in the ledger is a no-op. See
-              // joinRaceCore.
-              onboarding: true,
-            );
-      raceId = result['raceId'] as String?;
+      if (approvalRequired) {
+        final result = await _backendApiService.requestPrivateRaceJoin(
+          identityToken: identityToken,
+          token: token,
+          team: team,
+        );
+        final rawRequest = result['joinRequest'];
+        final request = rawRequest is Map
+            ? Map<String, dynamic>.from(rawRequest)
+            : const <String, dynamic>{};
+        final status = request['status'];
+        final resultRaceId = request['raceId'];
+        if (status == 'ACCEPTED' && resultRaceId is String) {
+          raceId = resultRaceId;
+        } else if (mounted) {
+          await _showPrivateJoinPending();
+        }
+      } else {
+        final result = team != null
+            ? await _backendApiService.joinRaceByShareTokenOnTeam(
+                identityToken: identityToken,
+                token: token,
+                team: team,
+                onboarding: true,
+              )
+            : await _backendApiService.joinRaceByShareToken(
+                identityToken: identityToken,
+                token: token,
+                // Server-gated one-time welcome boxes: a fresh share-link user
+                // gets them; anyone already in the ledger is a no-op. See
+                // joinRaceCore.
+                onboarding: true,
+              );
+        raceId = result['raceId'] is String ? result['raceId'] as String : null;
+      }
     } on ApiException catch (e) {
       if (e.code == kFundedExposureLimitCode) {
         errorMessage = fundedExposureErrorCopy(e);
@@ -1025,7 +1053,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             token: token,
             identityToken: identityToken,
           );
-          raceId = preview['id'] as String?;
+          final previewRaceId = preview['id'];
+          raceId = previewRaceId is String ? previewRaceId : null;
         } catch (_) {}
         if (raceId == null) errorMessage = e.message;
       }
@@ -1045,6 +1074,124 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       showErrorToast(context, errorMessage);
     }
   }
+
+  Future<bool?> _confirmPrivateJoinRequest(Map<String, dynamic>? preview) {
+    final rawName = preview?['name'];
+    final raceName = rawName is String && rawName.trim().isNotEmpty
+        ? rawName.trim()
+        : 'this private race';
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: GameContainer(
+          padding: const EdgeInsets.all(20),
+          frameColor: AppColors.of(dialogContext).coinDark,
+          surfaceColor: AppColors.of(dialogContext).parchmentLight,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_person_rounded,
+                size: 34,
+                color: AppColors.of(dialogContext).accent,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'APPROVAL REQUIRED',
+                textAlign: TextAlign.center,
+                style: HomeText.display(
+                  size: 22,
+                  color: AppColors.of(dialogContext).ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Request to join “$raceName”? The race creator must approve you before you’re added.',
+                textAlign: TextAlign.center,
+                style: HomeText.body(
+                  size: 14,
+                  color: AppColors.of(dialogContext).muted,
+                  weight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: PillButton(
+                      label: 'NOT NOW',
+                      variant: PillButtonVariant.secondary,
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: PillButton(
+                      key: const Key('private-share-request-join'),
+                      label: 'JOIN',
+                      icon: Icons.outgoing_mail,
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPrivateJoinPending() => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: GameContainer(
+        padding: const EdgeInsets.all(20),
+        frameColor: AppColors.of(dialogContext).coinDark,
+        surfaceColor: AppColors.of(dialogContext).parchmentLight,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.hourglass_top_rounded,
+              size: 34,
+              color: AppColors.of(dialogContext).accent,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'REQUEST PENDING',
+              style: HomeText.display(
+                size: 22,
+                color: AppColors.of(dialogContext).ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your request was sent. The race creator needs to approve it.',
+              textAlign: TextAlign.center,
+              style: HomeText.body(
+                size: 14,
+                color: AppColors.of(dialogContext).muted,
+                weight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: PillButton(
+                label: 'GOT IT',
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   /// The tournament analog of [_maybeDrainPendingSharedRace] — joins the bracket
   /// behind a `/t/<token>` share link (captured by [DeepLinkService]) once past
@@ -3380,6 +3527,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             ),
           ),
         );
+      case InboxDestinationRoute.raceJoinRequest:
+        // Creator approval actions are completed inline in Inbox. This route
+        // is allowlisted for parsing, but deliberately has no second screen.
+        return;
     }
   }
 

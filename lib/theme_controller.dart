@@ -7,9 +7,9 @@ enum AppThemePreference { automatic, light, dark }
 
 typedef AppClock = DateTime Function();
 
-/// Owns the user's appearance preference and the fixed 10 PM–7 AM US-Eastern
-/// schedule (the same real-world moment for every user, whatever their device
-/// time zone says).
+/// Owns the user's appearance preference and the local 8 PM–7 AM schedule.
+/// Automatic mode follows the device timezone and is recalculated on resume,
+/// which also catches timezone changes while the app was backgrounded.
 /// This is deliberately device-only: theme selection never depends on the API.
 class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   AppThemeController({
@@ -23,7 +23,7 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   static const preferenceKey = 'app_theme_preference';
-  static const nightStartHour = 22;
+  static const nightStartHour = 20;
   static const dayStartHour = 7;
 
   final AppClock _clock;
@@ -75,35 +75,28 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   static ThemeMode resolve(AppThemePreference preference, DateTime now) {
+    final localHour = now.toLocal().hour;
     return switch (preference) {
       AppThemePreference.light => ThemeMode.light,
       AppThemePreference.dark => ThemeMode.dark,
       AppThemePreference.automatic =>
-        easternHour(now) >= nightStartHour || easternHour(now) < dayStartHour
+        localHour >= nightStartHour || localHour < dayStartHour
             ? ThemeMode.dark
             : ThemeMode.light,
     };
   }
 
-  /// The next 07:00 / 22:00 Eastern flip strictly after [instant], as UTC.
+  /// The next local 07:00 / 20:00 flip strictly after [instant].
   @visibleForTesting
   static DateTime nextBoundaryUtc(DateTime instant) {
-    final nowUtc = instant.toUtc();
-    final easternNow = nowUtc.add(easternOffset(nowUtc));
-
-    // Build an Eastern wall-clock time (carried in a UTC DateTime so the host
-    // zone can never leak in) and convert it back to a real UTC instant using
-    // the offset in force *at that candidate instant* — the candidate can sit
-    // on the far side of a DST transition from `now`.
+    final localNow = instant.toLocal();
     DateTime candidate(int dayOffset, int hour) {
-      final wall = DateTime.utc(
-        easternNow.year,
-        easternNow.month,
-        easternNow.day + dayOffset,
+      return DateTime(
+        localNow.year,
+        localNow.month,
+        localNow.day + dayOffset,
         hour,
       );
-      final firstGuess = wall.subtract(easternOffset(nowUtc));
-      return wall.subtract(easternOffset(firstGuess));
     }
 
     final candidates = <DateTime>[
@@ -113,7 +106,7 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
       candidate(1, nightStartHour),
     ]..sort();
     return candidates.firstWhere(
-      (value) => value.isAfter(nowUtc),
+      (value) => value.isAfter(localNow),
       orElse: () => candidates.last,
     );
   }
@@ -143,7 +136,7 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   void _scheduleBoundary() {
     _boundaryTimer?.cancel();
     if (_preference != AppThemePreference.automatic) return;
-    final now = _clock().toUtc();
+    final now = _clock().toLocal();
     final next = nextBoundaryUtc(now);
     _boundaryTimer = Timer(next.difference(now), _recalculate);
   }

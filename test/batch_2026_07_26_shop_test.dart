@@ -116,7 +116,9 @@ Future<void> _pump(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final auth = await _auth(coins: coins);
   await tester.pumpWidget(
-    MaterialApp(home: ShopTab(authService: auth, backendApiService: api)),
+    MaterialApp(
+      home: ShopTab(authService: auth, backendApiService: api),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -131,6 +133,54 @@ Future<void> _openFilterSortSheet(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => PowerupCopy.resetForTest());
+
+  group('live Bara preview', () {
+    testWidgets('renders above the catalog and previews a tapped cosmetic', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _FakeShopApi(
+          powerupCatalog: _powerupCatalog(),
+          cosmetics: const [
+            {
+              'id': 'item-corgi',
+              'sku': 'COS_CORGI',
+              'name': 'Corgi Puppy',
+              'slot': 'CHARACTER',
+              'assetKey': 'corgi_puppy',
+              'owned': false,
+              'equipped': false,
+              'priceCoins': 300,
+              'description': 'Zoom',
+            },
+          ],
+        ),
+      );
+
+      final preview = find.byKey(const Key('shop-character-preview'));
+      expect(preview, findsOneWidget);
+      await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+        find.text('Corgi Puppy'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        tester.getTopLeft(preview).dy,
+        lessThan(tester.getTopLeft(find.text('Corgi Puppy')).dy),
+      );
+      await tester.tap(find.text('Corgi Puppy'));
+      await tester.pump();
+
+      expect(find.text('Previewing Corgi Puppy'), findsOneWidget);
+      expect(
+        find.byKey(const Key('shop-preview-corgi_puppy-')),
+        findsOneWidget,
+      );
+    });
+  });
 
   group('item 1 — one dropdown replaces the filter pills and the sort pill', () {
     testWidgets('the collapsed control shows the active filter and sort', (
@@ -363,10 +413,7 @@ void main() {
       // A never-completing catalog keeps the skeleton on screen.
       await tester.pumpWidget(
         MaterialApp(
-          home: ShopTab(
-            authService: auth,
-            backendApiService: _StalledApi(),
-          ),
+          home: ShopTab(authService: auth, backendApiService: _StalledApi()),
         ),
       );
       await tester.pump();

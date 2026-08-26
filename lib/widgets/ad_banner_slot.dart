@@ -23,23 +23,28 @@ enum AdBannerPlacement { standard, boxTop }
 /// Spacing paired with a banner slot; it follows the same runtime gate so a
 /// remote disable never leaves a dead strip in the host screen.
 class AdBannerSpacing extends StatelessWidget {
-  const AdBannerSpacing({super.key, this.height = 12, this.placement = AdBannerPlacement.standard});
+  const AdBannerSpacing({
+    super.key,
+    this.height = 12,
+    this.placement = AdBannerPlacement.standard,
+  });
 
   final double height;
   final AdBannerPlacement placement;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-        valueListenable: AdService.bannerAdsEnabledListenable,
-        builder: (context, enabled, child) => SizedBox(
-          height: enabled &&
-                  (placement == AdBannerPlacement.boxTop
-                      ? AdService.boxTopBannerEnabled
-                      : AdService.bannersEnabled)
-              ? height
-              : 0,
-        ),
-      );
+    valueListenable: AdService.bannerAdsEnabledListenable,
+    builder: (context, enabled, child) => SizedBox(
+      height:
+          enabled &&
+              (placement == AdBannerPlacement.boxTop
+                  ? AdService.boxTopBannerEnabled
+                  : AdService.bannersEnabled)
+          ? height
+          : 0,
+    ),
+  );
 }
 
 /// Compact banner ad for the bottom of low-stakes screens. Renders NOTHING —
@@ -56,6 +61,7 @@ class AdBannerSlot extends StatefulWidget {
     this.placement = AdBannerPlacement.standard,
     this.reserveSpaceWhileLoading = false,
     this.hidden = false,
+    this.sdkInitializer,
   });
 
   /// For hosts whose SafeArea excludes the bottom (race detail): pad the
@@ -79,6 +85,11 @@ class AdBannerSlot extends StatefulWidget {
   /// the BannerAd, so every return trip costs a brand-new ad request. Nothing
   /// is requested until the slot is first un-hidden.
   final bool hidden;
+
+  /// Test seam for exercising both platform bootstrap paths without creating
+  /// a native SDK object. Production always uses [AdService.ensureInitialized].
+  @visibleForTesting
+  final Future<bool> Function()? sdkInitializer;
 
   @override
   State<AdBannerSlot> createState() => _AdBannerSlotState();
@@ -108,7 +119,10 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
 
   void _onBannerGateChanged() {
     if (!mounted) return;
-    if (!AdService.bannerAdsRuntimeEnabled) {
+    final enabled = widget.placement == AdBannerPlacement.boxTop
+        ? AdService.boxTopBannerEnabled
+        : AdService.bannersEnabled;
+    if (!enabled) {
       _loadGeneration++;
       _retryTimer?.cancel();
       _retryTimer = null;
@@ -152,54 +166,80 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
         ? AdService.boxTopBannerEnabled
         : AdService.bannersEnabled;
     if (!enabled) return;
-    await AdService.ensureInitialized();
-    if (!mounted || generation != _loadGeneration || !enabled) return;
+    bool initialized;
+    try {
+      initialized =
+          await (widget.sdkInitializer?.call() ??
+              AdService.ensureInitialized());
+    } catch (error) {
+      debugPrint('Ad SDK bootstrap threw: $error');
+      return;
+    }
+    if (!initialized) {
+      return;
+    }
+    if (!mounted ||
+        generation != _loadGeneration ||
+        !enabled ||
+        !(widget.placement == AdBannerPlacement.boxTop
+            ? AdService.boxTopBannerEnabled
+            : AdService.bannersEnabled)) {
+      return;
+    }
     // Use the standard 320x50 banner format shared by Google demand and our
     // mediation providers. In particular, Meta Audience Network rejects
     // anchored/inline adaptive sizes, while arbitrary screen-width AdSize
     // values are not standard Google banner inventory. AdSize.banner keeps a
     // single request eligible across Google, Meta, and AppLovin.
     const size = AdSize.banner;
-    final ad = BannerAd(
-      adUnitId: widget.placement == AdBannerPlacement.boxTop
-          ? AdService.boxTopBannerAdUnitId
-          : AdService.bannerAdUnitId,
-      size: size,
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (_) {
-          if (mounted && generation == _loadGeneration && enabled) {
-            setState(() {
-              _loaded = true;
-              _retries = 0;
-            });
-          }
-        },
-        onAdFailedToLoad: (ad, error) {
-          // No fill / error: stay collapsed. Common while the AdMob app is
-          // new or unverified; the screen simply has no banner.
-          debugPrint('Banner ad failed to load: $error');
-          ad.dispose();
-          if (generation != _loadGeneration) return;
-          if (mounted) {
-            setState(() {
-              _ad = null;
-              _loaded = false;
-            });
-            // No-fill is often transient. Retry conservatively instead of
-            // leaving this placement empty for the widget's entire lifetime —
-            // but give up after _maxRetries so we stop burning requests on a
-            // placement that simply has no demand right now.
-            if (_retries < _maxRetries) {
-              _retryTimer = Timer(_retryBaseDelay * (1 << _retries), _load);
-              _retries++;
+    BannerAd? ad;
+    try {
+      ad = BannerAd(
+        adUnitId: widget.placement == AdBannerPlacement.boxTop
+            ? AdService.boxTopBannerAdUnitId
+            : AdService.bannerAdUnitId,
+        size: size,
+        request: const AdRequest(),
+        listener: BannerAdListener(
+          onAdLoaded: (_) {
+            if (mounted && generation == _loadGeneration && enabled) {
+              setState(() {
+                _loaded = true;
+                _retries = 0;
+              });
             }
-          }
-        },
-      ),
-    );
-    _ad = ad;
-    await ad.load();
+          },
+          onAdFailedToLoad: (ad, error) {
+            // No fill / error: stay collapsed. Common while the AdMob app is
+            // new or unverified; the screen simply has no banner.
+            debugPrint('Banner ad failed to load: $error');
+            ad.dispose();
+            if (generation != _loadGeneration) return;
+            if (mounted) {
+              setState(() {
+                _ad = null;
+                _loaded = false;
+              });
+              if (_retries < _maxRetries) {
+                _retryTimer = Timer(_retryBaseDelay * (1 << _retries), _load);
+                _retries++;
+              }
+            }
+          },
+        ),
+      );
+      _ad = ad;
+      await ad.load();
+    } catch (error) {
+      debugPrint('Banner ad construction/load threw: $error');
+      ad?.dispose();
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _ad = null;
+          _loaded = false;
+        });
+      }
+    }
   }
 
   @override

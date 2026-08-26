@@ -505,6 +505,93 @@ class _FinishRewardRaceBackendApiService
   }
 }
 
+class _TimelineRaceApi extends _ActivePaidRaceBackendApiService {
+  _TimelineRaceApi({this.capable = true});
+
+  final bool capable;
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceTimeline({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int limit = 30,
+  }) async => {
+    if (capable) 'timelineVersion': 1,
+    'messages': const [
+      {
+        'kind': 'USER',
+        'id': 'chat-timeline',
+        'createdAt': '2026-08-25T15:04:05.000Z',
+        'body': 'Catch me if you can',
+        'senderId': 'user-2',
+        'senderName': 'Rival',
+      },
+      {
+        'kind': 'SYSTEM',
+        'id': 'event-timeline',
+        'createdAt': '2026-08-25T15:03:05.000Z',
+        'body': 'Rival took the lead',
+        'eventType': 'LEAD_CHANGE',
+        'actorUserId': 'user-2',
+      },
+    ],
+    'nextCursor': null,
+  };
+}
+
+class _MissingPayoutRaceApi extends _ActivePaidRaceBackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async {
+    final race = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    for (final key in const [
+      'prizePool',
+      'buyInAmount',
+      'potCoins',
+      'projectedPotCoins',
+      'payouts',
+      'payoutTiers',
+    ]) {
+      race.remove(key);
+    }
+    return race;
+  }
+}
+
+class _PrivateLegacyShareRaceApi extends _ActivePaidRaceBackendApiService {
+  int shareCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async {
+    final race = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    race['isPublic'] = false;
+    return race;
+  }
+
+  @override
+  Future<Map<String, dynamic>> createRaceShareLink({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    shareCalls += 1;
+    return const {'url': 'https://example.invalid/r/legacy'};
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -557,6 +644,100 @@ void main() {
       reason: 'Retrying the same request can never recover from no auth token.',
     );
   });
+
+  testWidgets('timeline-v1 interleaves chat and activity in one surface', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: await _createAuthService(),
+          raceId: 'race-timeline',
+          backendApiService: _TimelineRaceApi(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('race-timeline-heading')), findsOneWidget);
+    expect(find.text('Catch me if you can'), findsOneWidget);
+    expect(find.text('Rival took the lead'), findsOneWidget);
+    expect(find.text('ACTIVITY'), findsNothing);
+    expect(find.text('CHAT'), findsNothing);
+  });
+
+  testWidgets('missing timeline marker preserves the legacy tabs', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: await _createAuthService(),
+          raceId: 'race-legacy-timeline',
+          backendApiService: _TimelineRaceApi(capable: false),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('race-timeline-heading')), findsNothing);
+    expect(find.text('ACTIVITY'), findsOneWidget);
+    expect(find.text('CHAT'), findsOneWidget);
+  });
+
+  testWidgets('active race keeps an observable payout unavailable state', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: await _createAuthService(),
+          raceId: 'race-missing-payout',
+          backendApiService: _MissingPayoutRaceApi(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('race-payout-section')), findsOneWidget);
+    expect(find.byKey(const Key('race-payout-unavailable')), findsOneWidget);
+    expect(find.text('UNAVAILABLE'), findsOneWidget);
+  });
+
+  testWidgets(
+    'private share refuses a response without strict approval marker',
+    (tester) async {
+      final api = _PrivateLegacyShareRaceApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: await _createAuthService(),
+            raceId: 'race-private-legacy',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.ios_share).first);
+      await tester.pump();
+
+      expect(api.shareCalls, 1);
+      expect(
+        find.text('Update required to share this private race'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'pull-to-refresh recovers the failed-to-load state after a network error',
@@ -661,7 +842,8 @@ void main() {
       expect(
         api.detailCalls,
         2,
-        reason: 'A concurrent retry must reuse the in-flight fetch, not start another.',
+        reason:
+            'A concurrent retry must reuse the in-flight fetch, not start another.',
       );
 
       api.detailsCompleter.complete(<String, dynamic>{
@@ -1278,10 +1460,10 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // The prize pool lives in a HUD chip on the hero; tapping it opens the
-      // payout breakdown sheet.
+      // The hero HUD stays as the quick action while the always-visible payout
+      // section repeats the amount in the race body.
       expect(find.text('PRIZE POOL'), findsOneWidget);
-      expect(find.text('600'), findsOneWidget);
+      expect(find.text('600'), findsNWidgets(2));
       final prizePoolBoard = find.byKey(const Key('race-prize-pool-board'));
       expect(prizePoolBoard, findsOneWidget);
 

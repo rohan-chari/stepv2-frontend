@@ -4873,6 +4873,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     onOpenPayouts: _hasPrizeDisplay ? _showPrizePoolSheet : null,
   );
 
+  Widget _buildPayoutSection() => Column(
+    key: const Key('race-payout-section'),
+    children: [
+      _checkerSectionHeader('PAYOUT'),
+      _sectionCard(
+        padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+        child: _buildRaceInfoCard(),
+      ),
+    ],
+  );
+
   // ignore: unused_element
   Widget _buildLegacyRaceInfoCard() {
     final maxDays = _readInt(_race!['maxDurationDays'], fallback: 7);
@@ -5648,6 +5659,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         children: [
           _buildRaceHero(runners: const [], chips: chips),
           const SizedBox(height: 16),
+          _buildPayoutSection(),
+          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: KeyedSubtree(
@@ -5663,6 +5676,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return Column(
         children: [
           _buildRaceHero(runners: const [], chips: chips),
+          const SizedBox(height: 16),
+          _buildPayoutSection(),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -5735,6 +5750,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
             ],
           ),
+
+        const SizedBox(height: 16),
+        _buildPayoutSection(),
 
         if (_progressState.isRefreshing)
           Padding(
@@ -7329,7 +7347,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         identityToken: identityToken,
         raceId: widget.raceId,
       );
-      final url = result['url'] as String?;
+      final isPrivateRace = _race?['isPublic'] != true;
+      if (isPrivateRace && result['approvalRequired'] != true) {
+        if (mounted) {
+          showErrorToast(context, 'Update required to share this private race');
+        }
+        return;
+      }
+      final rawUrl = result['url'];
+      final url = rawUrl is String ? rawUrl : null;
       if (url == null || url.isEmpty) {
         throw const ApiException('Could not create a share link.');
       }
@@ -7728,6 +7754,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     setState(() => _sendingMessage = true);
     _messageInput.clear();
     await chat.send(text);
+    if (_streams?.timelineMode == true) await _streams?.refreshNow();
     if (mounted) setState(() => _sendingMessage = false);
   }
 
@@ -7753,6 +7780,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
     if (confirmed == true) {
       await chat.deleteMessage(messageId);
+      if (_streams?.timelineMode == true) await _streams?.refreshNow();
     }
   }
 
@@ -7771,6 +7799,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   /// Two-tab bounded panel replacing the old merged activity section.
   Widget _buildActivityTabsSection() {
+    if (_streams?.timelineMode == true) return _buildTimelineSection();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -7791,6 +7820,108 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             child: _activityTabIndex == 0
                 ? _buildActivityTab()
                 : _buildChatTab(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimelineSection() {
+    final streams = _streams;
+    final messages = streams?.timelineMessages ?? const <RaceChatMessage>[];
+    final actorNames = _participantNames();
+    final colors = AppColors.of(context);
+    Widget body;
+    if (streams == null || (messages.isEmpty && streams.timelineLoading)) {
+      body = const LoadingSkeleton(
+        child: Column(
+          children: [
+            SkeletonLine(width: double.infinity, height: 14),
+            SizedBox(height: 8),
+            SkeletonLine(width: 220, height: 14),
+          ],
+        ),
+      );
+    } else if (messages.isEmpty && streams.timelineError != null) {
+      body = LoadErrorPanel(
+        title: 'Couldn’t load timeline',
+        message: 'Check your connection and try again.',
+        onRetry: streams.refreshNow,
+      );
+    } else if (messages.isEmpty) {
+      body = _buildTabEmptyState('No activity yet. Race is young!');
+    } else {
+      body = ListView(
+        key: const Key('race-timeline-list'),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        children: [
+          for (final message in messages)
+            if (message.kind == 'SYSTEM')
+              _buildActivityItem(
+                RaceFeedEvent(
+                  id: message.id,
+                  eventType: message.eventType ?? '',
+                  description: message.body,
+                  createdAt: message.createdAt,
+                  powerupType: message.powerupType,
+                  actorUserId: message.actorUserId,
+                ),
+                actorNames,
+              )
+            else
+              Container(
+                key: ValueKey('race-timeline-chat-${message.id}'),
+                margin: const EdgeInsets.symmetric(vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.coinLight.withValues(alpha: 0.18),
+                  border: Border(
+                    left: BorderSide(color: colors.coinDark, width: 3),
+                  ),
+                ),
+                child: _buildChatItem(message),
+              ),
+          if (streams.timelineHasMore)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: TextButton(
+                  onPressed: streams.timelineLoading
+                      ? null
+                      : streams.loadOlderTimeline,
+                  child: Text(
+                    streams.timelineLoading ? 'Loading…' : 'Load older',
+                    style: PixelText.body(size: 13, color: colors.accent),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'TIMELINE',
+            key: const Key('race-timeline-heading'),
+            style: PixelText.title(size: 15, color: colors.textDark),
+          ),
+        ),
+        const SizedBox(height: 10),
+        _sectionCard(
+          padding: const EdgeInsets.all(10),
+          child: SizedBox(
+            height: 400,
+            child: Column(
+              children: [
+                Expanded(child: body),
+                _buildMessageComposer(),
+              ],
+            ),
           ),
         ),
       ],
@@ -8135,6 +8266,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         children: [
           _buildRaceHero(runners: const [], chips: const []),
           const SizedBox(height: 16),
+          _buildPayoutSection(),
+          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: KeyedSubtree(
@@ -8149,6 +8282,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return Column(
         children: [
           _buildRaceHero(runners: const [], chips: const []),
+          const SizedBox(height: 16),
+          _buildPayoutSection(),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -8264,6 +8399,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ],
         ),
         const SizedBox(height: 16),
+
+        _buildPayoutSection(),
+        const SizedBox(height: 18),
 
         // WINNER — celebratory podium card.
         StaggerIn(
@@ -10476,7 +10614,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   static String _formatSteps(int n) {
-    final s = n.toString();
+    final s = (n < 0 ? 0 : n).toString();
     final buf = StringBuffer();
     for (int i = 0; i < s.length; i++) {
       if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');

@@ -271,34 +271,27 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _HowItWorks extends StatefulWidget {
+class _HowItWorks extends StatelessWidget {
   const _HowItWorks();
-
-  @override
-  State<_HowItWorks> createState() => _HowItWorksState();
-}
-
-class _HowItWorksState extends State<_HowItWorks> {
-  late final PageController _controller = PageController(viewportFraction: .46);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 96,
-      child: PageView.builder(
+      child: SingleChildScrollView(
         key: const PageStorageKey('contest-how-it-works-carousel'),
-        controller: _controller,
-        padEnds: false,
-        itemCount: _steps.length,
-        itemBuilder: (context, index) => Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: _StepCard(step: _steps[index]),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final step in _steps)
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: SizedBox(
+                  width: MediaQuery.sizeOf(context).width * .42,
+                  child: _StepCard(step: step),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -315,9 +308,9 @@ const _steps = <_ContestStep>[
   (
     number: 3,
     type: _StepIcon.race,
-    label: 'FRIEND FINISHES\nA QUALIFYING RACE',
+    label: 'FRIEND FINISHES\nA QUALIFYING\nRACE',
   ),
-  (number: 4, type: _StepIcon.win, label: 'MOST VERIFIED\nREFERRALS WINS'),
+  (number: 4, type: _StepIcon.win, label: 'MOST VERIFIED\nREFERRALS\nWINS'),
 ];
 
 class _StepCard extends StatelessWidget {
@@ -344,7 +337,6 @@ class _StepCard extends StatelessWidget {
           ),
           Center(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
                   width: 38,
@@ -352,14 +344,20 @@ class _StepCard extends StatelessWidget {
                   child: Center(child: _stepIcon()),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  step.label,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  style: PixelText.display(
-                    size: 8.8,
-                    color: colors.textDark,
-                  ).copyWith(height: .94),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: Text(
+                      step.label,
+                      maxLines: 3,
+                      textAlign: TextAlign.center,
+                      style: PixelText.display(
+                        size: 8.8,
+                        color: colors.textDark,
+                      ).copyWith(height: .94),
+                    ),
+                  ),
                 ),
               ],
             ),

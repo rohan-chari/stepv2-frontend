@@ -11,7 +11,6 @@ import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/error_toast.dart';
-import '../widgets/app_refresh_indicator.dart';
 import '../widgets/referral_contest_joined_dashboard.dart';
 import '../widgets/referral_contest_overview.dart';
 import 'display_name_screen.dart';
@@ -955,13 +954,9 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
 
   Widget _globalJoinedHub(GiveawayCurrent data, AppPalette colors) {
     final entryStatus = data.entry?.status;
-    if (entryStatus == GiveawayEntryStatus.ineligible ||
-        entryStatus == GiveawayEntryStatus.withdrawn) {
-      return _globalRestrictedHub(data, colors);
-    }
     final share = _globalShare(data);
     final showNotice =
-        entryStatus == GiveawayEntryStatus.underReview ||
+        entryStatus != GiveawayEntryStatus.eligible ||
         data.contest.status != GiveawayStatus.active;
     return ReferralContestJoinedDashboard(
       data: data,
@@ -976,6 +971,7 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
           ? null
           : () => _copyInviteValue(share.url.toString(), 'Invite link copied'),
       onToggleLeaderboard: () => _toggleGlobalLeaderboard(),
+      onRules: () => _openRules(data.contest),
       statusNotice: showNotice ? _joinedStatusNotice(data, colors) : null,
       leaderboard: Focus(
         key: _leadersDrawerKey,
@@ -985,50 +981,8 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
     );
   }
 
-  Widget _globalRestrictedHub(GiveawayCurrent data, AppPalette colors) {
-    return AppRefreshIndicator(
-      onRefresh: _load,
-      child: SingleChildScrollView(
-        key: const Key('giveaway-content-scroll'),
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(
-          16,
-          28,
-          16,
-          MediaQuery.paddingOf(context).bottom + 28,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _card(colors, child: _joinedStatusNotice(data, colors)),
-            const SizedBox(height: 16),
-            TextButton(
-              style: _greenSurfaceLinkStyle(colors),
-              onPressed: () => _openRules(data.contest),
-              child: const Text('OFFICIAL RULES'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _toggleGlobalLeaderboard() {
-    final willOpen = !_leadersOpen;
-    setState(() => _leadersOpen = willOpen);
-    if (!willOpen) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final drawerContext = _leadersDrawerKey.currentContext;
-      if (drawerContext == null) return;
-      _leadersDrawerFocusNode.requestFocus();
-      Scrollable.ensureVisible(
-        drawerContext,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        alignment: .08,
-      );
-    });
+    setState(() => _leadersOpen = !_leadersOpen);
   }
 
   Widget _joinedStatusNotice(GiveawayCurrent data, AppPalette colors) {

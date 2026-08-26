@@ -95,7 +95,7 @@ void main() {
       );
 
       // No pump-and-settle needed: the batch payload renders in-frame.
-      expect(find.text('DAILY REWARD'), findsOneWidget);
+      expect(find.text('CLAIM REWARD'), findsOneWidget);
       expect(api.statusCalls, 0);
     },
   );
@@ -142,7 +142,7 @@ void main() {
       await tester.pump();
 
       expect(api.statusCalls, 1);
-      expect(find.text('DAILY REWARD'), findsOneWidget);
+      expect(find.text('CLAIM REWARD'), findsOneWidget);
     },
   );
 
@@ -207,7 +207,7 @@ void main() {
     await tester.pump();
 
     expect(api.statusCalls, 1);
-    expect(find.text('DAILY REWARD'), findsOneWidget);
+    expect(find.text('CLAIM REWARD'), findsOneWidget);
   });
 
   testWidgets(

@@ -512,6 +512,28 @@ class _SettingsContentState extends State<_SettingsContent> {
           ),
           const SizedBox(height: 24),
           _SettingsSection(
+            sectionKey: const Key('settings-section-about-us'),
+            title: 'ABOUT US',
+            icon: Icons.info_outline_rounded,
+            children: [
+              PillButton(
+                key: const Key('settings-buy-us-a-coffee'),
+                label: 'BUY US A COFFEE',
+                icon: Icons.local_cafe_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () =>
+                    showInfoToast(context, 'Donation link coming soon'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _SettingsSection(
             sectionKey: const Key('settings-section-account'),
             title: 'ACCOUNT',
             icon: Icons.lock_rounded,
@@ -856,7 +878,7 @@ class _AppearancePreferenceControl extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            'Automatic uses dark mode from 10 PM to 7 AM Eastern.',
+            'Automatic uses dark mode from 8 PM to 7 AM local time.',
             style: PixelText.body(size: 11, color: colors.textMid),
           ),
         ],

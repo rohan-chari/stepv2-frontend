@@ -20,6 +20,7 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
+import '../../widgets/race_ui.dart';
 import '../../constants/powerup_copy.dart';
 import '../get_coins_screen.dart';
 
@@ -201,6 +202,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   // Powerup store sub-filter + sort (item 9). Persisted in screen state.
   _PowerupFilter _powerupFilter = _PowerupFilter.all;
   _PowerupSort _powerupSort = _PowerupSort.nameAsc;
+  Map<String, dynamic>? _draftPreviewItem;
 
   // Ad-unlock rules. The server serves them in the catalog's `adUnlock` block
   // (contract §4.3); when it is absent — an older backend — we keep the
@@ -654,6 +656,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         setState(() {
           _catalog = next;
           _catalogState = Loadable.success(next);
+          _draftPreviewItem = null;
         });
         widget.onShopChanged?.call(next);
       } else {
@@ -691,6 +694,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     setState(() {
       _catalog = catalog;
       _catalogState = Loadable.success(catalog);
+      _draftPreviewItem = null;
       _recomputeAdUnlock();
     });
     widget.onShopChanged?.call(catalog);
@@ -870,17 +874,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                'Spend coins on gear and powerups. Earn more by walking and racing.',
-                style: PixelText.body(
-                  size: 15,
-                  color: AppColors.of(
-                    context,
-                  ).textLight.withValues(alpha: 0.92),
-                ),
-              ),
-              const SizedBox(height: 12),
+              _buildCharacterPreview(),
+              const SizedBox(height: 6),
               _buildSegmentControl(),
               const SizedBox(height: 8),
               _buildCategoryPills(),
@@ -1054,6 +1049,89 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             ..._buildStore(items)
           else
             ..._buildInventory(items),
+        ],
+      ),
+    );
+  }
+
+  void _previewSelection(Map<String, dynamic> item) {
+    final slot = item['slot'];
+    if (slot is! String || slot.isEmpty || !mounted) return;
+    setState(() => _draftPreviewItem = Map<String, dynamic>.from(item));
+  }
+
+  Widget _buildCharacterPreview() {
+    final equippedRaw = _catalog?['equipped'];
+    final equipped = equippedRaw is Map
+        ? equippedRaw
+        : const <dynamic, dynamic>{};
+    final rows = <Map<String, dynamic>>[];
+    for (final value in equipped.values) {
+      if (value is Map) {
+        rows.add(<String, dynamic>{
+          for (final entry in value.entries)
+            if (entry.key is String) entry.key as String: entry.value,
+        });
+      }
+    }
+    final draft = _draftPreviewItem;
+    if (draft != null) {
+      final slot = draft['slot'];
+      rows.removeWhere((row) => row['slot'] == slot);
+      rows.add(draft);
+    }
+    String? animal;
+    final accessories = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final assetKey = row['assetKey'];
+      if (row['slot'] == 'CHARACTER') {
+        if (assetKey is String && assetKey.isNotEmpty) animal = assetKey;
+      } else if (assetKey is String && assetKey.isNotEmpty) {
+        accessories.add(row);
+      }
+    }
+    return Container(
+      key: const Key('shop-character-preview'),
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: _shopCardDecoration(),
+      child: Row(
+        children: [
+          Transform.scale(
+            scale: 1.25,
+            child: RacerAvatar(
+              key: ValueKey(
+                'shop-preview-${animal ?? kDefaultAnimal}-${accessories.map((e) => e['assetKey']).join('-')}',
+              ),
+              rank: 1,
+              size: 28,
+              showMedalRing: false,
+              animal: animal,
+              accessories: accessories,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'YOUR BARA',
+            style: PixelText.title(
+              size: 10.5,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              draft == null
+                  ? 'Your equipped look'
+                  : 'Previewing ${draft['name'] is String ? draft['name'] : 'this item'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.body(
+                size: 9.5,
+                color: AppColors.of(context).textMid,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1348,13 +1426,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         ? _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock)
         : null;
     void openSheet() {
+      _previewSelection(item);
       _warmShopAd(adContext);
       unawaited(
         _showItemSheet(
           art: _cosmeticArt(item, iconSize: 48),
           name: name,
           slotLabel: _slotLabels[item['slot']],
-          description: item['description'] as String? ?? '',
+          description: item['description'] is String
+              ? item['description'] as String
+              : '',
           actions: [
             ?_adUnlockCapNotice(price),
             switch (route) {
@@ -1376,7 +1457,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     ? 'WATCH 1 AD TO UNLOCK'
                     : 'WATCH $adsNeeded ADS TO UNLOCK',
                 icon: Icons.smart_display_rounded,
-                variant: PillButtonVariant.secondary,
+                variant: PillButtonVariant.rewardedAd,
                 fontSize: 13,
                 fullWidth: true,
                 onPressed: _saving
@@ -1439,31 +1520,37 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       stripLabel: equipped ? 'CLEAR' : 'EQUIP',
       stripIcon: equipped ? Icons.close_rounded : Icons.check_rounded,
       stripEnabled: !_saving,
-      onStrip: equipped ? doClear : doEquip,
-      onTap: () => _showItemSheet(
-        art: _cosmeticArt(item, iconSize: 48),
-        name: name,
-        slotLabel: _slotLabels[item['slot']],
-        badge: equipped ? 'EQUIPPED' : null,
-        description: item['description'] as String? ?? '',
-        actions: [
-          PillButton(
-            label: equipped ? 'CLEAR' : 'EQUIP',
-            icon: equipped ? Icons.close_rounded : Icons.check_rounded,
-            variant: equipped
-                ? PillButtonVariant.secondary
-                : PillButtonVariant.primary,
-            fontSize: 14,
-            fullWidth: true,
-            onPressed: _saving
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    (equipped ? doClear : doEquip)();
-                  },
-          ),
-        ],
-      ),
+      onStrip: () {
+        _previewSelection(item);
+        (equipped ? doClear : doEquip)();
+      },
+      onTap: () {
+        _previewSelection(item);
+        _showItemSheet(
+          art: _cosmeticArt(item, iconSize: 48),
+          name: name,
+          slotLabel: _slotLabels[item['slot']],
+          badge: equipped ? 'EQUIPPED' : null,
+          description: item['description'] as String? ?? '',
+          actions: [
+            PillButton(
+              label: equipped ? 'CLEAR' : 'EQUIP',
+              icon: equipped ? Icons.close_rounded : Icons.check_rounded,
+              variant: equipped
+                  ? PillButtonVariant.secondary
+                  : PillButtonVariant.primary,
+              fontSize: 14,
+              fullWidth: true,
+              onPressed: _saving
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      (equipped ? doClear : doEquip)();
+                    },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2122,7 +2209,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             ? 'WATCH 1 AD TO UNLOCK'
             : 'WATCH $adsNeeded ADS TO UNLOCK',
         icon: Icons.smart_display_rounded,
-        variant: PillButtonVariant.secondary,
+        variant: PillButtonVariant.rewardedAd,
         fontSize: 13,
         fullWidth: true,
         onPressed: _saving

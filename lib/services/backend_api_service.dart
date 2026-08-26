@@ -357,6 +357,7 @@ class BackendApiService {
       'impact_summaries',
       'review_prompt',
       'inbox_v1',
+      'privateJoinApproval',
       'api_payload_compact_v1',
       'referral_contest_v1',
       'referral_contest_global_v1',
@@ -369,8 +370,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -2377,6 +2378,22 @@ class BackendApiService {
     );
   }
 
+  /// Capable Inbox clear-on-open marks only ordinary alerts. A 404 must be
+  /// ignored by callers; it must never fall back to the legacy read-all route,
+  /// because that would also clear a pinned staff reply.
+  Future<void> markInboxAlertsRead({required String identityToken}) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/inbox/read-alerts',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+  }
+
   static int? _nonnegativeIntResponse(Object? value) {
     if (value is int && value >= 0) return value;
     return null;
@@ -3930,12 +3947,87 @@ class BackendApiService {
     String? identityToken,
   }) async {
     final response = await _sendGetRequest(
-      path: '/races/share/$token',
+      path: '/races/share/${Uri.encodeComponent(token)}',
       identityToken: identityToken,
     );
     final body = await _decodeJsonResponse(response);
     final race = body['race'];
-    return race is Map<String, dynamic> ? race : <String, dynamic>{};
+    if (race is! Map) return <String, dynamic>{};
+    return <String, dynamic>{
+      for (final entry in race.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+      // Internal names preserve the exact top-level wire contract while the
+      // existing screen-facing method continues returning the race map.
+      '_shareApprovalRequired': body['approvalRequired'] == true,
+      if (body['expiresAt'] is String)
+        '_shareExpiresAt': body['expiresAt'] as String,
+    };
+  }
+
+  Future<Map<String, dynamic>> requestPrivateRaceJoin({
+    required String identityToken,
+    required String token,
+    String? team,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/share/${Uri.encodeComponent(token)}/join-requests',
+      body: <String, dynamic>{'team': team},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> respondToPrivateRaceJoinRequest({
+    required String identityToken,
+    required String raceId,
+    required String requestId,
+    required String action,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/join-requests/${Uri.encodeComponent(requestId)}/respond',
+      body: <String, dynamic>{'action': action},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchPrivateRaceJoinRequests({
+    required String identityToken,
+    required String raceId,
+    String status = 'PENDING',
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final query =
+        <String, String>{
+              'status': status,
+              'limit': '${limit.clamp(1, 50)}',
+              if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+            }.entries
+            .map(
+              (entry) =>
+                  '${entry.key}=${Uri.encodeQueryComponent(entry.value)}',
+            )
+            .join('&');
+    final response = await _sendGetRequest(
+      path: '/races/${Uri.encodeComponent(raceId)}/join-requests?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchPrivateRaceJoinRequest({
+    required String identityToken,
+    required String requestId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/race-join-requests/${Uri.encodeComponent(requestId)}',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
   }
 
   /// Joins the race behind a shared [token]. Works for private races too
@@ -4788,6 +4880,31 @@ class BackendApiService {
         : '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
     final response = await _sendGetRequest(
       path: '/races/$raceId/messages$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// The bounded combined timeline opt-in. Test fakes that do not override
+  /// this method safely look like an older backend, avoiding accidental live
+  /// HTTP from existing widget tests.
+  Future<Map<String, dynamic>> fetchRaceTimeline({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int limit = 30,
+  }) async {
+    if (runtimeType != BackendApiService) return const <String, dynamic>{};
+    final params = <String, String>{
+      'view': 'timeline-v1',
+      'limit': '${limit.clamp(1, 50)}',
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+    };
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    final response = await _sendGetRequest(
+      path: '/races/${Uri.encodeComponent(raceId)}/messages?$query',
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
