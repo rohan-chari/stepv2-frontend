@@ -301,6 +301,13 @@ void main() {
     await _selectSegment(tester, 'INVENTORY');
     await _selectCategory(tester, 'CHARACTERS');
     await tester.tap(find.byKey(const Key('shop-capybara-tile')));
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('shop-dressing-room-stage')),
+        matching: find.text('DETAILS'),
+      ),
+    );
     // The character thumbnail animates forever; settle the sheet with fixed
     // frames instead of pumpAndSettle.
     await tester.pump();

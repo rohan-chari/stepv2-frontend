@@ -432,13 +432,15 @@ class _CompactDailyRewardButton extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: fontSize + 2, color: colors.textDark),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: fontSize + 2, color: colors.textDark),
+                  const SizedBox(width: 8),
+                  Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -447,8 +449,8 @@ class _CompactDailyRewardButton extends StatelessWidget {
                       color: colors.textDark,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

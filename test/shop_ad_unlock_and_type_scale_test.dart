@@ -346,8 +346,21 @@ void main() {
       await tester.tap(find.text('CHARACTERS').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('Corgi Puppy').first);
+      final selector = find.byKey(const Key('shop-cosmetic-selector-c1'));
+      await tester.scrollUntilVisible(
+        selector,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(selector);
+      await tester.pump(const Duration(milliseconds: 180));
+      final stage = find.byKey(const Key('shop-dressing-room-stage'));
+      await tester.ensureVisible(stage);
       await tester.pump();
+      await tester.tap(
+        find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
     });
 
@@ -380,8 +393,21 @@ void main() {
       await tester.tap(find.text('CHARACTERS').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('Corgi Puppy').first);
+      final selector = find.byKey(const Key('shop-cosmetic-selector-c1'));
+      await tester.scrollUntilVisible(
+        selector,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(selector);
+      await tester.pump(const Duration(milliseconds: 180));
+      final stage = find.byKey(const Key('shop-dressing-room-stage'));
+      await tester.ensureVisible(stage);
       await tester.pump();
+      await tester.tap(
+        find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Watch'), findsNothing);
       expect(find.text('GET MORE COINS'), findsOneWidget);
     });

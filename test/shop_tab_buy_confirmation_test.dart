@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 
 // No one-tap purchases in the store.
 //
@@ -409,14 +410,38 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
     await _selectCategory(tester, 'ACCESSORIES');
-    await tester.tap(find.text('Blue Hat'));
+    final hatSelector = find.byKey(
+      const Key('shop-cosmetic-selector-item-hat'),
+    );
+    await tester.scrollUntilVisible(
+      hatSelector,
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(hatSelector);
+    await tester.pump(const Duration(milliseconds: 180));
+    final stage = find.byKey(const Key('shop-dressing-room-stage'));
+    await tester.ensureVisible(stage);
     await tester.pump();
+    await tester.tap(
+      find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
+    );
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('BUY · 100'));
+    final buyButton = tester.widget<PillButton>(
+      find.ancestor(
+        of: find.text('BUY · 100'),
+        matching: find.byType(PillButton),
+      ),
+    );
+    buyButton.onPressed!();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await _selectCategory(tester, 'POWERUPS');
+    final powerupsCategory = find.byKey(const Key('shop-category-POWERUPS'));
+    await tester.ensureVisible(powerupsCategory);
+    await tester.pump();
+    await tester.tap(powerupsCategory);
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -519,8 +544,7 @@ void main() {
   );
 
   testWidgets(
-    'tapping the price strip on a store cosmetic opens the detail sheet '
-    'and does NOT purchase',
+    'cosmetic selection is local and stage details open the purchase sheet',
     (tester) async {
       final auth = await _createAuthService();
       final api = _FakeShopApi(
@@ -534,9 +558,25 @@ void main() {
       await _selectCategory(tester, 'ACCESSORIES');
 
       expect(find.text('100'), findsOneWidget);
+      final hatSelector = find.byKey(
+        const Key('shop-cosmetic-selector-item-hat'),
+      );
+      await tester.scrollUntilVisible(
+        hatSelector,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(hatSelector);
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(api.cosmeticPurchases, 0);
+      expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
 
-      await tester.tap(find.text('100'));
+      final stage = find.byKey(const Key('shop-dressing-room-stage'));
+      await tester.ensureVisible(stage);
       await tester.pump();
+      await tester.tap(
+        find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
+      );
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text(_hatDescription), findsOneWidget);

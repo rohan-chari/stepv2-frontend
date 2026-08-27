@@ -62,16 +62,11 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
             const SizedBox(height: 14),
             _InviteCard(
               share: shareEnabled ? data.share : null,
+              prizeCoins: data.contest.prize.coins,
               enabled: shareEnabled,
               onShare: onShare,
               onCopyCode: onCopyCode,
               onCopyUrl: onCopyUrl,
-            ),
-            const SizedBox(height: 14),
-            _TrailLandmarks(
-              shareEnabled: shareEnabled,
-              onLeaders: onToggleLeaderboard,
-              onWhatCounts: () => _showWhatCounts(context),
             ),
             const SizedBox(height: 16),
             const _SectionTitle(label: 'YOUR STANDING'),
@@ -101,156 +96,26 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
             _RecentReferralsCard(
               items: data.recentReferrals.take(3).toList(growable: false),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showWhatCounts(BuildContext context) {
-    final colors = AppColors.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: colors.grassDark,
-      builder: (sheetContext) => SafeArea(
-        child: Semantics(
-          key: const Key('contest-trail-what-counts-drawer'),
-          container: true,
-          label: 'What counts drawer',
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'WHAT COUNTS',
-                  textAlign: TextAlign.center,
-                  style: PixelText.title(size: 18, color: colors.textLight),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'A friend must use your invite and finish a qualifying race with another real player. Positions remain subject to review.',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(size: 13, color: colors.textLight),
-                ),
-                const SizedBox(height: 10),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: colors.textLight,
-                    minimumSize: const Size.fromHeight(44),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              key: const Key('contest-dashboard-official-rules'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.of(context).textAccent,
+                backgroundColor: AppColors.of(context).parchmentLight,
+                minimumSize: const Size.fromHeight(44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(9),
+                  side: BorderSide(
+                    color: AppColors.of(context).feedGold.withValues(alpha: .5),
                   ),
-                  onPressed: () {
-                    Navigator.of(sheetContext).pop();
-                    onRules();
-                  },
-                  child: const Text('OFFICIAL RULES'),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TrailLandmarks extends StatelessWidget {
-  const _TrailLandmarks({
-    required this.shareEnabled,
-    required this.onLeaders,
-    required this.onWhatCounts,
-  });
-
-  final bool shareEnabled;
-  final VoidCallback onLeaders;
-  final VoidCallback onWhatCounts;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    Widget passive(String key, IconData icon, String label) => Semantics(
-      enabled: false,
-      child: Container(
-        key: Key(key),
-        width: 58,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 21, color: colors.textLight),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: PixelText.title(size: 8, color: colors.textLight),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    Widget action(String key, IconData icon, String label, VoidCallback tap) =>
-        Semantics(
-          button: true,
-          child: InkWell(
-            key: Key(key),
-            onTap: tap,
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: 64,
-              height: 52,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 21, color: colors.pillGold),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: PixelText.title(size: 8, color: colors.textLight),
-                  ),
-                ],
               ),
+              onPressed: onRules,
+              icon: const Icon(Icons.menu_book_rounded, size: 18),
+              label: Text('OFFICIAL RULES', style: PixelText.title(size: 11)),
             ),
-          ),
-        );
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-      decoration: BoxDecoration(
-        color: colors.grassDark.withValues(alpha: .44),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.pillGold.withValues(alpha: .52)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          passive('contest-trail-landmark-start', Icons.flag_rounded, 'START'),
-          passive(
-            'contest-trail-landmark-race',
-            Icons.directions_run_rounded,
-            'RACE',
-          ),
-          action(
-            'contest-trail-landmark-leaders',
-            Icons.leaderboard_rounded,
-            'LEADERS',
-            onLeaders,
-          ),
-          action(
-            'contest-trail-landmark-what-counts',
-            Icons.help_outline_rounded,
-            'WHAT COUNTS',
-            onWhatCounts,
-          ),
-          passive('contest-trail-landmark-win', Icons.emoji_events, 'WIN'),
-          if (shareEnabled)
-            const SizedBox(
-              key: Key('contest-trail-landmark-share'),
-              width: 1,
-              height: 1,
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -907,6 +772,7 @@ class _PreviewEllipsis extends StatelessWidget {
 class _InviteCard extends StatelessWidget {
   const _InviteCard({
     required this.share,
+    required this.prizeCoins,
     required this.enabled,
     required this.onShare,
     required this.onCopyCode,
@@ -914,6 +780,7 @@ class _InviteCard extends StatelessWidget {
   });
 
   final GiveawayShare? share;
+  final int prizeCoins;
   final bool enabled;
   final VoidCallback? onShare;
   final VoidCallback? onCopyCode;
@@ -938,6 +805,10 @@ class _InviteCard extends StatelessWidget {
                   onCopyCode: onCopyCode,
                   onCopyUrl: onCopyUrl,
                 ),
+                if (enabled) ...[
+                  const SizedBox(height: 11),
+                  _ShareIdeas(prizeCoins: prizeCoins),
+                ],
                 const SizedBox(height: 10),
                 KeyedSubtree(
                   key: const Key('contest-trail-share'),
@@ -961,6 +832,100 @@ class _InviteCard extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _ShareIdeas extends StatelessWidget {
+  const _ShareIdeas({required this.prizeCoins});
+
+  final int prizeCoins;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final prize = formatReferralContestCoins(prizeCoins);
+    return Semantics(
+      key: const Key('contest-dashboard-share-ideas'),
+      container: true,
+      label:
+          'Make some noise. Drop your invite in the group chat or post it on Instagram. One share could win you $prize coins.',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+          decoration: BoxDecoration(
+            color: colors.grassDark.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: colors.feedGold.withValues(alpha: .42)),
+          ),
+          child: Column(
+            children: [
+              Text(
+                'MAKE SOME NOISE',
+                style: PixelText.title(size: 11, color: colors.textAccent),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ShareIdea(
+                      icon: Icons.forum_rounded,
+                      label: 'DROP IT IN THE GROUP CHAT',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ShareIdea(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'POST IT ON INSTAGRAM',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Text(
+                'ONE SHARE COULD WIN YOU $prize COINS',
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                style: PixelText.title(size: 11, color: colors.textAccent),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareIdea extends StatelessWidget {
+  const _ShareIdea({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 38),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.parchmentLight,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: colors.textAccent),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 3,
+              style: PixelText.title(size: 8.5, color: colors.textAccent),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

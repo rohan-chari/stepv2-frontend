@@ -304,7 +304,15 @@ void main() {
     expect(find.text('Knight Helmet'), findsOneWidget);
     expect(find.text('3D Glasses'), findsOneWidget);
     expect(find.text('EQUIPPED'), findsOneWidget);
-    await tester.tap(find.text('EQUIP'));
+    await tester.ensureVisible(find.text('3D Glasses'));
+    await tester.tap(find.text('3D Glasses'));
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('shop-dressing-room-stage')),
+        matching: find.text('EQUIP'),
+      ),
+    );
     await tester.pump();
 
     expect(

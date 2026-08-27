@@ -251,9 +251,7 @@ void main() {
 
   group('item 4 — quick-action labels fit rather than truncate', () {
     for (final width in <double>[320, 375]) {
-      testWidgets('extra-spin pill fits at ${width.toInt()}pt', (
-        tester,
-      ) async {
+      testWidgets('extra-spin pill fits at ${width.toInt()}pt', (tester) async {
         await tester.binding.setSurfaceSize(Size(width, 700));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final auth = await _auth();
@@ -281,11 +279,11 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text('DAILY REWARD'), findsOneWidget);
+        expect(find.text('BONUS SPIN - WATCH AD'), findsOneWidget);
         expect(
-          _truncated(tester, 'DAILY REWARD'),
+          _truncated(tester, 'BONUS SPIN - WATCH AD'),
           isFalse,
-          reason: 'daily-reward ticket must fit at ${width.toInt()}pt',
+          reason: 'bonus-spin ticket must fit at ${width.toInt()}pt',
         );
         expect(_truncated(tester, 'SHOP'), isFalse);
       });
@@ -442,8 +440,10 @@ void main() {
     });
   });
 
-  group('item 22 — the EQUIPPED pill is centred on inventory tiles', () {
-    testWidgets('EQUIPPED sits at the tile centre', (tester) async {
+  group('item 22 — equipped and selected states stay distinct', () {
+    testWidgets('EQUIPPED stays in the compact selector marker band', (
+      tester,
+    ) async {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
       await _openInventoryCharacters(tester);
 
@@ -451,12 +451,14 @@ void main() {
       expect(tile, findsOneWidget);
       final badge = find.descendant(
         of: tile,
-        matching: find.byKey(const Key('shop-tile-badge')),
+        matching: find.byKey(
+          const Key('shop-cosmetic-equipped-__default_capybara__'),
+        ),
       );
       expect(badge, findsOneWidget);
       expect(
-        tester.getCenter(badge).dx,
-        moreOrLessEquals(tester.getCenter(tile).dx, epsilon: 0.5),
+        tester.getCenter(badge).dy,
+        greaterThan(tester.getCenter(tile).dy),
       );
     });
 

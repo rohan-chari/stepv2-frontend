@@ -85,10 +85,18 @@ enum _AffordRoute { affordable, watchAds, getCoins }
 
 enum _ShopSection { store, inventory }
 
-/// Where a [_ShopTile]'s chip sits over the art.
-enum _TileBadgeAlignment { right, center }
-
 enum _ShopCategory { powerups, characters, accessories }
+
+const _knownEquipmentSlots = <String>{
+  'HEAD',
+  'FACE',
+  'NECK',
+  'BACK',
+  'FEET',
+  'CHARACTER',
+};
+
+const _defaultCharacterSelectionId = '__default_capybara__';
 
 extension on _ShopCategory {
   String get label => switch (this) {
@@ -199,6 +207,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _powerupStoreItems = const [];
   Map<String, int> _powerupInventory = const {};
   bool _powerupsAvailable = false;
+  bool _powerupsAvailabilityResolved = false;
 
   bool _loading = true;
   bool _saving = false;
@@ -208,7 +217,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   // Powerup store sub-filter + sort (item 9). Persisted in screen state.
   _PowerupFilter _powerupFilter = _PowerupFilter.all;
   _PowerupSort _powerupSort = _PowerupSort.nameAsc;
-  Map<String, dynamic>? _draftPreviewItem;
+  Map<String, dynamic>? _selectedCosmeticItem;
+
+  // Async Shop work is scoped to both the signed-in identity and a mutation
+  // epoch. A response from a previous account, or a read that began before an
+  // accepted write, must never repaint this account's outfit.
+  int _shopSessionGeneration = 0;
+  int _shopStateEpoch = 0;
+  int _catalogRequestGeneration = 0;
+  String? _shopSessionUserId;
+  String? _shopSessionToken;
 
   // Ad-unlock rules. The server serves them in the catalog's `adUnlock` block
   // (contract §4.3); when it is absent — an older backend — we keep the
@@ -225,6 +243,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _backendApiService = widget.backendApiService ?? BackendApiService();
+    _shopSessionUserId = widget.authService.userId;
+    _shopSessionToken = widget.authService.authToken;
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleShopAuthChanged);
     _loadCatalog();
@@ -232,6 +252,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _shopSessionGeneration++;
+    _shopStateEpoch++;
+    _catalogRequestGeneration++;
     _shopActionGeneration++;
     for (final controller in _activeShopAdControllers.toList()) {
       controller.dispose();
@@ -253,6 +276,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   void _handleShopAuthChanged() {
+    final nextUserId = widget.authService.userId;
+    final nextToken = widget.authService.authToken;
+    final identityChanged =
+        nextUserId != _shopSessionUserId || nextToken != _shopSessionToken;
+    if (!identityChanged) return;
+
+    _shopSessionUserId = nextUserId;
+    _shopSessionToken = nextToken;
+    _shopSessionGeneration++;
+    _shopStateEpoch++;
+    _catalogRequestGeneration++;
     _shopActionGeneration++;
     if (_activeShopAdControllers.isNotEmpty) {
       for (final controller in _activeShopAdControllers.toList()) {
@@ -264,6 +298,36 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (context != null && context.userId != widget.authService.userId) {
       _disposeShopAdTarget();
     }
+    if (!mounted) return;
+    setState(() {
+      _catalog = null;
+      _catalogState = const Loadable.initial();
+      _powerupStoreItems = const [];
+      _powerupInventory = const {};
+      _powerupsAvailable = false;
+      _powerupsAvailabilityResolved = false;
+      _selectedCosmeticItem = null;
+      _loading = true;
+      _saving = false;
+    });
+    unawaited(_loadCatalog());
+  }
+
+  bool _sessionIsCurrent({
+    required int generation,
+    required String? userId,
+    required String token,
+    int? epoch,
+    int? catalogRequest,
+  }) {
+    return mounted &&
+        generation == _shopSessionGeneration &&
+        userId == _shopSessionUserId &&
+        token == _shopSessionToken &&
+        widget.authService.userId == userId &&
+        widget.authService.authToken == token &&
+        (epoch == null || epoch == _shopStateEpoch) &&
+        (catalogRequest == null || catalogRequest == _catalogRequestGeneration);
   }
 
   Future<void> _loadCatalog() async {
@@ -272,6 +336,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     // than allowing an ad bound to the previous payload to survive it.
     _disposeShopAdTarget();
     final previous = _catalog;
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final generation = _shopSessionGeneration;
+    final epoch = _shopStateEpoch;
+    final catalogRequest = ++_catalogRequestGeneration;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -282,9 +351,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
 
     try {
-      final token = widget.authService.authToken;
       if (token == null || token.isEmpty) {
-        if (mounted) {
+        if (mounted &&
+            generation == _shopSessionGeneration &&
+            userId == _shopSessionUserId &&
+            catalogRequest == _catalogRequestGeneration) {
           setState(() {
             _loading = false;
             _catalogState = Loadable.error('Not signed in.', data: previous);
@@ -305,9 +376,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         throw const ApiException('Could not load the shop. Please try again.');
       }
       final coins = catalog['coins'];
-      if (coins != null) {
-        if (coins is num) await widget.authService.updateCoins(coins.toInt());
-      }
 
       var powerups = bootstrap.powerups;
       var inventory = bootstrap.inventory;
@@ -332,34 +400,56 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           );
         } catch (_) {}
       }
-      if (powerups != null && inventory != null) {
-        _applyPowerupComponents(powerups, inventory);
-        final powerupCoins = powerups['coins'];
-        if (powerupCoins is num) {
-          await widget.authService.updateCoins(powerupCoins.toInt());
+      if (!_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: epoch,
+        catalogRequest: catalogRequest,
+      )) {
+        return;
+      }
+
+      setState(() {
+        if (powerups != null && inventory != null) {
+          _applyPowerupComponents(powerups, inventory);
+        } else {
+          _powerupStoreItems = const [];
+          _powerupInventory = const {};
+          _powerupsAvailable = false;
+          _powerupAdUnlockBlock = null;
         }
-      } else {
-        _powerupsAvailable = false;
-      }
-
-      // The ad-unlock rules ride on either catalog (contract §4.3). Prefer the
-      // powerup store's copy when it carried one, else the cosmetics catalog's,
-      // else the legacy compiled-in rules.
-      final rawAdUnlock = _powerupAdUnlockBlock ?? catalog['adUnlock'];
-      _adUnlock = _AdUnlockConfig.fromJson(rawAdUnlock);
-      _hasValidServerAdUnlock = _validAdUnlockBlock(rawAdUnlock);
-      if (!_hasValidServerAdUnlock) _disposeShopAdTarget();
-
-      if (mounted) {
-        setState(() {
-          _catalog = catalog;
-          _catalogState = Loadable.success(catalog);
-          _loading = false;
-        });
-      }
+        _powerupsAvailabilityResolved = true;
+        _catalog = catalog;
+        _catalogState = Loadable.success(catalog);
+        _selectedCosmeticItem = _revalidatedSelection(catalog);
+        _loading = false;
+        _recomputeAdUnlock();
+      });
       widget.onShopChanged?.call(catalog);
+      final acceptedCoins = powerups?['coins'] ?? coins;
+      if (acceptedCoins is num &&
+          _sessionIsCurrent(
+            generation: generation,
+            userId: userId,
+            token: token,
+            epoch: epoch,
+            catalogRequest: catalogRequest,
+          )) {
+        await widget.authService.updateCoins(acceptedCoins.toInt());
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
+      if (token == null ||
+          !_sessionIsCurrent(
+            generation: generation,
+            userId: userId,
+            token: token,
+            epoch: epoch,
+            catalogRequest: catalogRequest,
+          )) {
+        return;
+      }
       setState(() {
         _loading = false;
         _catalogState = Loadable.error(error.message, data: previous);
@@ -367,6 +457,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       showErrorToast(context, error.message);
     } catch (_) {
       if (!mounted) return;
+      if (token == null ||
+          !_sessionIsCurrent(
+            generation: generation,
+            userId: userId,
+            token: token,
+            epoch: epoch,
+            catalogRequest: catalogRequest,
+          )) {
+        return;
+      }
       setState(() {
         _loading = false;
         _catalogState = Loadable.error(
@@ -381,21 +481,57 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// Best-effort load of the powerup store + inventory. Any failure (e.g. an
   /// older backend without these endpoints) leaves the powerup sections empty
   /// and hidden — it never breaks the cosmetics shop.
-  Future<void> _loadPowerups(String token) async {
+  Future<bool> _loadPowerups(
+    String token, {
+    required int generation,
+    required String? userId,
+    required int epoch,
+  }) async {
     try {
       final results = await Future.wait([
         _backendApiService.fetchPowerupShopCatalog(identityToken: token),
         _backendApiService.fetchPowerupInventory(identityToken: token),
       ]);
+      if (!_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: epoch,
+      )) {
+        return false;
+      }
       _applyPowerupComponents(results[0], results[1]);
+      if (_catalog case final catalog?) {
+        _loading = false;
+        _catalogState = Loadable.success(catalog);
+      }
       final coins = results[0]['coins'];
-      if (coins is num) await widget.authService.updateCoins(coins.toInt());
+      if (coins is num &&
+          _sessionIsCurrent(
+            generation: generation,
+            userId: userId,
+            token: token,
+            epoch: epoch,
+          )) {
+        await widget.authService.updateCoins(coins.toInt());
+      }
+      return true;
     } catch (_) {
+      if (!_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: epoch,
+      )) {
+        return false;
+      }
       _powerupStoreItems = const [];
       _powerupInventory = const {};
       _powerupsAvailable = false;
+      _powerupsAvailabilityResolved = true;
       _powerupAdUnlockBlock = null;
       _recomputeAdUnlock();
+      return false;
     }
   }
 
@@ -436,6 +572,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         .toList();
     _powerupInventory = inventory;
     _powerupsAvailable = true;
+    _powerupsAvailabilityResolved = true;
     final adUnlock = powerups['adUnlock'];
     _powerupAdUnlockBlock = adUnlock is Map ? adUnlock : null;
     _recomputeAdUnlock();
@@ -528,6 +665,99 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         );
   }
 
+  Map<String, dynamic>? _validEquipmentRow(
+    String slot, {
+    Map<String, dynamic>? catalog,
+  }) {
+    if (!_knownEquipmentSlots.contains(slot)) return null;
+    final rawEquipment = (catalog ?? _catalog)?['equipped'];
+    if (rawEquipment is! Map) return null;
+    final rawRow = rawEquipment[slot];
+    if (rawRow is! Map) return null;
+    final id = rawRow['id'];
+    final rowSlot = rawRow['slot'];
+    if (id is! String || id.trim().isEmpty || rowSlot != slot) return null;
+    return <String, dynamic>{
+      for (final entry in rawRow.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+  }
+
+  bool _isCosmeticEquipped(
+    Map<String, dynamic> item, {
+    Map<String, dynamic>? catalog,
+  }) {
+    final id = item['id'];
+    final slot = item['slot'];
+    if (id is! String ||
+        id.trim().isEmpty ||
+        slot is! String ||
+        !_knownEquipmentSlots.contains(slot)) {
+      return false;
+    }
+    return _validEquipmentRow(slot, catalog: catalog)?['id'] == id;
+  }
+
+  bool _defaultCharacterIsEquipped({Map<String, dynamic>? catalog}) =>
+      _validEquipmentRow('CHARACTER', catalog: catalog) == null;
+
+  bool _isCosmeticOwned(
+    Map<String, dynamic> item, {
+    Map<String, dynamic>? catalog,
+  }) {
+    if (item['owned'] == true) return true;
+    final id = item['id'];
+    final rawOwned = (catalog ?? _catalog)?['ownedItemIds'];
+    return id is String && rawOwned is List && rawOwned.contains(id);
+  }
+
+  Map<String, dynamic>? _validatedEquipmentMap(Object? raw) {
+    if (raw is! Map) return null;
+    final normalized = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final slot = entry.key;
+      if (slot is! String || !_knownEquipmentSlots.contains(slot)) continue;
+      final value = entry.value;
+      if (value == null) continue;
+      if (value is! Map) return null;
+      final id = value['id'];
+      if (id is! String || id.trim().isEmpty || value['slot'] != slot) {
+        return null;
+      }
+      normalized[slot] = <String, dynamic>{
+        for (final rowEntry in value.entries)
+          if (rowEntry.key is String) rowEntry.key as String: rowEntry.value,
+      };
+    }
+    return normalized;
+  }
+
+  Map<String, dynamic>? _revalidatedSelection(Map<String, dynamic> catalog) {
+    final selected = _selectedCosmeticItem;
+    if (selected == null || _activeCategory == _ShopCategory.powerups) {
+      return null;
+    }
+    if (selected['id'] == _defaultCharacterSelectionId) {
+      return _section == _ShopSection.inventory &&
+              _activeCategory == _ShopCategory.characters
+          ? selected
+          : null;
+    }
+    final id = selected['id'];
+    if (id is! String || id.isEmpty) return null;
+    for (final item in _safeShopItems(catalog['items'])) {
+      if (item['id'] != id) continue;
+      final character = _isCharacter(item);
+      if ((_activeCategory == _ShopCategory.characters) != character) {
+        return null;
+      }
+      final owned = _isCosmeticOwned(item, catalog: catalog);
+      if ((_section == _ShopSection.inventory) != owned) return null;
+      return item;
+    }
+    return null;
+  }
+
   /// The raw `adUnlock` block from the powerup store catalog, or null when the
   /// backend didn't serve one.
   Map<dynamic, dynamic>? _powerupAdUnlockBlock;
@@ -553,6 +783,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (_saving) return;
 
     final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final generation = _shopSessionGeneration;
+    final startedEpoch = _shopStateEpoch;
     final itemId = item['id'] as String?;
     if (token == null || token.isEmpty || itemId == null) return;
 
@@ -564,31 +797,74 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-${DateTime.now().microsecondsSinceEpoch}',
       );
+      if (!_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: startedEpoch,
+      )) {
+        return;
+      }
+      final acceptedEpoch = ++_shopStateEpoch;
       final idempotent = _isIdempotent(result);
       if (idempotent || !_patchCosmeticPurchase(result)) {
-        await _refreshCosmetics(token);
+        await _refreshCosmetics(
+          token,
+          generation: generation,
+          userId: userId,
+          epoch: acceptedEpoch,
+          clearSelection: true,
+        );
       } else {
         final coins = result['coins'];
-        if (coins is num) {
+        if (coins is num &&
+            _sessionIsCurrent(
+              generation: generation,
+              userId: userId,
+              token: token,
+              epoch: acceptedEpoch,
+            )) {
           await widget.authService.updateCoins(coins.toInt());
         }
       }
-      if (mounted) {
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: acceptedEpoch,
+      )) {
+        if (!mounted) return;
         showInfoToast(context, '${item['name'] ?? 'Accessory'} unlocked.');
       }
     } on ApiException catch (error) {
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
         showErrorToast(context, error.message);
       }
     } catch (_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
         showErrorToast(
           context,
           'Could not buy this accessory. Please try again.',
         );
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -606,6 +882,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (_saving) return;
 
     final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final generation = _shopSessionGeneration;
+    final startedEpoch = _shopStateEpoch;
     final sku = item['sku'] as String?;
     if (token == null || token.isEmpty || sku == null) return;
 
@@ -617,29 +896,73 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-pw-${DateTime.now().microsecondsSinceEpoch}',
       );
+      if (!_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: startedEpoch,
+      )) {
+        return;
+      }
+      final acceptedEpoch = ++_shopStateEpoch;
       final idempotent = _isIdempotent(result);
       if (idempotent || !_patchPowerupMutation(result, item)) {
-        await _loadPowerups(token);
+        await _loadPowerups(
+          token,
+          generation: generation,
+          userId: userId,
+          epoch: acceptedEpoch,
+        );
       } else {
         final coins = result['coins'];
-        if (coins is num) {
+        if (coins is num &&
+            _sessionIsCurrent(
+              generation: generation,
+              userId: userId,
+              token: token,
+              epoch: acceptedEpoch,
+            )) {
           await widget.authService.updateCoins(coins.toInt());
         }
       }
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: acceptedEpoch,
+      )) {
         showInfoToast(context, '${item['name'] ?? 'Powerup'} purchased.');
       }
     } on ApiException catch (error) {
-      if (mounted) showErrorToast(context, error.message);
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
+        showErrorToast(context, error.message);
+      }
     } catch (_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
         showErrorToast(
           context,
           'Could not buy this powerup. Please try again.',
         );
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -647,6 +970,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (_saving) return;
 
     final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final generation = _shopSessionGeneration;
+    final startedEpoch = _shopStateEpoch;
     if (token == null || token.isEmpty) return;
 
     setState(() => _saving = true);
@@ -656,29 +982,63 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         slot: slot,
         itemId: itemId,
       );
-      final equipped = result['equipped'];
-      if (equipped is Map && _catalog != null) {
+      if (!_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+        epoch: startedEpoch,
+      )) {
+        return;
+      }
+      final acceptedEpoch = ++_shopStateEpoch;
+      final equipped = _validatedEquipmentMap(result['equipped']);
+      if (equipped != null && _catalog != null) {
         final next = {..._catalog!, 'equipped': equipped};
         setState(() {
           _catalog = next;
           _catalogState = Loadable.success(next);
-          _draftPreviewItem = null;
+          _selectedCosmeticItem = null;
+          _loading = false;
         });
         widget.onShopChanged?.call(next);
       } else {
-        await _refreshCosmetics(token);
+        await _refreshCosmetics(
+          token,
+          generation: generation,
+          userId: userId,
+          epoch: acceptedEpoch,
+          clearSelection: false,
+        );
       }
     } on ApiException catch (error) {
-      if (mounted) showErrorToast(context, _equipErrorMessage(error));
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
+        showErrorToast(context, _equipErrorMessage(error));
+      }
     } catch (_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
         showErrorToast(
           context,
           'Could not update your outfit. Please try again.',
         );
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sessionIsCurrent(
+        generation: generation,
+        userId: userId,
+        token: token,
+      )) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -688,22 +1048,49 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         (purchase is Map && purchase['idempotent'] == true);
   }
 
-  Future<void> _refreshCosmetics(String token) async {
+  Future<bool> _refreshCosmetics(
+    String token, {
+    required int generation,
+    required String? userId,
+    required int epoch,
+    required bool clearSelection,
+  }) async {
     final catalog = await _backendApiService.fetchShopCatalog(
       identityToken: token,
     );
+    if (!_isValidCosmeticsCatalog(catalog, requireCompleteItems: false)) {
+      throw const ApiException('Could not refresh the shop. Please try again.');
+    }
+    if (!_sessionIsCurrent(
+      generation: generation,
+      userId: userId,
+      token: token,
+      epoch: epoch,
+    )) {
+      return false;
+    }
     final coins = catalog['coins'];
-    if (coins is num) await widget.authService.updateCoins(coins.toInt());
-    if (!mounted) return;
     final adUnlock = catalog['adUnlock'];
     if (adUnlock is Map) _powerupAdUnlockBlock = adUnlock;
     setState(() {
       _catalog = catalog;
       _catalogState = Loadable.success(catalog);
-      _draftPreviewItem = null;
+      _selectedCosmeticItem = clearSelection
+          ? null
+          : _revalidatedSelection(catalog);
       _recomputeAdUnlock();
     });
     widget.onShopChanged?.call(catalog);
+    if (coins is num &&
+        _sessionIsCurrent(
+          generation: generation,
+          userId: userId,
+          token: token,
+          epoch: epoch,
+        )) {
+      await widget.authService.updateCoins(coins.toInt());
+    }
+    return true;
   }
 
   bool _patchCosmeticPurchase(Map<String, dynamic> result) {
@@ -741,6 +1128,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     setState(() {
       _catalog = next;
       _catalogState = Loadable.success(next);
+      _selectedCosmeticItem = null;
+      _loading = false;
       _recomputeAdUnlock();
     });
     widget.onShopChanged?.call(next);
@@ -785,7 +1174,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     ];
     final adUnlock = result['adUnlock'];
     if (adUnlock is Map) _powerupAdUnlockBlock = adUnlock;
-    setState(_recomputeAdUnlock);
+    setState(() {
+      if (_catalog case final catalog?) {
+        _loading = false;
+        _catalogState = Loadable.success(catalog);
+      }
+      _recomputeAdUnlock();
+    });
     return true;
   }
 
@@ -906,7 +1301,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       final selected = _section == section;
       return Expanded(
         child: GestureDetector(
-          onTap: () => setState(() => _section = section),
+          onTap: () {
+            if (_section == section) return;
+            _disposeShopAdTarget();
+            setState(() {
+              _section = section;
+              _selectedCosmeticItem = null;
+            });
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9),
             decoration: BoxDecoration(
@@ -951,7 +1353,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// powerup endpoints are missing (older backend) — the same condition that
   /// hides the powerup section today, so those users never see a dead pill.
   List<_ShopCategory> get _visibleCategories => [
-    if (_powerupsAvailable) _ShopCategory.powerups,
+    if (_powerupsAvailable || !_powerupsAvailabilityResolved)
+      _ShopCategory.powerups,
     _ShopCategory.characters,
     _ShopCategory.accessories,
   ];
@@ -987,7 +1390,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       child: GestureDetector(
         key: Key('shop-category-${category.label}'),
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _category = category),
+        onTap: () {
+          if (_activeCategory == category) return;
+          _disposeShopAdTarget();
+          setState(() {
+            _category = category;
+            _selectedCosmeticItem = null;
+          });
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           curve: Curves.easeOut,
@@ -1043,7 +1453,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   Widget _buildBody() {
     final state = _catalogState;
     if (state.shouldShowInitialLoading || (_loading && _catalog == null)) {
-      return const _ShopLoadingSkeleton();
+      return _ShopLoadingSkeleton(
+        cosmetic: _activeCategory != _ShopCategory.powerups,
+      );
     }
 
     if (state.isError && !state.hasData) {
@@ -1088,39 +1500,321 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   void _previewSelection(Map<String, dynamic> item) {
     final slot = item['slot'];
     if (slot is! String || slot.isEmpty || !mounted) return;
-    setState(() => _draftPreviewItem = Map<String, dynamic>.from(item));
+    setState(() => _selectedCosmeticItem = Map<String, dynamic>.from(item));
   }
 
   Widget _buildCharacterPreview() {
-    final equippedRaw = _catalog?['equipped'];
-    final equipped = equippedRaw is Map
-        ? equippedRaw
-        : const <dynamic, dynamic>{};
+    if (_activeCategory == _ShopCategory.powerups) {
+      return _buildCompactCharacterPreview();
+    }
+    return _buildDressingRoomStage();
+  }
+
+  _PreviewComposition _previewComposition() {
     final rows = <Map<String, dynamic>>[];
-    for (final value in equipped.values) {
-      if (value is Map) {
-        rows.add(<String, dynamic>{
-          for (final entry in value.entries)
-            if (entry.key is String) entry.key as String: entry.value,
-        });
+    final equipped = _catalog?['equipped'];
+    if (equipped is Map) {
+      for (final entry in equipped.entries) {
+        final slot = entry.key;
+        if (slot is! String) continue;
+        final row = _validEquipmentRow(slot);
+        if (row != null) rows.add(row);
       }
     }
-    final draft = _draftPreviewItem;
+
+    final draft = _selectedCosmeticItem;
     if (draft != null) {
       final slot = draft['slot'];
-      rows.removeWhere((row) => row['slot'] == slot);
-      rows.add(draft);
+      final replacedAt = rows.indexWhere((row) => row['slot'] == slot);
+      if (replacedAt != -1) rows.removeAt(replacedAt);
+      if (draft['id'] != _defaultCharacterSelectionId) {
+        if (replacedAt == -1 || replacedAt >= rows.length) {
+          rows.add(draft);
+        } else {
+          rows.insert(replacedAt, draft);
+        }
+      }
     }
+
     String? animal;
+    var animalName = 'Capybara';
     final accessories = <Map<String, dynamic>>[];
     for (final row in rows) {
       final assetKey = row['assetKey'];
       if (row['slot'] == 'CHARACTER') {
-        if (assetKey is String && assetKey.isNotEmpty) animal = assetKey;
+        if (assetKey is String && assetKey.isNotEmpty) {
+          animal = assetKey;
+          final rawName = row['name'];
+          animalName = rawName is String && rawName.isNotEmpty
+              ? rawName
+              : assetKey.replaceAll('_', ' ');
+        }
       } else if (assetKey is String && assetKey.isNotEmpty) {
         accessories.add(row);
       }
     }
+
+    return _PreviewComposition(
+      animal: animal,
+      animalName: animalName,
+      accessories: accessories,
+    );
+  }
+
+  Widget _previewAvatar(
+    _PreviewComposition preview, {
+    required double avatarSize,
+  }) {
+    final accessoryKey = preview.accessories
+        .map((item) => item['assetKey'])
+        .whereType<String>()
+        .join('-');
+    final avatarKey =
+        'shop-preview-${preview.animal ?? kDefaultAnimal}-$accessoryKey';
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      key: const Key('shop-stage-avatar-transition'),
+      duration: reducedMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        if (reducedMotion) {
+          return FadeTransition(opacity: animation, child: child);
+        }
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: RacerAvatar(
+        key: ValueKey(avatarKey),
+        rank: 1,
+        size: avatarSize,
+        showMedalRing: false,
+        animal: preview.animal,
+        accessories: preview.accessories,
+      ),
+    );
+  }
+
+  Widget _buildDressingRoomStage() {
+    final colors = AppColors.of(context);
+    final preview = _previewComposition();
+    final selected = _selectedCosmeticItem;
+    final selectedName = selected?['name'] is String
+        ? selected!['name'] as String
+        : null;
+    final isDefault = selected?['id'] == _defaultCharacterSelectionId;
+    final selectedEquipped = selected == null
+        ? false
+        : isDefault
+        ? _defaultCharacterIsEquipped()
+        : _isCosmeticEquipped(selected);
+    final price = selected?['priceCoins'];
+    final status = selectedName == null
+        ? 'Your equipped look'
+        : 'Previewing $selectedName';
+    final detail = selectedName == null
+        ? '${preview.animalName} · ${preview.accessories.length} equipped'
+        : _section == _ShopSection.store
+        ? '$selectedName · ${price is num ? price.toInt() : 0} coins'
+        : selectedEquipped
+        ? '$selectedName is equipped'
+        : '$selectedName is ready to try';
+    final semantics = selectedName == null
+        ? 'Your Bara. Base character ${preview.animalName}. Equipped outfit.'
+        : 'Your Bara. Base character ${preview.animalName}. Previewing $selectedName.';
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 600;
+        final narrow = constraints.maxWidth < 360;
+        // The 2dp top margin participates in the keyed widget's measured
+        // footprint, so the painted panel stays within the 210–250dp contract.
+        final stageHeight = wide
+            ? 248.0
+            : narrow
+            ? 216.0
+            : 228.0;
+        final artDimension = wide
+            ? 166.0
+            : narrow
+            ? 132.0
+            : 146.0;
+        final avatarSize = wide
+            ? 140.0
+            : narrow
+            ? 120.0
+            : 132.0;
+        return KeyedSubtree(
+          key: const Key('shop-character-preview'),
+          child: Semantics(
+            container: true,
+            image: true,
+            label: semantics,
+            child: Container(
+              key: const Key('shop-dressing-room-stage'),
+              height: stageHeight,
+              margin: const EdgeInsets.only(top: 2),
+              padding: EdgeInsets.fromLTRB(
+                narrow ? 10 : 14,
+                12,
+                narrow ? 10 : 14,
+                12,
+              ),
+              decoration: BoxDecoration(
+                color: colors.parchment,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colors.parchmentBorder, width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x44000000),
+                    offset: Offset(0, 4),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: artDimension,
+                    height: double.infinity,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colors.parchmentDark,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: colors.parchmentBorder),
+                      ),
+                      child: Center(
+                        child: _previewAvatar(preview, avatarSize: avatarSize),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: narrow ? 10 : 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'YOUR BARA',
+                            style: PixelText.title(
+                              size: 14,
+                              color: colors.textDark,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Semantics(
+                          liveRegion: true,
+                          label: status,
+                          child: Text(
+                            status,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: PixelText.title(
+                              size: 12.5,
+                              color: colors.textDark,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            detail,
+                            maxLines: 1,
+                            style: PixelText.body(
+                              size: 11.5,
+                              color: colors.textMid,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        if (selected != null)
+                          _buildStageActions(
+                            selected,
+                            selectedEquipped: selectedEquipped,
+                            isDefault: isDefault,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStageActions(
+    Map<String, dynamic> selected, {
+    required bool selectedEquipped,
+    required bool isDefault,
+  }) {
+    if (_section == _ShopSection.store) {
+      return _DressingRoomActionButton(
+        key: const Key('shop-stage-primary-action'),
+        label: 'DETAILS & BUY',
+        icon: Icons.shopping_bag_rounded,
+        primary: true,
+        enabled: !_saving,
+        onPressed: () => _openStoreCosmeticSheet(selected),
+      );
+    }
+
+    final inertDefault = isDefault && selectedEquipped;
+    final primaryLabel = inertDefault
+        ? 'EQUIPPED'
+        : selectedEquipped
+        ? 'CLEAR'
+        : 'EQUIP';
+    final slot = selected['slot'] as String? ?? '';
+    final id = selected['id'] as String?;
+    return Row(
+      children: [
+        Expanded(
+          child: _DressingRoomActionButton(
+            key: const Key('shop-stage-primary-action'),
+            label: primaryLabel,
+            icon: inertDefault
+                ? Icons.check_rounded
+                : selectedEquipped
+                ? Icons.close_rounded
+                : Icons.check_rounded,
+            primary: !selectedEquipped,
+            enabled: !_saving && !inertDefault && slot.isNotEmpty,
+            onPressed: () =>
+                _equip(slot, isDefault || selectedEquipped ? null : id),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _DressingRoomActionButton(
+            key: const Key('shop-stage-details-action'),
+            label: 'DETAILS',
+            icon: Icons.info_outline_rounded,
+            primary: false,
+            enabled: true,
+            onPressed: () => _openInventoryCosmeticSheet(selected),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactCharacterPreview() {
+    final preview = _previewComposition();
     return Container(
       key: const Key('shop-character-preview'),
       margin: const EdgeInsets.only(top: 2),
@@ -1149,16 +1843,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               child: Center(
                 child: Transform.scale(
                   scale: 1.45,
-                  child: RacerAvatar(
-                    key: ValueKey(
-                      'shop-preview-${animal ?? kDefaultAnimal}-${accessories.map((e) => e['assetKey']).join('-')}',
-                    ),
-                    rank: 1,
-                    size: 30,
-                    showMedalRing: false,
-                    animal: animal,
-                    accessories: accessories,
-                  ),
+                  child: _previewAvatar(preview, avatarSize: 30),
                 ),
               ),
             ),
@@ -1178,9 +1863,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  draft == null
-                      ? 'Your equipped look'
-                      : 'Previewing ${draft['name'] is String ? draft['name'] : 'this item'}',
+                  'Your equipped look',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.body(
@@ -1369,7 +2052,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   Widget _cosmeticArt(Map<String, dynamic> item, {double iconSize = 44}) {
     final assetKey = item['assetKey'] as String? ?? '';
     final isCharacter = item['slot'] == 'CHARACTER';
-    final equipped = item['equipped'] == true;
+    final equipped = _isCosmeticEquipped(item);
     return isCharacter
         ? AccessoryThumbnail(
             assetKey: assetKey,
@@ -1410,15 +2093,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// Deliberately total: any shape the backend might send — a future scalar, a
   /// malformed row, an absent key — resolves to "no character equipped" rather
   /// than throwing. The backend may be a different version than this build.
-  String? _equippedCharacterAssetKey() {
-    final row = (_catalog?['equipped'] as Map?)?['CHARACTER'];
-    if (row is Map) {
-      final assetKey = row['assetKey'];
-      return assetKey is String ? assetKey : null;
-    }
-    if (row is String) return row; // defensive: never emitted today
-    return null;
-  }
+  Map<String, dynamic> _defaultCharacterItem() => {
+    'id': _defaultCharacterSelectionId,
+    'sku': 'DEFAULT_CAPYBARA',
+    'name': 'Capybara',
+    'description': 'The original. Steady, sociable, and always in your corner.',
+    'slot': 'CHARACTER',
+    'assetKey': kDefaultAnimal,
+    'priceCoins': 0,
+    'owned': true,
+  };
 
   /// Item 6 — the always-present Capybara tile at the head of Inventory →
   /// CHARACTERS.
@@ -1429,7 +2113,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// server. EQUIP is the existing `_equip('CHARACTER', null)` clear call — no
   /// new endpoint, no fake catalog row, safe on every backend version.
   Widget _capybaraInventoryTile() {
-    final equipped = _equippedCharacterAssetKey() == null;
+    final item = _defaultCharacterItem();
+    final equipped = _defaultCharacterIsEquipped();
+    final selected =
+        _selectedCosmeticItem?['id'] == _defaultCharacterSelectionId;
     final sprite = animalSpriteFor(kDefaultAnimal);
     Widget art({double iconSize = 30}) => AccessoryThumbnail(
       assetKey: kDefaultAnimal,
@@ -1443,54 +2130,58 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             : AppColors.of(context).textMid,
       ),
     );
-    void doEquip() => _equip('CHARACTER', null);
-
-    return _ShopTile(
+    return KeyedSubtree(
       key: const Key('shop-capybara-tile'),
-      art: art(),
-      name: 'Capybara',
-      badge: equipped ? 'EQUIPPED' : null,
-      badgeAlignment: _TileBadgeAlignment.center,
-      highlighted: equipped,
-      // No CLEAR: clearing the capybara has no meaning — it IS the cleared
-      // state. An equipped capybara's strip is inert, like an owned powerup's.
-      stripLabel: equipped ? 'EQUIPPED' : 'EQUIP',
-      stripIcon: Icons.check_rounded,
-      stripEnabled: !equipped && !_saving,
-      onStrip: equipped ? null : doEquip,
-      onTap: () => _showItemSheet(
-        art: art(iconSize: 48),
+      child: _CosmeticSelector(
+        key: const Key('shop-cosmetic-selector-__default_capybara__'),
+        art: art(),
         name: 'Capybara',
-        slotLabel: _slotLabels['CHARACTER'],
-        badge: equipped ? 'EQUIPPED' : null,
-        description:
-            'The original. Steady, sociable, and always in your corner.',
-        actions: [
-          if (!equipped)
-            PillButton(
-              label: 'EQUIP',
-              icon: Icons.check_rounded,
-              variant: PillButtonVariant.primary,
-              fontSize: 14,
-              fullWidth: true,
-              onPressed: _saving
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      doEquip();
-                    },
-            ),
-        ],
+        marker: equipped ? 'EQUIPPED' : 'OWNED',
+        selected: selected,
+        equipped: equipped,
+        equippedMarkerKey: equipped
+            ? const Key('shop-cosmetic-equipped-__default_capybara__')
+            : null,
+        semanticLabel:
+            'Capybara, character, owned, ${selected ? 'selected' : 'not selected'}, ${equipped ? 'equipped' : 'not equipped'}',
+        onPressed: () => _previewSelection(item),
       ),
     );
   }
 
-  /// STORE tile for a cosmetic/character: art + name + gold price strip.
-  ///
-  /// The price strip opens the detail sheet, same as the tile body — a user
-  /// mis-tapped the strip while reading descriptions and was instantly
-  /// charged. The sheet's BUY button is the only purchase path.
-  Widget _storeCosmeticTile(Map<String, dynamic> item) {
+  void _openInventoryCosmeticSheet(Map<String, dynamic> item) {
+    final isDefault = item['id'] == _defaultCharacterSelectionId;
+    final equipped = isDefault
+        ? _defaultCharacterIsEquipped()
+        : _isCosmeticEquipped(item);
+    final name = item['name'] as String? ?? 'Accessory';
+    final sprite = animalSpriteFor(kDefaultAnimal);
+    final art = isDefault
+        ? AccessoryThumbnail(
+            assetKey: kDefaultAnimal,
+            assetPath: sprite.asset,
+            animationFrames: sprite.frameCount,
+            errorBuilder: (context, error, stackTrace) => Icon(
+              Icons.pets_rounded,
+              size: 48,
+              color: AppColors.of(context).textMid,
+            ),
+          )
+        : _cosmeticArt(item, iconSize: 48);
+    unawaited(
+      _showItemSheet(
+        art: art,
+        name: name,
+        slotLabel: _slotLabels[item['slot']],
+        badge: equipped ? 'EQUIPPED' : 'OWNED',
+        description: item['description'] is String
+            ? item['description'] as String
+            : '',
+      ),
+    );
+  }
+
+  void _openStoreCosmeticSheet(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Accessory';
     final rawPrice = item['priceCoins'];
     final price = rawPrice is num ? rawPrice.toInt() : 0;
@@ -1501,132 +2192,104 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final adContext = route == _AffordRoute.watchAds
         ? _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock)
         : null;
-    void openSheet() {
-      _previewSelection(item);
-      _warmShopAd(adContext);
-      unawaited(
-        _showItemSheet(
-          art: _cosmeticArt(item, iconSize: 48),
-          name: name,
-          slotLabel: _slotLabels[item['slot']],
-          description: item['description'] is String
-              ? item['description'] as String
-              : '',
-          actions: [
-            ?_adUnlockCapNotice(price),
-            switch (route) {
-              _AffordRoute.affordable => PillButton(
-                label: 'BUY · $price',
-                leading: const CoinGlyph(size: 16),
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                onPressed: _saving
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        _purchase(item);
-                      },
-              ),
-              _AffordRoute.watchAds => PillButton(
-                label: adsNeeded == 1
-                    ? 'WATCH 1 AD TO UNLOCK'
-                    : 'WATCH $adsNeeded ADS TO UNLOCK',
-                icon: Icons.smart_display_rounded,
-                variant: PillButtonVariant.rewardedAd,
-                fontSize: 13,
-                fullWidth: true,
-                onPressed: _saving
-                    ? null
-                    : () {
-                        _shopActionContext = adContext;
-                        Navigator.of(context).pop();
-                        _unlockCosmeticWithAds(item, adsNeeded);
-                      },
-              ),
-              _AffordRoute.getCoins => PillButton(
-                label: 'GET MORE COINS',
-                icon: Icons.add_circle_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _openGetCoins();
-                },
-              ),
-            },
-          ],
-        ).whenComplete(() {
-          if (_shopActionContext != adContext) _disposeShopAdTarget();
-        }),
-      );
-    }
-
-    return _ShopTile(
-      art: _cosmeticArt(item),
-      name: name,
-      // Item 23 — the strip is the PRICE, in every affordability state. It
-      // stopped advertising the action ("Get coins" / "Watch 2 ads"), which is
-      // what pushed the number off the tile and needed a second price chip
-      // over the art to put it back. One number, one place. The sheet still
-      // carries the route-specific CTA, and the tile opens it either way.
-      stripLabel: '$price',
-      stripLeading: const CoinGlyph(),
-      stripEnabled: !_saving,
-      onStrip: openSheet,
-      onTap: openSheet,
-    );
-  }
-
-  /// INVENTORY tile for a cosmetic/character: art + name + EQUIP/CLEAR strip.
-  Widget _inventoryCosmeticTile(Map<String, dynamic> item) {
-    final name = item['name'] as String? ?? 'Accessory';
-    final equipped = item['equipped'] == true;
-    final slot = item['slot'] as String? ?? '';
-    final id = item['id'] as String?;
-    void doEquip() => _equip(slot, id);
-    void doClear() => _equip(slot, null);
-    return _ShopTile(
-      art: _cosmeticArt(item),
-      name: name,
-      badge: equipped ? 'EQUIPPED' : null,
-      badgeAlignment: _TileBadgeAlignment.center,
-      highlighted: equipped,
-      stripLabel: equipped ? 'CLEAR' : 'EQUIP',
-      stripIcon: equipped ? Icons.close_rounded : Icons.check_rounded,
-      stripEnabled: !_saving,
-      onStrip: () {
-        _previewSelection(item);
-        (equipped ? doClear : doEquip)();
-      },
-      onTap: () {
-        _previewSelection(item);
-        _showItemSheet(
-          art: _cosmeticArt(item, iconSize: 48),
-          name: name,
-          slotLabel: _slotLabels[item['slot']],
-          badge: equipped ? 'EQUIPPED' : null,
-          description: item['description'] as String? ?? '',
-          actions: [
-            PillButton(
-              label: equipped ? 'CLEAR' : 'EQUIP',
-              icon: equipped ? Icons.close_rounded : Icons.check_rounded,
-              variant: equipped
-                  ? PillButtonVariant.secondary
-                  : PillButtonVariant.primary,
+    _warmShopAd(adContext);
+    unawaited(
+      _showItemSheet(
+        art: _cosmeticArt(item, iconSize: 48),
+        name: name,
+        slotLabel: _slotLabels[item['slot']],
+        description: item['description'] is String
+            ? item['description'] as String
+            : '',
+        actions: [
+          ?_adUnlockCapNotice(price),
+          switch (route) {
+            _AffordRoute.affordable => PillButton(
+              label: 'BUY · $price',
+              leading: const CoinGlyph(size: 16),
+              variant: PillButtonVariant.secondary,
               fontSize: 14,
               fullWidth: true,
               onPressed: _saving
                   ? null
                   : () {
                       Navigator.of(context).pop();
-                      (equipped ? doClear : doEquip)();
+                      _purchase(item);
                     },
             ),
-          ],
-        );
-      },
+            _AffordRoute.watchAds => PillButton(
+              label: adsNeeded == 1
+                  ? 'WATCH 1 AD TO UNLOCK'
+                  : 'WATCH $adsNeeded ADS TO UNLOCK',
+              icon: Icons.smart_display_rounded,
+              variant: PillButtonVariant.rewardedAd,
+              fontSize: 13,
+              fullWidth: true,
+              onPressed: _saving
+                  ? null
+                  : () {
+                      _shopActionContext = adContext;
+                      Navigator.of(context).pop();
+                      _unlockCosmeticWithAds(item, adsNeeded);
+                    },
+            ),
+            _AffordRoute.getCoins => PillButton(
+              label: 'GET MORE COINS',
+              icon: Icons.add_circle_rounded,
+              variant: PillButtonVariant.secondary,
+              fontSize: 14,
+              fullWidth: true,
+              onPressed: () {
+                Navigator.of(context).pop();
+                _openGetCoins();
+              },
+            ),
+          },
+        ],
+      ).whenComplete(() {
+        if (_shopActionContext != adContext) _disposeShopAdTarget();
+      }),
+    );
+  }
+
+  Widget _storeCosmeticTile(Map<String, dynamic> item) {
+    final id = item['id'] as String? ?? '';
+    final name = item['name'] as String? ?? 'Accessory';
+    final slot = item['slot'] as String? ?? 'ITEM';
+    final rawPrice = item['priceCoins'];
+    final price = rawPrice is num ? rawPrice.toInt() : 0;
+    final selected = _selectedCosmeticItem?['id'] == id;
+    return _CosmeticSelector(
+      key: Key('shop-cosmetic-selector-$id'),
+      art: _cosmeticArt(item),
+      name: name,
+      marker: '$price',
+      markerLeading: const CoinGlyph(size: 11),
+      selected: selected,
+      equipped: false,
+      semanticLabel:
+          '$name, $slot, not owned, $price coins, ${selected ? 'selected' : 'not selected'}, not equipped',
+      onPressed: () => _previewSelection(item),
+    );
+  }
+
+  Widget _inventoryCosmeticTile(Map<String, dynamic> item) {
+    final id = item['id'] as String? ?? '';
+    final name = item['name'] as String? ?? 'Accessory';
+    final slot = item['slot'] as String? ?? 'ITEM';
+    final equipped = _isCosmeticEquipped(item);
+    final selected = _selectedCosmeticItem?['id'] == id;
+    return _CosmeticSelector(
+      key: Key('shop-cosmetic-selector-$id'),
+      art: _cosmeticArt(item),
+      name: name,
+      marker: equipped ? 'EQUIPPED' : 'OWNED',
+      selected: selected,
+      equipped: equipped,
+      equippedMarkerKey: equipped ? Key('shop-cosmetic-equipped-$id') : null,
+      semanticLabel:
+          '$name, $slot, owned, ${selected ? 'selected' : 'not selected'}, ${equipped ? 'equipped' : 'not equipped'}',
+      onPressed: () => _previewSelection(item),
     );
   }
 
@@ -2081,15 +2744,23 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     final adContext = _shopContextFor(item, RewardedAdPlacement.powerupUnlock);
     if (adContext == null) return;
-    final generation = _shopActionGeneration;
+    final actionGeneration = _shopActionGeneration;
+    final sessionGeneration = _shopSessionGeneration;
+    final userId = widget.authService.userId;
+    final startedEpoch = _shopStateEpoch;
     final name = item['name'] as String? ?? 'Powerup';
 
     setState(() => _saving = true);
     try {
-      if (!await _watchShopUnlockAds(adContext, adsNeeded, generation, token)) {
+      if (!await _watchShopUnlockAds(
+        adContext,
+        adsNeeded,
+        actionGeneration,
+        token,
+      )) {
         return;
       }
-      if (!_shopFlowCurrent(generation, token, adContext)) return;
+      if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
 
       final result = await _backendApiService.unlockPowerupWithAds(
         identityToken: token,
@@ -2098,28 +2769,68 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             '${adContext.userId}-pwunlock-${DateTime.now().microsecondsSinceEpoch}',
         localDate: adContext.localDate,
       );
-      if (!_shopFlowCurrent(generation, token, adContext)) return;
+      if (!_shopFlowCurrent(actionGeneration, token, adContext) ||
+          !_sessionIsCurrent(
+            generation: sessionGeneration,
+            userId: userId,
+            token: token,
+            epoch: startedEpoch,
+          )) {
+        return;
+      }
+      final acceptedEpoch = ++_shopStateEpoch;
       final rawCoins = result['coins'];
       final coins = rawCoins is num ? rawCoins.toInt() : null;
       if (_isIdempotent(result) || !_patchPowerupMutation(result, item)) {
-        await _loadPowerups(token);
-        if (!_shopFlowCurrent(generation, token, adContext)) return;
+        await _loadPowerups(
+          token,
+          generation: sessionGeneration,
+          userId: userId,
+          epoch: acceptedEpoch,
+        );
+        if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
       } else if (coins != null) {
-        if (!_shopFlowCurrent(generation, token, adContext)) return;
+        if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
         await widget.authService.updateCoins(coins);
       }
-      if (mounted) showInfoToast(context, '$name unlocked!');
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+        epoch: acceptedEpoch,
+      )) {
+        showInfoToast(context, '$name unlocked!');
+      }
     } on ApiException catch (error) {
-      if (mounted) showErrorToast(context, error.message);
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+      )) {
+        showErrorToast(context, error.message);
+      }
     } catch (_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+      )) {
         showErrorToast(
           context,
           'Couldn’t unlock this powerup. Please try again.',
         );
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+      )) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -2152,15 +2863,23 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     final adContext = _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock);
     if (adContext == null) return;
-    final generation = _shopActionGeneration;
+    final actionGeneration = _shopActionGeneration;
+    final sessionGeneration = _shopSessionGeneration;
+    final userId = widget.authService.userId;
+    final startedEpoch = _shopStateEpoch;
     final name = item['name'] as String? ?? 'Item';
 
     setState(() => _saving = true);
     try {
-      if (!await _watchShopUnlockAds(adContext, adsNeeded, generation, token)) {
+      if (!await _watchShopUnlockAds(
+        adContext,
+        adsNeeded,
+        actionGeneration,
+        token,
+      )) {
         return;
       }
-      if (!_shopFlowCurrent(generation, token, adContext)) return;
+      if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
 
       final result = await _backendApiService.unlockShopItemWithAds(
         identityToken: token,
@@ -2169,19 +2888,49 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             '${adContext.userId}-shopunlock-${DateTime.now().microsecondsSinceEpoch}',
         localDate: adContext.localDate,
       );
-      if (!_shopFlowCurrent(generation, token, adContext)) return;
+      if (!_shopFlowCurrent(actionGeneration, token, adContext) ||
+          !_sessionIsCurrent(
+            generation: sessionGeneration,
+            userId: userId,
+            token: token,
+            epoch: startedEpoch,
+          )) {
+        return;
+      }
+      final acceptedEpoch = ++_shopStateEpoch;
       final rawCoins = result['coins'];
       final coins = rawCoins is num ? rawCoins.toInt() : null;
       if (_isIdempotent(result) || !_patchCosmeticPurchase(result)) {
-        await _refreshCosmetics(token);
-        if (!_shopFlowCurrent(generation, token, adContext)) return;
+        await _refreshCosmetics(
+          token,
+          generation: sessionGeneration,
+          userId: userId,
+          epoch: acceptedEpoch,
+          clearSelection: true,
+        );
+        if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
       } else if (coins != null) {
-        if (!_shopFlowCurrent(generation, token, adContext)) return;
+        if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
         await widget.authService.updateCoins(coins);
       }
-      if (mounted) showInfoToast(context, '$name unlocked!');
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+        epoch: acceptedEpoch,
+      )) {
+        if (!mounted) return;
+        showInfoToast(context, '$name unlocked!');
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
+      if (!_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+      )) {
+        return;
+      }
       // A 404 means this backend has no cosmetic ad-unlock at all. Say so once
       // and send the user down the coin route rather than looping on ads.
       if (error.statusCode == 404) {
@@ -2190,11 +2939,22 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       }
       showErrorToast(context, error.message);
     } catch (_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+      )) {
         showErrorToast(context, 'Couldn’t unlock this item. Please try again.');
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sessionIsCurrent(
+        generation: sessionGeneration,
+        userId: userId,
+        token: token,
+      )) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -2359,9 +3119,52 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return [_buildSectionGroup(tiles, staggerIndex: 0)];
   }
 
+  List<Widget> _buildCosmeticCategoryBody(
+    List<Widget> selectors, {
+    required IconData emptyIcon,
+    required String emptyMessage,
+  }) {
+    if (selectors.isEmpty) {
+      return [
+        StaggerIn(
+          index: 0,
+          child: _buildEmptyState(icon: emptyIcon, message: emptyMessage),
+        ),
+      ];
+    }
+    return [
+      StaggerIn(
+        index: 0,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 600
+                ? 6
+                : constraints.maxWidth >= 360
+                ? 4
+                : 3;
+            return GridView.builder(
+              key: const Key('shop-cosmetic-grid'),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 9,
+                childAspectRatio: 0.82,
+              ),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+              itemCount: selectors.length,
+              itemBuilder: (context, index) => selectors[index],
+            );
+          },
+        ),
+      ),
+    ];
+  }
+
   // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────
   List<Widget> _buildStore(List<Map<String, dynamic>> items) {
-    final unowned = items.where((i) => i['owned'] != true).toList();
+    final unowned = items.where((i) => !_isCosmeticOwned(i)).toList();
 
     return switch (_activeCategory) {
       _ShopCategory.powerups => _buildCategoryBody(
@@ -2374,7 +3177,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             ? 'No powerups for sale right now.'
             : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
       ),
-      _ShopCategory.characters => _buildCategoryBody(
+      _ShopCategory.characters => _buildCosmeticCategoryBody(
         [
           for (final item in unowned.where(_isCharacter))
             _storeCosmeticTile(item),
@@ -2382,7 +3185,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         emptyIcon: Icons.pets_rounded,
         emptyMessage: 'You own every character! Check your Inventory.',
       ),
-      _ShopCategory.accessories => _buildCategoryBody(
+      _ShopCategory.accessories => _buildCosmeticCategoryBody(
         [
           for (final item in unowned.where((i) => !_isCharacter(i)))
             _storeCosmeticTile(item),
@@ -2395,7 +3198,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────
   List<Widget> _buildInventory(List<Map<String, dynamic>> items) {
-    final owned = items.where((i) => i['owned'] == true).toList();
+    final owned = items.where(_isCosmeticOwned).toList();
 
     return switch (_activeCategory) {
       _ShopCategory.powerups => _buildCategoryBody(
@@ -2408,7 +3211,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         emptyIcon: Icons.bolt_rounded,
         emptyMessage: 'No powerups yet. Buy some from the Store.',
       ),
-      _ShopCategory.characters => _buildCategoryBody(
+      _ShopCategory.characters => _buildCosmeticCategoryBody(
         [
           // Item 6 — the capybara is the compiled-in default, not a shop item,
           // so it is never `owned` and had no tile. The only route back was the
@@ -2423,7 +3226,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         emptyIcon: Icons.pets_rounded,
         emptyMessage: 'No extra characters yet. Buy some from the Store.',
       ),
-      _ShopCategory.accessories => _buildCategoryBody(
+      _ShopCategory.accessories => _buildCosmeticCategoryBody(
         [
           for (final item in owned.where((i) => !_isCharacter(i)))
             _inventoryCosmeticTile(item),
@@ -2467,10 +3270,243 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 }
 
+class _PreviewComposition {
+  const _PreviewComposition({
+    required this.animal,
+    required this.animalName,
+    required this.accessories,
+  });
+
+  final String? animal;
+  final String animalName;
+  final List<Map<String, dynamic>> accessories;
+}
+
+class _DressingRoomActionButton extends StatelessWidget {
+  const _DressingRoomActionButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.primary,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool primary;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final fill = primary
+        ? colors.pillGold.withValues(alpha: enabled ? 0.52 : 0.18)
+        : colors.parchmentDark;
+    final border = primary ? colors.pillGoldDark : colors.parchmentBorder;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: border, width: primary ? 1.5 : 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 14,
+                  color: enabled
+                      ? colors.textDark
+                      : colors.textMid.withValues(alpha: 0.62),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: PixelText.title(
+                        size: 10.5,
+                        color: enabled
+                            ? colors.textDark
+                            : colors.textMid.withValues(alpha: 0.62),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CosmeticSelector extends StatelessWidget {
+  const _CosmeticSelector({
+    super.key,
+    required this.art,
+    required this.name,
+    required this.marker,
+    required this.selected,
+    required this.equipped,
+    required this.semanticLabel,
+    required this.onPressed,
+    this.markerLeading,
+    this.equippedMarkerKey,
+  });
+
+  final Widget art;
+  final String name;
+  final String marker;
+  final Widget? markerLeading;
+  final bool selected;
+  final bool equipped;
+  final String semanticLabel;
+  final VoidCallback onPressed;
+  final Key? equippedMarkerKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: semanticLabel,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            decoration: BoxDecoration(
+              color: colors.parchment,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected
+                    ? colors.pillGoldDark
+                    : equipped
+                    ? colors.accent
+                    : colors.parchmentBorder,
+                width: selected
+                    ? 3
+                    : equipped
+                    ? 2
+                    : 1,
+              ),
+              boxShadow: selected
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x44000000),
+                        offset: Offset(0, 3),
+                        blurRadius: 0,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ColoredBox(
+                      color: colors.parchmentDark,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Center(
+                          child: Transform.scale(scale: 1.22, child: art),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 32,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _FittedTileName(
+                        name: name,
+                        color: colors.textDark,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    key: equippedMarkerKey,
+                    height: 22,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: equipped
+                          ? colors.accent.withValues(alpha: 0.16)
+                          : colors.parchmentDark,
+                      border: Border(
+                        top: BorderSide(color: colors.parchmentBorder),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (markerLeading != null) ...[
+                          markerLeading!,
+                          const SizedBox(width: 3),
+                        ],
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              marker,
+                              maxLines: 1,
+                              style: PixelText.title(
+                                size: equipped ? 8.5 : 9.5,
+                                color: equipped
+                                    ? colors.accent
+                                    : colors.textMid,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Loading placeholder for the store. Mirrors the real merchandise grid so the
 /// catalog does not visibly reflow when data lands.
 class _ShopLoadingSkeleton extends StatelessWidget {
-  const _ShopLoadingSkeleton();
+  const _ShopLoadingSkeleton({required this.cosmetic});
+
+  final bool cosmetic;
 
   Widget _tile(BuildContext context) {
     return DecoratedBox(
@@ -2511,13 +3547,13 @@ class _ShopLoadingSkeleton extends StatelessWidget {
             // Name
             Container(
               key: const Key('shop-skeleton-name-band'),
-              height: 38,
+              height: cosmetic ? 32 : 38,
               alignment: Alignment.center,
               child: const SkeletonLine(width: 52, height: 10),
             ),
             // Price strip
             Container(
-              height: 48,
+              height: cosmetic ? 22 : 48,
               decoration: BoxDecoration(
                 color: AppColors.of(context).parchmentDark,
                 border: Border(
@@ -2540,17 +3576,28 @@ class _ShopLoadingSkeleton extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 600;
-        final tileAspectRatio = !wide && constraints.maxWidth < 350
+        final columns = cosmetic
+            ? wide
+                  ? 6
+                  : constraints.maxWidth >= 360
+                  ? 4
+                  : 3
+            : wide
+            ? 4
+            : 3;
+        final tileAspectRatio = cosmetic
+            ? 0.82
+            : !wide && constraints.maxWidth < 350
             ? 0.70
             : 0.82;
         return GridView.count(
           key: const Key('shop-loading-grid'),
-          crossAxisCount: wide ? 4 : 3,
+          crossAxisCount: columns,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 12,
+          mainAxisSpacing: cosmetic ? 10 : 14,
+          crossAxisSpacing: cosmetic ? 9 : 12,
           childAspectRatio: tileAspectRatio,
           children: [for (var i = 0; i < tileCount; i++) _tile(context)],
         );
@@ -2575,7 +3622,6 @@ class _ShopLoadingSkeleton extends StatelessWidget {
 /// the card opens the detail sheet with the full description.
 class _ShopTile extends StatelessWidget {
   const _ShopTile({
-    super.key,
     required this.art,
     required this.name,
     required this.stripLabel,
@@ -2585,8 +3631,6 @@ class _ShopTile extends StatelessWidget {
     this.stripIcon,
     this.stripLeading,
     this.badge,
-    this.badgeAlignment = _TileBadgeAlignment.right,
-    this.highlighted = false,
   }) : assert(
          stripIcon != null || stripLeading != null,
          'the strip needs a glyph',
@@ -2608,24 +3652,13 @@ class _ShopTile extends StatelessWidget {
   /// Small chip over the art (EQUIPPED / xN).
   final String? badge;
 
-  /// Where that chip sits. `xN` is a corner marker and stays top-right;
-  /// EQUIPPED is a statement about the whole tile, so it is centred over the
-  /// art rather than tucked into a corner.
-  final _TileBadgeAlignment badgeAlignment;
-
   Widget _badgeChip(BuildContext context) => Container(
     key: const Key('shop-tile-badge'),
     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
     decoration: BoxDecoration(
-      color: highlighted
-          ? AppColors.of(context).pillGold
-          : AppColors.of(context).roofMid,
+      color: AppColors.of(context).roofMid,
       borderRadius: BorderRadius.circular(999),
-      border: Border.all(
-        color: highlighted
-            ? AppColors.of(context).pillGoldDark
-            : AppColors.of(context).roofDark,
-      ),
+      border: Border.all(color: AppColors.of(context).roofDark),
     ),
     child: Text(
       badge!,
@@ -2634,17 +3667,9 @@ class _ShopTile extends StatelessWidget {
       // text color painted near-black on the dark-green `roofMid` pill.
       // `textLight` is cream in both palettes, which is what the day design
       // intended. The `highlighted` branch is already correct.
-      style: PixelText.title(
-        size: 10,
-        color: highlighted
-            ? AppColors.of(context).textDark
-            : AppColors.of(context).textLight,
-      ),
+      style: PixelText.title(size: 10, color: AppColors.of(context).textLight),
     ),
   );
-
-  /// Gold frame for equipped items.
-  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -2656,9 +3681,7 @@ class _ShopTile extends StatelessWidget {
           color: AppColors.of(context).parchment,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: highlighted
-                ? AppColors.of(context).pillGoldDark
-                : AppColors.of(context).parchmentBorder,
+            color: AppColors.of(context).parchmentBorder,
             width: 1,
           ),
         ),
@@ -2718,22 +3741,7 @@ class _ShopTile extends StatelessWidget {
                       ),
                     ),
                     if (badge != null)
-                      // Item 22 — EQUIPPED is a statement about the whole
-                      // tile, so it reads centred over the art. Pinning both
-                      // edges gives the Center a full-width box; the xN
-                      // quantity marker keeps its original top-right inset.
-                      badgeAlignment == _TileBadgeAlignment.center
-                          ? Positioned(
-                              top: 4,
-                              left: 0,
-                              right: 0,
-                              child: Center(child: _badgeChip(context)),
-                            )
-                          : Positioned(
-                              top: 4,
-                              right: 4,
-                              child: _badgeChip(context),
-                            ),
+                      Positioned(top: 4, right: 4, child: _badgeChip(context)),
                   ],
                 ),
               ),

@@ -34,7 +34,17 @@ class _FakeShopApi extends BackendApiService {
     return {
       'coins': coins,
       'ownedItemIds': <String>[],
-      'equipped': <String, dynamic>{'CHARACTER': equippedCharacterId},
+      'equipped': <String, dynamic>{
+        if (equippedCharacterId case final id?)
+          'CHARACTER': <String, dynamic>{
+            'id': id,
+            'sku': 'COS_CORGI',
+            'name': 'Corgi Puppy',
+            'slot': 'CHARACTER',
+            'assetKey': 'corgi_puppy',
+            'renderMetadata': <String, dynamic>{},
+          },
+      },
       'items': cosmetics,
     };
   }
@@ -210,32 +220,40 @@ void main() {
       expect((decoration.border! as Border).top.width, 1);
     });
 
-    testWidgets('tablet and loading grids keep the same four-column geometry', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        _FakeShopApi(powerupCatalog: _powerupCatalog()),
-        surface: const Size(700, 900),
-      );
-      final live = tester.widget<GridView>(
-        find.byKey(const Key('shop-product-grid')),
-      );
-      final liveDelegate =
-          live.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(liveDelegate.crossAxisCount, 4);
+    testWidgets(
+      'tablet powerups keep the same compact geometry while loading and live',
+      (tester) async {
+        await _pump(
+          tester,
+          _FakeShopApi(powerupCatalog: _powerupCatalog()),
+          surface: const Size(700, 900),
+        );
+        final livePreviewHeight = tester
+            .getSize(find.byKey(const Key('shop-character-preview')))
+            .height;
+        final live = tester.widget<GridView>(
+          find.byKey(const Key('shop-product-grid')),
+        );
+        final liveDelegate =
+            live.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+        expect(liveDelegate.crossAxisCount, 4);
 
-      await _pump(tester, _StalledApi(), surface: const Size(700, 900));
-      final loading = tester.widget<GridView>(
-        find.byKey(const Key('shop-loading-grid')).first,
-      );
-      final loadingDelegate =
-          loading.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(loadingDelegate.crossAxisCount, liveDelegate.crossAxisCount);
-      expect(loadingDelegate.childAspectRatio, liveDelegate.childAspectRatio);
-      expect(loadingDelegate.mainAxisSpacing, liveDelegate.mainAxisSpacing);
-      expect(loadingDelegate.crossAxisSpacing, liveDelegate.crossAxisSpacing);
-    });
+        await _pump(tester, _StalledApi(), surface: const Size(700, 900));
+        expect(
+          tester
+              .getSize(find.byKey(const Key('shop-character-preview')))
+              .height,
+          livePreviewHeight,
+        );
+        final loading = tester.widget<GridView>(
+          find.byKey(const Key('shop-loading-grid')).first,
+        );
+        final loadingDelegate =
+            loading.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+        expect(loadingDelegate.crossAxisCount, 4);
+        expect(loadingDelegate.childAspectRatio, 0.82);
+      },
+    );
 
     testWidgets('category controls expose selection and a 48dp target', (
       tester,
@@ -535,9 +553,11 @@ void main() {
       await _pump(tester, api);
       await openCharacterInventory(tester);
       expect(find.text('Capybara'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('shop-capybara-tile')));
+      await tester.pump(const Duration(milliseconds: 180));
       await tester.tap(
         find.descendant(
-          of: find.byKey(const Key('shop-capybara-tile')),
+          of: find.byKey(const Key('shop-dressing-room-stage')),
           matching: find.text('EQUIP'),
         ),
       );
@@ -577,7 +597,7 @@ void main() {
       expect(decoration.border, isNotNull);
     });
 
-    testWidgets('the loading skeleton name band matches the real tile (38)', (
+    testWidgets('the compact loading skeleton uses the selector name band', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(360, 900));
@@ -590,11 +610,13 @@ void main() {
         ),
       );
       await tester.pump();
+      await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+      await tester.pump();
 
       final band = tester.widget<Container>(
         find.byKey(const Key('shop-skeleton-name-band')).first,
       );
-      expect(band.constraints?.maxHeight, 38);
+      expect(band.constraints?.maxHeight, 32);
     });
   });
 }

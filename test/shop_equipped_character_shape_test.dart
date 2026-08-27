@@ -91,7 +91,9 @@ Future<void> _pumpCharacterInventory(
   await tester.binding.setSurfaceSize(const Size(390, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
-    MaterialApp(home: ShopTab(authService: await _auth(), backendApiService: api)),
+    MaterialApp(
+      home: ShopTab(authService: await _auth(), backendApiService: api),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -145,7 +147,16 @@ void main() {
           of: find.byKey(const Key('shop-capybara-tile')),
           matching: find.text('EQUIP'),
         ),
-        findsWidgets,
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const Key('shop-capybara-tile')));
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('shop-dressing-room-stage')),
+          matching: find.text('EQUIP'),
+        ),
+        findsOneWidget,
       );
     },
   );
@@ -198,9 +209,14 @@ void main() {
   test('the fixture matches serializeEquippedAccessory\'s real keys', () {
     // Guard: if the backend serializer gains/loses a key, this fixture — and
     // therefore the regression above — must be updated with it.
-    expect(
-      serializedEquippedAccessory().keys.toSet(),
-      {'id', 'sku', 'name', 'slot', 'assetKey', 'renderMetadata', 'bobble'},
-    );
+    expect(serializedEquippedAccessory().keys.toSet(), {
+      'id',
+      'sku',
+      'name',
+      'slot',
+      'assetKey',
+      'renderMetadata',
+      'bobble',
+    });
   });
 }

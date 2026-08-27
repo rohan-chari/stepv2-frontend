@@ -534,18 +534,18 @@ void main() {
     expect(api.entries, hasLength(1));
   });
 
-  testWidgets('joined hub has pinned standing, expansion, and empty guidance', (
+  testWidgets('joined hub pairs playful sharing ideas with the invite action', (
     tester,
   ) async {
-    await _pumpContest(
-      tester,
-      _GlobalGiveawayApi(
-        payload: _globalCurrent(
-          entryStatus: 'ELIGIBLE',
-          emptyLeaderboard: true,
-        ),
-      ),
+    final payload = _globalCurrent(
+      entryStatus: 'ELIGIBLE',
+      emptyLeaderboard: true,
     );
+    payload['contest'] = {
+      ..._globalContest,
+      'prize': {'coins': 12345},
+    };
+    await _pumpContest(tester, _GlobalGiveawayApi(payload: payload));
     expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
     expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
     expect(find.textContaining('#8'), findsOneWidget);
@@ -564,31 +564,31 @@ void main() {
           .height,
       lessThanOrEqualTo(185),
     );
-    await tester.tap(find.byKey(const Key('contest-trail-landmark-leaders')));
+    expect(find.text('DROP IT IN THE GROUP CHAT'), findsOneWidget);
+    expect(find.text('POST IT ON INSTAGRAM'), findsOneWidget);
+    expect(
+      find.textContaining('ONE SHARE COULD WIN YOU 12,345 COINS'),
+      findsOneWidget,
+    );
+    expect(find.text('WHAT COUNTS'), findsNothing);
+    expect(find.text('START'), findsNothing);
+    expect(find.text('RACE'), findsNothing);
+    expect(find.text('WIN'), findsNothing);
+    await tester.tap(
+      find.byKey(const Key('contest-dashboard-view-leaderboard')),
+    );
     await tester.pump();
+    expect(
+      find.byKey(const Key('contest-trail-leaders-drawer')),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('Share your invite to lead the trail'),
       findsOneWidget,
     );
-    await tester.tap(
-      find.byKey(const Key('contest-trail-landmark-what-counts')),
-    );
-    await tester.pump();
-    expect(
-      find.textContaining('qualifying race with another real player'),
-      findsOneWidget,
-    );
-    expect(find.text('OFFICIAL RULES'), findsOneWidget);
-    final rulesButton = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'OFFICIAL RULES'),
-    );
-    expect(
-      rulesButton.style?.foregroundColor?.resolve(<WidgetState>{}),
-      AppPalette.light.textLight,
-    );
   });
 
-  testWidgets('joined global trail exposes map HUD and deliberate drawers', (
+  testWidgets('joined global hub has no mixed-interaction landmark strip', (
     tester,
   ) async {
     await _pumpContest(
@@ -611,31 +611,15 @@ void main() {
     for (final key in [
       'contest-trail-landmark-start',
       'contest-trail-landmark-race',
+      'contest-trail-landmark-leaders',
+      'contest-trail-landmark-what-counts',
       'contest-trail-landmark-win',
     ]) {
-      expect(
-        tester.getSemantics(find.byKey(Key(key))),
-        matchesSemantics(
-          isButton: false,
-          hasTapAction: false,
-          hasEnabledState: true,
-        ),
-      );
+      expect(find.byKey(Key(key)), findsNothing);
     }
-
-    await tester.tap(find.byKey(const Key('contest-trail-landmark-leaders')));
-    await tester.pump();
-    expect(
-      find.byKey(const Key('contest-trail-leaders-drawer')),
-      findsOneWidget,
-    );
-    await tester.tap(
-      find.byKey(const Key('contest-trail-landmark-what-counts')),
-    );
-    await tester.pump();
     expect(
       find.byKey(const Key('contest-trail-what-counts-drawer')),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
@@ -655,13 +639,21 @@ void main() {
         expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
         expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
         expect(find.text('JOIN CONTEST'), findsNothing);
+        expect(
+          find.byKey(const Key('contest-dashboard-official-rules')),
+          findsOneWidget,
+        );
         if (status == 'ELIGIBLE' || status == 'UNDER_REVIEW') {
           expect(find.text('SHARE YOUR INVITE'), findsOneWidget);
+          expect(
+            find.byKey(const Key('contest-dashboard-share-ideas')),
+            findsOneWidget,
+          );
         } else {
           expect(find.text('SHARE YOUR INVITE'), findsNothing);
           expect(find.byKey(const Key('contest-trail-share')), findsNothing);
           expect(
-            find.byKey(const Key('contest-trail-landmark-share')),
+            find.byKey(const Key('contest-dashboard-share-ideas')),
             findsNothing,
           );
         }
@@ -771,6 +763,24 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('contest-overview-join')), findsOneWidget);
+  });
+
+  testWidgets('joined sharing prompt wraps at compact large-text sizes', (
+    tester,
+  ) async {
+    await _pumpContest(
+      tester,
+      _GlobalGiveawayApi(payload: _globalCurrent(entryStatus: 'ELIGIBLE')),
+      size: const Size(320, 700),
+      textScale: 1.7,
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('DROP IT IN THE GROUP CHAT'), findsOneWidget);
+    expect(find.text('POST IT ON INSTAGRAM'), findsOneWidget);
+    expect(
+      find.byKey(const Key('contest-dashboard-share-ideas')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('rules fallback belongs only to the current successful screen', (
