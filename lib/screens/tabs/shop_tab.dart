@@ -2301,6 +2301,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return AccessoryThumbnail(
       assetKey: type,
       assetPath: path,
+      remoteKind: RemoteAssetKind.powerups,
       errorBuilder: (context, error, stackTrace) =>
           PowerupIcon(type: type, size: fallbackSize),
     );

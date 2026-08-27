@@ -40,7 +40,7 @@ Bara is an iOS Flutter app that turns your daily step count into a multiplayer r
 - **Mystery box rolls** earned at step thresholds during a race, with three slots and one queue slot.
 - **Box opening** screen with case-opening reveal animation and rarity tiers.
 - **Use, discard, and queue management** with HELD / MYSTERY_BOX / QUEUED / USED / EXPIRED status flow.
-- **Sneaky Swap** powerup with target-selection screen for stealing or swapping rivals' items.
+- **Pickpocket** powerup with target selection for stealing a random powerup from a rival.
 - **Twelve powerup types** including Leg Cramp, Red Card, Shortcut, Compression Socks, Protein Shake, Runner's High, Second Wind, Stealth Mode, Wrong Turn, Fanny Pack, Trail Mix, and Detour Sign.
 - **Live powerup inventory** synced via `/races/:id/inventory`.
 

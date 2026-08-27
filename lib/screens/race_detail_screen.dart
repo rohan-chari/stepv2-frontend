@@ -3194,7 +3194,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  /// Resolves the Sneaky Swap target list via the new backend endpoint, which
+  /// Resolves the Pickpocket target list via the legacy-named backend endpoint,
   /// returns only racers holding a stealable powerup. The returned userIds are
   /// re-joined with [eligibleTargets] (the live participant rows) so the picker
   /// keeps showing avatars/steps. Defends against an older backend that lacks

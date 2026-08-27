@@ -41,9 +41,21 @@ class _SneakySwapBackendApiService extends BackendApiService {
       'powerupsEnabled': true,
       'endsAt': '2026-12-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
-        {'userId': 'user-3', 'displayName': 'Ridge Runner', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-3',
+          'displayName': 'Ridge Runner',
+          'status': 'ACCEPTED',
+        },
       ],
     };
   }
@@ -78,7 +90,12 @@ class _SneakySwapBackendApiService extends BackendApiService {
       'powerupData': const {
         'enabled': true,
         'inventory': [
-          {'id': 'pw-sneaky-1', 'type': 'SNEAKY_SWAP', 'rarity': 'RARE', 'status': 'HELD'},
+          {
+            'id': 'pw-sneaky-1',
+            'type': 'SNEAKY_SWAP',
+            'rarity': 'RARE',
+            'status': 'HELD',
+          },
         ],
         'powerupSlots': 3,
         'queuedBoxCount': 0,
@@ -145,6 +162,11 @@ Future<void> _openSneakySwapUse(WidgetTester tester) async {
   await tester.tap(heldSlot);
   await _pumpFrames(tester);
 
+  // The wire type and endpoint keep their legacy names for frozen-client
+  // compatibility, but no current player-facing surface may show that name.
+  expect(find.text('Pickpocket'), findsWidgets);
+  expect(find.text('Sneaky Swap'), findsNothing);
+
   // Tap USE in the actions sheet -> triggers the target resolution + picker.
   expect(find.text('USE'), findsOneWidget);
   await tester.tap(find.text('USE'));
@@ -155,7 +177,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'Sneaky Swap picker shows only racers returned by the new endpoint',
+    'Pickpocket picker shows only racers returned by the legacy endpoint',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       // Endpoint reports only Hill Climber (user-2) has something stealable.
@@ -204,15 +226,13 @@ void main() {
       );
 
       // Dismiss the picker sheet so no route animation is left pending.
-      Navigator.of(
-        tester.element(find.text('CHOOSE A TARGET')),
-      ).pop();
+      Navigator.of(tester.element(find.text('CHOOSE A TARGET'))).pop();
       await _pumpFrames(tester);
     },
   );
 
   testWidgets(
-    'Sneaky Swap shows an empty-state and no picker when no one has a stealable powerup',
+    'Pickpocket shows an empty-state and no picker when no one has a stealable powerup',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final api = _SneakySwapBackendApiService(targets: const []);
@@ -238,7 +258,7 @@ void main() {
         findsOneWidget,
       );
       // No target picker was opened.
-      expect(find.text('TARGET FOR SNEAKY SWAP'), findsNothing);
+      expect(find.text('TARGET FOR PICKPOCKET'), findsNothing);
 
       // Let the toast auto-dismiss timer + reverse animation finish so no
       // Timer/animation is left pending at test teardown. (Avoid pumpAndSettle:

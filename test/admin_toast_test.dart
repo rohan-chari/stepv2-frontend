@@ -31,7 +31,8 @@ void main() {
     expect(find.text('Imposter'), findsOneWidget);
     expect(find.text('Rainstorm'), findsOneWidget);
     expect(find.text('Lucky Horseshoe'), findsOneWidget);
-    expect(find.text('Sneaky Swap'), findsOneWidget);
+    expect(find.text('Pickpocket'), findsOneWidget);
+    expect(find.text('Sneaky Swap'), findsNothing);
     expect(find.text('Mirror'), findsOneWidget);
 
     // One row per type PowerupIcon can render. This USED to compare against a

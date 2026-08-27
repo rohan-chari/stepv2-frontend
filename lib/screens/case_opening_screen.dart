@@ -105,8 +105,8 @@ const _powerupEntries = [
   ),
   (
     type: 'SNEAKY_SWAP',
-    name: 'Sneaky Swap',
-    description: 'View and swap a rival powerup',
+    name: 'Pickpocket',
+    description: 'Steal a random powerup from a rival',
   ),
   (
     type: 'MIRROR',

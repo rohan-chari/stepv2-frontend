@@ -205,6 +205,10 @@ void main() {
   });
 
   group('the catalog still overrides every bundled fallback', () {
+    test('the retired Sneaky Swap display name is Pickpocket', () {
+      expect(PowerupCopy.nameFor('SNEAKY_SWAP'), 'Pickpocket');
+    });
+
     test('a server snapshot wins for description and tiers', () async {
       await PowerupCopy.refresh(
         fetch: () async => {

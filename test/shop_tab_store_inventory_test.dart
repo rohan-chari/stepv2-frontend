@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/services/remote_asset_cache.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/accessory_thumbnail.dart';
 
 // Store/Inventory overhaul for the shop tab.
 //
@@ -240,6 +242,16 @@ void main() {
     await _selectSegment(tester, 'STORE');
 
     expect(find.text('Signal Jammer'), findsWidgets);
+    final art = tester
+        .widgetList<AccessoryThumbnail>(find.byType(AccessoryThumbnail))
+        .where((thumbnail) => thumbnail.assetKey == 'SIGNAL_JAMMER')
+        .toList();
+    expect(art, isNotEmpty);
+    expect(
+      art.first.remoteKind,
+      RemoteAssetKind.powerups,
+      reason: 'shop art must resolve from the powerups CDN manifest section',
+    );
   });
 
   testWidgets('STORE shows unowned cosmetics but NOT owned ones', (

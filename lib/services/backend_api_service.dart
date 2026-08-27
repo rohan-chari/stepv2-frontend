@@ -4964,7 +4964,7 @@ class BackendApiService {
     String? targetEffectId,
     int upgradeLevel = 0,
   }) async {
-    // Sneaky Swap's retired swapOfferedPowerupId/swapRequestedPowerupId are
+    // Pickpocket's retired swapOfferedPowerupId/swapRequestedPowerupId are
     // gone: the steal redesign is target-only, and the server ignores the
     // legacy ids anyway.
     final body = <String, dynamic>{};
@@ -5004,7 +5004,7 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
-  /// Returns the participants the user could Sneaky Swap with right now — only
+  /// Returns the participants the user could Pickpocket right now — only
   /// those holding >=1 stealable powerup (not self, stealthed, or finished).
   /// Additive endpoint; older backends 404 here, so callers should fall back to
   /// the existing eligible-racer behavior on failure.

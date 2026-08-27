@@ -374,7 +374,10 @@ abstract final class PowerupCopy {
     'POCKET_WATCH': 'Pocket Watch',
     'TRAIL_MINE': 'Trail Mine',
     'PINECONE_TOSS': 'Pinecone Toss',
-    'SNEAKY_SWAP': 'Sneaky Swap',
+    // The frozen wire identifier predates the one-way-steal redesign. Keep the
+    // enum for old backend/app compatibility; only the player-facing name is
+    // Pickpocket now.
+    'SNEAKY_SWAP': 'Pickpocket',
     'MIRROR': 'Mirror',
     'CLEANSE': 'Cleanse',
     'IMPOSTER': 'Imposter',

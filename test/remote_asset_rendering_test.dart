@@ -63,6 +63,7 @@ void main() {
         'assets/images/accessories/shoes.png',
         'assets/images/capybara_walk_right.png',
         'assets/images/powerups/mirror.png',
+        'assets/images/powerups/sneaky_swap.png',
       },
       fetcher: (uri, headers) async => throw const SocketException('offline'),
     );
@@ -617,6 +618,21 @@ void main() {
         ),
         hasLength(1),
       );
+    });
+
+    testWidgets('the CDN Pickpocket art overrides the bundled legacy icon', (
+      tester,
+    ) async {
+      RemoteAssetCache.instance.debugApplyManifest({
+        'powerups': {
+          'SNEAKY_SWAP': {'url': 'https://cdn/powerups/sneaky_swap@abc123.png'},
+        },
+      });
+      await _seedCachedFile(RemoteAssetKind.powerups, 'SNEAKY_SWAP', 'abc123');
+
+      await pumpIcon(tester, 'SNEAKY_SWAP');
+
+      expect(_fileImages(tester, 'SNEAKY_SWAP@abc123'), hasLength(1));
     });
 
     testWidgets('an unknown type with a cached remote icon renders it', (
