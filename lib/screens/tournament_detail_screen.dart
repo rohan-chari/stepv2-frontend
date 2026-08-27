@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/app_route_observer.dart';
+import '../services/interstitial_ad_service.dart';
+import '../services/race_detail_navigation.dart';
 import '../styles.dart';
 import '../utils/share_helper.dart';
 import '../utils/tournament.dart';
@@ -36,12 +38,14 @@ class TournamentDetailScreen extends StatefulWidget {
     required this.tournamentId,
     this.friends = const [],
     BackendApiService? backendApiService,
+    this.raceDetailNavigator,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   final AuthService authService;
   final String tournamentId;
   final List<Map<String, dynamic>> friends;
   final BackendApiService backendApiService;
+  final RaceDetailNavigator? raceDetailNavigator;
 
   /// Counts per-second countdown ticks so a test can prove the timer really is
   /// cancelled once a round enters settlement (spec §4). The state class is
@@ -607,14 +611,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   void _openMatchup(String raceId) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RaceDetailScreen(
+    final navigator =
+        widget.raceDetailNavigator ??
+        RaceDetailNavigator.withoutInterstitials(
           authService: widget.authService,
-          raceId: raceId,
           backendApiService: widget.backendApiService,
-          friends: widget.friends,
-        ),
+        );
+    unawaited(
+      navigator.push(
+        context: context,
+        raceId: raceId,
+        entrySurface: RaceDetailEntrySurface.tournament,
+        friends: widget.friends,
+        scheduleRefresh: () => unawaited(_load()),
       ),
     );
   }

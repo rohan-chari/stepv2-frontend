@@ -104,6 +104,13 @@ flutter build ipa --release \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-m1bdl17qk10afve110og6m7adte1q9n0.apps.googleusercontent.com
 ```
 
+Staging builds intentionally omit both
+`ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID` and
+`ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID`. Production uses the two
+approved iOS IDs in the production command below. Omitting either ID disables
+only that placement, without borrowing the other placement or a test-unit
+fallback.
+
 Then upload `build/ios/ipa/*.ipa` via Transporter or `xcrun altool`. Apple processes it (~10 min) and pushes to your "Bara Staging" TestFlight internal testers — no Beta App Review needed since they're internal.
 
 Friends update their Bara Staging app. The Bara (prod) app on their phone is untouched.
@@ -179,6 +186,14 @@ For most releases, you can deploy backend first because the old App Store binary
 # id in prod BEFORE this build ships (iOS Google ID tokens carry it as `aud`).
 # ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is the dedicated race-results Rewarded
 # unit. It has NO fallback; production uses /6376353967 under app ~5288861983.
+# The Race Detail and Race Results exits use separate iOS interstitial units
+# so their AdMob performance is reported independently. Omit both for the
+# initial production release. Configure each unit-level cap to 2
+# impressions/user/day; the backend still enforces one shared 2/day total.
+# Android builds omit both placement-specific Android defines and therefore
+# silently keep interstitials disabled. The four-slot implementation is already
+# code-ready; Android can activate later by supplying its two defines, without
+# a flag or code change.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -187,6 +202,8 @@ flutter build ipa --release \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
+  --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
+  --dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/6032212376 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -271,6 +288,23 @@ flutter build appbundle --release --flavor prod \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
   --build-number=<versionCode>
 ```
+
+Android production currently omits
+`ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID` and
+`ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID`. When Android units
+are created, append both to the same prod command:
+
+```text
+--dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<Android Race Detail exit interstitial unit id>
+--dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<Android Race Results exit interstitial unit id>
+```
+
+Configure each interstitial unit—not the whole AdMob app—with a 2
+impressions/user/day cap before building. The backend remains authoritative
+for the shared 2 impressions/user/day total across both placements. No app
+flag or code change is needed for the later Android activation: until those
+defines are supplied, both Android interstitial placements silently remain
+off.
 
 Output: `build/app/outputs/bundle/<flavor>Release/app-<flavor>-release.aab`.
 Release signing needs `android/key.properties` (gitignored; template in

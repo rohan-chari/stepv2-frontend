@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
@@ -5,6 +7,8 @@ import '../../models/race_handoff_result.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/interstitial_ad_service.dart';
+import '../../services/race_detail_navigation.dart';
 import '../../styles.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
@@ -24,7 +28,6 @@ import '../../widgets/spinning_crate.dart';
 import '../../widgets/team_scoreline.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
-import '../race_detail_screen.dart';
 import '../tournament_detail_screen.dart';
 
 // Hard-offset "game piece" shadow shared with the home tab's card language.
@@ -62,6 +65,7 @@ class RacesTab extends StatefulWidget {
   // Injected only by tests; production creates its own. Used for the tournament
   // invite accept/decline calls.
   final BackendApiService? backendApiService;
+  final RaceDetailNavigator? raceDetailNavigator;
 
   const RacesTab({
     super.key,
@@ -83,6 +87,7 @@ class RacesTab extends StatefulWidget {
     this.tutorialCardKey,
     this.tutorialBoxKey,
     this.backendApiService,
+    this.raceDetailNavigator,
   });
 
   @override
@@ -291,6 +296,7 @@ class _RacesTabState extends State<RacesTab> {
               tournamentId: tournamentId,
               backendApiService: widget.backendApiService,
               friends: widget.friendsSteps,
+              raceDetailNavigator: widget.raceDetailNavigator,
             ),
           ),
         )
@@ -378,7 +384,10 @@ class _RacesTabState extends State<RacesTab> {
           // detail lands on a fresh list that includes the new race.
           await widget.onRacesChanged();
           if (!mounted) return;
-          _navigateToRaceDetail(race['id'] as String);
+          _navigateToRaceDetail(
+            race['id'] as String,
+            entryOrigin: RaceDetailEntryOrigin.newlyCreated,
+          );
         });
   }
 
@@ -386,8 +395,11 @@ class _RacesTabState extends State<RacesTab> {
     Navigator.of(context)
         .push<RaceHandoffResult>(
           MaterialPageRoute(
-            builder: (context) =>
-                PublicRacesScreen(authService: widget.authService),
+            builder: (context) => PublicRacesScreen(
+              authService: widget.authService,
+              backendApiService: widget.backendApiService,
+              raceDetailNavigator: widget.raceDetailNavigator,
+            ),
           ),
         )
         .then((result) async {
@@ -403,27 +415,35 @@ class _RacesTabState extends State<RacesTab> {
         });
   }
 
-  void _navigateToRaceDetail(String raceId) {
+  void _navigateToRaceDetail(
+    String raceId, {
+    RaceDetailEntryOrigin entryOrigin = RaceDetailEntryOrigin.existing,
+  }) {
     // Rapid taps during the push transition used to stack duplicate detail
     // screens, each running the full details/progress/chat load.
     if (_navigatingToRace) return;
     _navigatingToRace = true;
-    Navigator.of(context)
-        .push<bool>(
-          MaterialPageRoute(
-            builder: (context) => RaceDetailScreen(
-              authService: widget.authService,
-              raceId: raceId,
-              backendApiService: widget.backendApiService,
-              friends: widget.friendsSteps,
-              notificationService: widget.notificationService,
-            ),
-          ),
-        )
-        .then((_) {
-          _navigatingToRace = false;
-          if (mounted) widget.onRacesChanged();
-        });
+    final navigator =
+        widget.raceDetailNavigator ??
+        RaceDetailNavigator.withoutInterstitials(
+          authService: widget.authService,
+          backendApiService: _api,
+        );
+    unawaited(
+      navigator
+          .push(
+            context: context,
+            raceId: raceId,
+            entrySurface: RaceDetailEntrySurface.races,
+            entryOrigin: entryOrigin,
+            friends: widget.friendsSteps,
+            notificationService: widget.notificationService,
+            scheduleRefresh: () {
+              if (mounted) unawaited(widget.onRacesChanged());
+            },
+          )
+          .whenComplete(() => _navigatingToRace = false),
+    );
   }
 
   @override

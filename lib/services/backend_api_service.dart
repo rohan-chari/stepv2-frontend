@@ -13,6 +13,7 @@ import '../config/backend_config.dart';
 import '../constants/powerup_copy.dart';
 import '../models/balance_config.dart';
 import '../models/home_race_suggestion.dart';
+import '../models/interstitial_ad.dart';
 import '../models/powerup_shop_admin_item.dart';
 import '../models/race_discovery_summary.dart';
 import '../models/race_payout_double_offer.dart';
@@ -423,6 +424,7 @@ class BackendApiService {
   EndpointSupport _friendIdentitySearchSupport = EndpointSupport.unknown;
   EndpointSupport _raceProgressParticipantsSupport = EndpointSupport.unknown;
   EndpointSupport _racePayoutDoubleSupport = EndpointSupport.unknown;
+  EndpointSupport _interstitialSupport = EndpointSupport.unknown;
   EndpointSupport _racePowerupUseContextSupport = EndpointSupport.unknown;
   static EndpointSupport _raceBootstrapSupport = EndpointSupport.unknown;
   static EndpointSupport _raceMessageStreamsSupport = EndpointSupport.unknown;
@@ -452,6 +454,9 @@ class BackendApiService {
   bool get shopAdUnlockSupported =>
       _shopAdUnlockSupport != EndpointSupport.unsupported;
 
+  bool get interstitialSupported =>
+      _interstitialSupport != EndpointSupport.unsupported;
+
   /// Clears every session-scoped capability cache. Call on sign-out.
   void resetSessionCapabilities() {
     _syncV2Support = EndpointSupport.unknown;
@@ -463,6 +468,7 @@ class BackendApiService {
     _raceProgressParticipantsSupport = EndpointSupport.unknown;
     _racePowerupUseContextSupport = EndpointSupport.unknown;
     _racePayoutDoubleSupport = EndpointSupport.unknown;
+    _interstitialSupport = EndpointSupport.unknown;
     resetRaceMessageConditionalState();
     _sessionUserId = null;
   }
@@ -482,6 +488,7 @@ class BackendApiService {
       _raceProgressParticipantsSupport = EndpointSupport.unknown;
       _racePowerupUseContextSupport = EndpointSupport.unknown;
       _racePayoutDoubleSupport = EndpointSupport.unknown;
+      _interstitialSupport = EndpointSupport.unknown;
       resetRaceMessageConditionalState();
       _sessionUserId = userId;
       _sessionBaseUrl = baseUrl;
@@ -2626,6 +2633,138 @@ class BackendApiService {
     final body = await _decodeJsonResponse(response);
     final stats = body['stats'];
     return stats is Map<String, dynamic> ? stats : <String, dynamic>{};
+  }
+
+  Future<InterstitialEligibility> fetchInterstitialEligibility({
+    required String identityToken,
+    required InterstitialPlacement placement,
+    required String sessionId,
+    required DateTime sessionStartedAt,
+  }) async {
+    if (_interstitialSupport == EndpointSupport.unsupported) {
+      return InterstitialEligibility.ineligible;
+    }
+    final query = Uri(
+      queryParameters: {
+        'placement': placement.wireName,
+        'sessionId': sessionId,
+        'sessionStartedAt': sessionStartedAt.toUtc().toIso8601String(),
+      },
+    ).query;
+    final response = await _sendGetRequest(
+      path: '/ads/interstitial/eligibility?$query',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404 || raw.statusCode == 405) {
+      _interstitialSupport = EndpointSupport.unsupported;
+      return InterstitialEligibility.ineligible;
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+    _interstitialSupport = EndpointSupport.supported;
+    return InterstitialEligibility.tryParse(raw.json);
+  }
+
+  Future<InterstitialPermitGrant> createInterstitialPermit({
+    required String identityToken,
+    required InterstitialPlacement placement,
+    required String sessionId,
+    required DateTime sessionStartedAt,
+    required String appVersion,
+    required String platform,
+    required DateTime now,
+  }) async {
+    if (_interstitialSupport == EndpointSupport.unsupported) {
+      return InterstitialPermitGrant.ineligible;
+    }
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/ads/interstitial/permits',
+      body: {
+        'placement': placement.wireName,
+        'sessionId': sessionId,
+        'sessionStartedAt': sessionStartedAt.toUtc().toIso8601String(),
+        'appVersion': appVersion,
+        'platform': platform,
+      },
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404 || raw.statusCode == 405) {
+      _interstitialSupport = EndpointSupport.unsupported;
+      return InterstitialPermitGrant.ineligible;
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+    _interstitialSupport = EndpointSupport.supported;
+    return InterstitialPermitGrant.tryParse(
+      raw.json,
+      expectedPlacement: placement,
+      expectedSessionId: sessionId,
+      now: now,
+    );
+  }
+
+  Future<void> reportInterstitialImpression({
+    required String identityToken,
+    required String eventId,
+    required String permitId,
+    required InterstitialPlacement placement,
+    required String sessionId,
+    required DateTime occurredAt,
+    required String appVersion,
+    required String platform,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/ads/interstitial/impressions',
+      body: {
+        'eventId': eventId,
+        'permitId': permitId,
+        'placement': placement.wireName,
+        'sessionId': sessionId,
+        'occurredAt': occurredAt.toUtc().toIso8601String(),
+        'appVersion': appVersion,
+        'platform': platform,
+      },
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404 || raw.statusCode == 405) {
+      _interstitialSupport = EndpointSupport.unsupported;
+      throw ApiException(
+        'Interstitial ads are unavailable.',
+        statusCode: raw.statusCode,
+      );
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+    _interstitialSupport = EndpointSupport.supported;
+  }
+
+  Future<void> cancelInterstitialPermit({
+    required String identityToken,
+    required String permitId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/ads/interstitial/permits/${Uri.encodeComponent(permitId)}/cancel',
+      body: const {},
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404 || raw.statusCode == 405) {
+      _interstitialSupport = EndpointSupport.unsupported;
+      return;
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+    _interstitialSupport = EndpointSupport.supported;
   }
 
   /// Best-effort iOS foreground-session fact. Queueing, retry bounds, and

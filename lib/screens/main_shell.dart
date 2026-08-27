@@ -15,6 +15,7 @@ import '../widgets/modal_action_button.dart';
 import '../models/loadable.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/home_invite_preflight.dart';
+import '../models/interstitial_ad.dart';
 import '../models/next_race.dart';
 import '../models/race_handoff_result.dart';
 import '../models/race_payout_double_offer.dart';
@@ -37,9 +38,11 @@ import '../services/background_sync_bootstrap_service.dart';
 import '../services/discovery_join_coordinator.dart';
 import '../services/health_service.dart';
 import '../services/install_attribution_service.dart';
+import '../services/interstitial_ad_service.dart';
 import '../services/notification_service.dart';
 import '../services/review_prompt_service.dart';
 import '../services/race_results_ack_queue.dart';
+import '../services/race_detail_navigation.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
 import '../widgets/ad_banner_slot.dart';
@@ -77,11 +80,14 @@ import 'create_race_screen.dart';
 import 'daily_reward_screen.dart';
 import 'inbox_screen.dart';
 import 'leaderboard_screen.dart';
-import 'race_detail_screen.dart';
 import 'public_races_screen.dart';
 import 'tournament_detail_screen.dart';
 import 'tabs/races_tab.dart';
 import 'tabs/shop_tab.dart';
+
+void _ignoreInterstitialFuture(Future<void> future) {
+  unawaited(future.catchError((_) {}));
+}
 
 class MainShell extends StatefulWidget {
   const MainShell({
@@ -95,6 +101,8 @@ class MainShell extends StatefulWidget {
     this.racePayoutDoubleAdController,
     this.getCoinsAdControllerBuilder,
     this.raceResultsAcknowledgementQueue,
+    this.interstitialCoordinator,
+    this.raceDetailNavigator,
     this.forceHomeInviteEligibilityForTesting = false,
   });
 
@@ -107,6 +115,8 @@ class MainShell extends StatefulWidget {
   final RacePayoutDoubleAdController? racePayoutDoubleAdController;
   final ExtraSpinAdController Function()? getCoinsAdControllerBuilder;
   final RaceResultsAcknowledgementQueue? raceResultsAcknowledgementQueue;
+  final InterstitialPresentationCoordinator? interstitialCoordinator;
+  final RaceDetailNavigator? raceDetailNavigator;
   @visibleForTesting
   final bool forceHomeInviteEligibilityForTesting;
 
@@ -127,6 +137,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final AdminMetricsTelemetryService _adminMetricsTelemetry;
   late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
   late final FriendsSummaryRepository _friendsRepository;
+  InterstitialPresentationCoordinator? _interstitialCoordinator;
+  RaceDetailNavigator? _raceDetailNavigator;
+  String? _interstitialBoundToken;
   ExtraSpinAdController? _getCoinsAdController;
   int _getCoinsAuthGeneration = 0;
   String? _getCoinsWarmKey;
@@ -440,18 +453,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await Future.wait([_fetchRaceCard(), _fetchRacesCore()]);
       if (!mounted || !sheetContext.mounted) return;
       Navigator.of(sheetContext).pop();
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => RaceDetailScreen(
-            authService: widget.authService,
-            raceId: id,
-            backendApiService: _backendApiService,
-            friends: _friendsSteps,
-            notificationService: widget.notificationService,
-            showPostCreateSharePrompt: persistedAsQuick,
-          ),
-        ),
-      );
+      final raceNavigator = _raceDetailNavigator;
+      if (raceNavigator != null) {
+        await raceNavigator.push(
+          context: context,
+          raceId: id,
+          entrySurface: RaceDetailEntrySurface.home,
+          entryOrigin: RaceDetailEntryOrigin.newlyCreated,
+          friends: _friendsSteps,
+          notificationService: widget.notificationService,
+          showPostCreateSharePrompt: persistedAsQuick,
+          scheduleRefresh: () =>
+              unawaited(Future.wait([_fetchRaceCard(), _fetchRacesCore()])),
+        );
+      }
     } catch (error) {
       final code = error is ApiException ? error.code : null;
       const knownCodes = {
@@ -655,6 +670,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final nextToken = widget.authService.authToken;
     final userChanged = _homeSuggestionsUserId != nextUserId;
     final tokenChanged = _raceCardAuthToken != nextToken;
+    if (userChanged || tokenChanged) _bindInterstitialAccount();
     if (userChanged || tokenChanged) {
       _invalidateGetCoinsSession();
     }
@@ -717,6 +733,57 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _scheduleGetCoinsWarm();
         }
       });
+    }
+  }
+
+  void _bindInterstitialAccount() {
+    final injectedCoordinator = widget.interstitialCoordinator;
+    if (injectedCoordinator != null) {
+      _interstitialBoundToken = widget.authService.authToken;
+      _interstitialCoordinator = injectedCoordinator;
+      _raceDetailNavigator =
+          widget.raceDetailNavigator ??
+          RaceDetailNavigator(
+            authService: widget.authService,
+            backendApiService: _backendApiService,
+            coordinator: injectedCoordinator,
+            analytics: _activationAnalytics,
+          );
+      return;
+    }
+    final userId = widget.authService.userId;
+    final token = widget.authService.authToken;
+    if (_interstitialCoordinator?.ownerUserId == userId &&
+        _interstitialBoundToken == token &&
+        userId != null &&
+        userId.isNotEmpty) {
+      return;
+    }
+    _interstitialCoordinator?.dispose();
+    _interstitialCoordinator = null;
+    _interstitialBoundToken = null;
+    _raceDetailNavigator = widget.raceDetailNavigator;
+    if (userId == null || userId.isEmpty || token == null || token.isEmpty) {
+      return;
+    }
+    final coordinator = InterstitialAdCoordinator(
+      ownerUserId: userId,
+      identityToken: token,
+      backendApiService: _backendApiService,
+      analytics: _activationAnalytics,
+    );
+    _interstitialCoordinator = coordinator;
+    _interstitialBoundToken = token;
+    _raceDetailNavigator =
+        widget.raceDetailNavigator ??
+        RaceDetailNavigator(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+          coordinator: coordinator,
+          analytics: _activationAnalytics,
+        );
+    if (!_isOnboarding) {
+      _ignoreInterstitialFuture(coordinator.flushPendingImpressions());
     }
   }
 
@@ -798,6 +865,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _activationAnalytics = ActivationAnalyticsService(
       backendApiService: _backendApiService,
     );
+    _bindInterstitialAccount();
     _adminMetricsTelemetry = AdminMetricsTelemetryService(
       backendApiService: _backendApiService,
     );
@@ -861,6 +929,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _pageController.dispose();
     _bannerHeight.dispose();
     _getCoinsAdController?.dispose();
+    if (widget.interstitialCoordinator == null) {
+      _interstitialCoordinator?.dispose();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1359,6 +1430,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+        _interstitialCoordinator?.didResume();
         _resumeGetCoinsWarm();
         unawaited(
           _adminMetricsTelemetry.didResume(
@@ -1369,6 +1441,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         break;
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
+        _interstitialCoordinator?.didEnterBackground();
         _adminMetricsTelemetry.didEnterBackground();
         break;
       case AppLifecycleState.inactive:
@@ -2251,6 +2324,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         builder: (_) => PublicRacesScreen(
           authService: widget.authService,
           backendApiService: _backendApiService,
+          raceDetailNavigator: _raceDetailNavigator,
         ),
       ),
     );
@@ -2686,54 +2760,61 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         ),
       );
     }
-    final startNext = await Navigator.of(context).push<bool>(
-      PageRouteBuilder(
-        opaque: false,
-        pageBuilder: (_, _, _) => RaceResultsSummaryScreen(
-          races: unseen,
-          canStartNextRace:
-              nextRace?.resolved == true &&
-              nextRace?.eligible == true &&
-              nextRace?.createEnabled == true,
-          payoutDoubleOffer: popupOffer,
-          authService: widget.authService,
-          backendApiService: _backendApiService,
-          adController: popupOffer == null
-              ? null
-              : widget.racePayoutDoubleAdController ??
-                    (AdService.racePayoutDoubleSupported
-                        ? AdService(
-                            adUnitId: AdService.racePayoutDoubleAdUnitId,
-                          )
-                        : null),
-          adControllerOwnedByCaller:
-              widget.racePayoutDoubleAdController != null,
-          onBeforeDismiss: userId == null || userId.isEmpty
-              ? null
-              : () async {
-                  await _raceResultsAckQueue.enqueue(
-                    userId: userId,
-                    backendBaseUrl: backendBaseUrl,
-                    raceIds: shownIds,
-                    racePayoutDoubleCapability: capable,
-                    identityToken:
-                        identityToken != null &&
-                            identityToken.isNotEmpty &&
-                            _raceResultsAuthContextMatches(
-                              identityToken: identityToken,
-                              userId: userId,
-                              backendBaseUrl: backendBaseUrl,
-                            )
-                        ? identityToken
-                        : null,
-                  );
-                },
-        ),
-        transitionsBuilder: (_, anim, _, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 250),
-      ),
-    );
+    final resultsCoordinator = _interstitialCoordinator;
+    if (resultsCoordinator != null && !_isOnboarding) {
+      _ignoreInterstitialFuture(
+        resultsCoordinator.prime(InterstitialPlacement.raceResultsExit),
+      );
+    }
+    final resultsResult = await Navigator.of(context)
+        .push<RaceResultsSummaryResult>(
+          PageRouteBuilder(
+            opaque: false,
+            pageBuilder: (_, _, _) => RaceResultsSummaryScreen(
+              races: unseen,
+              canStartNextRace:
+                  nextRace?.resolved == true &&
+                  nextRace?.eligible == true &&
+                  nextRace?.createEnabled == true,
+              payoutDoubleOffer: popupOffer,
+              authService: widget.authService,
+              backendApiService: _backendApiService,
+              adController: popupOffer == null
+                  ? null
+                  : widget.racePayoutDoubleAdController ??
+                        (AdService.racePayoutDoubleSupported
+                            ? AdService(
+                                adUnitId: AdService.racePayoutDoubleAdUnitId,
+                              )
+                            : null),
+              adControllerOwnedByCaller:
+                  widget.racePayoutDoubleAdController != null,
+              onBeforeDismiss: userId == null || userId.isEmpty
+                  ? null
+                  : () async {
+                      await _raceResultsAckQueue.enqueue(
+                        userId: userId,
+                        backendBaseUrl: backendBaseUrl,
+                        raceIds: shownIds,
+                        racePayoutDoubleCapability: capable,
+                        identityToken:
+                            identityToken != null &&
+                                identityToken.isNotEmpty &&
+                                _raceResultsAuthContextMatches(
+                                  identityToken: identityToken,
+                                  userId: userId,
+                                  backendBaseUrl: backendBaseUrl,
+                                )
+                            ? identityToken
+                            : null,
+                      );
+                    },
+            ),
+            transitionsBuilder: (_, anim, _, child) =>
+                FadeTransition(opacity: anim, child: child),
+            transitionDuration: const Duration(milliseconds: 250),
+          ),
+        );
     _raceResultsPopupOpen = false;
 
     // The screen queued durably before route pop. Replay now without blocking
@@ -2777,13 +2858,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final opportunity = reviewRace?['reviewOpportunity'];
     final opportunityId = opportunity is Map ? opportunity['id'] : null;
     final opportunityRaceId = opportunity is Map ? opportunity['raceId'] : null;
-    if (mounted &&
-        identityToken != null &&
-        identityToken.isNotEmpty &&
+    final hasReviewOpportunity =
         opportunityId is String &&
         opportunityId.isNotEmpty &&
         opportunityRaceId is String &&
-        opportunityRaceId.isNotEmpty) {
+        opportunityRaceId.isNotEmpty;
+    if (mounted &&
+        identityToken != null &&
+        identityToken.isNotEmpty &&
+        hasReviewOpportunity) {
       try {
         await _backendApiService.claimReviewOpportunity(
           identityToken: identityToken,
@@ -2795,8 +2878,36 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         // Missing/expired/claimed/old endpoint: no prompt and no disruption.
       }
     }
-    if (startNext == true && mounted) {
+    final shellRouteCurrent =
+        mounted && ModalRoute.of(context)?.isCurrent == true;
+    final appForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (resultsResult?.startNext == true && mounted) {
+      _ignoreInterstitialFuture(
+        resultsCoordinator?.cancel(InterstitialPlacement.raceResultsExit) ??
+            Future<void>.value(),
+      );
       await _showQuickCreateRaceSheet(surface: 'results');
+    } else if (hasReviewOpportunity ||
+        !mounted ||
+        !shellRouteCurrent ||
+        !appForeground ||
+        !_raceResultsAuthContextMatches(
+          identityToken: identityToken ?? '',
+          userId: userId ?? '',
+          backendBaseUrl: backendBaseUrl,
+        )) {
+      _ignoreInterstitialFuture(
+        resultsCoordinator?.cancel(InterstitialPlacement.raceResultsExit) ??
+            Future<void>.value(),
+      );
+    } else {
+      try {
+        resultsCoordinator?.presentIfReady(
+          InterstitialPlacement.raceResultsExit,
+          rewardedPresented: resultsResult?.rewardedPresented == true,
+        );
+      } catch (_) {}
     }
   }
 
@@ -3579,33 +3690,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Rapid taps during the push transition used to stack duplicate detail
     // screens, each running the full details/progress/chat load.
     if (_openingRaceDetail) return;
+    final raceNavigator = _raceDetailNavigator;
+    if (raceNavigator == null) return;
     _openingRaceDetail = true;
-    Navigator.of(context)
-        .push<bool>(
-          MaterialPageRoute<bool>(
-            builder: (_) => RaceDetailScreen(
-              authService: widget.authService,
-              raceId: raceId,
-              backendApiService: _backendApiService,
-              friends: _friendsSteps,
-              notificationService: widget.notificationService,
-              onBoxOpened: () =>
-                  maybeAskForNotifications(NotificationAskTrigger.boxOpen),
-            ),
-          ),
-        )
-        .then((result) {
-          // The detail screen pops `true` from its not-a-participant state's
-          // "Find it on Races" button. This entry point (a push tap or a card
-          // on the home tab) is the one that can be sitting on another tab.
-          if (mounted && result == true) _openRacesTab();
-          // This is also the preview-tap entry point for a Home suggestion
-          // card the user hasn't joined yet (race_preview): joining from
-          // inside the detail screen, then popping back, used to leave the
-          // stale "JOIN" card sitting in the carousel until the next full
-          // Home refresh. Always resync on return, not just on the
-          // not-a-participant branch above.
-          if (mounted) {
+    raceNavigator
+        .push(
+          context: context,
+          raceId: raceId,
+          entrySurface: RaceDetailEntrySurface.home,
+          friends: _friendsSteps,
+          notificationService: widget.notificationService,
+          onBoxOpened: () =>
+              maybeAskForNotifications(NotificationAskTrigger.boxOpen),
+          scheduleRefresh: () {
+            if (!mounted) return;
             unawaited(
               Future.wait([
                 _refreshHomeSuggestions(),
@@ -3613,7 +3711,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 _fetchRacesCore(),
               ]),
             );
+          },
+        )
+        .then((result) {
+          // The detail screen pops `true` from its not-a-participant state's
+          // "Find it on Races" button. This entry point (a push tap or a card
+          // on the home tab) is the one that can be sitting on another tab.
+          if (mounted && result == RaceDetailRouteResult.forwardExit) {
+            _openRacesTab();
           }
+          // This is also the preview-tap entry point for a Home suggestion
+          // card the user hasn't joined yet (race_preview): joining from
+          // inside the detail screen, then popping back, used to leave the
+          // stale "JOIN" card sitting in the carousel until the next full
+          // Home refresh. Always resync on return, not just on the
+          // not-a-participant branch above.
         })
         .whenComplete(() => _openingRaceDetail = false);
   }
@@ -3643,6 +3755,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               tournamentId: tournamentId,
               backendApiService: _backendApiService,
               friends: _friendsSteps,
+              raceDetailNavigator: _raceDetailNavigator,
             ),
           ),
         )
@@ -4576,6 +4689,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           publicRacesCount: _publicRacesCount,
                           displayName: _displayName,
                           notificationService: widget.notificationService,
+                          raceDetailNavigator: _raceDetailNavigator,
                           onOpenProfile: _openProfile,
                         ),
                         LeaderboardTab(

@@ -130,6 +130,9 @@ flutter pub get
 # ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is intentionally omitted here too. Its
 # SSV-backed reward must use a staging-specific unit/callback before it can be
 # enabled in a staging-backend build.
+# Both production interstitial IDs are intentionally omitted from staging.
+# Without them, Race Detail and Race Results exits continue normally with no
+# interstitial request, delay, or placeholder.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button (iOS). This is
 # the STAGING iOS OAuth client — it must match the backend the build talks to,
 # since each env's GOOGLE_AUTH_CLIENT_ID allowlist only accepts its own client.
@@ -156,16 +159,21 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # switch, so it still requires ADMOB_BANNER_AD_UNIT_ID to render at all).
 # ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is the dedicated rewarded unit for the
 # combined race-results bonus. It has NO fallback; omission removes the offer.
+# The two interstitial defines are placement-specific so AdMob reports Race
+# Detail exits separately from completed Race Results exits. Both share the
+# backend's account-wide cooldown/day/session caps.
 # GOOGLE_IOS_CLIENT_ID here is the PROD iOS OAuth client (prod backend only
 # accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
-  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
+  --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
+  --dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/6032212376 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -184,6 +192,8 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
     --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
     --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
     --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
+    --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
+    --dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/6032212376 \
     --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -201,6 +211,8 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
 # compiled out of the release entirely.
 # ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is also dedicated and has NO fallback.
 # The production iOS Rewarded unit is /6376353967 under app ~5288861983.
+# The two production interstitial units are required for the initial iOS
+# release; each placement is disabled independently if its define is omitted.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -209,13 +221,17 @@ flutter build ipa --release \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
+  --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
+  --dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/6032212376 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 ### Build production Android
 ```bash
-# The race-payout rewarded unit is platform-specific and has NO fallback.
-# Keep the explicit placeholder until the Android Rewarded unit is created.
+# The race-payout rewarded and both interstitial units are platform-specific
+# and have NO fallback. Keep the explicit placeholders until their Android
+# units are created; omitting both interstitial defines disables Android
+# interstitials without affecting navigation or the iOS release.
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
@@ -223,6 +239,8 @@ flutter build appbundle --release --flavor prod \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
+  --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables Race Detail exit interstitials> \
+  --dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables Race Results exit interstitials> \
   --build-number=<versionCode>
 ```
 

@@ -57,6 +57,17 @@ class RaceResultsSummaryScreen extends StatefulWidget {
       _RaceResultsSummaryScreenState();
 }
 
+@immutable
+class RaceResultsSummaryResult {
+  const RaceResultsSummaryResult({
+    this.startNext = false,
+    this.rewardedPresented = false,
+  });
+
+  final bool startNext;
+  final bool rewardedPresented;
+}
+
 enum _PayoutDoubleFlowState { ready, loading, verifying, earned }
 
 class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
@@ -71,6 +82,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
   Future<void>? _preparationFuture;
   int _popupGeneration = 0;
   bool _presentationStarted = false;
+  bool _rewardedPresented = false;
   bool _recoveryClaimedOffer = false;
   String? _boundToken;
   String? _boundUserId;
@@ -123,7 +135,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     _hideOffer();
   }
 
-  Future<void> _dismiss([bool? result]) async {
+  Future<void> _dismiss([bool startNext = false]) async {
     if (_dismissStarted) return;
     _dismissStarted = true;
     try {
@@ -132,7 +144,14 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       // Queue persistence has its own memory fallback. Dismissal must remain
       // available even if local storage is unavailable.
     }
-    if (mounted) Navigator.of(context).pop(result);
+    if (mounted) {
+      Navigator.of(context).pop(
+        RaceResultsSummaryResult(
+          startNext: startNext,
+          rewardedPresented: _rewardedPresented,
+        ),
+      );
+    }
   }
 
   Future<void> _ensurePrepared() {
@@ -310,6 +329,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
         });
         return;
       }
+      _rewardedPresented = true;
       final earned = await ads.showAndAwaitRewardFor(context);
       if (!_generationMatches(generation, token, userId)) return;
       if (!earned) {
@@ -563,11 +583,8 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                                       : 'CONTINUE',
                                   variant: PillButtonVariant.primary,
                                   fullWidth: true,
-                                  // TODO(ads-interstitial): frequency-capped
-                                  // interstitial fires after this pop (see ADS_TODO.md)
-                                  onPressed: () => _dismiss(
-                                    widget.canStartNextRace ? true : null,
-                                  ),
+                                  onPressed: () =>
+                                      _dismiss(widget.canStartNextRace),
                                 ),
                                 if (widget.canStartNextRace) ...[
                                   const SizedBox(height: 8),

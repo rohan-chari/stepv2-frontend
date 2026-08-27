@@ -14,6 +14,8 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/discovery_join_coordinator.dart';
 import '../services/notification_service.dart';
+import '../services/interstitial_ad_service.dart';
+import '../services/race_detail_navigation.dart';
 import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
 import '../services/race_stream_coordinator.dart';
@@ -78,6 +80,8 @@ class RaceDetailScreen extends StatefulWidget {
   final BackendApiService backendApiService;
   final NotificationService? notificationService;
   final ActivationAnalyticsService? activationAnalyticsService;
+  final RaceDetailInterstitialVisit? interstitialVisit;
+  final RaceDetailNavigator? raceDetailNavigator;
 
   /// Fired once a mystery-box reveal has finished and its overlay has closed.
   /// The host uses it for the relocated notification ask (spec §5.4) — this is
@@ -143,6 +147,8 @@ class RaceDetailScreen extends StatefulWidget {
     BackendApiService? backendApiService,
     this.notificationService,
     this.activationAnalyticsService,
+    this.interstitialVisit,
+    this.raceDetailNavigator,
     this.onBoxOpened,
     this.tutorialPowerupsKey,
     this.tutorialClockKey,
@@ -422,6 +428,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // a user mashing both doesn't fire concurrent detail fetches.
   Future<void>? _detailsInFlight;
   late bool _postCreateSharePromptVisible;
+  late final String? _interstitialVisitUserId;
+  late final String? _interstitialVisitToken;
 
   /// WHICH action is in flight (batch 2026-08-08, item 12).
   ///
@@ -598,6 +606,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void didPushNext() {
     _routeVisible = false;
+    widget.interstitialVisit?.setCovered(true);
     _leaderboardWasVisible = false;
     _pauseCoveredTimers();
   }
@@ -605,6 +614,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void didPopNext() {
     _routeVisible = true;
+    widget.interstitialVisit?.setCovered(false);
     _scheduleLeaderboardVisibilityCheck();
     // Route uncover (case opening, picker, or another child page) refreshes
     // progress but is not a foreground-resume notification opportunity.
@@ -764,6 +774,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   void initState() {
     super.initState();
     _postCreateSharePromptVisible = widget.showPostCreateSharePrompt;
+    _interstitialVisitUserId = widget.authService.userId;
+    _interstitialVisitToken = widget.authService.authToken;
     if (_postCreateSharePromptVisible && !widget.demoMode) {
       unawaited(
         _activationAnalytics.record(
@@ -951,11 +963,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _appResumed = false;
+      widget.interstitialVisit?.setForeground(false);
       _backgroundedSinceLastResume = true;
       _impactAttemptGeneration += 1;
       _leaderboardWasVisible = false;
     } else if (state == AppLifecycleState.resumed) {
       _appResumed = true;
+      widget.interstitialVisit?.setForeground(true);
       _scheduleLeaderboardVisibilityCheck();
     }
     switch (racePollLifecycleAction(state, wasPolling: _pollingActive)) {
@@ -1034,6 +1048,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _messageInput.dispose();
     _messageFocus.dispose();
     _streams?.dispose();
+    widget.interstitialVisit?.dispose();
     super.dispose();
   }
 
@@ -1166,6 +1181,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (!mounted) return;
       final isInitialRouteLoad = !_initialDetailsLoadCompleted;
       _initialDetailsLoadCompleted = true;
+      if (isInitialRouteLoad) {
+        widget.interstitialVisit?.stampFirstAuthoritativeLoad(
+          raceStatus: details['status'],
+          participantStatus: details['myStatus'],
+        );
+      } else if (details['status'] != 'ACTIVE' ||
+          details['myStatus'] != 'ACCEPTED') {
+        widget.interstitialVisit?.revoke();
+      }
       final previousRaceStatus = _race?['status'];
       setState(() {
         _race = details;
@@ -1456,6 +1480,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// down. Called from the details load and from the 30s progress poll, so a
   /// mid-session prune stops the loop instead of erroring every 30s forever.
   void _enterNotAParticipant() {
+    widget.interstitialVisit?.revoke();
     _pollingActive = false;
     _countdownActive = false;
     _pollTimer?.cancel();
@@ -1896,7 +1921,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         showInfoToast(context, 'You joined the race!');
         _loadDetails();
       } else {
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(RaceDetailRouteResult.stateChange);
       }
     } on ApiException catch (e) {
       if (mounted) showErrorToast(context, fundedExposureErrorCopy(e));
@@ -2121,7 +2146,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // A forfeited race is no longer an actionable detail route. Return to
       // the caller immediately; the shell refreshes its races list on resume,
       // and the backend omits this membership from `active` for new clients.
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) {
+        Navigator.of(context).pop(RaceDetailRouteResult.stateChange);
+      }
     } on ApiException catch (e) {
       if (mounted) {
         showErrorToast(
@@ -2222,7 +2249,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (token == null || token.isEmpty) return;
       await _api.leaveRace(identityToken: token, raceId: widget.raceId);
       await _refreshWallet();
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) {
+        Navigator.of(context).pop(RaceDetailRouteResult.stateChange);
+      }
     } on ApiException catch (e) {
       if (mounted) {
         showErrorToast(
@@ -2358,7 +2387,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       await _api.cancelRace(identityToken: token, raceId: widget.raceId);
       await _refreshWallet();
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) {
+        Navigator.of(context).pop(RaceDetailRouteResult.stateChange);
+      }
     } catch (e) {
       if (mounted) showErrorToast(context, e.toString());
     } finally {
@@ -4147,7 +4178,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   child: Row(
                     children: [
                       GestureDetector(
-                        onTap: () => Navigator.of(context).pop(true),
+                        onTap: () => Navigator.of(
+                          context,
+                        ).pop(RaceDetailRouteResult.backExit),
                         child: Padding(
                           padding: EdgeInsets.all(8),
                           child: Icon(
@@ -4329,7 +4362,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 // Pops with `true` so the shell (the only entry point that can
                 // be sitting on another tab) swings over to Races. Every other
                 // push site is already in the races area, and ignores it.
-                onPressed: () => Navigator.of(context).maybePop(true),
+                onPressed: () => Navigator.of(
+                  context,
+                ).maybePop(RaceDetailRouteResult.forwardExit),
               ),
             ],
           ),
@@ -6253,6 +6288,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               tournamentId: tournamentId,
               backendApiService: widget.backendApiService,
               friends: widget.friends,
+              raceDetailNavigator: widget.raceDetailNavigator,
             ),
           ),
         );
@@ -6546,6 +6582,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   RewardedAdContext? _rerollBoundContext;
 
   void _handleRewardedAdAuthChanged() {
+    if (widget.authService.userId != _interstitialVisitUserId ||
+        widget.authService.authToken != _interstitialVisitToken) {
+      widget.interstitialVisit?.revoke();
+    }
     final controller = _rerollAdCtrl;
     if (controller == null) return;
     if (_rerollBoundUserId == _myUserId) return;
@@ -6640,6 +6680,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         return null;
       }
 
+      widget.interstitialVisit?.recordRewardedPresented();
       final earned = await _rerollAd.showAndAwaitRewardFor(adContext);
       // Closed early: no grant was minted, so there is nothing to consume.
       if (!earned) return null;
@@ -6749,6 +6790,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         return null;
       }
 
+      widget.interstitialVisit?.recordRewardedPresented();
       final earned = await _rerollAd.showAndAwaitRewardFor(adContext);
       // Closed early: no grant was minted, so there is nothing to consume.
       if (!earned) return null;
@@ -7755,7 +7797,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       await _refreshWallet();
       if (!mounted) return;
       if (!isForfeit) {
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(RaceDetailRouteResult.stateChange);
         return;
       }
       await _loadDetails();

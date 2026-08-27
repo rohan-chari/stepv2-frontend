@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:gma_mediation_unity/unity_privacy_api.g.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../models/interstitial_ad.dart';
+import 'interstitial_ad_service.dart';
+
 enum RewardedAdPlacement {
   extraSpin,
   getCoins,
@@ -424,6 +427,24 @@ class AdService
     'ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID',
   );
 
+  // Each interstitial placement has an independent per-platform ID so AdMob
+  // reports their performance separately. There is deliberately no fallback
+  // to a sibling placement, platform, rewarded, or test unit.
+  static const _envRaceDetailExitInterstitialAdUnitId = String.fromEnvironment(
+    'ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID',
+  );
+  static const _envRaceResultsExitInterstitialAdUnitId = String.fromEnvironment(
+    'ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID',
+  );
+  static const _envRaceDetailExitInterstitialAdUnitIdAndroid =
+      String.fromEnvironment(
+        'ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID',
+      );
+  static const _envRaceResultsExitInterstitialAdUnitIdAndroid =
+      String.fromEnvironment(
+        'ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID',
+      );
+
   // Banner placements (shop, race mystery-box overlay) are display-only: no
   // SSV, no reward, no backend. Like the rewarded unit, the real banner unit is
   // baked in per-build via --dart-define; absent, we fall back to Google's
@@ -541,6 +562,52 @@ class AdService
 
   static bool get racePayoutDoubleSupported =>
       racePayoutDoubleAdUnitId.isNotEmpty;
+
+  static String interstitialAdUnitIdFor(InterstitialPlacement placement) {
+    if (kIsWeb) return '';
+    return resolveInterstitialAdUnitId(
+      placement: placement,
+      platform: Platform.isIOS
+          ? 'ios'
+          : Platform.isAndroid
+          ? 'android'
+          : 'other',
+      iosRaceDetailUnitId: _envRaceDetailExitInterstitialAdUnitId,
+      iosRaceResultsUnitId: _envRaceResultsExitInterstitialAdUnitId,
+      androidRaceDetailUnitId: _envRaceDetailExitInterstitialAdUnitIdAndroid,
+      androidRaceResultsUnitId: _envRaceResultsExitInterstitialAdUnitIdAndroid,
+    );
+  }
+
+  @visibleForTesting
+  static String resolveInterstitialAdUnitId({
+    required InterstitialPlacement placement,
+    required String platform,
+    required String iosRaceDetailUnitId,
+    required String iosRaceResultsUnitId,
+    required String androidRaceDetailUnitId,
+    required String androidRaceResultsUnitId,
+  }) => switch (platform) {
+    'ios' => switch (placement) {
+      InterstitialPlacement.raceDetailExit => iosRaceDetailUnitId,
+      InterstitialPlacement.raceResultsExit => iosRaceResultsUnitId,
+    },
+    'android' => switch (placement) {
+      InterstitialPlacement.raceDetailExit => androidRaceDetailUnitId,
+      InterstitialPlacement.raceResultsExit => androidRaceResultsUnitId,
+    },
+    _ => '',
+  };
+
+  static bool interstitialSupportedFor(InterstitialPlacement placement) =>
+      interstitialAdUnitIdFor(placement).isNotEmpty;
+
+  static String get currentAdPlatform {
+    if (kIsWeb) return 'other';
+    if (Platform.isIOS) return 'ios';
+    if (Platform.isAndroid) return 'android';
+    return 'other';
+  }
 
   static String get _platformBannerUnitId {
     if (kIsWeb) return '';
@@ -972,6 +1039,9 @@ class _GoogleRewardedAdHandle implements RewardedAdNativeHandle {
     final completer = Completer<bool>();
     var earned = false;
     _ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (_) {
+        unawaited(FullScreenPresentationTracker.production.recordPresented());
+      },
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
         if (!completer.isCompleted) completer.complete(earned);

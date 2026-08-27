@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/models/home_race_suggestion.dart';
+import 'package:step_tracker/models/interstitial_ad.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
@@ -17,7 +18,9 @@ import 'package:step_tracker/models/race_payout_double_offer.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
 import 'package:step_tracker/services/health_service.dart';
+import 'package:step_tracker/services/interstitial_ad_service.dart';
 import 'package:step_tracker/services/race_results_ack_queue.dart';
+import 'package:step_tracker/services/review_prompt_service.dart';
 import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/wooden_tab_bar.dart';
 
@@ -76,6 +79,7 @@ class _FakeBackendApiService extends BackendApiService {
   int seenCalls = 0;
   int homeInvitePreflightCalls = 0;
   int globalSummaryAckCalls = 0;
+  int reviewClaimCalls = 0;
   final List<({String token, List<String> raceIds})> seenRequests = [];
 
   @override
@@ -243,6 +247,15 @@ class _FakeBackendApiService extends BackendApiService {
   }) async {
     globalSummaryAckCalls++;
   }
+
+  @override
+  Future<void> claimReviewOpportunity({
+    required String identityToken,
+    required String raceId,
+    required String opportunityId,
+  }) async {
+    reviewClaimCalls++;
+  }
 }
 
 class _DeferredSummaryApi extends _FakeBackendApiService {
@@ -337,6 +350,60 @@ class _FakeRacePayoutDoubleAdController
   void dispose() {}
 }
 
+class _ReadyRacePayoutDoubleAdController
+    implements RacePayoutDoubleAdController {
+  _ReadyRacePayoutDoubleAdController({this.onShow});
+  final VoidCallback? onShow;
+  bool ready = true;
+  int shows = 0;
+
+  @override
+  bool get isReady => ready;
+  @override
+  bool get isSupported => true;
+  @override
+  Future<void> loadForRacePayoutDouble({
+    required String userId,
+    required String offerId,
+  }) async => ready = true;
+  @override
+  Future<bool> showAndAwaitReward() async {
+    shows++;
+    onShow?.call();
+    ready = false;
+    return true;
+  }
+
+  @override
+  void dispose() {}
+}
+
+class _RewardedResultsApi extends _FakeBackendApiService {
+  _RewardedResultsApi({required super.racesData});
+  int claimAttempts = 0;
+  bool adEarned = false;
+
+  @override
+  Future<RacePayoutDoubleClaimResult> claimRacePayoutDouble({
+    required String identityToken,
+    required String offerId,
+    required List<String> popupRaceIds,
+  }) async {
+    claimAttempts++;
+    if (!adEarned) {
+      throw const ApiException('not verified', code: 'AD_NOT_VERIFIED');
+    }
+    return RacePayoutDoubleClaimResult.tryParse(const {
+      'awarded': true,
+      'alreadyClaimed': false,
+      'raceIds': ['race-rewarded'],
+      'baseCoins': 100,
+      'bonusCoins': 100,
+      'coins': 300,
+    }, popupRaceIds: popupRaceIds)!;
+  }
+}
+
 class _FakeGetCoinsAdController implements ExtraSpinAdController {
   bool ready = false;
   int loadCalls = 0;
@@ -383,6 +450,49 @@ Future<AuthService> _authService() async {
   final authService = AuthService();
   await authService.restoreSession();
   return authService;
+}
+
+class _RecordingInterstitialCoordinator
+    implements InterstitialPresentationCoordinator {
+  _RecordingInterstitialCoordinator({this.primeThrows = false});
+  final bool primeThrows;
+  @override
+  String get ownerUserId => 'user-1';
+  @override
+  String get sessionId => '4b7c1f1e-4a5f-4bc1-a9b8-6bd986112a61';
+  final List<InterstitialPlacement> primes = [];
+  final List<InterstitialPlacement> presentations = [];
+  final List<InterstitialPlacement> cancellations = [];
+  final List<bool> rewardedArguments = [];
+
+  @override
+  Future<void> prime(InterstitialPlacement placement) async {
+    primes.add(placement);
+    if (primeThrows) throw StateError('prime failed');
+  }
+
+  @override
+  bool presentIfReady(
+    InterstitialPlacement placement, {
+    bool excludedFlow = false,
+    bool rewardedPresented = false,
+  }) {
+    rewardedArguments.add(rewardedPresented);
+    if (!rewardedPresented && !excludedFlow) presentations.add(placement);
+    return !rewardedPresented && !excludedFlow;
+  }
+
+  @override
+  Future<void> cancel(InterstitialPlacement placement) async =>
+      cancellations.add(placement);
+  @override
+  Future<void> flushPendingImpressions() async {}
+  @override
+  void didEnterBackground() {}
+  @override
+  void didResume() {}
+  @override
+  void dispose() {}
 }
 
 void main() {
@@ -1235,4 +1345,297 @@ void main() {
       expect(records, isEmpty);
     },
   );
+
+  testWidgets(
+    'plain completed-results exit primes before and presents after shell restore',
+    (WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final authService = await _authService();
+      final coordinator = _RecordingInterstitialCoordinator();
+      final api = _FakeBackendApiService(
+        racesData: const {
+          'completed': <Map<String, dynamic>>[
+            {
+              'id': 'race-interstitial',
+              'name': 'Finished Cleanly',
+              'myStatus': 'ACCEPTED',
+              'myResultsSeen': false,
+              'myPayoutCoins': 10,
+            },
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            interstitialCoordinator: coordinator,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        coordinator.primes,
+        contains(InterstitialPlacement.raceResultsExit),
+      );
+      expect(coordinator.presentations, isEmpty);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('Finished Cleanly'), findsNothing);
+      expect(coordinator.presentations, [
+        InterstitialPlacement.raceResultsExit,
+      ]);
+    },
+  );
+
+  testWidgets('backgrounded results exit cancels instead of presenting', (
+    WidgetTester tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final authService = await _authService();
+    final coordinator = _RecordingInterstitialCoordinator();
+    final api = _FakeBackendApiService(
+      racesData: const {
+        'completed': <Map<String, dynamic>>[
+          {
+            'id': 'race-background',
+            'name': 'Background Finish',
+            'myStatus': 'ACCEPTED',
+            'myResultsSeen': false,
+            'myPayoutCoins': 10,
+          },
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          interstitialCoordinator: coordinator,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Background Finish'), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(coordinator.presentations, isEmpty);
+    expect(
+      coordinator.cancellations,
+      contains(InterstitialPlacement.raceResultsExit),
+    );
+  });
+
+  testWidgets('results prime failures never interrupt the popup', (
+    WidgetTester tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final authService = await _authService();
+    final coordinator = _RecordingInterstitialCoordinator(primeThrows: true);
+    final api = _FakeBackendApiService(
+      racesData: const {
+        'completed': <Map<String, dynamic>>[
+          {
+            'id': 'race-prime-failure',
+            'name': 'Prime Failure Finish',
+            'myStatus': 'ACCEPTED',
+            'myResultsSeen': false,
+            'myPayoutCoins': 10,
+          },
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          interstitialCoordinator: coordinator,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Prime Failure Finish'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Start Next Race cancels the results placement', (
+    WidgetTester tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final authService = await _authService();
+    final coordinator = _RecordingInterstitialCoordinator();
+    final api = _FakeBackendApiService(
+      racesData: const {
+        'completed': <Map<String, dynamic>>[
+          {
+            'id': 'race-next',
+            'name': 'Next Race Finish',
+            'myStatus': 'ACCEPTED',
+            'myResultsSeen': false,
+            'myPayoutCoins': 10,
+          },
+        ],
+        'nextRace': {
+          'resolved': true,
+          'eligible': true,
+          'discoveryEnabled': true,
+          'createEnabled': true,
+          'openRaces': <Map<String, dynamic>>[],
+        },
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          interstitialCoordinator: coordinator,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('START YOUR NEXT RACE'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(coordinator.presentations, isEmpty);
+    expect(
+      coordinator.cancellations,
+      contains(InterstitialPlacement.raceResultsExit),
+    );
+  });
+
+  testWidgets('native review opportunity cancels the results placement', (
+    WidgetTester tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final authService = await _authService();
+    final coordinator = _RecordingInterstitialCoordinator();
+    final api = _FakeBackendApiService(
+      racesData: const {
+        'completed': <Map<String, dynamic>>[
+          {
+            'id': 'race-review',
+            'name': 'Review Finish',
+            'myStatus': 'ACCEPTED',
+            'myResultsSeen': false,
+            'myPayoutCoins': 10,
+            'reviewOpportunity': {
+              'id': 'review-opportunity',
+              'raceId': 'race-review',
+            },
+          },
+        ],
+      },
+    );
+    var nativeReviewCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          interstitialCoordinator: coordinator,
+          reviewPromptService: ReviewPromptService(
+            requestNativeReview: () async => nativeReviewCalls++,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(nativeReviewCalls, 1);
+    expect(api.reviewClaimCalls, 1);
+    expect(coordinator.presentations, isEmpty);
+    expect(
+      coordinator.cancellations,
+      contains(InterstitialPlacement.raceResultsExit),
+    );
+  });
+
+  testWidgets('payout rewarded presentation suppresses results interstitial', (
+    WidgetTester tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final authService = await _authService();
+    final coordinator = _RecordingInterstitialCoordinator();
+    final api = _RewardedResultsApi(
+      racesData: const {
+        'completed': <Map<String, dynamic>>[
+          {
+            'id': 'race-rewarded',
+            'name': 'Rewarded Finish',
+            'myStatus': 'ACCEPTED',
+            'myResultsSeen': false,
+            'myPayoutCoins': 100,
+          },
+        ],
+        'payoutDoubleOffer': {
+          'offerId': 'd05cb2a4-16b7-463f-977d-58231987a0ac',
+          'raceIds': ['race-rewarded'],
+          'baseCoins': 100,
+          'bonusCoins': 100,
+        },
+      },
+    );
+    final ads = _ReadyRacePayoutDoubleAdController(
+      onShow: () => api.adEarned = true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          interstitialCoordinator: coordinator,
+          racePayoutDoubleAdController: ads,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    await tester.tap(find.textContaining('WATCH AD'));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(ads.shows, 1);
+    expect(coordinator.presentations, isEmpty);
+    expect(coordinator.rewardedArguments, contains(true));
+  });
 }

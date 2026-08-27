@@ -9,6 +9,8 @@ import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/discovery_join_coordinator.dart';
+import '../services/interstitial_ad_service.dart';
+import '../services/race_detail_navigation.dart';
 import '../styles.dart';
 import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
@@ -25,7 +27,6 @@ import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import '../widgets/tournament_game_card.dart';
 import 'create_race_screen.dart';
-import 'race_detail_screen.dart';
 import 'tournament_detail_screen.dart';
 
 class PublicRacesScreen extends StatefulWidget {
@@ -36,7 +37,10 @@ class PublicRacesScreen extends StatefulWidget {
     super.key,
     required this.authService,
     BackendApiService? backendApiService,
+    this.raceDetailNavigator,
   }) : backendApiService = backendApiService ?? BackendApiService();
+
+  final RaceDetailNavigator? raceDetailNavigator;
 
   @override
   State<PublicRacesScreen> createState() => _PublicRacesScreenState();
@@ -307,19 +311,22 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   /// spectator/preview banner from what the backend returns.
   void _viewFeaturedRace(String raceId) {
     if (raceId.isEmpty) return;
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => RaceDetailScreen(
-              authService: widget.authService,
-              raceId: raceId,
-              backendApiService: widget.backendApiService,
-            ),
-          ),
-        )
-        .then((_) {
-          if (mounted) _load();
-        });
+    final navigator =
+        widget.raceDetailNavigator ??
+        RaceDetailNavigator.withoutInterstitials(
+          authService: widget.authService,
+          backendApiService: widget.backendApiService,
+        );
+    unawaited(
+      navigator.push(
+        context: context,
+        raceId: raceId,
+        entrySurface: RaceDetailEntrySurface.publicRaces,
+        scheduleRefresh: () {
+          if (mounted) unawaited(_load());
+        },
+      ),
+    );
   }
 
   /// Opens the bracket screen for [tournamentId], refreshing on return.
@@ -332,6 +339,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               authService: widget.authService,
               tournamentId: tournamentId,
               backendApiService: widget.backendApiService,
+              raceDetailNavigator: widget.raceDetailNavigator,
             ),
           ),
         )
