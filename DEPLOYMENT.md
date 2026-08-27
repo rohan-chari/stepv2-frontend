@@ -187,8 +187,8 @@ For most releases, you can deploy backend first because the old App Store binary
 # ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is the dedicated race-results Rewarded
 # unit. It has NO fallback; production uses /6376353967 under app ~5288861983.
 # The Race Detail and Race Results exits use separate iOS interstitial units
-# so their AdMob performance is reported independently. Omit both for the
-# initial production release. Configure each unit-level cap to 2
+# so their AdMob performance is reported independently. Both iOS interstitial
+# defines are required for the initial production release. Configure each unit-level cap to 2
 # impressions/user/day; the backend still enforces one shared 2/day total.
 # Android builds omit both placement-specific Android defines and therefore
 # silently keep interstitials disabled. The four-slot implementation is already

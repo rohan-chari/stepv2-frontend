@@ -229,8 +229,8 @@ flutter build ipa --release \
 ### Build production Android
 ```bash
 # The race-payout rewarded and both interstitial units are platform-specific
-# and have NO fallback. Keep the explicit placeholders until their Android
-# units are created; omitting both interstitial defines disables Android
+# and have NO fallback. The two Android interstitial defines are deliberately
+# omitted until real Android units exist; omission disables Android
 # interstitials without affecting navigation or the iOS release.
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
@@ -239,9 +239,14 @@ flutter build appbundle --release --flavor prod \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
-  --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables Race Detail exit interstitials> \
-  --dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables Race Results exit interstitials> \
   --build-number=<versionCode>
+```
+
+When the Android interstitial units are created, append both real values:
+
+```bash
+--dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<Android Race Detail exit unit ID>
+--dart-define=ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID=<Android Race Results exit unit ID>
 ```
 
 ### Tests
