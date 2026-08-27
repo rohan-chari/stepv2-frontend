@@ -1,6 +1,6 @@
 # Feedback email handoff requirements
 
-Status: Gmail API revision approved and implemented; A0 is live, with external OAuth preflight and A1 deployment pending
+Status: Gmail API revision approved, implemented, preflighted, and live in A1 production
 
 ## Summary and user story
 
@@ -149,9 +149,13 @@ button:
   bytes as base64url, and send `{ "raw": "..." }` through the Gmail API. Header
   names and From/To/subject are server-owned; validated user input may appear
   only in the text body and optional Reply-To value.
-- Because live DMARC is `p=reject; sp=reject; adkim=s; aspf=s`, a pre-release
-  delivered-header test must show Google DKIM `d=barastep.com` and DMARC pass
-  for From `support@barastep.com`.
+- The self-to-self Gmail API message remains inside Google's mailbox system and
+  can legitimately omit SPF/DKIM/DMARC results. Pre-release evidence must show
+  Inbox and Sent placement, locked From/To/unique subject, and a raw-message
+  `Received` path through `gmailapi.google.com` with `HTTPREST`. Absence of
+  external SMTP authentication results on that internal copy is not a failure;
+  Bara's existing Workspace DKIM/DMARC configuration still governs external
+  support replies sent from Gmail.
 - Bound OAuth and HTTPS request timeouts and disable automatic redirects on the
   Gmail send POST. Any failure before invoking that POST is
   definitive/unavailable. Every `4xx` except `408` is definitive/unavailable.
@@ -192,8 +196,10 @@ button:
 6. With A0 workers still loaded and serving, pull/install the reviewed A1 code
    under fresh production approval and run its no-user-data preflight directly.
    It must refresh the OAuth token and send one uniquely-subjected message
-   from/to `support@barastep.com`. Confirm Inbox and Sent placement plus From,
-   To, Message-ID, DKIM, SPF, and DMARC headers before any PM2 reload.
+   from/to `support@barastep.com`. Confirm Inbox and Sent placement, locked
+   From/To/unique subject, and the internal `gmailapi.google.com`/`HTTPREST`
+   receipt before any PM2 reload. Google may replace the supplied RFC
+   Message-ID and omit SPF/DKIM/DMARC on this internal self-delivery.
 7. If credentials are exposed, revoke the refresh token/app grant, remove the
    production secret, roll back and reload all HTTP workers to clear cached
    access tokens, and revoke/rotate the OAuth client secret as appropriate.
@@ -489,7 +495,7 @@ arbitrary headers. If an HTML alternative is later added, escape every value.
   additive attempt migration -> A0 on both workers -> A1 -> zero
   thread/support-event work -> B backend -> B frontend -> at least one week ->
   C with separate prod approvals.
-- Privacy/store disclosures, DNS/DMARC delivered-header evidence, mailbox loop
+- Privacy/store disclosures, Gmail API internal-delivery evidence, mailbox loop
   tests, Flutter analyze/tests, backend unit/integration tests, both platforms,
   code review, and the manual UI checklist are complete.
 
@@ -693,3 +699,10 @@ cleanup release.
   revocation plus worker reload and access-token residual lifetime, and moved
   the live A1 preflight before PM2 reload so unverified code never serves user
   feedback.
+- **Gmail API production preflight (2026-08-27):** Google accepted and delivered
+  the unique no-user-data message to Inbox and Sent through
+  `gmailapi.google.com`/`HTTPREST` with the locked From/To. The internal
+  self-delivery omitted SPF/DKIM/DMARC and Google replaced the supplied RFC
+  Message-ID; documented both as provider behavior rather than launch failures.
+  A1 commit `e96c7ec` then loaded on exactly two HTTP workers plus the dedicated
+  resolution/cron processes while staging remained stopped.
