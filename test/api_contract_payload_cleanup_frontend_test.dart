@@ -126,6 +126,46 @@ void main() {
   });
 
   test(
+    'typed Detour target context preserves mask and targeting metadata',
+    () async {
+      final http = _Http([
+        _Response(200, const {
+          'contract': 'race-powerup-target-context-v1',
+          'participants': [
+            {
+              'userId': 'masked-rival',
+              'displayName': '???',
+              'profilePhotoUrl': null,
+              'team': null,
+              'forfeitedAt': null,
+              'stealthed': true,
+              'targetable': true,
+            },
+          ],
+          'powerupData': {
+            'powerupSlots': 3,
+            'inventory': [],
+            'queuedBoxCount': 0,
+            'myPlacement': null,
+          },
+        }),
+      ]);
+
+      final result = await BackendApiService(httpClient: http)
+          .fetchRacePowerupTargetContext(
+            identityToken: 'token',
+            raceId: 'race-1',
+            powerupType: 'LEG_CRAMP',
+          );
+      final participant = (result['participants'] as List).single as Map;
+      expect(participant['displayName'], '???');
+      expect(participant['stealthed'], isTrue);
+      expect(participant['targetable'], isTrue);
+      expect(participant.containsKey('totalSteps'), isFalse);
+    },
+  );
+
+  test(
     'compact race bootstrap rejects a naked lean participant page',
     () async {
       Map<String, dynamic> payload(Map<String, dynamic> participant) => {

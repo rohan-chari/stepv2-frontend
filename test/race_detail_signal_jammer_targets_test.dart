@@ -5,6 +5,7 @@ import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/item_slot.dart';
+import 'package:step_tracker/widgets/leaderboard_plank.dart';
 
 /// Fake API for the Signal Jammer target-picker flow. Renders an ACTIVE race
 /// with powerups enabled and a single held SIGNAL_JAMMER in the signed-in
@@ -12,9 +13,16 @@ import 'package:step_tracker/widgets/item_slot.dart';
 /// the jammer uses the generic picker built from the progress participants,
 /// excluding self and stealthed racers.
 class _SignalJammerBackendApiService extends BackendApiService {
-  _SignalJammerBackendApiService();
+  _SignalJammerBackendApiService({
+    this.heldPowerupType = 'SIGNAL_JAMMER',
+    this.viewerDetoured = false,
+  });
+
+  final String heldPowerupType;
+  final bool viewerDetoured;
 
   int usePowerupCalls = 0;
+  int fetchPublicProfileCalls = 0;
   String? lastUsedPowerupId;
   String? lastTargetUserId;
   int lastUpgradeLevel = -1;
@@ -73,15 +81,19 @@ class _SignalJammerBackendApiService extends BackendApiService {
       'participants': [
         {
           'userId': 'user-1',
-          'displayName': 'Trail Walker',
-          'totalSteps': 42000,
+          'displayName': viewerDetoured ? '???' : 'Trail Walker',
+          'totalSteps': viewerDetoured ? null : 42000,
           'finishedAt': null,
+          if (viewerDetoured) 'stealthed': true,
+          if (viewerDetoured) 'targetable': true,
         },
         {
           'userId': 'user-2',
-          'displayName': 'Hill Climber',
-          'totalSteps': 38000,
+          'displayName': viewerDetoured ? '???' : 'Hill Climber',
+          'totalSteps': viewerDetoured ? null : 38000,
           'finishedAt': null,
+          if (viewerDetoured) 'stealthed': true,
+          if (viewerDetoured) 'targetable': true,
         },
         {
           'userId': 'user-3',
@@ -90,6 +102,7 @@ class _SignalJammerBackendApiService extends BackendApiService {
           'finishedAt': null,
           // Stealthed racers are excluded from the target picker.
           'stealthed': true,
+          'targetable': false,
         },
       ],
       'powerupData': {
@@ -97,7 +110,7 @@ class _SignalJammerBackendApiService extends BackendApiService {
         'inventory': [
           {
             'id': 'pw-jammer-1',
-            'type': 'SIGNAL_JAMMER',
+            'type': heldPowerupType,
             'rarity': 'RARE',
             'status': 'HELD',
           },
@@ -121,6 +134,15 @@ class _SignalJammerBackendApiService extends BackendApiService {
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     return const {'coins': 500, 'heldCoins': 0};
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async {
+    fetchPublicProfileCalls += 1;
+    return const {};
   }
 
   @override
@@ -176,10 +198,13 @@ Future<void> _openSignalJammerUse(WidgetTester tester) async {
   await tester.tap(heldSlot);
   await _pumpFrames(tester);
 
-  // SIGNAL_JAMMER is non-upgradeable, so the sheet shows the single USE
-  // button (no tier buttons).
-  expect(find.text('USE'), findsOneWidget);
-  await tester.tap(find.text('USE'));
+  // Non-upgradeable powerups show USE; upgradeable offensive powerups expose
+  // a free base tier instead.
+  final useButton = find.text('USE').evaluate().isNotEmpty
+      ? find.text('USE')
+      : find.textContaining('USE BASE:');
+  expect(useButton, findsOneWidget);
+  await tester.tap(useButton);
   await _pumpFrames(tester);
 }
 
@@ -253,4 +278,61 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     },
   );
+
+  testWidgets('Detour-masked rival appears as ??? and can receive Leg Cramp', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final authService = await _createAuthService();
+    final api = _SignalJammerBackendApiService(
+      heldPowerupType: 'LEG_CRAMP',
+      viewerDetoured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: authService,
+          raceId: 'race-detoured-targeting',
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    // Detour masking must continue to disable the ordinary leaderboard
+    // profile action; otherwise a tap would reveal who "???" really is.
+    final maskedPlanks = tester
+        .widgetList<LeaderboardPlank>(find.byType(LeaderboardPlank))
+        .where((plank) => plank.name == '???');
+    expect(maskedPlanks, isNotEmpty);
+    expect(maskedPlanks.every((plank) => plank.onProfileTap == null), isTrue);
+    expect(api.fetchPublicProfileCalls, 0);
+
+    await _openSignalJammerUse(tester);
+
+    expect(find.text('CHOOSE A TARGET'), findsOneWidget);
+    final picker = find.byKey(const Key('powerup-target-list'));
+    expect(
+      find.descendant(of: picker, matching: find.text('???')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: picker, matching: find.textContaining('steps')),
+      findsNothing,
+    );
+
+    await tester.tap(find.descendant(of: picker, matching: find.text('???')));
+    await _pumpFrames(tester);
+
+    expect(api.usePowerupCalls, 1);
+    expect(api.lastTargetUserId, 'user-2');
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+  });
 }

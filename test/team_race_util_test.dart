@@ -240,6 +240,31 @@ void main() {
       {'userId': 'enemy2', 'team': 'TEAM_B'},
     ];
 
+    test('allows a Detour-masked rival without exposing their profile', () {
+      final targets = TeamRace.offensiveTargets(
+        participants: const [
+          {'userId': 'me', 'stealthed': true, 'targetable': true},
+          {
+            'userId': 'masked-rival',
+            'displayName': '???',
+            'stealthed': true,
+            'targetable': true,
+          },
+          {
+            'userId': 'actual-stealth',
+            'displayName': '???',
+            'stealthed': true,
+            'targetable': false,
+          },
+        ],
+        myUserId: 'me',
+        race: const {'isTeamRace': false},
+      );
+
+      expect(targets.map((target) => target['userId']), ['masked-rival']);
+      expect(targets.single['stealthed'], isTrue);
+    });
+
     test('team race offers enemy-team members only (no friendly fire)', () {
       final targets = TeamRace.offensiveTargets(
         participants: participants,

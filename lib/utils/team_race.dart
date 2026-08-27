@@ -324,8 +324,11 @@ abstract final class TeamRace {
 
   /// TR-651/657 — the pool an OFFENSIVE single-target powerup may aim at.
   ///
-  /// Always drops the caster and stealthed racers (existing rules). In a team
-  /// race it additionally drops teammates (no friendly fire — the server
+  /// Always drops the caster and genuinely protected racers. A Detour-masked
+  /// rival remains `stealthed:true` so profile taps stay disabled, but a new
+  /// backend marks that anonymous row `targetable:true`. Older backends omit
+  /// the additive field and retain the original stealthed-only behavior. In a
+  /// team race it additionally drops teammates (no friendly fire — the server
   /// answers `INVALID_TARGET`) and forfeited members (excluded from every
   /// targeting pool). Invalid targets are never presented rather than shown
   /// grayed out.
@@ -350,7 +353,7 @@ abstract final class TeamRace {
     return participants
         .where((p) {
           if ((p['userId'] as String?) == myUserId) return false;
-          if (p['stealthed'] == true) return false;
+          if (p['stealthed'] == true && p['targetable'] != true) return false;
           if (hasForfeited(p)) return false;
           if (hasActiveLegCramp(p)) return false;
           if (myTeam != null && participantTeam(p) == myTeam) return false;

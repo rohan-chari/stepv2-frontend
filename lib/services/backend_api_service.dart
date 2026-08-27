@@ -4818,6 +4818,7 @@ class BackendApiService {
       final team = participant?['team'];
       final forfeitedAt = participant?['forfeitedAt'];
       final stealthed = participant?['stealthed'];
+      final targetable = participant?['targetable'];
       final totalSteps = participant?['totalSteps'];
       if (participant == null ||
           userId is! String ||
@@ -4827,6 +4828,7 @@ class BackendApiService {
           (team != null && team is! String) ||
           (forfeitedAt != null && forfeitedAt is! String) ||
           (typed && stealthed is! bool) ||
+          (targetable != null && targetable is! bool) ||
           (totalSteps != null && totalSteps is! num) ||
           (typed && powerupType == 'BOUNTY' && totalSteps is! num) ||
           (typed &&
@@ -4841,6 +4843,7 @@ class BackendApiService {
         'team': team,
         'forfeitedAt': forfeitedAt,
         'stealthed': participant['stealthed'] == true,
+        if (targetable is bool) 'targetable': targetable,
         if (totalSteps is num) 'totalSteps': totalSteps.toInt(),
       });
     }

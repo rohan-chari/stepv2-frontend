@@ -35,6 +35,14 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.9',
+    title: 'POWERUPS, NOW SNEAKIER',
+    bullets: <String>[
+      'Pickpocket now steals a random powerup without giving one away.',
+      'Use offensive powerups while Detour-signed—the target stays anonymous.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.3.8',
     title: 'RACE WITH FRIENDS',
     bullets: <String>[
