@@ -275,7 +275,41 @@ Android Liftoff Rewarded Reference ID: <pending>
 Android Liftoff Banner Reference ID: <pending>
 ```
 
-Upload via Transporter to "Bara" in App Store Connect.
+### Push the archive to App Store Connect
+
+The phrase **"push to App Store Connect"** is explicit authorization to upload
+the current verified Bara production archive using the Apple account already
+signed into Xcode on this Mac. Do this automatically; do not stop at telling
+the user to drag the IPA into Transporter. For a production release, first
+build and verify the matching Android AAB as required by the lockstep rule.
+
+`flutter build ipa` creates both the signed archive and an export-options plist.
+Change that generated plist from a local export to an App Store Connect upload,
+then let Xcode authenticate with its existing account:
+
+```bash
+plutil -replace destination -string upload \
+  build/ios/ipa/ExportOptions.plist
+
+xcodebuild -exportArchive \
+  -archivePath build/ios/archive/Runner.xcarchive \
+  -exportPath build/ios/upload \
+  -exportOptionsPlist build/ios/ipa/ExportOptions.plist \
+  -allowProvisioningUpdates
+```
+
+Success requires both `Upload succeeded` and `** EXPORT SUCCEEDED **` in the
+output. Report the uploaded version/build and any symbol warnings. If Xcode has
+no authenticated account or Apple requires interactive account action, stop
+and report that exact blocker; never invent or request an API key when the
+signed-in Xcode path is available.
+
+This phrase authorizes **binary upload only**. It does not authorize selecting
+the build for App Review, submitting it for review, changing phased-release
+settings, or releasing it to customers. Those actions require their own
+explicit instruction. An uploaded build may be used by TestFlight after Apple
+finishes processing it, but uploading alone does not publish an App Store
+version.
 
 ### 5. Submit for App Store review
 

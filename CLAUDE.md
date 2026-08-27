@@ -100,6 +100,12 @@ platforms are coupled in non-obvious ways: a dependency added for one (e.g.
 `firebase_*`) still links into the other's build. Build and verify **both**
 before considering a build/release change done. See `DEPLOYMENT.md`.
 
+The phrase **"push to App Store Connect"** explicitly authorizes uploading the
+current verified iOS archive through the Apple account already signed into
+Xcode. Follow `DEPLOYMENT.md` and perform the upload automatically after the
+matching Android artifact is built and verified. Upload does not also authorize
+App Review submission or customer release.
+
 ## Production and staging operations
 
 - Production runs with **exactly two PM2 workers** on the production host unless
