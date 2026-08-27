@@ -1,6 +1,6 @@
 # Feedback email handoff requirements
 
-Status: approved by owner; Stage A implemented, external preflight and deployment pending
+Status: Gmail API revision approved and implemented; A0 is live, with external OAuth preflight and A1 deployment pending
 
 ## Summary and user story
 
@@ -59,19 +59,23 @@ button:
 - Add optional **EMAIL FOR A REPLY**. Select Reply-To from a valid entered
   address, then a valid stored account email, otherwise omit it and put
   `NO REPLY ADDRESS — DO NOT REPLY` at the top of the message body.
-- Send through Google Workspace's SMTP relay. Occasional duplicate mail after
-  an ambiguous network timeout is explicitly acceptable; no client or provider
-  idempotency mechanism is required.
+- Send through the Google Workspace Gmail API over HTTPS. The existing
+  licensed, Gmail-enabled primary user `support@barastep.com` completes a
+  one-time Internal OAuth consent flow with only the `gmail.send` scope; a
+  refresh token lets production send non-interactively afterward. No service
+  account, domain-wide delegation, or additional Workspace user is required.
+  Occasional duplicate mail after an ambiguous network timeout is explicitly
+  acceptable; no client or provider idempotency mechanism is required.
 - Envelope: From `Bara Support <support@barastep.com>`, To
   `support@barastep.com`, Subject `USER FEEDBACK • <8 uppercase hex
   characters>` derived from the random Message-ID so unrelated submissions do
   not become one Gmail conversation, user address only in Reply-To.
-- `feedback-bounces@barastep.com` is an intentionally unprovisioned envelope
-  sender, not a Workspace user, alias, or Group; delivery-status notices are
-  discarded. Support mail follows the existing mailbox's normal retention and
-  may remain until manually deleted. No secondary provider archive, delivery
-  webhook, or open/click tracking. Account deletion cannot recall an
-  already-sent email; the product/privacy copy must say so.
+- The Gmail API owns the SMTP envelope and Return-Path; Bara does not provision
+  a bounce mailbox or process delivery-status notices. Support mail follows the
+  existing mailbox's normal retention and may remain until manually deleted.
+  No secondary provider archive, delivery webhook, or open/click tracking.
+  Account deletion cannot recall an already-sent email; the product/privacy
+  copy must say so.
 - Existing database-backed conversations remain available until the expiry job
   has removed the final active thread. Replies currently extend expiry by 30
   days, so this is a data-driven drain, not a guaranteed calendar deadline.
@@ -93,7 +97,7 @@ button:
 
 ### Release A backend
 
-- Send new submissions through Google Workspace SMTP relay without storing
+- Send new submissions through the Google Workspace Gmail API without storing
   message content in Bara's feedback tables.
 - Add content-free durable attempt/quota metadata for an atomic five-per-day
   limit across both production workers.
@@ -118,35 +122,83 @@ button:
 
 ## Provider, authentication, and loop-safety contract
 
-- Use Google Workspace SMTP relay at `smtp-relay.gmail.com` with STARTTLS on
-  port 587 through an injected Nodemailer transport. Configure Workspace to
-  allow only the production server's explicit static IP, require TLS, and
-  restrict senders to Bara's domain/registered address. No Gmail username,
-  password, OAuth token, or app password is committed or required by the app.
-- SMTP host/port are fixed infrastructure constants, not feature controls.
-  Missing/invalid transport configuration or connection failure returns
+- Use `POST https://gmail.googleapis.com/gmail/v1/users/support%40barastep.com/messages/send`
+  over HTTPS. The production host already reaches TCP 443; no DigitalOcean SMTP
+  exception is required.
+- Create an organization-owned Google Cloud OAuth client with an **Internal**
+  consent screen. Authorize only the existing `support@barastep.com` user with
+  exactly `https://www.googleapis.com/auth/gmail.send`, request offline access,
+  and retain the resulting refresh token. Do not request mailbox read, modify,
+  settings, Drive, OpenID profile, or broad `https://mail.google.com/` scopes.
+- The Gmail endpoint `userId` and RFC 5322 From header are both locked to the
+  authenticated primary mailbox `support@barastep.com`. No additional
+  Workspace user, alias, Group, delegate, service account, or domain-wide
+  delegation is required.
+- Store the OAuth client ID, client secret, and refresh token only in one
+  root-readable production JSON secret outside the repository. Configure its
+  path through `GOOGLE_WORKSPACE_FEEDBACK_OAUTH_FILE`; never put its values in
+  Git, `.env`, PM2 output, application logs, API responses, or a client build.
+  Validate the file shape and the expected OAuth client ID before use.
+- Exchange the refresh token for a short-lived OAuth access token before
+  constructing the Gmail send request. Token/configuration failures happen
+  before dispatch and return
   `503 EMAIL_DELIVERY_UNAVAILABLE`; the server still starts so unrelated app
-  functions remain available.
+  functions remain available. Cache only through the Google auth library's
+  normal in-memory token lifetime; never persist access tokens.
+- Build one plain-text RFC 5322 message with a MIME composer, encode the raw
+  bytes as base64url, and send `{ "raw": "..." }` through the Gmail API. Header
+  names and From/To/subject are server-owned; validated user input may appear
+  only in the text body and optional Reply-To value.
 - Because live DMARC is `p=reject; sp=reject; adkim=s; aspf=s`, a pre-release
   delivered-header test must show Google DKIM `d=barastep.com` and DMARC pass
   for From `support@barastep.com`.
-- Use the controlled, unprovisioned `feedback-bounces@barastep.com` address as
-  Nodemailer's `envelope.from` while visible header From remains
-  `support@barastep.com`. Delivery-status notices are intentionally discarded;
-  verify no catch-all/routing rule sends them into support and preflight
-  Google's actual Return-Path rewrite from a delivered message.
-- Nodemailer uses `secure:false`, `requireTLS:true`, bounded connection,
-  greeting, and socket timeouts, and one exact envelope recipient. Acceptance
-  requires `info.accepted` to contain only `support@barastep.com` and no
-  rejection.
+- Bound OAuth and HTTPS request timeouts and disable automatic redirects on the
+  Gmail send POST. Any failure before invoking that POST is
+  definitive/unavailable. Every `4xx` except `408` is definitive/unavailable.
+  HTTP `408`, every `5xx`, redirects or other unexpected status classes,
+  timeout/abort/network failure after invocation, and malformed 2xx responses
+  are uncertain because Google may have created the message. Only a 2xx with a
+  non-empty Gmail message ID is accepted. Do not automatically retry the Gmail
+  send POST; any user retry remains an explicit new attempt.
 - Disable vacation/automatic replies on the support mailbox, verify no
-  forwarding rule routes support mail back to itself, and test discarded bounce,
-  forwarding, user Reply-To, and absent Reply-To cases before prod.
+  forwarding rule routes support mail back to itself, and test same-mailbox
+  delivery, user Reply-To, and absent Reply-To cases before prod.
 - Register Bara's sending domain/address for Apple private-email relay before
   relying on replies to Apple relay addresses.
-- SMTP acceptance means the relay accepted `support@barastep.com` after DATA;
-  it does not guarantee final mailbox delivery. Store only the generated
-  Message-ID and attempt state, never message content.
+- Gmail API acceptance means Google created the sent message; it does not
+  guarantee final inbox placement. Store only the generated RFC Message-ID and
+  attempt state, never message content or Google's mailbox message/thread IDs.
+
+### Google administrator setup
+
+1. In a Bara-owned Google Cloud project, enable **Gmail API**.
+2. Configure the OAuth consent screen for the Workspace organization as
+   **Internal**, with the app name identifying Bara feedback delivery. Internal
+   status avoids the short refresh-token lifetime imposed on External apps in
+   Testing while keeping consent limited to Bara Workspace users.
+3. Create an OAuth client used only for feedback delivery. Use a localhost
+   redirect URI for the one-time operator authorization helper; production does
+   not expose an OAuth callback endpoint.
+4. Confirm Directory → Users lists `support@barastep.com` as an active,
+   licensed user with Gmail enabled. While signed in as that exact user, run
+   the local helper, request offline access with consent, and grant only
+   `https://www.googleapis.com/auth/gmail.send`.
+5. The helper writes the OAuth client ID, client secret, and returned refresh
+   token directly to an explicitly chosen local file with mode `0600`; it never
+   prints tokens. Transfer that file directly to the production host without
+   chat, email, Git, or issue-tracker storage and install it outside the repo as
+   owner `root`, mode `0600`. Record only its path in production `.env` as
+   `GOOGLE_WORKSPACE_FEEDBACK_OAUTH_FILE`.
+6. With A0 workers still loaded and serving, pull/install the reviewed A1 code
+   under fresh production approval and run its no-user-data preflight directly.
+   It must refresh the OAuth token and send one uniquely-subjected message
+   from/to `support@barastep.com`. Confirm Inbox and Sent placement plus From,
+   To, Message-ID, DKIM, SPF, and DMARC headers before any PM2 reload.
+7. If credentials are exposed, revoke the refresh token/app grant, remove the
+   production secret, roll back and reload all HTTP workers to clear cached
+   access tokens, and revoke/rotate the OAuth client secret as appropriate.
+   Already-stolen access tokens may remain usable until their short expiry;
+   revocation is not an instantaneous kill switch.
 
 ## API contract and frozen clients
 
@@ -176,7 +228,7 @@ additive:
   `ios`/`android` provenance; missing/unknown stores/sends no platform value and
   never rejects feedback.
 
-Every successful request represents a new SMTP send:
+Every successful request represents a new Gmail API send:
 
 ```json
 HTTP 201
@@ -193,17 +245,17 @@ Errors use `{ "error": "safe message", "code": "CODE" }`:
 - `400 INVALID_TEXT`, `INVALID_CATEGORY`, or `INVALID_REPLY_TO_EMAIL`.
 - `429 DAILY_LIMIT_REACHED` after five reserved/accepted submissions per user
   per UTC day.
-- `503 EMAIL_DELIVERY_UNAVAILABLE` for missing config or definitive provider
+- `503 EMAIL_DELIVERY_UNAVAILABLE` for missing credentials, OAuth failure, or a definitive provider
   rejection; a reserved quota slot is released on definitive failure.
-- `503 EMAIL_DELIVERY_UNCERTAIN` for timeout/connection loss after dispatch may
+- `503 EMAIL_DELIVERY_UNCERTAIN` for timeout/connection loss after HTTPS dispatch may
   have reached Google; keep the slot reserved. Retrying may create a duplicate
   and the app says so plainly.
-- `500 INTERNAL_ERROR` only for failures before known SMTP acceptance. Once
+- `500 INTERNAL_ERROR` only for failures before known Gmail API acceptance. Once
   Google returns final acceptance, bounded ACCEPTED-state finalize retries run;
   if they still fail, log the metadata failure and return the successful `201`
   so the client is not encouraged to duplicate a known-accepted email.
 
-Do not expose SMTP details, Message-IDs, stored account email, or internal errors
+Do not expose provider details, Message-IDs, stored account email, or internal errors
 to the client.
 
 ### Legacy thread compatibility after drain
@@ -244,15 +296,16 @@ Reserve quota under a per-user/UTC-day Postgres advisory transaction lock:
 2. Count `RESERVED|ACCEPTED` attempts plus same-day legacy `Suggestion` rows
    during the cutover day. If five, return 429.
 3. Generate a random RFC-compliant Message-ID, insert it with RESERVED, and
-   commit before calling SMTP. Two PM2 workers serialize quota reservation;
+   commit before calling the Gmail API. Two PM2 workers serialize quota reservation;
    Redis is never authoritative.
 4. Send the plain-text email with that Message-ID.
-5. SMTP acceptance -> persist ACCEPTED + Message-ID.
-6. An SMTP rejection at MAIL FROM, RCPT TO, or DATA is definitive: mark FAILED
-   and release the slot. Socket loss/timeout before DATA begins is also
-   definitive. Socket loss/timeout after DATA begins but before Google's final
-   `250` is uncertain: remain RESERVED and consume the slot.
-7. Once final `250` acceptance is known, return `201 delivery:"email"` even if
+5. Gmail API 2xx with a non-empty provider message ID -> persist ACCEPTED while
+   retaining only Bara's pre-generated RFC Message-ID.
+6. OAuth/configuration failure before the Gmail send POST or any `4xx` except
+   `408` is definitive: mark FAILED and release the slot. HTTP `408`, every
+   `5xx`, redirect/unexpected status, abort/network failure after invocation,
+   or malformed 2xx is uncertain: remain RESERVED and consume the slot.
+7. Once Gmail API acceptance is known, return `201 delivery:"email"` even if
    bounded ACCEPTED-state persistence retries fail.
 
 Every retry is a new attempt and may create a duplicate email. The sheet keeps
@@ -267,7 +320,12 @@ have completed the send.
 - `src/modules/feedback/models/feedbackEmailAttempt.js`: Prisma metadata and
   atomic reservation/finalization operations.
 - `src/modules/feedback/services/googleWorkspaceFeedbackTransport.js`:
-  injected Nodemailer/SMTP adapter; no Prisma and no user-built raw headers.
+  replace the SMTP adapter with an injected one-user OAuth/HTTPS Gmail API
+  adapter; no Prisma and no user-built raw headers. Retain a MIME composer only
+  for safe RFC 5322 serialization.
+- Add `google-auth-library` as a direct pinned runtime dependency even though it
+  is currently present transitively. Use the platform `fetch` implementation
+  for the bounded Gmail API POST; do not add the full `googleapis` package.
 - `src/modules/feedback/commands/sendFeedbackEmail.js`: validation,
   canonicalization, quota orchestration, plain-text message formatting, and
   injected transport/clock/UUID/model collaborators.
@@ -294,7 +352,9 @@ arbitrary headers. If an HTML alternative is later added, escape every value.
   all copies. Make the same correction in `web/src/pages/SupportPage.vue`.
   Review iOS App Privacy and Google Play Data Safety disclosures.
 - No delivery webhook or local message-body logs. Operational metrics are only
-  attempt state, Message-ID, latency/error class, and aggregate counts.
+  attempt state, Message-ID, latency/error class, safe HTTP status class, and
+  aggregate counts. Never log OAuth client secrets, refresh/access tokens,
+  authorization headers, provider response bodies, MIME, or feedback content.
 
 ## Data-driven legacy drain and three-stage cleanup
 
@@ -312,13 +372,24 @@ arbitrary headers. If an HTML alternative is later added, escape every value.
 
 ### Stage A1: additive email release
 
-- Add Google Workspace SMTP delivery and stop creating new legacy content rows.
+- Add Google Workspace Gmail API delivery and stop creating new legacy content rows.
   Count same-day legacy Suggestions and new attempts together under the A0
   lock; the attempt metadata/table is already present from the A0 prerequisite.
 - Keep legacy tables, all existing reads/replies, support unread counts,
   support events/projections, expiry job, account deletion, and both admin
   layouts. Every reply may extend expiry another 30 days.
 - Deploy A1 backend-first, then the same frontend behavior on iOS and Android.
+- Current production is intentionally held at A0 commit `b16137e` after the
+  SMTP preflight rollback. The reviewed SMTP A1 commit remains in Git history
+  but must not be redeployed unchanged. Land the Gmail API transport as a new
+  additive commit and install the OAuth secret before a fresh A1 deploy
+  approval. With A0 workers still loaded, switch the checkout to `main`, pull
+  and install A1, then run the complete live no-user-data preflight directly
+  through the pulled A1 code. Only after the preflight email and authentication
+  headers are verified may PM2 reload exactly two HTTP workers plus the
+  resolution and cron processes onto A1; staging remains stopped. If preflight
+  fails, do not reload PM2—restore the A0 checkout while the loaded A0 workers
+  continue serving the database-backed feedback path.
 
 ### Drain gate
 
@@ -362,16 +433,22 @@ arbitrary headers. If an HTML alternative is later added, escape every value.
   two-server mixed test proves four legacy rows plus a committed A1 reservation
   make an A0 worker reject a sixth submission.
 - Real HTTP + confirmed `*_test` Postgres: accepted send/discriminator,
-  validation/error envelopes, missing config, SMTP rejection/timeout,
+  validation/error envelopes, missing credentials, OAuth/API rejection/timeout,
   ambiguous timeout reservation, accepted-then-finalize failure, definitive
   failure quota release, account deletion, and attempt expiry.
 - Two real app/server instances: simultaneous sixth submissions reserve at most
   five. Concurrent/retried requests may send duplicates but cannot reserve more
   than the daily limit.
-- Exact envelope/Reply-To/plain-text body, absent Reply-To warning, bounded
-  provenance, no forbidden identifiers, pre-dispatch Message-ID persistence,
-  exact accepted recipient, SMTP stage classification, and known-acceptance
-  finalize-failure success semantics.
+- Exact From/To/Reply-To/subject/plain-text MIME, absent Reply-To warning,
+  bounded provenance, no forbidden identifiers, pre-dispatch Message-ID
+  persistence, base64url encoding, fixed OAuth user/scope, refresh-token and
+  `invalid_grant` failure with no subsequent Gmail POST,
+  definitive HTTP rejection, post-dispatch ambiguity, malformed-2xx ambiguity,
+  and known-acceptance finalize-failure success semantics.
+- Transport tests cover an unlisted `4xx`, `408`, `500`, `503`, `504`, redirect,
+  unexpected status, malformed JSON/2xx, fetch rejection, redirect disabling,
+  no automatic send retry, client/refresh/access-token redaction, and no live
+  credentials in any automated test.
 - Attempt-expiry job coverage proves instance-0-only scheduling, durable claim,
   bounded seven-day deletion, and account-deletion cascade.
 - Existing Inbox/domain integration tests seed legacy rows through test setup
@@ -401,7 +478,7 @@ arbitrary headers. If an HTML alternative is later added, escape every value.
 
 ## Acceptance criteria / definition of done
 
-- New submissions are accepted through Google Workspace SMTP relay to the
+- New submissions are accepted through the Google Workspace Gmail API to the
   locked envelope and no feedback content is stored in Bara's feedback tables.
 - Reply-To is safe and useful when available; absent-address mail cannot create
   a support loop.
@@ -590,3 +667,29 @@ cleanup release.
   same-mailbox loop paths, enforceable Inbox/Sent/Trash/bounce retention,
   account-deletion disclosures, attempt cleanup scheduling, and pending support
   notification work before legacy table readers are removed.
+- **Gmail API transport revision (2026-08-27):** production preflight proved
+  DigitalOcean blocks outbound SMTP ports 25, 465, and 587 at its network edge.
+  A1 was rolled back to healthy A0. Replaced SMTP relay transport with the
+  Gmail HTTPS API, narrow `gmail.send` domain-wide delegation, direct
+  impersonation of the existing licensed `support@barastep.com` primary user,
+  root-readable external credentials, HTTP-specific uncertainty semantics, and
+  API acceptance checks. Removed bounce-envelope and SMTP-port assumptions.
+- **Gmail API gap pass 1 (2026-08-27):** constrained domain-wide delegation to
+  a dedicated no-IAM-role service account and the single `gmail.send` scope;
+  added direct impersonation of the licensed primary support mailbox, an
+  external root-only JSON secret, explicit rotation/revocation, direct runtime
+  dependency ownership, and a ban on committing or logging credentials.
+- **Gmail API gap pass 2 (2026-08-27):** separated pre-dispatch OAuth failures
+  from ambiguous post-dispatch HTTPS failures, made malformed 2xx responses
+  uncertain, prohibited storing Google's mailbox IDs, added same-mailbox
+  Inbox/Sent and authentication-header preflight, and documented the current
+  A0 rollback state plus an A0 rollback requirement if A1 authorization fails.
+- **Gmail API architect review (2026-08-27):** rejected domain-wide delegation
+  as unnecessarily broad because a stolen service-account key could request
+  `gmail.send` tokens as any Bara Workspace user. The owner accepted one-user
+  OAuth instead. Replaced DWD with an Internal OAuth app, one-time offline
+  consent by `support@barastep.com`, and a root-only refresh-token file; fully
+  classified every HTTP status/redirect/network outcome, specified token
+  revocation plus worker reload and access-token residual lifetime, and moved
+  the live A1 preflight before PM2 reload so unverified code never serves user
+  feedback.
