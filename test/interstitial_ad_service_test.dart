@@ -376,6 +376,7 @@ void main() {
         ),
         backendBaseUrl: 'https://example.test',
         adUnitId: 'test-injected-unit',
+        effectiveTimeZoneProvider: () async => api.effectiveTimeZone,
         platform: 'ios',
         now: clock.call,
         fullScreenTracker: FullScreenPresentationTracker(now: clock.call),
@@ -390,23 +391,58 @@ void main() {
       expect(api.eligibilityCalls, 1);
 
       await coordinator.cancel(InterstitialPlacement.raceDetailExit);
-      await coordinator.prime(InterstitialPlacement.raceResultsExit);
+      api.effectiveTimeZone = 'America/Chicago';
+      await coordinator.prime(InterstitialPlacement.raceDetailExit);
       expect(api.eligibilityCalls, 2);
+
+      await coordinator.cancel(InterstitialPlacement.raceDetailExit);
+      await coordinator.prime(InterstitialPlacement.raceResultsExit);
+      expect(api.eligibilityCalls, 3);
 
       await coordinator.cancel(InterstitialPlacement.raceResultsExit);
       clock.advance(const Duration(minutes: 5));
       await coordinator.prime(InterstitialPlacement.raceDetailExit);
-      expect(api.eligibilityCalls, 3);
+      expect(api.eligibilityCalls, 4);
 
       await coordinator.cancel(InterstitialPlacement.raceDetailExit);
       coordinator.didEnterBackground();
       clock.advance(const Duration(seconds: 30));
       coordinator.didResume();
       await coordinator.prime(InterstitialPlacement.raceResultsExit);
-      expect(api.eligibilityCalls, 4);
+      expect(api.eligibilityCalls, 5);
       coordinator.dispose();
     },
   );
+
+  test('timezone provider failures skip caching without escaping', () async {
+    final now = DateTime.utc(2026, 8, 26, 18);
+    final api = _InterstitialApi(now);
+    final coordinator = InterstitialAdCoordinator(
+      ownerUserId: 'user-a',
+      identityToken: 'token-a',
+      backendApiService: api,
+      analytics: ActivationAnalyticsService(
+        backendApiService: api,
+        isIosForTesting: true,
+      ),
+      backendBaseUrl: 'https://example.test',
+      adUnitId: 'test-injected-unit',
+      effectiveTimeZoneProvider: () async => throw StateError('unavailable'),
+      platform: 'ios',
+      now: () => now,
+      fullScreenTracker: FullScreenPresentationTracker(now: () => now),
+      loader: (_) async => _FakeInterstitial(impresses: false),
+      sessionId: _sessionId,
+      sessionStartedAt: now.subtract(const Duration(minutes: 2)),
+    );
+
+    await coordinator.prime(InterstitialPlacement.raceDetailExit);
+    await coordinator.cancel(InterstitialPlacement.raceDetailExit);
+    await coordinator.prime(InterstitialPlacement.raceDetailExit);
+
+    expect(api.eligibilityCalls, 2);
+    coordinator.dispose();
+  });
 
   test(
     'only the SDK impression callback consumes and reports a permit',
@@ -818,6 +854,7 @@ class _InterstitialApi extends BackendApiService {
   int cancelCalls = 0;
   int eligibilityCalls = 0;
   int permitCalls = 0;
+  String effectiveTimeZone = 'America/New_York';
 
   @override
   Future<InterstitialEligibility> fetchInterstitialEligibility({
@@ -832,7 +869,7 @@ class _InterstitialApi extends BackendApiService {
       dailyCount: 0,
       dailyLimit: 2,
       capDate: '2026-08-26',
-      timeZone: 'America/New_York',
+      timeZone: effectiveTimeZone,
       serverTime: now,
     );
   }

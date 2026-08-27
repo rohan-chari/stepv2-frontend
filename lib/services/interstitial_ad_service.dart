@@ -265,6 +265,7 @@ class _EligibilityCacheEntry {
     required String expectedBackendBaseUrl,
     required String expectedSessionId,
     required InterstitialPlacement expectedPlacement,
+    required String expectedTimeZone,
     required DateTime now,
   }) {
     final age = now.difference(fetchedAt);
@@ -272,7 +273,7 @@ class _EligibilityCacheEntry {
         backendBaseUrl == expectedBackendBaseUrl &&
         sessionId == expectedSessionId &&
         placement == expectedPlacement &&
-        timeZone == value.timeZone &&
+        timeZone == expectedTimeZone &&
         age >= Duration.zero &&
         age < const Duration(minutes: 5);
   }
@@ -287,6 +288,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
     String? backendBaseUrl,
     String? adUnitId,
     String Function(InterstitialPlacement)? adUnitIdForPlacement,
+    Future<String?> Function()? effectiveTimeZoneProvider,
     String? platform,
     DateTime Function()? now,
     FullScreenPresentationTracker? fullScreenTracker,
@@ -302,6 +304,8 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
            (adUnitId == null
                ? AdService.interstitialAdUnitIdFor
                : (_) => adUnitId),
+       _effectiveTimeZoneProvider =
+           effectiveTimeZoneProvider ?? backendApiService.getEffectiveTimeZone,
        _platform = platform ?? AdService.currentAdPlatform,
        _now = now ?? DateTime.now,
        _tracker = fullScreenTracker ?? FullScreenPresentationTracker.production,
@@ -321,6 +325,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   final ActivationAnalyticsService _analytics;
   final String _backendBaseUrl;
   final String Function(InterstitialPlacement) _adUnitIdForPlacement;
+  final Future<String?> Function() _effectiveTimeZoneProvider;
   final String _platform;
   final DateTime Function() _now;
   final FullScreenPresentationTracker _tracker;
@@ -374,7 +379,16 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
       return;
     }
     try {
-      var eligibility = _cachedEligibility(placement);
+      String? effectiveTimeZone;
+      try {
+        effectiveTimeZone = await _effectiveTimeZoneProvider();
+      } catch (_) {
+        effectiveTimeZone = null;
+      }
+      if (!_accepts(generation, placement)) return;
+      var eligibility = effectiveTimeZone == null
+          ? null
+          : _cachedEligibility(placement, effectiveTimeZone);
       var fetchedEligibility = false;
       if (eligibility == null) {
         eligibility = await _api.fetchInterstitialEligibility(
@@ -391,7 +405,9 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
         return;
       }
       if (!_accepts(generation, placement)) return;
-      if (fetchedEligibility) _cacheEligibility(placement, eligibility);
+      if (fetchedEligibility && effectiveTimeZone != null) {
+        _cacheEligibility(placement, eligibility, effectiveTimeZone);
+      }
       if (!eligibility.eligible) {
         _lastSkipReason = eligibility.reason ?? 'backend_unavailable';
         return;
@@ -467,7 +483,10 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
       generation == _generation &&
       (_placement == null || _placement == placement);
 
-  InterstitialEligibility? _cachedEligibility(InterstitialPlacement placement) {
+  InterstitialEligibility? _cachedEligibility(
+    InterstitialPlacement placement,
+    String effectiveTimeZone,
+  ) {
     final entry = _eligibilityCache[placement];
     if (entry == null ||
         !entry.isValid(
@@ -475,6 +494,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
           expectedBackendBaseUrl: _backendBaseUrl,
           expectedSessionId: _sessionId,
           expectedPlacement: placement,
+          expectedTimeZone: effectiveTimeZone,
           now: _now().toUtc(),
         )) {
       _eligibilityCache.remove(placement);
@@ -486,9 +506,13 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   void _cacheEligibility(
     InterstitialPlacement placement,
     InterstitialEligibility eligibility,
+    String effectiveTimeZone,
   ) {
     final timeZone = eligibility.timeZone;
-    if (timeZone == null || timeZone.isEmpty) return;
+    if (timeZone == null || timeZone.isEmpty || timeZone != effectiveTimeZone) {
+      _eligibilityCache.remove(placement);
+      return;
+    }
     _eligibilityCache[placement] = _EligibilityCacheEntry(
       ownerUserId: ownerUserId,
       backendBaseUrl: _backendBaseUrl,

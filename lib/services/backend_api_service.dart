@@ -549,6 +549,21 @@ class BackendApiService {
     return _cachedTimeZone!;
   }
 
+  /// Returns the timezone that subsequent transport requests will send.
+  /// Refresh failures retain a previously usable value and otherwise return
+  /// null so optional advisory caches can fail closed without leaking plugin
+  /// errors into app flows.
+  Future<String?> getEffectiveTimeZone() async {
+    try {
+      final current = await FlutterTimezone.getLocalTimezone();
+      if (current.isEmpty) return _cachedTimeZone;
+      _cachedTimeZone = current;
+      return current;
+    } catch (_) {
+      return _cachedTimeZone;
+    }
+  }
+
   // The build's release channel, sent to the backend so it knows whether to
   // reveal test-only catalog items. TestFlight (and dev) builds report
   // 'testflight'; App Store builds — and any platform where detection fails or
