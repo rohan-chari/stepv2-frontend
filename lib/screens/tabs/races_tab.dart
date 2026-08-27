@@ -167,7 +167,7 @@ class _PersonalGroupHeader extends StatelessWidget {
               label,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
-              style: PixelText.display(size: 20, color: colors.textLight)
+              style: PixelText.title(size: 15, color: colors.textLight)
                   .copyWith(
                     shadows: const [
                       Shadow(
@@ -829,8 +829,8 @@ class _RacesTabState extends State<RacesTab> {
               const SizedBox(width: 8),
               Text(
                 'INVITES',
-                style: PixelText.display(
-                  size: 22,
+                style: PixelText.title(
+                  size: 20,
                   color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),

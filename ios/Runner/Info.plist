@@ -119,6 +119,13 @@
 			<key>SKAdNetworkIdentifier</key>
 			<string>n38lu8286q.skadnetwork</string>
 		</dict>
+		<!-- Liftoff Monetize published network list, refreshed 2026-08-26 from
+		     https://vungle.com/skadnetworkids.xml. All other published Liftoff
+		     identifiers are already present in the deduplicated partner list. -->
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>7953jerfzd.skadnetwork</string>
+		</dict>
 		<!-- AppLovin's published SKAdNetwork list, refreshed 2026-07-20 from
 		     https://skadnetwork-ids.applovin.com/v1/skadnetworkids.json. -->
 		<dict>

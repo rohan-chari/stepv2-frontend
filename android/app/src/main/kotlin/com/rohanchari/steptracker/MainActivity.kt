@@ -52,6 +52,30 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // UMP's IAB TCF/Additional Consent/GPP values live in the platform
+        // default SharedPreferences store. Return only standardized CMP keys;
+        // Dart treats absent or malformed values as unknown.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.steptracker/ad_privacy_signals"
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "getIabSignals") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val prefs = applicationContext.getSharedPreferences(
+                "${applicationContext.packageName}_preferences",
+                MODE_PRIVATE,
+            )
+            val values = mutableMapOf<String, Any>()
+            iabPrivacySignalKeys.forEach { key ->
+                when (val value = prefs.all[key]) {
+                    is String, is Int, is Long, is Boolean -> values[key] = value
+                }
+            }
+            result.success(values)
+        }
     }
 
     // Connects to the Play Install Referrer service, hands the raw referrer
@@ -87,6 +111,35 @@ class MainActivity : FlutterFragmentActivity() {
             })
         } catch (_: Exception) {
             finish(null)
+        }
+    }
+
+    companion object {
+        private val iabPrivacySignalKeys: List<String> = buildList {
+            addAll(
+                listOf(
+                    "IABTCF_gdprApplies",
+                    "IABTCF_PurposeConsents",
+                    "IABTCF_VendorConsents",
+                    "IABTCF_AddtlConsent",
+                    "IABGPP_GppSID",
+                    "IABGPP_HDR_GppString",
+                    "IABGPP_TCFEU2_gdprApplies",
+                    "IABGPP_TCFEU2_PurposesConsent",
+                    "IABUSPrivacy_String",
+                    "IABGPP_USP1_OptOut",
+                )
+            )
+            listOf(
+                "USNAT", "USCA", "USVA", "USCO", "USUT", "USCT", "USFL",
+                "USMT", "USOR", "USTX", "USDE", "USIA", "USNE", "USNH",
+                "USNJ", "USTN", "USMN", "USMD", "USIN", "USKY", "USRI",
+            ).forEach { prefix ->
+                add("IABGPP_${prefix}_SaleOptOut")
+                add("IABGPP_${prefix}_SharingOptOut")
+                add("IABGPP_${prefix}_TargetedAdvertisingOptOut")
+                add("IABGPP_${prefix}_Gpc")
+            }
         }
     }
 }

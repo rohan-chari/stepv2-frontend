@@ -866,10 +866,11 @@ void main() {
       expect(bar.items.map((item) => item.label), [
         'Home',
         'Races',
-        'Boards',
         'Friends',
+        'Boards',
         'Profile',
       ]);
+      expect(bar.items[3].icon, Icons.bar_chart_rounded);
       expect(find.byKey(const Key('home-leaderboards-ticket')), findsNothing);
     },
   );
@@ -892,7 +893,7 @@ void main() {
     );
     await _boundedPump(tester);
     final bar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(bar.currentIndex, 3);
+    expect(bar.currentIndex, 2);
   });
 
   testWidgets('Inbox suppresses routine and malformed alert rows', (

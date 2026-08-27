@@ -291,7 +291,11 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                       child: Container(
                         key: const Key('case-opening-reel-viewport'),
                         height: widget.height,
-                        width: viewportWidth,
+                        // Leave room for the reel surface's horizontal
+                        // padding; using the full parent width here made the
+                        // restored daily-reward popup overflow on narrow
+                        // phones.
+                        width: (viewportWidth - 20).clamp(0.0, double.infinity),
                         // Dark machine window: tiles glow against the deep
                         // felt, framed like a cabinet slot.
                         decoration: BoxDecoration(
@@ -414,24 +418,27 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                     _waitingForSwipe &&
                     !widget.hideSwipeHint) ...[
                   const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.swipe_rounded,
-                        size: 18,
-                        color: AppColors.of(context).accent,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'drag across the reel',
-                        style: HomeText.body(
-                          size: 13,
-                          color: AppColors.of(context).muted,
-                          weight: FontWeight.w800,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.swipe_rounded,
+                          size: 18,
+                          color: AppColors.of(context).accent,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Text(
+                          'drag across the reel',
+                          style: HomeText.body(
+                            size: 13,
+                            color: AppColors.of(context).muted,
+                            weight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ],

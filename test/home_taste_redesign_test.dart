@@ -8,7 +8,6 @@ import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
-import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/arcade_fx.dart';
 
 class _TasteHomeApi extends BackendApiService {
@@ -95,62 +94,47 @@ void main() {
     );
   });
 
-  testWidgets(
-    'daily reward is primary and Shop is a compact secondary action',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final api = _TasteHomeApi();
-      final auth = await _auth(api);
+  testWidgets('daily reward and Shop use equal-sized buttons', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _TasteHomeApi();
+    final auth = await _auth(api);
 
-      await tester.pumpWidget(_home(auth, api));
-      await _flush(tester);
+    await tester.pumpWidget(_home(auth, api));
+    await _flush(tester);
 
-      final reward = find.byKey(const Key('home-daily-reward-button'));
-      final shop = find.byKey(const Key('home-shop-button'));
-      expect(reward, findsOneWidget);
-      expect(shop, findsOneWidget);
-      expect(
-        tester.getSize(reward).width,
-        greaterThan(tester.getSize(shop).width * 2),
-      );
-      expect(tester.getSize(shop), const Size(80, 58));
-      final compactReward = find.byKey(
-        const Key('home-daily-reward-compact-layout'),
-      );
-      expect(tester.getSize(compactReward).height, 58);
-      final rewardIcon = find.descendant(
-        of: compactReward,
-        matching: find.byType(Icon),
-      );
-      final rewardLabel = find.descendant(
-        of: compactReward,
-        matching: find.byType(Text),
-      );
-      expect(
-        tester.getRect(rewardIcon).bottom,
-        lessThan(tester.getRect(rewardLabel).top),
-      );
-      expect(
-        tester.getRect(rewardIcon).center.dx,
-        closeTo(tester.getRect(rewardLabel).center.dx, 1),
-      );
-      final rewardStyle = tester.widget<Text>(rewardLabel).style!;
-      final shopStyle = tester.widget<Text>(find.text('SHOP')).style!;
-      final alertsStyle = tester.widget<Text>(find.text('ALERTS')).style!;
-      expect(rewardStyle.fontFamily, shopStyle.fontFamily);
-      expect(alertsStyle.fontFamily, shopStyle.fontFamily);
-      expect(rewardStyle.fontSize, shopStyle.fontSize);
-      expect(alertsStyle.fontSize, shopStyle.fontSize);
-      final arcadeStyle = PixelText.pill(size: 14);
-      expect(rewardStyle.fontFamily, arcadeStyle.fontFamily);
-      expect(rewardStyle.fontSize, arcadeStyle.fontSize);
-      final alertsText = tester.widget<Text>(find.text('ALERTS'));
-      expect(alertsText.data, 'ALERTS');
-      expect(alertsText.softWrap, isFalse);
-      expect(alertsText.overflow, TextOverflow.visible);
-    },
-  );
+    final reward = find.byKey(const Key('home-daily-reward-button'));
+    final shop = find.byKey(const Key('home-shop-button'));
+    expect(reward, findsOneWidget);
+    expect(shop, findsOneWidget);
+    expect(tester.getSize(reward), tester.getSize(shop));
+    expect(tester.getSize(shop).height, 44);
+    final compactReward = find.byKey(
+      const Key('home-daily-reward-compact-layout'),
+    );
+    expect(tester.getSize(compactReward).height, 44);
+    final rewardIcon = find.descendant(
+      of: compactReward,
+      matching: find.byType(Icon),
+    );
+    final rewardLabel = find.descendant(
+      of: compactReward,
+      matching: find.byType(Text),
+    );
+    expect(
+      tester.getRect(rewardIcon).center.dx,
+      lessThan(tester.getRect(rewardLabel).center.dx),
+    );
+    expect(
+      tester.getRect(rewardIcon).center.dy,
+      closeTo(tester.getRect(rewardLabel).center.dy, 1),
+    );
+    final rewardStyle = tester.widget<Text>(rewardLabel).style!;
+    final shopStyle = tester.widget<Text>(find.text('SHOP')).style!;
+    expect(rewardStyle.fontFamily, shopStyle.fontFamily);
+    expect(rewardStyle.fontSize, shopStyle.fontSize);
+    expect(find.text('ALERTS'), findsNothing);
+  });
 
   testWidgets('a pending invite outranks incomplete setup', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 2400));
@@ -168,7 +152,7 @@ void main() {
     expect(tester.getTopLeft(invite).dy, lessThan(tester.getTopLeft(setup).dy));
   });
 
-  testWidgets('Home ends with the compact Feedback section', (tester) async {
+  testWidgets('Home ends with the restored Feedback section', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final api = _TasteHomeApi();
@@ -180,10 +164,11 @@ void main() {
     final feedback = find.byKey(const Key('home-feedback-card'));
     expect(feedback, findsOneWidget);
     expect(find.byKey(const Key('home-feedback-button')), findsOneWidget);
-    expect(find.text('FEEDBACK'), findsOneWidget);
+    expect(find.text('Found a bug? Have an idea? Let us know'), findsOneWidget);
+    expect(find.text('SEND FEEDBACK'), findsOneWidget);
     expect(
       tester.getTopLeft(feedback).dy,
-      greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
+      greaterThan(tester.getTopLeft(find.text('Suggested Races')).dy),
     );
   });
 

@@ -10,11 +10,13 @@ import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
 import 'package:step_tracker/screens/inbox_screen.dart';
+import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/models/step_sync_v2_result.dart';
 import 'package:step_tracker/models/race_discovery_summary.dart';
 import 'package:step_tracker/models/race_payout_double_offer.dart';
+import 'package:step_tracker/models/race_resolution_status.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
 import 'package:step_tracker/services/health_service.dart';
@@ -61,6 +63,7 @@ class _FakeBackendApiService extends BackendApiService {
       'invites': <Map<String, dynamic>>[],
     },
     this.completeOnboarding = true,
+    this.displayName = 'Trail Walker',
     this.homeRaceCard = const {'state': 'EMPTY'},
     this.inboxAlerts = const {
       'alerts': <Map<String, dynamic>>[],
@@ -71,6 +74,7 @@ class _FakeBackendApiService extends BackendApiService {
   final Map<String, dynamic> racesData;
   final Map<String, dynamic> homeInvitePreflight;
   final bool completeOnboarding;
+  final String displayName;
   final Map<String, dynamic> homeRaceCard;
   final Map<String, dynamic> inboxAlerts;
   int homeSuggestionCalls = 0;
@@ -178,7 +182,7 @@ class _FakeBackendApiService extends BackendApiService {
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     return {
-      'displayName': 'Trail Walker',
+      'displayName': displayName,
       'incomingFriendRequests': 0,
       'firstRaceOnboardingSeen': completeOnboarding,
       'tutorialOnboardingSeen': completeOnboarding,
@@ -267,6 +271,115 @@ class _DeferredSummaryApi extends _FakeBackendApiService {
     bool usePersistedTotals = false,
   }) => homeCard.future;
 }
+
+class _SummaryWorkPollingApi extends _FakeBackendApiService {
+  _SummaryWorkPollingApi({
+    required this.statuses,
+    this.includeRaceJob = false,
+    List<GlobalEventSummaryWorkReceipt?>? syncReceipts,
+  }) : syncReceipts = syncReceipts == null
+           ? null
+           : List<GlobalEventSummaryWorkReceipt?>.of(syncReceipts);
+
+  final List<GlobalEventSummaryWorkStatus?> statuses;
+  final bool includeRaceJob;
+  final List<GlobalEventSummaryWorkReceipt?>? syncReceipts;
+  int workStatusCalls = 0;
+  int raceStatusCalls = 0;
+  int homeRaceCardCalls = 0;
+  int syncCalls = 0;
+  final List<bool> homePulls = [];
+
+  GlobalEventSummaryWorkReceipt get _defaultReceipt =>
+      GlobalEventSummaryWorkReceipt(
+        id: 'summary-work-1',
+        state: GlobalEventSummaryWorkState.waitingRaces,
+        expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+      );
+
+  @override
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+    bool homePull = false,
+  }) async {
+    syncCalls++;
+    homePulls.add(homePull);
+    final scriptedReceipts = syncReceipts;
+    final receipt = scriptedReceipts == null
+        ? _defaultReceipt
+        : scriptedReceipts.isEmpty
+        ? null
+        : scriptedReceipts.removeAt(0);
+    return StepSyncV2Result(
+      kind: StepSyncV2Kind.current,
+      jobId: includeRaceJob ? 'race-job-1' : null,
+      generation: includeRaceJob ? 7 : null,
+      globalEventSummaryWork: receipt,
+    );
+  }
+
+  @override
+  Future<GlobalEventSummaryWorkStatus?> fetchGlobalEventSummaryWorkStatus({
+    required String identityToken,
+    required String workId,
+  }) async {
+    workStatusCalls++;
+    if (statuses.isEmpty) return null;
+    return statuses.removeAt(0);
+  }
+
+  @override
+  Future<RaceResolutionStatus> fetchRaceResolutionStatus({
+    required String identityToken,
+    required String jobId,
+    required int generation,
+  }) async {
+    raceStatusCalls++;
+    return const RaceResolutionStatus(RaceResolutionState.queued);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) async {
+    homeRaceCardCalls++;
+    return {
+      'state': 'EMPTY',
+      if (homeRaceCardCalls >= 2)
+        'globalEventSummary': _globalEventSummary(
+          id: 'summary-from-work',
+          validForMs: 3600000,
+        ),
+    };
+  }
+}
+
+Map<String, dynamic> _globalEventSummary({
+  String id = 'summary-1',
+  int extraRaceSteps = 125,
+  int raceCount = 1,
+  Object? expiresAt = '2099-08-27T04:00:00.000Z',
+  Object? validForMs = 10000,
+}) => {
+  'id': id,
+  'eventId': 'event-1',
+  'extraRaceSteps': extraRaceSteps,
+  'raceCount': raceCount,
+  'settledAt': '2026-08-26T20:30:05.000Z',
+  'expiresAt': expiresAt,
+  'validForMs': validForMs,
+};
+
+GlobalEventSummaryWorkReceipt _summaryWorkReceipt({DateTime? expiresAt}) =>
+    GlobalEventSummaryWorkReceipt(
+      id: 'summary-work-1',
+      state: GlobalEventSummaryWorkState.waitingRaces,
+      expiresAt:
+          expiresAt ?? DateTime.now().toUtc().add(const Duration(hours: 1)),
+    );
 
 class _AccountSwitchRaceCardApi extends _FakeBackendApiService {
   final Completer<Map<String, dynamic>> oldAccount = Completer();
@@ -454,21 +567,37 @@ Future<AuthService> _authService() async {
 
 class _RecordingInterstitialCoordinator
     implements InterstitialPresentationCoordinator {
-  _RecordingInterstitialCoordinator({this.primeThrows = false});
+  _RecordingInterstitialCoordinator({
+    this.primeThrows = false,
+    this.warmCompleter,
+    this.primeCompleter,
+  });
   final bool primeThrows;
+  final Completer<void>? warmCompleter;
+  final Completer<void>? primeCompleter;
   @override
   String get ownerUserId => 'user-1';
   @override
   String get sessionId => '4b7c1f1e-4a5f-4bc1-a9b8-6bd986112a61';
   final List<InterstitialPlacement> primes = [];
+  final List<InterstitialPlacement> warms = [];
   final List<InterstitialPlacement> presentations = [];
   final List<InterstitialPlacement> cancellations = [];
   final List<bool> rewardedArguments = [];
 
   @override
+  Future<void> warm(InterstitialPlacement placement) async {
+    warms.add(placement);
+    final pending = warmCompleter;
+    if (pending != null) await pending.future;
+  }
+
+  @override
   Future<void> prime(InterstitialPlacement placement) async {
     primes.add(placement);
     if (primeThrows) throw StateError('prime failed');
+    final pending = primeCompleter;
+    if (pending != null) await pending.future;
   }
 
   @override
@@ -508,6 +637,166 @@ void main() {
     );
   });
 
+  testWidgets(
+    'authenticated foreground shell warms Race Detail after consent',
+    (WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      AdService.setConsentPermission(true);
+      addTearDown(() => AdService.setConsentPermission(false));
+      final authService = await _authService();
+      final coordinator = _RecordingInterstitialCoordinator();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: _FakeBackendApiService(),
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            interstitialCoordinator: coordinator,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(coordinator.warms, contains(InterstitialPlacement.raceDetailExit));
+      expect(coordinator.primes, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'consent allowed while backgrounded waits for foreground resume',
+    (WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      AdService.setConsentPermission(false);
+      addTearDown(() => AdService.setConsentPermission(false));
+      final authService = await _authService();
+      final coordinator = _RecordingInterstitialCoordinator();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: _FakeBackendApiService(),
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            interstitialCoordinator: coordinator,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(coordinator.warms, isEmpty);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      AdService.setConsentPermission(true);
+      await tester.pump();
+      expect(coordinator.warms, isEmpty);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(coordinator.warms, [InterstitialPlacement.raceDetailExit]);
+    },
+  );
+
+  testWidgets(
+    'consent allowed during onboarding waits for onboarding completion',
+    (WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      AdService.setConsentPermission(false);
+      addTearDown(() => AdService.setConsentPermission(false));
+      SharedPreferences.setMockInitialValues({
+        'auth_identity_token': 'apple-token',
+        'auth_user_identifier': 'apple-user-123',
+        'auth_session_token': 'session-token',
+        'auth_backend_user_id': 'user-1',
+        'auth_display_name': 'Trail Walker',
+        'auth_first_race_onboarding_seen': false,
+        'auth_tutorial_onboarding_seen': false,
+      });
+      final authService = AuthService();
+      await authService.restoreSession();
+      final coordinator = _RecordingInterstitialCoordinator();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: _FakeBackendApiService(
+              completeOnboarding: false,
+            ),
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            interstitialCoordinator: coordinator,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      AdService.setConsentPermission(true);
+      await tester.pump();
+      expect(coordinator.warms, isEmpty);
+
+      await authService.syncFromBackendUser(const {
+        'firstRaceOnboardingSeen': true,
+        'tutorialOnboardingSeen': true,
+        'featureFlags': {'onboardingV3Enabled': true},
+      });
+      await tester.pump();
+      expect(coordinator.warms, [InterstitialPlacement.raceDetailExit]);
+    },
+  );
+
+  testWidgets('unauthenticated shell never warms interstitial inventory', (
+    WidgetTester tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    AdService.setConsentPermission(true);
+    addTearDown(() => AdService.setConsentPermission(false));
+    SharedPreferences.setMockInitialValues({});
+    final authService = AuthService();
+    await authService.restoreSession();
+    final coordinator = _RecordingInterstitialCoordinator();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: _FakeBackendApiService(),
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+          interstitialCoordinator: coordinator,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(coordinator.warms, isEmpty);
+  });
+
+  test(
+    'both platform feature-header branches advertise expiring summaries',
+    () {
+      for (final isIos in [false, true]) {
+        for (final adsSupported in [false, true]) {
+          final features = BackendApiService.clientFeaturesHeaderForPlatform(
+            isIos: isIos,
+            adsSupported: adsSupported,
+            racePayoutDoubleSupported: false,
+          ).split(',');
+          expect(features, contains('impact_summaries'));
+          expect(features, contains('impact_summary_expiry_v1'));
+        }
+      }
+      expect(
+        BackendApiService.clientFeaturesHeader.split(','),
+        contains('impact_summary_expiry_v1'),
+      );
+    },
+  );
+
   testWidgets('MainShell renders tabs in the primary navigation order', (
     WidgetTester tester,
   ) async {
@@ -530,10 +819,11 @@ void main() {
     expect(tabBar.items.map((item) => item.label), [
       'Home',
       'Races',
-      'Boards',
       'Friends',
+      'Boards',
       'Profile',
     ]);
+    expect(tabBar.items[3].icon, Icons.bar_chart_rounded);
     expect(find.byKey(const Key('home-inbox-button')), findsNothing);
   });
 
@@ -709,6 +999,7 @@ void main() {
       );
       await authService.updateCoins(987654321);
       final api = _FakeBackendApiService(
+        displayName: 'A Very Long Trail Walker Display Name That Must Truncate',
         inboxAlerts: const {
           'alerts': <Map<String, dynamic>>[],
           'nextCursor': null,
@@ -742,11 +1033,15 @@ void main() {
       expect(daily, findsOneWidget);
       expect(shop, findsOneWidget);
       expect(bell, findsOneWidget);
-      expect(tester.getSize(shop), const Size(80, 58));
-      expect(tester.getSize(bell), const Size(80, 58));
-      expect(tester.getRect(shop).top, tester.getRect(bell).top);
-      expect(tester.getRect(shop).right, lessThan(tester.getRect(bell).left));
-      expect(tester.getRect(bell).right, lessThanOrEqualTo(320));
+      expect(tester.getSize(daily), tester.getSize(shop));
+      expect(tester.getSize(shop).height, 44);
+      expect(tester.getRect(bell).bottom, lessThan(tester.getRect(shop).top));
+      final longName = find.byKey(const Key('home-username'));
+      expect(longName, findsOneWidget);
+      expect(
+        tester.getRect(longName).right,
+        lessThanOrEqualTo(tester.getRect(bell).left),
+      );
       expect(find.text('9+'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -818,115 +1113,144 @@ void main() {
     );
   });
 
-  testWidgets(
-    'Home seats Notifications beside Shop as a matching quick action',
-    (WidgetTester tester) async {
-      await tester.binding.setSurfaceSize(const Size(700, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final authService = await _authService();
-      final api = _FakeBackendApiService(
-        inboxAlerts: const {
-          'alerts': <Map<String, dynamic>>[],
-          'nextCursor': null,
-          'totalUnreadCount': 2,
-        },
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppThemeData.light(),
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
+  testWidgets('Home seats white Mail to the left of the hero sun/moon', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(700, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 2,
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.light(),
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
         ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-      final shop = find.byKey(const Key('home-shop-button'));
-      final bell = find.byKey(const Key('home-notifications-card'));
-      expect(
-        tester.getRect(bell).left - tester.getRect(shop).right,
-        inInclusiveRange(8, 12),
-      );
-      expect(tester.getSize(shop), const Size(80, 58));
-      expect(tester.getSize(bell), const Size(80, 58));
-      expect(tester.getRect(shop).top, tester.getRect(bell).top);
-      final plateFinder = find.byKey(const Key('home-notifications-backplate'));
-      final plate = tester.widget<Ink>(plateFinder);
-      final colors = AppColors.of(tester.element(bell));
-      final decoration = plate.decoration! as BoxDecoration;
-      expect(decoration.color, colors.pillGold);
-      final icon = tester.widget<Icon>(
-        find.descendant(of: plateFinder, matching: find.byType(Icon)),
-      );
-      expect(icon.color, colors.textDark);
-      var badge = tester.widget<Container>(
-        find.byKey(const Key('home-notifications-badge')),
-      );
-      expect((badge.decoration! as BoxDecoration).color, colors.coinLight);
-      var badgeText = tester.widget<Text>(
-        find.descendant(
-          of: find.byKey(const Key('home-notifications-badge')),
-          matching: find.byType(Text),
-        ),
-      );
-      expect(badgeText.style!.color, colors.roofDark);
+    final shop = find.byKey(const Key('home-shop-button'));
+    final bell = find.byKey(const Key('home-notifications-card'));
+    final daily = find.byKey(const Key('home-daily-reward-button'));
+    expect(tester.getSize(daily), tester.getSize(shop));
+    expect(tester.getSize(shop).height, 44);
+    expect(tester.getSize(bell), const Size(44, 44));
+    expect(tester.getTopRight(bell).dx, closeTo(636, 2));
+    expect(tester.getRect(bell).bottom, lessThan(tester.getRect(shop).top));
+    final plateFinder = find.byKey(const Key('home-notifications-backplate'));
+    final icon = tester.widget<Icon>(
+      find.descendant(of: plateFinder, matching: find.byType(Icon)),
+    );
+    expect(icon.icon, Icons.mail_outline_rounded);
+    expect(icon.color, Colors.white);
+    expect(icon.size, closeTo(33, 0.1));
+    var badge = tester.widget<Container>(
+      find.byKey(const Key('home-notifications-badge')),
+    );
+    final colors = AppColors.of(tester.element(bell));
+    expect((badge.decoration! as BoxDecoration).color, colors.coinLight);
+    expect(badge.constraints!.minWidth, closeTo(27, 0.1));
+    var badgeText = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const Key('home-notifications-badge')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(badgeText.style!.color, colors.roofDark);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('night-bell'),
-          theme: AppThemeData.night(),
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        key: const ValueKey('night-bell'),
+        theme: AppThemeData.night(),
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
         ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      final nightColors = AppColors.of(
-        tester.element(find.byKey(const Key('home-notifications-card'))),
-      );
-      final nightPlate = tester.widget<Ink>(
-        find.byKey(const Key('home-notifications-backplate')),
-      );
-      expect(
-        (nightPlate.decoration! as BoxDecoration).color,
-        nightColors.pillGold,
-      );
-      badge = tester.widget<Container>(
-        find.byKey(const Key('home-notifications-badge')),
-      );
-      expect((badge.decoration! as BoxDecoration).color, nightColors.coinLight);
-      badgeText = tester.widget<Text>(
-        find.descendant(
-          of: find.byKey(const Key('home-notifications-badge')),
-          matching: find.byType(Text),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    final nightIcon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('home-notifications-backplate')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(nightIcon.icon, Icons.mail_outline_rounded);
+    expect(nightIcon.color, Colors.white);
+    expect(nightIcon.size, closeTo(33, 0.1));
+    badge = tester.widget<Container>(
+      find.byKey(const Key('home-notifications-badge')),
+    );
+    final nightColors = AppColors.of(tester.element(bell));
+    expect((badge.decoration! as BoxDecoration).color, nightColors.coinLight);
+    badgeText = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const Key('home-notifications-badge')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(badgeText.style!.color, nightColors.roofDark);
+  });
+
+  testWidgets('Home stacks the coin balance below the username', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    await authService.updateDisplayName('Trail Walker');
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 0,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
         ),
-      );
-      expect(badgeText.style!.color, nightColors.roofDark);
-    },
-  );
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final name = find.text('@Trail Walker');
+    final coins = find.byKey(const Key('home-coin-balance'));
+    expect(name, findsOneWidget);
+    expect(coins, findsOneWidget);
+    expect(tester.getRect(coins).top, greaterThan(tester.getRect(name).bottom));
+  });
 
   testWidgets('mixed net-zero 2x summary remains eligible on Home', (
     WidgetTester tester,
   ) async {
     final authService = await _authService();
     final api = _FakeBackendApiService(
-      homeRaceCard: const {
+      homeRaceCard: {
         'state': 'EMPTY',
-        'globalEventSummary': {
-          'id': 'summary-net-zero',
-          'extraRaceSteps': 0,
-          'raceCount': 2,
-        },
+        'globalEventSummary': _globalEventSummary(
+          id: 'summary-net-zero',
+          extraRaceSteps: 0,
+          raceCount: 2,
+        ),
       },
     );
 
@@ -978,13 +1302,9 @@ void main() {
         1,
       );
 
-      api.homeCard.complete(const {
+      api.homeCard.complete({
         'state': 'EMPTY',
-        'globalEventSummary': {
-          'id': 'summary-deferred',
-          'extraRaceSteps': 125,
-          'raceCount': 1,
-        },
+        'globalEventSummary': _globalEventSummary(id: 'summary-deferred'),
       });
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
@@ -1000,6 +1320,606 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
     },
   );
+
+  testWidgets(
+    '2x summary expires from the off-Home queue without acknowledgement',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _DeferredSummaryApi();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(1);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).currentIndex,
+        1,
+      );
+
+      api.homeCard.complete({
+        'state': 'EMPTY',
+        'globalEventSummary': _globalEventSummary(
+          id: 'summary-expiring-queued',
+          validForMs: 500,
+        ),
+      });
+      for (var i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+      await tester.pump(const Duration(milliseconds: 600));
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(0);
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(find.text('2× STEPS COMPLETE'), findsNothing);
+      expect(api.globalSummaryAckCalls, 0);
+    },
+  );
+
+  testWidgets(
+    '2x summary shown before expiry stays open and acknowledges after expiry',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _FakeBackendApiService(
+        homeRaceCard: {
+          'state': 'EMPTY',
+          'globalEventSummary': _globalEventSummary(
+            id: 'summary-visible-at-expiry',
+            validForMs: 500,
+          ),
+        },
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(api.globalSummaryAckCalls, 1);
+    },
+  );
+
+  testWidgets('malformed or missing 2x expiry metadata fails soft', (
+    WidgetTester tester,
+  ) async {
+    final invalidSummaries = <Map<String, dynamic>>[
+      _globalEventSummary()..remove('expiresAt'),
+      _globalEventSummary(expiresAt: 'not-a-date'),
+      _globalEventSummary(validForMs: null),
+      _globalEventSummary(validForMs: 0),
+      _globalEventSummary(validForMs: double.nan),
+    ];
+
+    for (var index = 0; index < invalidSummaries.length; index++) {
+      final authService = await _authService();
+      final api = _FakeBackendApiService(
+        homeRaceCard: {
+          'state': 'EMPTY',
+          'globalEventSummary': invalidSummaries[index],
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(index),
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      for (var frame = 0; frame < 8; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        find.text('2× STEPS COMPLETE'),
+        findsNothing,
+        reason: 'invalid summary index $index must be suppressed',
+      );
+      expect(find.byType(HomeTab), findsOneWidget);
+    }
+  });
+
+  testWidgets('Home request RTT is subtracted from 2x summary lifetime', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _DeferredSummaryApi();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    api.homeCard.complete({
+      'state': 'EMPTY',
+      'globalEventSummary': _globalEventSummary(
+        id: 'summary-expired-in-flight',
+        validForMs: 100,
+      ),
+    });
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    expect(find.byType(HomeTab), findsOneWidget);
+  });
+
+  testWidgets(
+    'fast device clock cannot suppress work polling or CREATED Home refetch',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final locallyPast = DateTime.utc(2000, 1, 1);
+      final api = _SummaryWorkPollingApi(
+        statuses: [
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.created,
+            expiresAt: locallyPast,
+          ),
+        ],
+        syncReceipts: [_summaryWorkReceipt(expiresAt: locallyPast)],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 750));
+      await tester.pump();
+
+      expect(api.workStatusCalls, 1);
+      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
+
+  testWidgets(
+    'slow device clock still lets server CREATED drive Home refetch',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final locallyFarFuture = DateTime.utc(2099, 1, 1);
+      final api = _SummaryWorkPollingApi(
+        statuses: [
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.created,
+            expiresAt: locallyFarFuture,
+          ),
+        ],
+        syncReceipts: [_summaryWorkReceipt(expiresAt: locallyFarFuture)],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 750));
+      await tester.pump();
+
+      expect(api.workStatusCalls, 1);
+      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
+
+  testWidgets(
+    'server EXPIRED_UNDELIVERED stops work despite a locally future deadline',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final locallyFarFuture = DateTime.utc(2099, 1, 1);
+      final api = _SummaryWorkPollingApi(
+        statuses: [
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.expiredUndelivered,
+            expiresAt: locallyFarFuture,
+          ),
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.created,
+            expiresAt: locallyFarFuture,
+          ),
+        ],
+        syncReceipts: [_summaryWorkReceipt(expiresAt: locallyFarFuture)],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 750));
+      await tester.pump(const Duration(seconds: 10));
+
+      expect(api.workStatusCalls, 1);
+      expect(api.homeRaceCardCalls, 1);
+      expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'summary work polls past race cadence and CREATED independently refetches Home',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final waiting = GlobalEventSummaryWorkStatus(
+        state: GlobalEventSummaryWorkState.waitingRaces,
+        expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+      );
+      final api = _SummaryWorkPollingApi(
+        includeRaceJob: true,
+        statuses: [
+          waiting,
+          waiting,
+          waiting,
+          waiting,
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.created,
+            expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      for (final delay in const [
+        Duration(milliseconds: 750),
+        Duration(milliseconds: 1500),
+        Duration(seconds: 3),
+        Duration(seconds: 5),
+        Duration(seconds: 5),
+      ]) {
+        await tester.pump(delay);
+        await tester.pump();
+      }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(api.workStatusCalls, 5);
+      expect(api.raceStatusCalls, lessThan(api.workStatusCalls));
+      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
+
+  testWidgets('terminal summary work state stops polling without UI', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(
+      statuses: [
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.allZero,
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.pump(const Duration(seconds: 10));
+
+    expect(api.workStatusCalls, 1);
+    expect(api.homeRaceCardCalls, 1);
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+  });
+
+  testWidgets('failed summary work status read stops polling without UI', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(statuses: [null]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.pump(const Duration(seconds: 10));
+
+    expect(api.workStatusCalls, 1);
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+  });
+
+  testWidgets('backgrounding cancels summary work polling', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(
+      statuses: [
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.waitingRaces,
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(api.workStatusCalls, 0);
+  });
+
+  testWidgets(
+    'paused summary work is retained and polling restarts on resume',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _SummaryWorkPollingApi(
+        statuses: [
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.created,
+            expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+          ),
+        ],
+        // The resume sync deliberately has no receipt. Polling can only restart
+        // if the shell retained the first active receipt while paused.
+        syncReceipts: [_summaryWorkReceipt(), null],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(seconds: 2));
+      expect(api.workStatusCalls, 0);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(milliseconds: 750));
+      await tester.pump();
+
+      expect(api.workStatusCalls, 1);
+      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
+
+  testWidgets('hidden summary work cancels polling and restarts on resume', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(
+      statuses: [
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.created,
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      ],
+      syncReceipts: [_summaryWorkReceipt(), null],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(seconds: 2));
+    expect(api.workStatusCalls, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.pump();
+    expect(api.workStatusCalls, 1);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('later Home pull receipt starts existing WAITING_RACES work', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(
+      statuses: [
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.created,
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      ],
+      // Models a recreated process whose first sync sees no work, followed by
+      // the backend returning the existing active row on a later Home pull.
+      syncReceipts: [null, _summaryWorkReceipt()],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    await home.onRefresh();
+    expect(api.homePulls, contains(true));
+
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.pump();
+    expect(api.workStatusCalls, 1);
+    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('terminal summary work is not restarted after resume', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(
+      statuses: [
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.unscorable,
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      ],
+      syncReceipts: [_summaryWorkReceipt(), null],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.pump();
+    expect(api.workStatusCalls, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(api.workStatusCalls, 1);
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+  });
+
+  testWidgets('sign-out cancels summary work polling', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SummaryWorkPollingApi(
+      statuses: [
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.waitingRaces,
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await authService.signOut();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(api.workStatusCalls, 0);
+  });
 
   testWidgets('Home loads suggestions without Races discovery fan-out', (
     WidgetTester tester,
@@ -1382,6 +2302,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(
+        coordinator.warms,
+        contains(InterstitialPlacement.raceResultsExit),
+      );
+      expect(
         coordinator.primes,
         contains(InterstitialPlacement.raceResultsExit),
       );
@@ -1394,6 +2318,69 @@ void main() {
       expect(coordinator.presentations, [
         InterstitialPlacement.raceResultsExit,
       ]);
+    },
+  );
+
+  testWidgets(
+    'unresolved results warm and prime never delay dismissal or present late',
+    (WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final authService = await _authService();
+      final warm = Completer<void>();
+      final prime = Completer<void>();
+      final coordinator = _RecordingInterstitialCoordinator(
+        warmCompleter: warm,
+        primeCompleter: prime,
+      );
+      final api = _FakeBackendApiService(
+        racesData: const {
+          'completed': <Map<String, dynamic>>[
+            {
+              'id': 'race-unresolved-interstitial',
+              'name': 'Finished Without Waiting',
+              'myStatus': 'ACCEPTED',
+              'myResultsSeen': false,
+              'myPayoutCoins': 10,
+            },
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            interstitialCoordinator: coordinator,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Finished Without Waiting'), findsOneWidget);
+      expect(
+        coordinator.primes,
+        contains(InterstitialPlacement.raceResultsExit),
+      );
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('Finished Without Waiting'), findsNothing);
+      expect(coordinator.presentations, [
+        InterstitialPlacement.raceResultsExit,
+      ]);
+      warm.complete();
+      prime.complete();
+      await tester.pump();
+      expect(coordinator.presentations, [
+        InterstitialPlacement.raceResultsExit,
+      ]);
+      expect(tester.takeException(), isNull);
     },
   );
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -244,6 +245,54 @@ void main() {
     expect(harness.coordinator.presentCalls, 1);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'an unresolved prime never delays back navigation or presents late',
+    (tester) async {
+      final prime = Completer<void>();
+      final harness = await _pumpRace(tester, primeCompleter: prime);
+      await tester.pump(const Duration(seconds: 10));
+      expect(harness.coordinator.primes, [
+        InterstitialPlacement.raceDetailExit,
+      ]);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('OPEN'), findsOneWidget);
+      expect(harness.coordinator.presentCalls, 1);
+      prime.complete();
+      await tester.pump();
+      expect(harness.coordinator.presentCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('concurrent Race Detail analytics retain visit-time session', (
+    tester,
+  ) async {
+    final api = _ActiveRaceApi();
+    final analytics = _QueuedAnalytics(api);
+    final harness = await _pumpRace(tester, analytics: analytics);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pump(const Duration(milliseconds: 400));
+    await analytics.settle();
+
+    final prefs = await SharedPreferences.getInstance();
+    final events =
+        (jsonDecode(prefs.getString('activation_events_v1')!) as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+    expect(events.map((event) => event['name']), [
+      'race_detail_visit_started',
+      'race_detail_visit_ended',
+      'race_detail_back_exit',
+      'race_detail_exit_eligible',
+    ]);
+    expect(events.map((event) => event['onboardingSessionId']).toSet(), {
+      harness.coordinator.sessionId,
+    });
+  });
 }
 
 class _RaceHarness {
@@ -257,11 +306,15 @@ Future<_RaceHarness> _pumpRace(
   ActivationAnalyticsService? analytics,
   FutureOr<void> Function()? scheduleRefresh,
   bool primeThrows = false,
+  Completer<void>? primeCompleter,
 }) async {
   final auth = AuthService();
   await auth.restoreSession();
   final api = _ActiveRaceApi();
-  final coordinator = _RecordingCoordinator(primeThrows: primeThrows);
+  final coordinator = _RecordingCoordinator(
+    primeThrows: primeThrows,
+    primeCompleter: primeCompleter,
+  );
   final navigator = RaceDetailNavigator(
     authService: auth,
     backendApiService: api,
@@ -292,8 +345,9 @@ Future<_RaceHarness> _pumpRace(
 }
 
 class _RecordingCoordinator implements InterstitialPresentationCoordinator {
-  _RecordingCoordinator({this.primeThrows = false});
+  _RecordingCoordinator({this.primeThrows = false, this.primeCompleter});
   final bool primeThrows;
+  final Completer<void>? primeCompleter;
   @override
   String get ownerUserId => 'user-1';
   @override
@@ -303,9 +357,14 @@ class _RecordingCoordinator implements InterstitialPresentationCoordinator {
   InterstitialPlacement? lastPlacement;
 
   @override
+  Future<void> warm(InterstitialPlacement placement) async {}
+
+  @override
   Future<void> prime(InterstitialPlacement placement) async {
     primes.add(placement);
     if (primeThrows) throw StateError('prime failed');
+    final pending = primeCompleter;
+    if (pending != null) await pending.future;
   }
 
   @override
@@ -342,6 +401,38 @@ class _NoopAnalytics extends ActivationAnalyticsService {
     String? ownerUserId,
     Map<String, String> context = const {},
   }) async {}
+}
+
+class _QueuedAnalytics extends ActivationAnalyticsService {
+  _QueuedAnalytics(BackendApiService api)
+    : super(backendApiService: api, isIosForTesting: true);
+
+  final List<Future<void>> _pending = [];
+
+  @override
+  Future<void> record(
+    String name, {
+    String? sessionId,
+    String? ownerUserId,
+    Map<String, String> context = const {},
+  }) {
+    final future = super.record(
+      name,
+      sessionId: sessionId,
+      ownerUserId: ownerUserId,
+      context: context,
+    );
+    _pending.add(future);
+    return future;
+  }
+
+  Future<void> settle() async {
+    var count = 0;
+    while (count != _pending.length) {
+      count = _pending.length;
+      await Future.wait<void>(_pending.take(count));
+    }
+  }
 }
 
 class _RecordingAnalytics extends _NoopAnalytics {

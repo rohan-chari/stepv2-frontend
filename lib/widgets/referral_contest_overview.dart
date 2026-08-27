@@ -260,7 +260,7 @@ class _SectionTitle extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               label,
-              style: PixelText.display(size: 16, color: colors.textLight),
+              style: PixelText.title(size: 16, color: colors.textLight),
             ),
           ),
         ),
@@ -332,7 +332,7 @@ class _StepCard extends StatelessWidget {
             top: 1,
             child: Text(
               '${step.number}',
-              style: PixelText.display(size: 11, color: colors.grassDark),
+              style: PixelText.title(size: 11, color: colors.grassDark),
             ),
           ),
           Center(
@@ -352,7 +352,7 @@ class _StepCard extends StatelessWidget {
                       step.label,
                       maxLines: 3,
                       textAlign: TextAlign.center,
-                      style: PixelText.display(
+                      style: PixelText.title(
                         size: 8.8,
                         color: colors.textDark,
                       ).copyWith(height: .94),
@@ -425,7 +425,7 @@ class _HowToWin extends StatelessWidget {
               children: [
                 Text(
                   'HOW TO WIN',
-                  style: PixelText.display(size: 14, color: colors.grassDark),
+                  style: PixelText.title(size: 14, color: colors.grassDark),
                 ),
                 const SizedBox(height: 4),
                 Text(

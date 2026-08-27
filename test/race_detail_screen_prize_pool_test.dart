@@ -1,10 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:step_tracker/demo/demo_race_engine.dart';
 import 'package:step_tracker/screens/edit_race_screen.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/tutorial/tutorial_preview_data.dart';
+import 'package:step_tracker/utils/team_race.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/race_payout_scorecard.dart';
 
@@ -76,6 +82,31 @@ Map<String, dynamic> _legacyPaidRace() => {
     {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
   ],
 };
+
+Map<String, dynamic> _fixedTeamRace({String status = 'ACTIVE'}) =>
+    _fundedRace(status: status, coins: 2500)
+      ..['isTeamRace'] = true
+      ..['teamSize'] = 5
+      ..['teamPayoutVersion'] = 1
+      ..['teamWinnerRewardCoins'] = 500
+      ..['maxDurationDays'] = 7
+      ..['payouts'] = const {'first': 500, 'second': 500, 'third': 500}
+      ..['payoutTiers'] = const [
+        {'placement': 1, 'amount': 500},
+        {'placement': 2, 'amount': 500},
+        {'placement': 3, 'amount': 500},
+        {'placement': 4, 'amount': 500},
+        {'placement': 5, 'amount': 500},
+      ]
+      ..['participants'] = [
+        for (var i = 0; i < 10; i++)
+          {
+            'userId': 'user-$i',
+            'displayName': 'Runner $i',
+            'status': 'ACCEPTED',
+            'team': i < 5 ? 'TEAM_A' : 'TEAM_B',
+          },
+      ];
 
 class _StubApi extends BackendApiService {
   _StubApi(this.race);
@@ -167,14 +198,32 @@ Future<AuthService> _authService() async {
   return authService;
 }
 
-Future<void> _pump(WidgetTester tester, _StubApi api) async {
+Future<void> _pump(
+  WidgetTester tester,
+  _StubApi api, {
+  Size? surfaceSize,
+  TextScaler textScaler = TextScaler.noScaling,
+  ThemeMode themeMode = ThemeMode.light,
+}) async {
+  if (surfaceSize != null) {
+    await tester.binding.setSurfaceSize(surfaceSize);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
   final authService = await _authService();
   await tester.pumpWidget(
     MaterialApp(
-      home: RaceDetailScreen(
-        authService: authService,
-        raceId: 'race-1',
-        backendApiService: api,
+      themeMode: themeMode,
+      darkTheme: ThemeData.dark(),
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: surfaceSize ?? const Size(800, 1200),
+          textScaler: textScaler,
+        ),
+        child: RaceDetailScreen(
+          authService: authService,
+          raceId: 'race-1',
+          backendApiService: api,
+        ),
       ),
     ),
   );
@@ -194,6 +243,16 @@ Future<void> _teardown(WidgetTester tester) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'com.bara.app',
+      version: '2.3.6',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+  });
 
   testWidgets('projected viewer payout names the coin unit', (tester) async {
     final race = _fundedRace(status: 'ACTIVE');
@@ -335,28 +394,9 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('a funded TEAM race sheet says the winning team splits the pool '
-      'and drops the 1ST tier row', (tester) async {
-    final race = _fundedRace(coins: 800)
-      ..['isTeamRace'] = true
-      ..['teamSize'] = 2
-      ..['payoutTiers'] = const [
-        {'placement': 1, 'amount': 800},
-      ]
-      ..['participants'] = const [
-        {
-          'userId': 'user-1',
-          'displayName': 'Trail Walker',
-          'status': 'ACCEPTED',
-          'team': 'TEAM_A',
-        },
-        {
-          'userId': 'user-2',
-          'displayName': 'Hill Climber',
-          'status': 'ACCEPTED',
-          'team': 'TEAM_B',
-        },
-      ];
+  testWidgets('a fixed-award TEAM race shows the server-authored per-winner '
+      'fact and drops the obsolete split-pool copy', (tester) async {
+    final race = _fixedTeamRace();
     await _pump(tester, _StubApi(race));
 
     final board = find.byKey(const Key('race-prize-pool-board'));
@@ -365,14 +405,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    // The sheet must say how a team pool pays out — split evenly across the
-    // winning team, matching backend settlement (completeRace TR-502/503/504).
-    // One short line only: the solo growth note is dropped for team races.
-    expect(find.byKey(const Key('race-prize-pool-team-split')), findsOneWidget);
+    final fact = find.byKey(const Key('race-prize-pool-team-winner-reward'));
+    expect(fact, findsOneWidget);
     expect(
-      find.text('The winning team splits the whole pool evenly.'),
+      find.descendant(of: fact, matching: find.text('500 PER ELIGIBLE WINNER')),
       findsOneWidget,
     );
+    expect(find.textContaining('splits the whole pool'), findsNothing);
     expect(find.textContaining('The pool grows'), findsNothing);
     // The individual-race "1ST <full pool>" row would read as per-runner —
     // it must not render for a team race.
@@ -383,6 +422,351 @@ void main() {
     );
     expect(find.text('1ST'), findsNothing);
 
+    await _teardown(tester);
+  });
+
+  testWidgets('a pending shared-preview TEAM race shows the same fixed fact', (
+    tester,
+  ) async {
+    final race = _fixedTeamRace(status: 'PENDING')
+      ..['myStatus'] = null
+      ..['isPublic'] = true;
+    await _pump(tester, _StubApi(race));
+
+    await tester.tap(find.byKey(const Key('race-prize-pool-board')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(
+      find.byKey(const Key('race-prize-pool-team-winner-reward')),
+      findsOneWidget,
+    );
+    expect(find.text('500 PER ELIGIBLE WINNER'), findsOneWidget);
+    expect(find.textContaining('splits the whole pool'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await _teardown(tester);
+  });
+
+  testWidgets('missing fixed-award tiers retain generic TEAM copy with no '
+      'empty fact row', (tester) async {
+    final race = _fundedRace(coins: 600)
+      ..['isTeamRace'] = true
+      ..['teamSize'] = 5
+      ..['teamPayoutVersion'] = 1
+      ..['teamWinnerRewardCoins'] = 500
+      ..remove('payoutTiers');
+    await _pump(tester, _StubApi(race));
+
+    await tester.tap(find.byKey(const Key('race-prize-pool-board')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(
+      find.byKey(const Key('race-prize-pool-team-winner-reward')),
+      findsNothing,
+    );
+    expect(find.textContaining('PER ELIGIBLE WINNER'), findsNothing);
+    expect(find.text(kRaceTeamPayoutExplanation), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await _teardown(tester);
+  });
+
+  testWidgets('malformed, unequal, or total-mismatched TEAM tiers never invent '
+      'a per-winner reward', (tester) async {
+    final payloads = <List<Object?>>[
+      const [
+        {'placement': 1, 'amount': 500},
+        {'placement': 'two', 'amount': 500},
+      ],
+      const [
+        {'placement': 1, 'amount': 500},
+        {'placement': 2, 'amount': 200},
+      ],
+      const [
+        {'placement': 1, 'amount': 500},
+        {'placement': 2, 'amount': 500},
+      ],
+    ];
+
+    for (final tiers in payloads) {
+      final race = _fundedRace(coins: 2500)
+        ..['isTeamRace'] = true
+        ..['teamSize'] = 5
+        ..['teamPayoutVersion'] = 1
+        ..['teamWinnerRewardCoins'] = 500
+        ..['payoutTiers'] = tiers;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RacePrizePoolSheet(
+              presentation: RacePayoutPresentation.fromRace(
+                race,
+                isTeamRace: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('race-prize-pool-team-winner-reward')),
+        findsNothing,
+      );
+      expect(find.textContaining('PER ELIGIBLE WINNER'), findsNothing);
+      expect(find.text(kRaceTeamPayoutExplanation), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+    await _teardown(tester);
+  });
+
+  testWidgets('legacy equal TEAM tiers are never mistaken for a fixed stamp', (
+    tester,
+  ) async {
+    final race = _fundedRace(coins: 80)
+      ..['isTeamRace'] = true
+      ..['teamSize'] = 2
+      ..['payouts'] = const {'first': 40, 'second': 40, 'third': 0}
+      ..['payoutTiers'] = const [
+        {'placement': 1, 'amount': 40},
+        {'placement': 2, 'amount': 40},
+      ]
+      ..['participants'] = [
+        for (var i = 0; i < 4; i++)
+          {
+            'userId': 'legacy-$i',
+            'displayName': 'Legacy Runner $i',
+            'status': 'ACCEPTED',
+            'team': i < 2 ? 'TEAM_A' : 'TEAM_B',
+          },
+      ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RacePrizePoolSheet(
+            presentation: RacePayoutPresentation.fromRace(
+              race,
+              isTeamRace: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('race-prize-pool-team-winner-reward')),
+      findsNothing,
+    );
+    expect(find.textContaining('PER ELIGIBLE WINNER'), findsNothing);
+    expect(find.text(kRaceTeamPayoutExplanation), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await _teardown(tester);
+  });
+
+  testWidgets('partial or malformed fixed TEAM markers retain generic copy', (
+    tester,
+  ) async {
+    final markers = <Map<String, Object?>>[
+      const {'teamWinnerRewardCoins': 500},
+      const {'teamPayoutVersion': 1},
+      const {'teamPayoutVersion': 2, 'teamWinnerRewardCoins': 500},
+      const {'teamPayoutVersion': '1', 'teamWinnerRewardCoins': 500},
+      const {'teamPayoutVersion': 1.0, 'teamWinnerRewardCoins': 500},
+      const {'teamPayoutVersion': 1, 'teamWinnerRewardCoins': '500'},
+      const {'teamPayoutVersion': 1, 'teamWinnerRewardCoins': 'five hundred'},
+      const {'teamPayoutVersion': 1, 'teamWinnerRewardCoins': 200},
+    ];
+
+    for (final marker in markers) {
+      final race = _fixedTeamRace()
+        ..remove('teamPayoutVersion')
+        ..remove('teamWinnerRewardCoins')
+        ..addAll(marker);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RacePrizePoolSheet(
+              presentation: RacePayoutPresentation.fromRace(
+                race,
+                isTeamRace: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('race-prize-pool-team-winner-reward')),
+        findsNothing,
+      );
+      expect(find.textContaining('PER ELIGIBLE WINNER'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+    await _teardown(tester);
+  });
+
+  testWidgets('a completed fixed TEAM tie never labels a recipient a winner', (
+    tester,
+  ) async {
+    final race = _fixedTeamRace(status: 'COMPLETED')
+      ..['winnerTeam'] = null
+      ..['prizePool'] = {
+        ...(_fixedTeamRace()['prizePool'] as Map<String, dynamic>),
+        'projected': false,
+      }
+      ..['payoutTiers'] = [
+        for (var placement = 1; placement <= 10; placement++)
+          {'placement': placement, 'amount': 250},
+      ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RacePrizePoolSheet(
+            presentation: RacePayoutPresentation.fromRace(
+              race,
+              isTeamRace: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('race-prize-pool-team-winner-reward')),
+      findsNothing,
+    );
+    expect(find.textContaining('PER ELIGIBLE WINNER'), findsNothing);
+    expect(
+      find.text('Eligible runners receive the team payout.'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(RegExp('winner', caseSensitive: false)),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+    await _teardown(tester);
+  });
+
+  test(
+    'legacy compatibility tie fallback uses the neutral shared team copy',
+    () {
+      final source = File(
+        'lib/screens/race_detail_screen.dart',
+      ).readAsStringSync();
+      final legacyStart = source.indexOf('void _showLegacyPrizePoolSheet()');
+      final legacyEnd = source.indexOf(
+        'Widget _checkerSectionHeader',
+        legacyStart,
+      );
+      expect(legacyStart, greaterThanOrEqualTo(0));
+      expect(legacyEnd, greaterThan(legacyStart));
+
+      final legacySheet = source.substring(legacyStart, legacyEnd);
+      expect(legacySheet, contains('kRaceTeamPayoutExplanation'));
+      expect(
+        legacySheet,
+        isNot(contains('Eligible runners on the winning team')),
+      );
+      expect(
+        kRaceTeamPayoutExplanation.toLowerCase(),
+        isNot(contains('winner')),
+      );
+    },
+  );
+
+  testWidgets('fixed TEAM fact fits a narrow dark sheet at 200% text scale', (
+    tester,
+  ) async {
+    final race = _fixedTeamRace();
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        themeMode: ThemeMode.dark,
+        darkTheme: ThemeData.dark(),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(320, 640),
+            textScaler: TextScaler.linear(2),
+          ),
+          child: Scaffold(
+            body: RacePrizePoolSheet(
+              presentation: RacePayoutPresentation.fromRace(
+                race,
+                isTeamRace: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final sheet = find.byKey(const Key('race-prize-pool-sheet'));
+    final fact = find.byKey(const Key('race-prize-pool-team-winner-reward'));
+    expect(sheet, findsOneWidget);
+    expect(fact, findsOneWidget);
+    expect(
+      tester.getTopLeft(fact).dy,
+      greaterThan(
+        tester
+            .getBottomLeft(find.byKey(const Key('race-prize-pool-hero-band')))
+            .dy,
+      ),
+    );
+    expect(
+      tester.getBottomRight(fact).dy,
+      lessThan(tester.getBottomRight(sheet).dy),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+  });
+
+  testWidgets('demo and tab-tutorial solo mirrors never show the TEAM fact', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 26, 12);
+    final engine = DemoRaceEngine(
+      myUserId: 'demo-me',
+      myDisplayName: 'Rohan',
+      startedAt: now,
+      clock: () => now,
+    );
+    final mirroredRaces = [
+      engine.raceDetails(now, wallNow: now),
+      tutorialPreviewRaceDetail(),
+    ];
+
+    for (final race in mirroredRaces) {
+      expect(TeamRace.isTeamRace(race), isFalse);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RacePrizePoolSheet(
+              presentation: RacePayoutPresentation.fromRace(
+                race,
+                isTeamRace: TeamRace.isTeamRace(race),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('race-prize-pool-team-winner-reward')),
+        findsNothing,
+      );
+      expect(find.textContaining('PER ELIGIBLE WINNER'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
     await _teardown(tester);
   });
 

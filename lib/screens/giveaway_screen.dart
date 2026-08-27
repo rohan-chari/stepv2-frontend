@@ -177,7 +177,7 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
                   child: Text(
                     isGlobal ? 'BARA REFERRAL CONTEST' : 'REFERRAL CONTEST',
                     textAlign: TextAlign.center,
-                    style: PixelText.display(size: 16, color: colors.textLight),
+                    style: PixelText.title(size: 16, color: colors.textLight),
                   ),
                 ),
               ),

@@ -42,6 +42,91 @@ enum StepSyncV2Kind {
   cooldown,
 }
 
+enum GlobalEventSummaryWorkState {
+  waitingSync,
+  queued,
+  processing,
+  waitingRaces,
+  created,
+  allZero,
+  unscorable,
+  expiredUndelivered;
+
+  static GlobalEventSummaryWorkState? tryParse(Object? raw) {
+    switch (raw) {
+      case 'WAITING_SYNC':
+        return GlobalEventSummaryWorkState.waitingSync;
+      case 'QUEUED':
+        return GlobalEventSummaryWorkState.queued;
+      case 'PROCESSING':
+        return GlobalEventSummaryWorkState.processing;
+      case 'WAITING_RACES':
+        return GlobalEventSummaryWorkState.waitingRaces;
+      case 'CREATED':
+        return GlobalEventSummaryWorkState.created;
+      case 'ALL_ZERO':
+        return GlobalEventSummaryWorkState.allZero;
+      case 'UNSCORABLE':
+        return GlobalEventSummaryWorkState.unscorable;
+      case 'EXPIRED_UNDELIVERED':
+        return GlobalEventSummaryWorkState.expiredUndelivered;
+      default:
+        return null;
+    }
+  }
+
+  bool get isCreated => this == GlobalEventSummaryWorkState.created;
+
+  bool get isTerminal =>
+      isCreated ||
+      this == GlobalEventSummaryWorkState.allZero ||
+      this == GlobalEventSummaryWorkState.unscorable ||
+      this == GlobalEventSummaryWorkState.expiredUndelivered;
+}
+
+class GlobalEventSummaryWorkStatus {
+  const GlobalEventSummaryWorkStatus({
+    required this.state,
+    required this.expiresAt,
+  });
+
+  final GlobalEventSummaryWorkState state;
+  final DateTime expiresAt;
+
+  static GlobalEventSummaryWorkStatus? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final state = GlobalEventSummaryWorkState.tryParse(raw['state']);
+    final rawExpiresAt = raw['expiresAt'];
+    final expiresAt = rawExpiresAt is String
+        ? DateTime.tryParse(rawExpiresAt)?.toUtc()
+        : null;
+    if (state == null || expiresAt == null) return null;
+    return GlobalEventSummaryWorkStatus(state: state, expiresAt: expiresAt);
+  }
+}
+
+class GlobalEventSummaryWorkReceipt extends GlobalEventSummaryWorkStatus {
+  const GlobalEventSummaryWorkReceipt({
+    required this.id,
+    required super.state,
+    required super.expiresAt,
+  });
+
+  final String id;
+
+  static GlobalEventSummaryWorkReceipt? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final status = GlobalEventSummaryWorkStatus.tryParse(raw);
+    if (id is! String || id.isEmpty || status == null) return null;
+    return GlobalEventSummaryWorkReceipt(
+      id: id,
+      state: status.state,
+      expiresAt: status.expiresAt,
+    );
+  }
+}
+
 class StepSyncV2Result {
   const StepSyncV2Result({
     required this.kind,
@@ -51,6 +136,7 @@ class StepSyncV2Result {
     this.boxStateCurrent = false,
     this.retryAfterSeconds,
     this.diagnostic,
+    this.globalEventSummaryWork,
   });
 
   final StepSyncV2Kind kind;
@@ -66,6 +152,11 @@ class StepSyncV2Result {
   /// Non-null when this outcome is a client-side contract alarm that should be
   /// logged (malformed success, idempotency conflict).
   final String? diagnostic;
+
+  /// Owner-bound lifecycle receipt for today's optional 2x recap. Missing or
+  /// malformed additive data remains null so sync success is unaffected when
+  /// talking to an older/newer backend.
+  final GlobalEventSummaryWorkReceipt? globalEventSummaryWork;
 
   /// The uploader's own progress/box state is current -> fetch Home with
   /// `homePersistedTotals=1`.

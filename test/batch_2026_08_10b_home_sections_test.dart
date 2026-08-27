@@ -157,7 +157,7 @@ void main() {
       // the cascade assertion below pins the exact ordering.
     });
 
-    testWidgets('SUGGESTED RACES stays discoverable, never a bare header '
+    testWidgets('Suggested Races stays discoverable, never a bare header '
         'and never a duplicate invite', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -169,7 +169,7 @@ void main() {
       );
       await _flush(tester);
 
-      expect(find.text('SUGGESTED RACES'), findsOneWidget);
+      expect(find.text('Suggested Races'), findsOneWidget);
       expect(find.text('BROWSE ALL'), findsOneWidget);
       // "INVITE" appears EXACTLY once — the promoted card's eyebrow, meaning
       // "you were invited". The fallback row's invite-friends button is
@@ -183,7 +183,7 @@ void main() {
       expect(empty, findsOneWidget);
       expect(
         tester.getTopLeft(empty).dy,
-        greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
+        greaterThan(tester.getTopLeft(find.text('Suggested Races')).dy),
       );
     });
 
@@ -202,7 +202,7 @@ void main() {
 
       expect(find.text('NO SUGGESTED RACES'), findsOneWidget);
       expect(find.text('BROWSE ALL'), findsOneWidget);
-      expect(find.text('SUGGESTED RACES'), findsOneWidget);
+      expect(find.text('Suggested Races'), findsOneWidget);
 
       final card = find.byKey(const Key('home-suggestions-empty'));
       final message = find.text('NO SUGGESTED RACES');
@@ -301,7 +301,7 @@ void main() {
       expect(button, findsOneWidget);
       expect(
         tester.getTopLeft(card).dy,
-        greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
+        greaterThan(tester.getTopLeft(find.text('Suggested Races')).dy),
       );
 
       await tester.ensureVisible(button);

@@ -15,6 +15,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    AdService.setConsentPermission(true);
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
       appName: 'Bara',
@@ -24,6 +25,7 @@ void main() {
       buildSignature: '',
     );
   });
+  tearDown(() => AdService.setConsentPermission(false));
 
   test('version-skewed eligibility responses fail closed', () {
     expect(InterstitialEligibility.tryParse(null).eligible, isFalse);

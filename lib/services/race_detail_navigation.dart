@@ -81,6 +81,7 @@ class RaceDetailNavigator {
                 backendApiService: backendApiService,
                 friends: friends,
                 notificationService: notificationService,
+                activationAnalyticsService: analytics,
                 onBoxOpened: onBoxOpened,
                 showPostCreateSharePrompt: showPostCreateSharePrompt,
                 interstitialVisit: visit,
@@ -196,6 +197,9 @@ class _NavigationOnlyInterstitialCoordinator
 
   @override
   Future<void> flushPendingImpressions() async {}
+
+  @override
+  Future<void> warm(InterstitialPlacement placement) async {}
 
   @override
   Future<void> prime(InterstitialPlacement placement) async {}

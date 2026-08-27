@@ -161,7 +161,7 @@ void main() {
   setUp(() => PowerupCopy.resetForTest());
 
   group('mobile Taste shop redesign', () {
-    testWidgets('the live Bara stage leads a breathable two-column catalog', (
+    testWidgets('the live Bara stage leads a breathable three-column catalog', (
       tester,
     ) async {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
@@ -174,8 +174,28 @@ void main() {
       );
       final delegate =
           grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 2);
+      expect(delegate.crossAxisCount, 3);
       expect(delegate.childAspectRatio, greaterThan(0.78));
+
+      final artScale = tester.widget<Transform>(
+        find.byKey(const Key('shop-tile-art-scale')).first,
+      );
+      expect(artScale.transform.getMaxScaleOnAxis(), closeTo(1.5, 0.001));
+    });
+
+    testWidgets('narrow phones keep a usable art window for three columns', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _FakeShopApi(powerupCatalog: _powerupCatalog()),
+        surface: const Size(320, 900),
+      );
+
+      final artBox = tester.getSize(
+        find.byKey(const Key('shop-tile-art-box')).first,
+      );
+      expect(artBox.height, greaterThanOrEqualTo(38));
     });
 
     testWidgets('merchandise cards are flat and art-led', (tester) async {

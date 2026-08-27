@@ -7,6 +7,9 @@ import 'spinning_coin.dart';
 
 enum RacePayoutMode { none, even, graded, podium }
 
+const String kRaceTeamPayoutExplanation =
+    'Eligible runners receive the team payout.';
+
 @immutable
 class RacePayoutPresentation {
   const RacePayoutPresentation({
@@ -20,6 +23,7 @@ class RacePayoutPresentation {
     required this.acceptedCount,
     required this.viewerPlacement,
     required this.isTeamRace,
+    required this.teamWinnerRewardCoins,
     required this.payoutAvailable,
   });
 
@@ -68,6 +72,9 @@ class RacePayoutPresentation {
         const {'TOP_HALF', 'ALL_BUT_LAST'}.contains(preset) &&
         pool?.funded == true &&
         !even;
+    final authoritativePrizeCoins =
+        pool?.coins ??
+        (hasLegacyPot ? safeInt(race?['projectedPotCoins']) : null);
     return RacePayoutPresentation(
       durationDays: safeInt(race?['maxDurationDays'], fallback: 7),
       buyInAmount: safeInt(race?['buyInAmount']),
@@ -85,6 +92,11 @@ class RacePayoutPresentation {
       acceptedCount: accepted,
       viewerPlacement: viewerPlacement,
       isTeamRace: isTeamRace,
+      teamWinnerRewardCoins: _readConsistentTeamWinnerReward(
+        race,
+        isTeamRace: isTeamRace,
+        authoritativePrizeCoins: authoritativePrizeCoins,
+      ),
       payoutAvailable:
           pool != null || hasLegacyPot || hasLegacyBuyIn || tiers.isNotEmpty,
     );
@@ -100,6 +112,7 @@ class RacePayoutPresentation {
   final int acceptedCount;
   final int? viewerPlacement;
   final bool isTeamRace;
+  final int? teamWinnerRewardCoins;
   final bool payoutAvailable;
 
   bool get hasFundedPool => pool != null && (pool!.funded || pool!.coins > 0);
@@ -175,13 +188,111 @@ class RacePayoutPresentation {
   };
 
   String? get callout {
-    if (isTeamRace) return 'The winning team splits the whole pool evenly.';
+    // Team copy lives in the PAYOUTS body. Fixed-award races get a compact
+    // server-authored fact above that body, while legacy/malformed payloads
+    // retain one generic explanation without implying a divisible pool.
+    if (isTeamRace) return null;
     if (pool?.atMax == true) return 'This pool has reached its maximum.';
     if (pool?.projected == true) {
       return 'Projected payouts settle from runners who actually walked.';
     }
     return null;
   }
+}
+
+int? _readConsistentTeamWinnerReward(
+  Map<String, dynamic>? race, {
+  required bool isTeamRace,
+  required int? authoritativePrizeCoins,
+}) {
+  if (!isTeamRace || race == null) return null;
+  final rawPool = race['prizePool'];
+  if (rawPool is! Map || rawPool['funded'] != true) return null;
+  final stampedVersion = race['teamPayoutVersion'];
+  if (stampedVersion is! int || stampedVersion != 1) return null;
+  final stampedReward = race['teamWinnerRewardCoins'];
+  if (stampedReward is! int || stampedReward <= 0) return null;
+  final rawTiers = race['payoutTiers'];
+  if (rawTiers is! List || rawTiers.isEmpty) return null;
+
+  for (var index = 0; index < rawTiers.length; index++) {
+    final rawTier = rawTiers[index];
+    if (rawTier is! Map) return null;
+    final placement = _strictPositiveInt(rawTier['placement']);
+    final amount = _strictPositiveInt(rawTier['amount']);
+    if (placement != index + 1 || amount == null) return null;
+    if (stampedReward != amount) return null;
+  }
+
+  final total = authoritativePrizeCoins;
+  if (total == null || total <= 0) return null;
+  if (stampedReward * rawTiers.length != total) return null;
+
+  // When the detail response contains the team roster, it is an additional
+  // authority check. This prevents a legacy 5v5 payload with one full-pool
+  // tier from being mislabeled as a per-runner award. Team races cap at ten
+  // walkers, below the detail-page participant limit.
+  final expectedRecipients = _teamPayoutRecipientCount(race);
+  if (expectedRecipients != null && expectedRecipients != rawTiers.length) {
+    return null;
+  }
+
+  final payouts = race['payouts'];
+  if (payouts is Map) {
+    const keys = ['first', 'second', 'third'];
+    for (
+      var index = 0;
+      index < keys.length && index < rawTiers.length;
+      index++
+    ) {
+      final rawAmount = payouts[keys[index]];
+      if (rawAmount == null) continue;
+      if (_strictPositiveInt(rawAmount) != stampedReward) return null;
+    }
+  }
+  return stampedReward;
+}
+
+int? _strictPositiveInt(Object? value) {
+  final parsed = switch (value) {
+    int number => number,
+    num number when number.isFinite && number == number.roundToDouble() =>
+      number.toInt(),
+    _ => null,
+  };
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
+int? _teamPayoutRecipientCount(Map<String, dynamic> race) {
+  final participants = race['participants'];
+  if (participants is! List) return null;
+
+  var teamA = 0;
+  var teamB = 0;
+  var foundTeamMember = false;
+  for (final raw in participants) {
+    if (raw is! Map) continue;
+    final team = raw['team'];
+    if (team != 'TEAM_A' && team != 'TEAM_B') continue;
+    foundTeamMember = true;
+    if (raw['status'] != null && raw['status'] != 'ACCEPTED') continue;
+    if (raw['forfeitedAt'] != null) continue;
+    if (team == 'TEAM_A') {
+      teamA++;
+    } else {
+      teamB++;
+    }
+  }
+  if (!foundTeamMember) return null;
+
+  if (race['status'] == 'COMPLETED') {
+    return switch (race['winnerTeam']) {
+      'TEAM_A' => teamA,
+      'TEAM_B' => teamB,
+      _ => teamA + teamB,
+    };
+  }
+  return teamA > teamB ? teamA : teamB;
 }
 
 class RacePayoutScorecard extends StatelessWidget {
@@ -490,9 +601,17 @@ class RacePrizePoolSheet extends StatelessWidget {
                   children: [
                     const SpinningCoin(size: 28),
                     const SizedBox(width: 10),
-                    Text(
-                      formatPrizeCoins(p.prizeCoins),
-                      style: PixelText.number(size: 34, color: colors.coinDark),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          formatPrizeCoins(p.prizeCoins),
+                          style: PixelText.number(
+                            size: 34,
+                            color: colors.coinDark,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -500,9 +619,7 @@ class RacePrizePoolSheet extends StatelessWidget {
               if (p.callout != null) ...[
                 const SizedBox(height: 10),
                 Container(
-                  key: p.isTeamRace
-                      ? const Key('race-prize-pool-team-split')
-                      : const Key('race-prize-pool-rule-callout'),
+                  key: const Key('race-prize-pool-rule-callout'),
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: colors.parchmentDark,
@@ -512,6 +629,26 @@ class RacePrizePoolSheet extends StatelessWidget {
                     p.callout!,
                     textAlign: TextAlign.center,
                     style: PixelText.body(size: 12, color: colors.textMid),
+                  ),
+                ),
+              ],
+              if (p.teamWinnerRewardCoins != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  key: const Key('race-prize-pool-team-winner-reward'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.parchmentDark,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${formatPrizeCoins(p.teamWinnerRewardCoins!)} PER ELIGIBLE WINNER',
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: PixelText.title(size: 11.5, color: colors.coinDark),
                   ),
                 ),
               ],
@@ -539,7 +676,7 @@ class RacePrizePoolSheet extends StatelessWidget {
     if (p.isTeamRace) {
       return Center(
         child: Text(
-          'Paid evenly to the winning team’s eligible runners.',
+          kRaceTeamPayoutExplanation,
           textAlign: TextAlign.center,
           style: PixelText.body(size: 13, color: colors.textMid),
         ),

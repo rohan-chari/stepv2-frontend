@@ -249,7 +249,7 @@ class _StartScreenState extends State<StartScreen> {
                 Text(
                   'Bara',
                   textAlign: TextAlign.center,
-                  style: PixelText.display(
+                  style: PixelText.title(
                     size: compact ? 76 : 92,
                     color: colors.textLight,
                   ).copyWith(shadows: PixelText.skyOutline(compact ? 2.4 : 3)),

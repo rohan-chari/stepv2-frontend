@@ -178,7 +178,7 @@ void main() {
       expect(_styleOf(tester, '150').fontSize, 13);
     });
 
-    // The phone grid is two tiles wide, giving merchandise room to breathe.
+    // The phone grid is three tiles wide, matching the compact store layout.
     // The name still steps down from 13pt only as far as it must — long
     // two-word names must still render whole, never ellipsised.
     testWidgets('long names render un-ellipsised at 320dp and 360dp wide', (

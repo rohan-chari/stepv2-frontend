@@ -713,9 +713,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.byKey(const Key('race-payout-section')), findsOneWidget);
-    expect(find.byKey(const Key('race-payout-unavailable')), findsOneWidget);
-    expect(find.text('UNAVAILABLE'), findsOneWidget);
+    expect(find.byKey(const Key('race-payout-section')), findsNothing);
+    expect(find.byKey(const Key('race-payout-unavailable')), findsNothing);
+    expect(find.text('UNAVAILABLE'), findsNothing);
   });
 
   testWidgets(
@@ -1468,7 +1468,7 @@ void main() {
       // The hero HUD stays as the quick action while the always-visible payout
       // section repeats the amount in the race body.
       expect(find.text('PRIZE POOL'), findsOneWidget);
-      expect(find.text('600'), findsNWidgets(2));
+      expect(find.text('600'), findsOneWidget);
       final prizePoolBoard = find.byKey(const Key('race-prize-pool-board'));
       expect(prizePoolBoard, findsOneWidget);
 

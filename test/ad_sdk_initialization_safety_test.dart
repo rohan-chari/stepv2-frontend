@@ -1,11 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:step_tracker/services/ad_consent_coordinator.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/widgets/ad_banner_slot.dart';
 import 'package:step_tracker/widgets/ad_inline_card.dart';
 
 void main() {
+  tearDown(() {
+    AdService.setConsentPermission(true);
+  });
+
+  test('ad request gates default closed before consent bootstrap', () {
+    expect(AdService.adRequestsAllowed, isFalse);
+    expect(AdService.adRequestPermissionListenable.value, isFalse);
+    expect(AdService.bannerAdsRuntimeEnabled, isFalse);
+  });
+
   test(
     'iOS denial continues with limited ads and every SDK seam runs',
     () async {
@@ -17,20 +28,11 @@ void main() {
           return false;
         },
         setMetaTrackingEnabled: (enabled) async => calls.add('meta:$enabled'),
-        setUnityGdprConsent: () async => calls.add('unity-gdpr'),
-        setUnityCcpaConsent: () async => calls.add('unity-ccpa'),
         updateRequestConfiguration: () async => calls.add('config'),
         initializeMobileAds: () async => calls.add('mobile-ads'),
       ).run();
 
-      expect(calls, [
-        'att',
-        'meta:false',
-        'unity-gdpr',
-        'unity-ccpa',
-        'config',
-        'mobile-ads',
-      ]);
+      expect(calls, ['att', 'meta:false', 'config', 'mobile-ads']);
       expect(initialized, isTrue);
     },
   );
@@ -45,14 +47,12 @@ void main() {
             throw StateError('ATT unavailable'),
         setMetaTrackingEnabled: (_) async =>
             throw StateError('Meta unavailable'),
-        setUnityGdprConsent: () async => throw StateError('Unity unavailable'),
-        setUnityCcpaConsent: () async => calls.add('unity-ccpa'),
         updateRequestConfiguration: () async =>
             throw StateError('config unavailable'),
         initializeMobileAds: () async => calls.add('mobile-ads'),
       ).run();
 
-      expect(calls, ['unity-ccpa', 'mobile-ads']);
+      expect(calls, ['mobile-ads']);
       expect(initialized, isTrue);
     },
   );
@@ -68,8 +68,6 @@ void main() {
         return true;
       },
       setMetaTrackingEnabled: (_) async => metaCalls++,
-      setUnityGdprConsent: () async {},
-      setUnityCcpaConsent: () async {},
       updateRequestConfiguration: () async {},
       initializeMobileAds: () async => mobileInitialized = true,
     ).run();
@@ -79,6 +77,32 @@ void main() {
     expect(initialized, isTrue);
     expect(mobileInitialized, isTrue);
   });
+
+  test(
+    'determinate partner signals are isolated and unknown values skipped',
+    () async {
+      final calls = <String>[];
+      await PartnerConsentPropagationSteps(
+        signals: const PartnerConsentSignals(
+          gdprConsent: true,
+          ccpaConsent: false,
+        ),
+        setUnityGdprConsent: (_) async =>
+            throw StateError('Unity GDPR unavailable'),
+        setUnityCcpaConsent: (value) async => calls.add('unity-ccpa:$value'),
+        setLiftoffCcpaConsent: (value) async =>
+            calls.add('liftoff-ccpa:$value'),
+      ).run();
+      await PartnerConsentPropagationSteps(
+        signals: const PartnerConsentSignals(),
+        setUnityGdprConsent: (_) async => calls.add('unexpected-gdpr'),
+        setUnityCcpaConsent: (_) async => calls.add('unexpected-unity-ccpa'),
+        setLiftoffCcpaConsent: (_) async => calls.add('unexpected-liftoff'),
+      ).run();
+
+      expect(calls, ['unity-ccpa:false', 'liftoff-ccpa:false']);
+    },
+  );
 
   test(
     'Mobile Ads failure returns false and is retried instead of cached',
@@ -93,6 +117,31 @@ void main() {
       expect(await initializer.ensureInitialized(), isTrue);
       expect(await initializer.ensureInitialized(), isTrue);
       expect(attempts, 2);
+    },
+  );
+
+  test(
+    'consent withdrawal disposes a cached rewarded ad immediately',
+    () async {
+      final handle = _DisposableRewardedHandle();
+      final service = AdService(
+        adUnitId: 'test-rewarded-unit',
+        supportedOverride: true,
+        sdkInitializer: RewardedAdSdkInitializer(() async => true),
+        rewardedAdLoader:
+            ({required adUnitId, required userId, required customData}) async =>
+                handle,
+      );
+      addTearDown(service.dispose);
+
+      AdService.setConsentPermission(true);
+      await service.load(userId: 'user-1', localDate: '2026-08-26');
+      expect(service.isReady, isTrue);
+
+      AdService.setConsentPermission(false);
+
+      expect(handle.disposed, isTrue);
+      expect(service.isReady, isFalse);
     },
   );
 
@@ -114,8 +163,6 @@ void main() {
         return false;
       },
       setMetaTrackingEnabled: (_) async {},
-      setUnityGdprConsent: () async {},
-      setUnityCcpaConsent: () async {},
       updateRequestConfiguration: () async {},
       initializeMobileAds: () async {
         mobileCalls++;
@@ -156,8 +203,6 @@ void main() {
         return true;
       },
       setMetaTrackingEnabled: (_) async {},
-      setUnityGdprConsent: () async {},
-      setUnityCcpaConsent: () async {},
       updateRequestConfiguration: () async {},
       initializeMobileAds: () async => throw StateError('SDK unavailable'),
     );
@@ -171,4 +216,14 @@ void main() {
     expect(find.byType(AdWidget), findsNothing);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _DisposableRewardedHandle implements RewardedAdNativeHandle {
+  bool disposed = false;
+
+  @override
+  void dispose() => disposed = true;
+
+  @override
+  Future<bool> showAndAwaitReward({required Duration timeout}) async => true;
 }

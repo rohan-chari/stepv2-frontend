@@ -11,8 +11,8 @@ class ExtraSpinRewardTicket extends StatefulWidget {
   const ExtraSpinRewardTicket({
     super.key,
     required this.onPressed,
-    this.label = 'EXTRA SPIN',
-    this.semanticsLabel = 'Extra spin. Watch a short ad for one extra spin.',
+    this.label = 'BONUS SPIN - WATCH AD',
+    this.semanticsLabel = 'Bonus spin. Watch ad.',
   });
 
   final VoidCallback onPressed;

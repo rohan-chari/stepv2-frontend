@@ -60,12 +60,20 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
             _ContestSummary(data: data),
             if (notice != null) ...[const SizedBox(height: 15), notice],
             const SizedBox(height: 14),
+            _InviteCard(
+              share: shareEnabled ? data.share : null,
+              enabled: shareEnabled,
+              onShare: onShare,
+              onCopyCode: onCopyCode,
+              onCopyUrl: onCopyUrl,
+            ),
+            const SizedBox(height: 14),
             _TrailLandmarks(
               shareEnabled: shareEnabled,
               onLeaders: onToggleLeaderboard,
               onWhatCounts: () => _showWhatCounts(context),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             const _SectionTitle(label: 'YOUR STANDING'),
             const SizedBox(height: 11),
             KeyedSubtree(
@@ -89,15 +97,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
                     )
                   : const SizedBox.shrink(),
             ),
-            const SizedBox(height: 16),
-            _InviteCard(
-              share: shareEnabled ? data.share : null,
-              enabled: shareEnabled,
-              onShare: onShare,
-              onCopyCode: onCopyCode,
-              onCopyUrl: onCopyUrl,
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             _RecentReferralsCard(
               items: data.recentReferrals.take(3).toList(growable: false),
             ),
@@ -126,7 +126,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
                 Text(
                   'WHAT COUNTS',
                   textAlign: TextAlign.center,
-                  style: PixelText.display(size: 18, color: colors.textLight),
+                  style: PixelText.title(size: 18, color: colors.textLight),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -343,6 +343,12 @@ class _ContestSummaryState extends State<_ContestSummary> {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final data = widget.data;
+    final contestLabel = data.contest.title.trim().toUpperCase();
+    final summaryLabel =
+        contestLabel == 'BARA REFERRAL CONTEST' ||
+            contestLabel == 'REFERRAL CONTEST'
+        ? 'YOU’RE IN'
+        : contestLabel;
     return Container(
       key: const Key('contest-dashboard-summary'),
       constraints: const BoxConstraints(minHeight: 88),
@@ -364,7 +370,7 @@ class _ContestSummaryState extends State<_ContestSummary> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  data.contest.title.toUpperCase(),
+                  summaryLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.title(size: 10, color: colors.textMid),
@@ -471,7 +477,7 @@ class _SectionTitle extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               label,
-              style: PixelText.display(size: 16, color: colors.textLight),
+              style: PixelText.title(size: 16, color: colors.textLight),
             ),
           ),
         ),
@@ -636,7 +642,7 @@ class _StandingMetric extends StatelessWidget {
                 child: Text(
                   label,
                   maxLines: 1,
-                  style: PixelText.display(size: 9.5, color: colors.textMid),
+                  style: PixelText.title(size: 9.5, color: colors.textMid),
                 ),
               ),
             ),
@@ -647,7 +653,7 @@ class _StandingMetric extends StatelessWidget {
           fit: BoxFit.scaleDown,
           child: Text(
             value,
-            style: PixelText.display(size: 36, color: colors.textAccent),
+            style: PixelText.title(size: 36, color: colors.textAccent),
           ),
         ),
       ],
@@ -718,7 +724,7 @@ class _LeaderboardPreview extends StatelessWidget {
               Expanded(
                 child: Text(
                   'LEADERBOARD PREVIEW',
-                  style: PixelText.display(size: 13, color: colors.textAccent),
+                  style: PixelText.title(size: 13, color: colors.textAccent),
                 ),
               ),
               Semantics(
@@ -866,7 +872,7 @@ class _PreviewRow extends StatelessWidget {
             children: [
               Text(
                 '${row.count}',
-                style: PixelText.display(size: 16, color: colors.textAccent),
+                style: PixelText.title(size: 16, color: colors.textAccent),
               ),
               Text(
                 'VERIFIED',
@@ -892,10 +898,7 @@ class _PreviewEllipsis extends StatelessWidget {
     child: Center(
       child: Text(
         '•••',
-        style: PixelText.display(
-          size: 11,
-          color: AppColors.of(context).feedGold,
-        ),
+        style: PixelText.title(size: 11, color: AppColors.of(context).feedGold),
       ),
     ),
   );
@@ -997,7 +1000,7 @@ class _InviteDetails extends StatelessWidget {
                 children: [
                   Text(
                     'YOUR INVITE',
-                    style: PixelText.display(
+                    style: PixelText.title(
                       size: 10.5,
                       color: colors.textAccent,
                     ),
@@ -1008,10 +1011,7 @@ class _InviteDetails extends StatelessWidget {
                     child: Text(
                       invite.code,
                       maxLines: 1,
-                      style: PixelText.display(
-                        size: 23,
-                        color: colors.textDark,
-                      ),
+                      style: PixelText.title(size: 23, color: colors.textDark),
                     ),
                   ),
                 ],
@@ -1101,7 +1101,7 @@ class _MissingInvite extends StatelessWidget {
       const SizedBox(height: 8),
       Text(
         'INVITE UNAVAILABLE',
-        style: PixelText.display(size: 14, color: colors.textDark),
+        style: PixelText.title(size: 14, color: colors.textDark),
       ),
       const SizedBox(height: 5),
       Text(
@@ -1130,7 +1130,7 @@ class _RecentReferralsCard extends StatelessWidget {
         children: [
           Text(
             'RECENT REFERRALS',
-            style: PixelText.display(size: 13, color: colors.textAccent),
+            style: PixelText.title(size: 13, color: colors.textAccent),
           ),
           const SizedBox(height: 5),
           if (items.isEmpty)
@@ -1153,7 +1153,7 @@ class _RecentReferralsCard extends StatelessWidget {
                       children: [
                         Text(
                           'NO REFERRALS YET',
-                          style: PixelText.display(
+                          style: PixelText.title(
                             size: 11,
                             color: colors.textDark,
                           ),

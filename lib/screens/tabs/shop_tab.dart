@@ -1223,15 +1223,18 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 600;
+          final tileAspectRatio = !wide && constraints.maxWidth < 350
+              ? 0.70
+              : 0.82;
           return GridView.count(
             key: const Key('shop-product-grid'),
-            crossAxisCount: wide ? 4 : 2,
+            crossAxisCount: wide ? 4 : 3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
             mainAxisSpacing: 14,
             crossAxisSpacing: 12,
-            childAspectRatio: 0.82,
+            childAspectRatio: tileAspectRatio,
             children: tiles,
           );
         },
@@ -2464,8 +2467,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 }
 
-/// Loading placeholder for the store. Mirrors the real two-column merchandise
-/// grid so the catalog does not visibly reflow when data lands.
+/// Loading placeholder for the store. Mirrors the real merchandise grid so the
+/// catalog does not visibly reflow when data lands.
 class _ShopLoadingSkeleton extends StatelessWidget {
   const _ShopLoadingSkeleton();
 
@@ -2537,15 +2540,18 @@ class _ShopLoadingSkeleton extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 600;
+        final tileAspectRatio = !wide && constraints.maxWidth < 350
+            ? 0.70
+            : 0.82;
         return GridView.count(
           key: const Key('shop-loading-grid'),
-          crossAxisCount: wide ? 4 : 2,
+          crossAxisCount: wide ? 4 : 3,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
           mainAxisSpacing: 14,
           crossAxisSpacing: 12,
-          childAspectRatio: 0.82,
+          childAspectRatio: tileAspectRatio,
           children: [for (var i = 0; i < tileCount; i++) _tile(context)],
         );
       },
@@ -2689,8 +2695,25 @@ class _ShopTile extends StatelessWidget {
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Center(child: art),
+                          // Keep the scaled artwork from crowding the frame;
+                          // the extra vertical breathing room is especially
+                          // important for tall powerup art.
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 12,
+                          ),
+                          child: Center(
+                            // The bundled thumbnails have deliberately
+                            // transparent canvases, so their visible art was
+                            // reading much smaller than the tile allowed.
+                            // Scale the rendered artwork, while keeping the
+                            // card dimensions and hit target unchanged.
+                            child: Transform.scale(
+                              key: const Key('shop-tile-art-scale'),
+                              scale: 1.5,
+                              child: art,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -2718,7 +2741,7 @@ class _ShopTile extends StatelessWidget {
               // of 13pt pixel type need ~38dp, and under-sizing the box is what
               // clips the second line.
               //
-              // The two-column layout gives product names enough width to read
+              // The responsive grid gives product names enough width to read
               // as merchandise instead of inventory abbreviations.
               Container(
                 height: 38,
@@ -2788,7 +2811,7 @@ class _ShopTile extends StatelessWidget {
 
 /// The tile's item name at the largest size that still fits two lines.
 ///
-/// The two-column redesign supports a larger nominal name size while this
+/// The responsive redesign supports a larger nominal name size while this
 /// still picks the biggest size from [_sizes] whose
 /// two-line layout fits the tile, so the type gets bigger wherever there's room
 /// and never smaller than what shipped.

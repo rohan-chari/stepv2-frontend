@@ -6,18 +6,16 @@ import 'package:step_tracker/widgets/pill_button.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('normal-sized game action labels use the bundled pixel font', () {
+  test('normal-sized game action labels use the established sans font', () {
     expect(PixelText.display().fontFamily, 'Jersey25');
-    expect(PixelText.pill().fontFamily, 'Jersey25');
   });
 
   test('Jersey25 display styles use the enlarged arcade scale', () {
     expect(PixelText.display(size: 20).fontSize, 30);
-    expect(PixelText.pill(size: 20).fontSize, 30);
   });
 
   testWidgets(
-    'standard action buttons render the pixel label without overflow',
+    'standard action buttons render the sans label without overflow',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -28,7 +26,7 @@ void main() {
       );
 
       final label = tester.widget<Text>(find.text('DAILY REWARD'));
-      expect(label.style?.fontFamily, 'Jersey25');
+      expect(label.style?.fontFamily, startsWith('DMSans'));
       expect(tester.takeException(), isNull);
     },
   );

@@ -355,7 +355,7 @@ void main() {
       find.byKey(const Key('contest-dashboard-summary')),
     );
     final decoration = summary.decoration! as BoxDecoration;
-    expect(decoration.color, AppPalette.night.parchment);
+    expect(decoration.color, AppPalette.night.parchmentLight);
 
     final shareFace = tester.widget<AnimatedContainer>(
       find.descendant(
@@ -549,6 +549,15 @@ void main() {
     expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
     expect(find.byKey(const Key('contest-trail-hud')), findsOneWidget);
     expect(find.textContaining('#8'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('contest-dashboard-share'))).dy,
+      lessThan(
+        tester
+            .getTopLeft(find.byKey(const Key('contest-dashboard-standing')))
+            .dy,
+      ),
+      reason: 'the primary share action should appear before progress details',
+    );
     expect(
       tester
           .getSize(find.byKey(const Key('contest-dashboard-standing')))

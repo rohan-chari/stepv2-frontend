@@ -197,7 +197,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             // Light on the home tab's dark felt backdrop.
-            style: PixelText.display(
+            style: PixelText.title(
               size: 22,
               color: AppColors.of(context).textLight,
             ),

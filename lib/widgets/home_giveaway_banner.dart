@@ -29,7 +29,6 @@ class HomeGiveawayBanner extends StatelessWidget {
     final colors = AppColors.of(context);
     final countdown = _remainingLabel(remaining);
     final formattedPrize = _commas(coinPrize);
-    final foreground = colors.isDark ? colors.textDark : colors.woodDarker;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -49,19 +48,34 @@ class HomeGiveawayBanner extends StatelessWidget {
               excludeFromSemantics: true,
               child: Container(
                 key: const Key('home-giveaway-banner'),
-                padding: const EdgeInsets.fromLTRB(12, 9, 10, 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color: colors.pillGold,
+                  color: colors.parchmentLight,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: colors.coinMid, width: 1.5),
+                  border: Border.all(
+                    color: colors.woodDark.withValues(alpha: 0.28),
+                    width: 1,
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.emoji_events_rounded,
-                      color: foreground,
-                      size: 24,
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: colors.roofMid,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.woodDark, width: 1.5),
+                      ),
+                      child: Icon(
+                        Icons.emoji_events_rounded,
+                        color: colors.textLight,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -78,36 +92,15 @@ class HomeGiveawayBanner extends StatelessWidget {
                               color: colors.textDark,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Flexible(
-                                child: _FactItem(
-                                  icon: Icons.monetization_on_rounded,
-                                  label: '$formattedPrize COINS',
-                                  colors: colors,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                                child: Text(
-                                  '·',
-                                  style: PixelText.body(
-                                    size: 12,
-                                    color: foreground,
-                                  ),
-                                ),
-                              ),
-                              Flexible(
-                                child: _FactItem(
-                                  icon: Icons.schedule_rounded,
-                                  label: 'ENDS IN $countdown',
-                                  colors: colors,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 2),
+                          Text(
+                            'WIN $formattedPrize COINS · ENDS IN $countdown',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: PixelText.body(
+                              size: 12.5,
+                              color: colors.textMid,
+                            ),
                           ),
                         ],
                       ),
@@ -116,14 +109,22 @@ class HomeGiveawayBanner extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'VIEW',
-                          style: PixelText.pill(size: 12, color: foreground),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 20,
-                          color: foreground,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.woodDark,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'VIEW',
+                            style: PixelText.title(
+                              size: 11,
+                              color: colors.textLight,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -272,40 +273,5 @@ class _ContestAttentionState extends State<_ContestAttention>
   ) {
     final progress = (value - start) / (end - start);
     return from + ((to - from) * progress);
-  }
-}
-
-class _FactItem extends StatelessWidget {
-  const _FactItem({
-    required this.icon,
-    required this.label,
-    required this.colors,
-  });
-
-  final IconData icon;
-  final String label;
-  final AppPalette colors;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = colors.isDark ? colors.textDark : colors.woodDarker;
-    return Container(
-      key: ValueKey('home-giveaway-fact-$label'),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: foreground),
-          const SizedBox(width: 3),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PixelText.pill(size: 12, color: foreground),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

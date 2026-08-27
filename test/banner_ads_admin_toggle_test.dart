@@ -54,6 +54,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    AdService.setConsentPermission(true);
     AdService.setBannerUnitAvailabilityForTesting(
       standard: true,
       boxTop: true,
@@ -65,6 +66,7 @@ void main() {
   tearDown(() {
     AdService.setBannerUnitAvailabilityForTesting();
     AdService.setBannerAdsEnabled(true);
+    AdService.setConsentPermission(false);
   });
 
   group('bannerAdsEnabled auth parsing', () {

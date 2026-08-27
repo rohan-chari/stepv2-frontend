@@ -4202,8 +4202,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             ),
                             maxLines: 1,
                             softWrap: false,
-                            style: PixelText.display(
-                              size: 28,
+                            style: PixelText.title(
+                              size: 22,
                               color: AppColors.of(context).textLight,
                             ).copyWith(shadows: _headerTextShadows),
                             overflow: TextOverflow.visible,
@@ -4736,6 +4736,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final pool = _prizePool;
     final payoutTiers = parsePayoutTiers(_race);
     final isTeamRace = TeamRace.isTeamRace(_race ?? const {});
+    final teamWinnerRewardCoins = _payoutPresentation.teamWinnerRewardCoins;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.of(context).parchmentLight,
@@ -4802,20 +4803,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 // the runner something they can act on — that the pool is still
                 // moving. A settled pool has nothing left to say, so it says
                 // nothing rather than leaving an empty line.
-                // One short explainer line. Team races state only the split
-                // rule — settlement divides the whole pool evenly across the
-                // winning team's non-forfeited runners (backend
-                // TR-502/503/504), which is also why the "1ST <full pool>"
-                // tier row is suppressed below: it would read as per-runner.
+                // Team payouts stay server-authored. A complete, consistent
+                // fixed-award tier set may name the per-runner amount; older,
+                // partial, or contradictory responses retain generic copy.
                 // Solo races keep the growth note while still projected.
                 if ((pool != null && pool.projected) || isTeamRace) ...[
                   const SizedBox(height: 6),
                   Text(
-                    key: isTeamRace
-                        ? const Key('race-prize-pool-team-split')
+                    key: teamWinnerRewardCoins != null
+                        ? const Key('race-prize-pool-team-winner-reward')
+                        : isTeamRace
+                        ? const Key('race-prize-pool-team-payout-copy')
                         : null,
                     isTeamRace
-                        ? 'The winning team splits the whole pool evenly.'
+                        ? teamWinnerRewardCoins != null
+                              ? '${formatPrizeCoins(teamWinnerRewardCoins)} '
+                                    'PER ELIGIBLE WINNER'
+                              : kRaceTeamPayoutExplanation
                         : 'The pool grows as more runners join, and settles '
                               'on who actually walked.',
                     textAlign: TextAlign.center,
@@ -4886,8 +4890,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           Expanded(
             child: Text(
               title,
-              style: PixelText.display(
-                size: 20,
+              style: PixelText.title(
+                size: 16,
                 color: AppColors.of(context).textLight,
               ).copyWith(shadows: _headerTextShadows),
               maxLines: 1,
@@ -4928,44 +4932,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             : null,
         showPayoutAction: showPayoutAction,
       );
-
-  Widget? _payoutHeaderAction() {
-    if (!_payoutPresentation.hasPrize) return null;
-    return Semantics(
-      button: true,
-      label: 'Open payout details',
-      child: InkWell(
-        key: const Key('race-payouts-open'),
-        onTap: _showPrizePoolSheet,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.of(context).woodDark,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.of(context).roofEdge, width: 2),
-          ),
-          child: Text(
-            'VIEW PAYOUTS',
-            style: PixelText.title(size: 10, color: Colors.white),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPayoutSection() => Column(
-    key: const Key('race-payout-section'),
-    children: [
-      _checkerSectionHeader('PAYOUT', trailing: _payoutHeaderAction()),
-      _sectionCard(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: _buildRaceInfoCard(showPayoutAction: false),
-      ),
-    ],
-  );
 
   // ignore: unused_element
   Widget _buildLegacyRaceInfoCard() {
@@ -5742,8 +5708,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         children: [
           _buildRaceHero(runners: const [], chips: chips),
           const SizedBox(height: 16),
-          _buildPayoutSection(),
-          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: KeyedSubtree(
@@ -5759,8 +5723,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return Column(
         children: [
           _buildRaceHero(runners: const [], chips: chips),
-          const SizedBox(height: 16),
-          _buildPayoutSection(),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -5835,8 +5797,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
 
         const SizedBox(height: 16),
-        _buildPayoutSection(),
-
         if (_progressState.isRefreshing)
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 12),
@@ -8370,8 +8330,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         children: [
           _buildRaceHero(runners: const [], chips: const []),
           const SizedBox(height: 16),
-          _buildPayoutSection(),
-          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: KeyedSubtree(
@@ -8386,8 +8344,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return Column(
         children: [
           _buildRaceHero(runners: const [], chips: const []),
-          const SizedBox(height: 16),
-          _buildPayoutSection(),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -8478,11 +8434,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
             ),
             // A finished funded race still shows what the pool paid out.
-            if (_prizePool != null &&
-                (_prizePool!.funded || _prizePool!.coins > 0)) ...[
-              const Spacer(),
-              _prizeChip(),
-            ],
+            if (_hasPrizeDisplay) ...[const Spacer(), _prizeChip()],
           ],
           runners: [
             for (final p in participants)
@@ -8503,9 +8455,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ],
         ),
         const SizedBox(height: 16),
-
-        _buildPayoutSection(),
-        const SizedBox(height: 18),
 
         // WINNER — celebratory podium card.
         StaggerIn(

@@ -223,7 +223,7 @@ void main() {
       final ads = _FakeAdController();
       await _pumpScreen(tester, api: api, adController: ads);
 
-      expect(find.text('SPIN AGAIN'), findsOneWidget);
+      expect(find.text('BONUS SPIN - WATCH AD'), findsOneWidget);
       expect(find.text('COME BACK TOMORROW'), findsNothing);
       expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
     },
@@ -236,7 +236,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    expect(find.text('SPIN AGAIN'), findsNothing);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsNothing);
     expect(ads.loadCalls, 0);
   });
 
@@ -250,7 +250,7 @@ void main() {
     );
     await _pumpScreen(tester, api: api, adController: _FakeAdController());
 
-    expect(find.text('SPIN AGAIN'), findsNothing);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsNothing);
     expect(find.text('REWARD CLAIMED'), findsOneWidget);
   });
 
@@ -283,19 +283,14 @@ void main() {
       );
       await tester.pump();
       expect(find.byType(ExtraSpinRewardTicket), findsOneWidget);
-      expect(find.text('DAILY REWARD'), findsOneWidget);
+      expect(find.text('BONUS SPIN - WATCH AD'), findsOneWidget);
+      expect(find.bySemanticsLabel('Bonus spin. Watch ad.'), findsOneWidget);
       expect(
-        find.bySemanticsLabel('Daily reward. One more spin is ready.'),
-        findsOneWidget,
-      );
-      expect(
-        tester.getSemantics(
-          find.bySemanticsLabel('Daily reward. One more spin is ready.'),
-        ),
+        tester.getSemantics(find.bySemanticsLabel('Bonus spin. Watch ad.')),
         matchesSemantics(
           isButton: true,
           hasTapAction: true,
-          label: 'Daily reward. One more spin is ready.',
+          label: 'Bonus spin. Watch ad.',
         ),
       );
       semantics.dispose();
@@ -305,7 +300,7 @@ void main() {
         chip({'available': false, 'pendingGrant': false, 'used': true}),
       );
       await tester.pump();
-      expect(find.text('DAILY REWARD'), findsOneWidget);
+      expect(find.text('REWARD CLAIMED'), findsOneWidget);
     },
   );
 
@@ -519,7 +514,7 @@ void main() {
     final ads = _FakeAdController(readyAfterLoad: false);
     await _pumpScreen(tester, api: api, adController: ads);
 
-    expect(find.text('SPIN AGAIN'), findsOneWidget);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsOneWidget);
   });
 
   testWidgets('daily screen records ready, tap, completion, and claim stages', (
@@ -538,7 +533,7 @@ void main() {
       analytics: analytics,
     );
 
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -602,7 +597,7 @@ void main() {
       adController: ads,
     );
 
-    expect(find.text('SPIN AGAIN'), findsNothing);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsNothing);
     expect(ads.loadCalls, 0);
   });
 
@@ -623,7 +618,7 @@ void main() {
       adController: _UnsupportedAdController(),
     );
 
-    expect(find.text('SPIN AGAIN'), findsNothing);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsNothing);
   });
 
   testWidgets('tap: shows the ad, claims, and spins the reel again', (
@@ -637,7 +632,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -645,7 +640,7 @@ void main() {
     expect(api.claimCalls, 1);
     expect(find.byType(CaseOpeningReel), findsOneWidget);
     // Offer is single-use: no second button behind the reel.
-    expect(find.text('SPIN AGAIN'), findsNothing);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsNothing);
   });
 
   testWidgets('pendingGrant claims directly without showing another ad', (
@@ -660,7 +655,7 @@ void main() {
     await _pumpScreen(tester, api: api, adController: ads);
 
     // A verified-but-unredeemed watch exists: claim it, don't run a new ad.
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -684,7 +679,7 @@ void main() {
     );
 
     now = DateTime(2026, 8, 26, 0, 1);
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
 
     expect(api.claimDates, isEmpty);
@@ -706,7 +701,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
     expect(api.claimCalls, 1);
 
@@ -728,7 +723,7 @@ void main() {
     final ads = _FakeAdController()..earnReward = false;
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 

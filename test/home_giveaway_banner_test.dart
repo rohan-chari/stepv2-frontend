@@ -190,7 +190,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('contest banner uses a gold outline in both themes', (
+  testWidgets('contest banner matches the compact 2x notice treatment', (
     tester,
   ) async {
     Widget bannerFor(ThemeMode themeMode) => MaterialApp(
@@ -212,7 +212,11 @@ void main() {
       find.byKey(const Key('home-giveaway-banner')),
     );
     var decoration = banner.decoration! as BoxDecoration;
-    expect((decoration.border! as Border).top.color, AppPalette.light.coinMid);
+    expect(decoration.color, AppPalette.light.parchmentLight);
+    expect(
+      (decoration.border! as Border).top.color,
+      AppPalette.light.woodDark.withValues(alpha: 0.28),
+    );
 
     await tester.pumpWidget(bannerFor(ThemeMode.dark));
     await tester.pump(const Duration(milliseconds: 250));
@@ -221,14 +225,14 @@ void main() {
       find.byKey(const Key('home-giveaway-banner')),
     );
     decoration = banner.decoration! as BoxDecoration;
-    expect(decoration.color, AppPalette.night.pillGold);
+    expect(decoration.color, AppPalette.night.parchmentLight);
     expect(decoration.border, isA<Border>());
-    expect((decoration.border! as Border).top.color, AppPalette.night.coinMid);
-
-    final chip = tester.widget<Container>(
-      find.byKey(const Key('home-giveaway-fact-5,000 COINS')),
+    expect(
+      (decoration.border! as Border).top.color,
+      AppPalette.night.woodDark.withValues(alpha: 0.28),
     );
-    expect(chip.decoration, isNull);
+
+    expect(find.textContaining('WIN 5,000 COINS · ENDS IN'), findsOneWidget);
 
     final headline = tester.widget<Text>(
       find.text('Bara Referral Contest is open now.'),
@@ -236,15 +240,15 @@ void main() {
     expect(headline.style?.color, AppPalette.night.textDark);
     expect(
       tester.widget<Icon>(find.byIcon(Icons.emoji_events_rounded)).color,
-      AppPalette.night.textDark,
+      AppPalette.night.textLight,
     );
     expect(
-      tester.widget<Text>(find.text('5,000 COINS')).style?.color,
-      AppPalette.night.textDark,
+      tester.widget<Text>(find.textContaining('WIN 5,000 COINS')).style?.color,
+      AppPalette.night.textMid,
     );
     expect(
       tester.widget<Text>(find.text('VIEW')).style?.color,
-      AppPalette.night.textDark,
+      AppPalette.night.textLight,
     );
   });
 

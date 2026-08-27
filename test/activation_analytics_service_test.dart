@@ -51,6 +51,54 @@ void main() {
   });
 
   test(
+    'concurrent records preserve call order and event-time values',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = ActivationAnalyticsService(
+        backendApiService: _AnalyticsApi(),
+        isIosForTesting: true,
+      );
+      final secondService = ActivationAnalyticsService(
+        backendApiService: _AnalyticsApi(),
+        isIosForTesting: true,
+      );
+      final firstContext = <String, String>{
+        'placement': 'race_detail_exit',
+        'result': 'back_exit',
+      };
+
+      final first = service.record(
+        'interstitial_opportunity',
+        sessionId: 'session-at-opportunity',
+        context: firstContext,
+      );
+      firstContext['result'] = 'failed';
+      final second = secondService.record(
+        'interstitial_skipped',
+        sessionId: 'session-at-skip',
+        context: const {'placement': 'race_detail_exit', 'reason': 'not_ready'},
+      );
+      await Future.wait<void>([first, second]);
+
+      final prefs = await SharedPreferences.getInstance();
+      final events =
+          (jsonDecode(prefs.getString('activation_events_v1')!)
+                  as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      expect(events.map((event) => event['name']), [
+        'interstitial_opportunity',
+        'interstitial_skipped',
+      ]);
+      expect(events[0]['onboardingSessionId'], 'session-at-opportunity');
+      expect(events[0]['context'], {
+        'placement': 'race_detail_exit',
+        'result': 'back_exit',
+      });
+      expect(events[1]['onboardingSessionId'], 'session-at-skip');
+    },
+  );
+
+  test(
     'extra-spin funnel events retain only their bounded contract context',
     () async {
       SharedPreferences.setMockInitialValues({});

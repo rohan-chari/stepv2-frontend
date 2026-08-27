@@ -223,9 +223,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('SPIN AGAIN'), findsOneWidget);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsOneWidget);
     expect(find.text('LOADING AD...'), findsNothing);
-    await tester.tap(find.text('SPIN AGAIN'));
+    await tester.tap(find.text('BONUS SPIN - WATCH AD'));
     await tester.pump();
     expect(ad.loads, greaterThanOrEqualTo(2));
   });

@@ -137,7 +137,7 @@ void main() {
 
   group('§6.1 placement', () {
     // 1. SETUP renders above the race section.
-    testWidgets('SETUP sits above the SUGGESTED RACES section', (tester) async {
+    testWidgets('SETUP sits above the Suggested Races section', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -151,13 +151,13 @@ void main() {
       await _flush(tester);
 
       expect(find.text('SETUP'), findsOneWidget);
-      expect(find.text('SUGGESTED RACES'), findsOneWidget);
+      expect(find.text('Suggested Races'), findsOneWidget);
       expect(find.byKey(const Key('home-rename-chip')), findsOneWidget);
 
       final setupDy = tester.getTopLeft(find.text('SETUP')).dy;
       expect(
         setupDy,
-        lessThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
+        lessThan(tester.getTopLeft(find.text('Suggested Races')).dy),
         reason: 'setup work is a prerequisite for the races below it',
       );
     });

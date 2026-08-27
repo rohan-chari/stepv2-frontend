@@ -622,55 +622,45 @@ class HomeTab extends StatelessWidget {
   }
 
   Widget _buildFeedbackSection(BuildContext context) {
-    final colors = AppColors.of(context);
     return Padding(
-      key: const Key('home-feedback-card'),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: GameContainer(
-        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-        surfaceColor: colors.roofDark,
-        frameColor: colors.textLight.withValues(alpha: 0.24),
-        child: Row(
+        key: const Key('home-feedback-card'),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.chat_bubble_outline_rounded,
-              size: 22,
-              color: colors.textLight.withValues(alpha: 0.82),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'FEEDBACK',
-                    style: PixelText.title(size: 15, color: colors.textLight),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Help us make Bara better.',
-                    style: PixelText.body(
-                      size: 12,
-                      color: colors.textLight.withValues(alpha: 0.72),
+            Row(
+              children: [
+                const _SectionTick(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Found a bug? Have an idea? Let us know',
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textDark,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 44),
-              child: PillButton(
+            const SizedBox(height: 12),
+            Builder(
+              builder: (btnContext) => PillButton(
                 key: const Key('home-feedback-button'),
-                label: 'SEND',
+                label: 'SEND FEEDBACK',
+                icon: Icons.chat_bubble_outline_rounded,
                 variant: PillButtonVariant.secondary,
-                fontSize: 12,
+                fontSize: 13,
+                fullWidth: true,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 9,
+                  horizontal: 24,
+                  vertical: 12,
                 ),
                 onPressed: () => showFeedbackSheet(
-                  context: context,
+                  context: btnContext,
                   authService: authService,
                   backendApiService: backendApiService,
                 ),
@@ -1322,7 +1312,7 @@ class HomeTab extends StatelessWidget {
           Text(
             'STEPS TODAY',
             textAlign: TextAlign.center,
-            style: PixelText.display(
+            style: PixelText.title(
               size: 13,
               color: AppColors.of(context).textLight.withValues(alpha: 0.85),
             ).copyWith(shadows: _heroShadows, letterSpacing: 3),
@@ -1344,44 +1334,41 @@ class HomeTab extends StatelessWidget {
           children: [
             Positioned(
               left: 20 + mediaPadding.left,
-              right: 20 + mediaPadding.right,
+              // Leave a dedicated gutter for the mail control so long names
+              // truncate before, rather than underneath, the upper-right HUD.
+              right: 144 + mediaPadding.right,
               top: topInset + 12,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // Keep the identity line focused on the user and balance.
-                  // Notifications live with the quick actions below the hero,
-                  // safely away from the fixed moon/sun artwork.
-                  final coinMaxWidth = (constraints.maxWidth * 0.34)
+                  // Keep the identity block focused on the user and balance;
+                  // Inbox sits independently in the hero's upper-right corner.
+                  final coinMaxWidth = (constraints.maxWidth * 0.38)
                       .clamp(88.0, 136.0)
                       .toDouble();
                   return SizedBox(
-                    height: 44,
-                    child: Row(
+                    height: 64,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: 1,
-                            child: MediaQuery.withClampedTextScaling(
-                              maxScaleFactor: 1.3,
-                              child: Text(
-                                atName(displayName ?? 'You'),
-                                maxLines: 1,
-                                softWrap: false,
-                                style: PixelText.title(
-                                  size: 24,
-                                  color: AppColors.of(context).textLight,
-                                ).copyWith(shadows: _heroShadows),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                        MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.3,
+                          child: Text(
+                            atName(displayName ?? 'You'),
+                            key: const Key('home-username'),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: PixelText.title(
+                              size: 24,
+                              color: AppColors.of(context).textLight,
+                            ).copyWith(shadows: _heroShadows),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(height: 3),
                         SizedBox(
                           key: const Key('home-coin-balance'),
                           width: coinMaxWidth,
-                          height: 44,
+                          height: 25,
                           child: FittedBox(
                             alignment: Alignment.centerLeft,
                             fit: BoxFit.scaleDown,
@@ -1409,13 +1396,21 @@ class HomeTab extends StatelessWidget {
               ),
             ),
             Positioned(
+              // The sky's sun/moon occupies the far-right corner. Keep this
+              // mail affordance just to its left, clear of the artwork's
+              // brightest pixels and consistent across both palettes.
+              right: 64 + mediaPadding.right,
+              top: topInset + 12,
+              child: _buildNotificationHudButton(context),
+            ),
+            Positioned(
               left: 16,
               right: 16,
-              // The compact HUD used to begin at +52. The complete 44px
+              // The compact HUD used to begin at +52. The complete 58px
               // button and its 3px shadow now end at +59, so +72 leaves a
               // deliberate 13px gap while retaining clearance above the
               // walking capybara.
-              top: topInset + 72,
+              top: topInset + 88,
               child: hud,
             ),
             // The wooden pace-line trail sign that used to stand in the dirt
@@ -1443,14 +1438,17 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  /// Daily reward plus the two compact destinations, first row under the hero.
+  /// Daily reward and Shop share the first row under the hero.
+  double _quickActionFontSize(BuildContext context) =>
+      (MediaQuery.sizeOf(context).width * 0.031).clamp(11.0, 12.0).toDouble();
+
   Widget _buildQuickActionsRow(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: SizedBox(
-            height: 58,
+            height: 44,
             child: KeyedSubtree(
               key: const Key('home-daily-reward-button'),
               child: StreakChip(
@@ -1462,28 +1460,33 @@ class HomeTab extends StatelessWidget {
                 // else; falls back to its own fetch on old backends.
                 initialData: raceCard?['dailyReward'] as Map<String, dynamic>?,
                 awaitingBatch: raceCardLoading,
+                compactFontSize: _quickActionFontSize(context),
                 onClaimedToday: onDailyRewardClaimed,
               ),
             ),
           ),
         ),
         const SizedBox(width: 10),
-        SizedBox(
-          width: 80,
-          height: 58,
-          child: KeyedSubtree(
-            key: tutorialShopKey,
-            child: _HomeShopButton(
-              key: const Key('home-shop-button'),
-              onPressed: onOpenShop,
+        Expanded(
+          child: SizedBox(
+            height: 44,
+            child: KeyedSubtree(
+              key: tutorialShopKey,
+              child: PillButton(
+                key: const Key('home-shop-button'),
+                label: 'SHOP',
+                icon: Icons.storefront_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: _quickActionFontSize(context),
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                onPressed: onOpenShop,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 80,
-          height: 58,
-          child: _buildNotificationHudButton(context),
         ),
       ],
     );
@@ -1501,9 +1504,9 @@ class HomeTab extends StatelessWidget {
       _ => 'Notifications, $unreadCount unread notifications',
     };
     final badgeLabel = unreadCount > 9 ? '9+' : '$unreadCount';
-    final backplate = colors.pillGold;
-    final borderColor = colors.pillGoldDark;
-    final iconColor = colors.textDark;
+    // This is hero chrome rather than a card: the mail glyph stays white in
+    // both themes so it reads consistently against the day/night sky.
+    const iconColor = Colors.white;
 
     return Semantics(
       container: true,
@@ -1519,69 +1522,34 @@ class HomeTab extends StatelessWidget {
             child: InkWell(
               key: const Key('home-notifications-card'),
               onTap: onOpenNotifications,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(22),
               child: Ink(
                 key: const Key('home-notifications-backplate'),
-                width: 80,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: backplate,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: borderColor, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: borderColor.withValues(alpha: 0.24),
-                      offset: const Offset(3, 3),
-                    ),
-                  ],
-                ),
+                width: 44,
+                height: 44,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.notifications_rounded,
-                            size: 22,
-                            color: iconColor,
-                          ),
-                          const SizedBox(height: 2),
-                          Flexible(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 2,
-                              ),
-                              child: Text(
-                                'ALERTS',
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.visible,
-                                textAlign: TextAlign.center,
-                                textScaler: TextScaler.noScaling,
-                                style: PixelText.pill(
-                                  size: 14,
-                                  color: iconColor,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: Icon(
+                        Icons.mail_outline_rounded,
+                        size: 33,
+                        color: iconColor,
+                        shadows: _heroShadows,
                       ),
                     ),
                     if (unreadCount > 0)
                       Positioned(
-                        top: -5,
-                        right: -5,
+                        top: -7,
+                        right: -7,
                         child: Container(
                           key: const Key('home-notifications-badge'),
                           constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
+                            minWidth: 27,
+                            minHeight: 27,
                           ),
                           padding: EdgeInsets.symmetric(
-                            horizontal: unreadCount > 9 ? 3 : 2,
+                            horizontal: unreadCount > 9 ? 4 : 3,
                           ),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
@@ -1598,7 +1566,7 @@ class HomeTab extends StatelessWidget {
                               badgeLabel,
                               maxLines: 1,
                               style: PixelText.number(
-                                size: 9,
+                                size: 13,
                                 color: colors.roofDark,
                               ).copyWith(height: 1),
                             ),
@@ -1633,76 +1601,6 @@ class HomeTab extends StatelessWidget {
       buf.write(s[i]);
     }
     return buf.toString();
-  }
-}
-
-/// Compact secondary destination beside the wider daily action.
-///
-/// The visible label is intentional: the tutorial teaches this control, and
-/// an icon-only storefront is less recognizable than it is space-efficient.
-class _HomeShopButton extends StatelessWidget {
-  const _HomeShopButton({super.key, required this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Semantics(
-      button: true,
-      enabled: onPressed != null,
-      label: 'Shop',
-      onTap: onPressed,
-      excludeSemantics: true,
-      child: Tooltip(
-        message: 'Shop',
-        excludeFromSemantics: true,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            excludeFromSemantics: true,
-            borderRadius: BorderRadius.circular(8),
-            child: Ink(
-              width: 80,
-              height: 58,
-              decoration: BoxDecoration(
-                color: colors.pillGold,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: colors.pillGoldDark, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.pillGoldDark.withValues(alpha: 0.24),
-                    offset: const Offset(3, 3),
-                    blurRadius: 0,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.storefront_rounded,
-                    size: 22,
-                    color: colors.textDark,
-                  ),
-                  const SizedBox(height: 2),
-                  Flexible(
-                    child: Text(
-                      'SHOP',
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      textScaler: TextScaler.noScaling,
-                      style: PixelText.pill(size: 14, color: colors.textDark),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -2484,11 +2382,11 @@ class _HomeRaceHeader extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'SUGGESTED RACES',
+                'Suggested Races',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: PixelText.display(
-                  size: 22,
+                style: PixelText.title(
+                  size: 20,
                   color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
@@ -3279,8 +3177,8 @@ class _HomeSectionHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: PixelText.display(
-                  size: 22,
+                style: PixelText.title(
+                  size: 20,
                   color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),

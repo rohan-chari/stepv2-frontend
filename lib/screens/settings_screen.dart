@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/backend_config.dart';
 import '../services/auth_service.dart';
 import '../services/activation_analytics_service.dart';
+import '../services/ad_consent_coordinator.dart';
 import '../services/backend_api_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
@@ -32,6 +33,7 @@ class SettingsScreen extends StatelessWidget {
     this.backendApiService,
     this.healthService,
     this.activationAnalyticsService,
+    this.adConsentCoordinator,
     required this.onSettingsChanged,
   });
 
@@ -40,6 +42,7 @@ class SettingsScreen extends StatelessWidget {
   final BackendApiService? backendApiService;
   final HealthService? healthService;
   final ActivationAnalyticsService? activationAnalyticsService;
+  final AdConsentCoordinator? adConsentCoordinator;
   final VoidCallback onSettingsChanged;
 
   @override
@@ -81,6 +84,7 @@ class SettingsScreen extends StatelessWidget {
                   backendApiService: backendApiService,
                   healthService: healthService,
                   activationAnalyticsService: activationAnalyticsService,
+                  adConsentCoordinator: adConsentCoordinator,
                   onSettingsChanged: onSettingsChanged,
                 ),
               ),
@@ -98,6 +102,7 @@ class _SettingsContent extends StatefulWidget {
   final BackendApiService? backendApiService;
   final HealthService? healthService;
   final ActivationAnalyticsService? activationAnalyticsService;
+  final AdConsentCoordinator? adConsentCoordinator;
   final VoidCallback onSettingsChanged;
 
   const _SettingsContent({
@@ -106,6 +111,7 @@ class _SettingsContent extends StatefulWidget {
     this.backendApiService,
     this.healthService,
     this.activationAnalyticsService,
+    this.adConsentCoordinator,
     required this.onSettingsChanged,
   });
 
@@ -127,6 +133,7 @@ class _SettingsContentState extends State<_SettingsContent> {
   /// Null when there is no API service or no auth token — the toggles then
   /// fall back to their documented defaults.
   Future<Map<String, dynamic>>? _notificationPrefs;
+  AdConsentCoordinator? _adConsentCoordinator;
 
   @override
   void initState() {
@@ -138,6 +145,28 @@ class _SettingsContentState extends State<_SettingsContent> {
         identityToken: token,
       );
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final coordinator =
+        widget.adConsentCoordinator ?? AdConsentScope.maybeOf(context);
+    if (identical(coordinator, _adConsentCoordinator)) return;
+    _adConsentCoordinator?.removeListener(_onAdConsentChanged);
+    _adConsentCoordinator = coordinator;
+    coordinator?.addListener(_onAdConsentChanged);
+    if (coordinator != null) unawaited(coordinator.bootstrap());
+  }
+
+  void _onAdConsentChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _adConsentCoordinator?.removeListener(_onAdConsentChanged);
+    super.dispose();
   }
 
   Future<void> _openUrl(String path) async {
@@ -415,6 +444,18 @@ class _SettingsContentState extends State<_SettingsContent> {
                 icon: Icons.support_agent_rounded,
                 onPressed: () => _openUrl('/support.html'),
               ),
+              if (_adConsentCoordinator?.privacyOptionsRequired == true)
+                _SettingsActionTile(
+                  key: const Key('settings-privacy-options'),
+                  label: 'PRIVACY AND COOKIE SETTINGS',
+                  icon: Icons.tune_rounded,
+                  onPressed:
+                      _adConsentCoordinator?.privacyOptionsFormOpen == true
+                      ? null
+                      : () => unawaited(
+                          _adConsentCoordinator!.showPrivacyOptions(),
+                        ),
+                ),
               _SettingsActionTile(
                 key: const Key('settings-privacy-policy'),
                 label: 'PRIVACY POLICY',

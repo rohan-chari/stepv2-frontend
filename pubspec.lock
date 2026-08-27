@@ -378,6 +378,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  gma_mediation_liftoffmonetize:
+    dependency: "direct main"
+    description:
+      name: gma_mediation_liftoffmonetize
+      sha256: d790d5a1e2f9c093276c4bae18cea81fcc9f6afd57221069d0e962b3cfbc3bf5
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.2"
   gma_mediation_unity:
     dependency: "direct main"
     description:

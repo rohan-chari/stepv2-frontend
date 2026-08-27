@@ -379,6 +379,7 @@ class BackendApiService {
       'active_impact_notices_v1',
       'resolved_impact_events_v2',
       'impact_summaries',
+      'impact_summary_expiry_v1',
       'review_prompt',
       'inbox_v1',
       'privateJoinApproval',
@@ -394,8 +395,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -964,7 +965,37 @@ class BackendApiService {
           ? rawResolved
           : 0,
       boxStateCurrent: isCurrent && boxCurrent == true,
+      globalEventSummaryWork: GlobalEventSummaryWorkReceipt.tryParse(
+        json['globalEventSummaryWork'],
+      ),
     );
+  }
+
+  /// Owner-only, fail-soft status for the optional post-event recap work. Any
+  /// transport/auth/not-found/malformed response stops this particular poll;
+  /// a later normal sync can provide a fresh receipt.
+  Future<GlobalEventSummaryWorkStatus?> fetchGlobalEventSummaryWorkStatus({
+    required String identityToken,
+    required String workId,
+  }) async {
+    HttpClientResponse response;
+    try {
+      response = await _sendGetRequest(
+        path: '/home/global-event-summary-work/$workId',
+        identityToken: identityToken,
+      );
+    } on ApiException {
+      return null;
+    }
+
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 ||
+        raw.statusCode >= 300 ||
+        raw.decodeFailed ||
+        raw.json == null) {
+      return null;
+    }
+    return GlobalEventSummaryWorkStatus.tryParse(raw.json);
   }
 
   /// `GET /steps/race-resolution/:jobId?generation=` (spec §6.5). Optional,

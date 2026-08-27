@@ -134,7 +134,7 @@ class OnboardingScene extends StatelessWidget {
                       child: Stack(
                         children: [
                           // Same wordmark treatment the title screen gives
-                          // "Bara" (PixelText.display + sky outline), so the
+                          // "Bara" (sans display + sky outline), so the
                           // headline reads as part of the same sign-painted
                           // world rather than as UI copy dropped on the sky.
                           //
@@ -154,14 +154,11 @@ class OnboardingScene extends StatelessWidget {
                             child: Text(
                               headline,
                               textAlign: TextAlign.center,
-                              // Jersey25 is a bitmap face with a small x-height,
-                              // so it reads a size smaller than it measures —
-                              // these numbers sit above the Space Grotesk sizes
-                              // they replace on purpose. A step with no emblem
-                              // has the whole sky to itself and goes larger
-                              // still.
+                              // Keep this scene's headline in the established
+                              // sans face; the arcade face is reserved for the
+                              // large numeric steps value on Home.
                               style:
-                                  PixelText.display(
+                                  PixelText.title(
                                     size: hasCenterpiece
                                         ? (compact ? 30 : 34)
                                         : (compact ? 36 : 44),

@@ -28,6 +28,7 @@ class StreakChip extends StatefulWidget {
     required this.authService,
     required this.backendApiService,
     this.compact = false,
+    this.compactFontSize = 12,
     this.initialData,
     this.awaitingBatch = false,
     this.onClaimedToday,
@@ -46,6 +47,7 @@ class StreakChip extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final bool compact;
+  final double compactFontSize;
 
   /// Daily-reward payload from the home race-card batch (`dailyReward`:
   /// `{claimedToday, localDate}`). When present and fresh, no extra request
@@ -77,6 +79,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   // dailyReward.adExtraSpin (new backends) or the standalone status fetch.
   bool _extraSpinAvailable = false;
   bool _extraSpinPendingGrant = false;
+  bool _extraSpinClaimed = false;
   // One ad controller per chip lifetime so a preloaded rewarded ad survives
   // reopening the daily-reward screen. Constructing it touches no platform
   // channels; ads only load once the screen sees a live offer.
@@ -120,6 +123,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         _unclaimed = data['claimedToday'] != true;
         _extraSpinAvailable = available;
         _extraSpinPendingGrant = extra?['pendingGrant'] == true;
+        _extraSpinClaimed = extra?['used'] == true;
         _loaded = true;
         _lastFetchedDate = today;
       });
@@ -201,6 +205,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         _unclaimed = res['claimedToday'] != true;
         _extraSpinAvailable = available;
         _extraSpinPendingGrant = extra?['pendingGrant'] == true;
+        _extraSpinClaimed = extra?['used'] == true;
         _loaded = true;
         _lastFetchedDate = localDate;
       });
@@ -318,9 +323,6 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (!_loaded) {
       return const SizedBox(height: 48);
     }
-    // The Home affordance is deliberately one stable destination. A changing
-    // CLAIM/EXTRA SPIN label made the same tap target feel like two unrelated
-    // systems; availability is communicated by the icon and attention beat.
     if (_extraSpinAvailable) {
       void openExtraSpin() {
         unawaited(
@@ -336,38 +338,42 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         return _DailyRewardAttention(
           active: !_opening,
           child: _CompactDailyRewardButton(
-            label: 'DAILY REWARD',
-            semanticsLabel: 'Daily reward. One more spin is ready.',
+            label: 'BONUS SPIN - WATCH AD',
+            semanticsLabel: 'Bonus spin. Watch ad.',
             icon: Icons.card_giftcard_rounded,
             onPressed: openExtraSpin,
+            fontSize: widget.compactFontSize,
           ),
         );
       }
       return ExtraSpinRewardTicket(
-        label: 'DAILY REWARD',
-        semanticsLabel: 'Daily reward. One more spin is ready.',
+        label: 'BONUS SPIN - WATCH AD',
+        semanticsLabel: 'Bonus spin. Watch ad.',
         onPressed: openExtraSpin,
       );
     }
+    final claimedLabel = _extraSpinClaimed ? 'REWARD CLAIMED' : 'DAILY REWARD';
+    final claimedSemantics = _extraSpinClaimed
+        ? 'Reward claimed'
+        : 'Open daily reward';
     if (widget.compact) {
       return _DailyRewardAttention(
         active: _unclaimed && !_opening,
         child: _CompactDailyRewardButton(
-          label: _unclaimed ? 'CLAIM REWARD' : 'DAILY REWARD',
-          semanticsLabel: _unclaimed
-              ? 'Claim daily reward'
-              : 'Open daily reward',
+          label: _unclaimed ? 'CLAIM REWARD' : claimedLabel,
+          semanticsLabel: _unclaimed ? 'Claim daily reward' : claimedSemantics,
           icon: _unclaimed
               ? Icons.card_giftcard_rounded
               : Icons.check_box_rounded,
           onPressed: _open,
+          fontSize: widget.compactFontSize,
         ),
       );
     }
     return _DailyRewardAttention(
       active: _unclaimed && !_opening,
       child: PillButton(
-        label: _unclaimed ? 'CLAIM REWARD' : 'DAILY REWARD',
+        label: _unclaimed ? 'CLAIM REWARD' : claimedLabel,
         icon: _unclaimed
             ? Icons.card_giftcard_rounded
             : Icons.check_box_rounded,
@@ -379,8 +385,8 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   }
 }
 
-/// Home's wide quick action uses the same icon-over-label rhythm as the two
-/// square destinations beside it. Non-compact StreakChip callers keep their
+/// Home's wide quick action keeps its icon beside the label so the action
+/// remains legible on narrow phones. Non-compact StreakChip callers keep their
 /// existing PillButton / ticket composition.
 class _CompactDailyRewardButton extends StatelessWidget {
   const _CompactDailyRewardButton({
@@ -388,12 +394,14 @@ class _CompactDailyRewardButton extends StatelessWidget {
     required this.semanticsLabel,
     required this.icon,
     required this.onPressed,
+    this.fontSize = 12,
   });
 
   final String label;
   final String semanticsLabel;
   final IconData icon;
   final VoidCallback? onPressed;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -412,7 +420,7 @@ class _CompactDailyRewardButton extends StatelessWidget {
           child: Ink(
             key: const Key('home-daily-reward-compact-layout'),
             width: double.infinity,
-            height: 58,
+            height: 44,
             decoration: BoxDecoration(
               color: colors.pillGold,
               borderRadius: BorderRadius.circular(8),
@@ -424,18 +432,19 @@ class _CompactDailyRewardButton extends StatelessWidget {
                 ),
               ],
             ),
-            child: Column(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 20, color: colors.textDark),
-                const SizedBox(height: 2),
+                Icon(icon, size: fontSize + 2, color: colors.textDark),
+                const SizedBox(width: 8),
                 Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      style: PixelText.pill(size: 14, color: colors.textDark),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.pill(
+                      size: fontSize,
+                      color: colors.textDark,
                     ),
                   ),
                 ),

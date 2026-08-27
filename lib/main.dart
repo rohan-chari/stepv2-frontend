@@ -12,6 +12,8 @@ import 'screens/main_shell.dart';
 import 'screens/start_screen.dart';
 import 'screens/update_required_screen.dart';
 import 'services/auth_service.dart';
+import 'services/ad_consent_coordinator.dart';
+import 'services/ad_service.dart';
 import 'services/app_route_observer.dart';
 import 'services/backend_api_service.dart';
 import 'services/background_sync_bootstrap_service.dart';
@@ -90,6 +92,12 @@ Future<void> main() async {
   final results = await prefsBatch;
   final themePreference = results[2] as AppThemePreference;
   final themeController = AppThemeController(preference: themePreference);
+  final adConsentCoordinator = AdConsentCoordinator.production(
+    initializeAds: AdService.initializeMobileAdsAfterConsent,
+    applyPartnerConsent: AdService.applyPartnerConsentSignals,
+    onAdsPermissionChanged: AdService.setConsentPermission,
+  );
+  AdService.configureConsentBootstrap(adConsentCoordinator.bootstrap);
 
   runApp(
     StepTrackerApp(
@@ -97,6 +105,7 @@ Future<void> main() async {
       authService: authService,
       deepLinkService: deepLinkService,
       themeController: themeController,
+      adConsentCoordinator: adConsentCoordinator,
     ),
   );
 }
@@ -108,6 +117,7 @@ class StepTrackerApp extends StatelessWidget {
     required this.authService,
     required this.deepLinkService,
     required this.themeController,
+    required this.adConsentCoordinator,
   });
 
   final NotificationService notificationService;
@@ -117,6 +127,7 @@ class StepTrackerApp extends StatelessWidget {
   // the life of the app (links tapped while running).
   final DeepLinkService deepLinkService;
   final AppThemeController themeController;
+  final AdConsentCoordinator adConsentCoordinator;
 
   @override
   Widget build(BuildContext context) {
@@ -131,35 +142,46 @@ class StepTrackerApp extends StatelessWidget {
               .accessibilityFeatures
               .disableAnimations;
           final dark = themeController.resolvedMode == ThemeMode.dark;
-          return MaterialApp(
-            title: 'Bara',
-            debugShowCheckedModeBanner: false,
-            navigatorObservers: [appRouteObserver],
-            theme: AppThemeData.light(),
-            darkTheme: AppThemeData.night(),
-            themeMode: themeController.resolvedMode,
-            themeAnimationDuration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 250),
-            themeAnimationCurve: Curves.easeOutCubic,
-            builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: dark
-                    ? Brightness.light
-                    : Brightness.dark,
-                statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-                systemNavigationBarColor: AppColors.of(context).parchmentLight,
-                systemNavigationBarIconBrightness: dark
-                    ? Brightness.light
-                    : Brightness.dark,
-              ),
-              child: _EnvironmentBanner(child: child),
-            ),
-            home: _VersionGate(
-              child: _SessionGate(
-                authService: authService,
-                notificationService: notificationService,
+          return AdConsentScope(
+            coordinator: adConsentCoordinator,
+            child: MaterialApp(
+              title: 'Bara',
+              debugShowCheckedModeBanner: false,
+              navigatorObservers: [appRouteObserver],
+              theme: AppThemeData.light(),
+              darkTheme: AppThemeData.night(),
+              themeMode: themeController.resolvedMode,
+              themeAnimationDuration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 250),
+              themeAnimationCurve: Curves.easeOutCubic,
+              builder: (context, child) =>
+                  AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: SystemUiOverlayStyle(
+                      statusBarColor: Colors.transparent,
+                      statusBarIconBrightness: dark
+                          ? Brightness.light
+                          : Brightness.dark,
+                      statusBarBrightness: dark
+                          ? Brightness.dark
+                          : Brightness.light,
+                      systemNavigationBarColor: AppColors.of(
+                        context,
+                      ).parchmentLight,
+                      systemNavigationBarIconBrightness: dark
+                          ? Brightness.light
+                          : Brightness.dark,
+                    ),
+                    child: _EnvironmentBanner(child: child),
+                  ),
+              home: AdConsentBootstrap(
+                coordinator: adConsentCoordinator,
+                child: _VersionGate(
+                  child: _SessionGate(
+                    authService: authService,
+                    notificationService: notificationService,
+                  ),
+                ),
               ),
             ),
           );

@@ -60,6 +60,8 @@ dependencies:
   in_app_review: ^2.0.10
   google_mobile_ads: ^9.0.0
   gma_mediation_unity: ^1.9.0
+  # Exact adapter release built/tested against google_mobile_ads 9.0.0.
+  gma_mediation_liftoffmonetize: 1.5.2
   app_tracking_transparency: ^2.0.7
 
 dev_dependencies:

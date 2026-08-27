@@ -14,6 +14,7 @@ import google_mobile_ads
   private var appInfoChannel: FlutterMethodChannel?
   private var referralChannel: FlutterMethodChannel?
   private var metaAdsChannel: FlutterMethodChannel?
+  private var adPrivacySignalsChannel: FlutterMethodChannel?
   private lazy var notificationInstallationIDStore = NotificationInstallationIDStore()
   private let healthStore = HKHealthStore()
   private var hasRegisteredHealthObserver = false
@@ -73,6 +74,30 @@ import google_mobile_ads
       }
       FBAdSettings.setAdvertiserTrackingEnabled(enabled)
       result(nil)
+    }
+
+    // UMP writes IAB's standardized TCF/Additional Consent/GPP values to the
+    // platform default store. Dart reads only these authoritative CMP values;
+    // absent or malformed choices remain unknown and no mediation-partner
+    // setter is invoked.
+    adPrivacySignalsChannel = FlutterMethodChannel(
+      name: "com.steptracker/ad_privacy_signals",
+      binaryMessenger: controller.binaryMessenger
+    )
+    adPrivacySignalsChannel?.setMethodCallHandler { call, result in
+      guard call.method == "getIabSignals" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let defaults = UserDefaults.standard
+      var values: [String: Any] = [:]
+      for key in AppDelegate.iabPrivacySignalKeys {
+        if let value = defaults.object(forKey: key),
+           value is String || value is NSNumber {
+          values[key] = value
+        }
+      }
+      result(values)
     }
 
     notificationChannel = FlutterMethodChannel(
@@ -215,6 +240,33 @@ import google_mobile_ads
     return receiptURL.lastPathComponent == "sandboxReceipt"
     #endif
   }
+
+  private static let iabPrivacySignalKeys: [String] = {
+    var keys = [
+      "IABTCF_gdprApplies",
+      "IABTCF_PurposeConsents",
+      "IABTCF_VendorConsents",
+      "IABTCF_AddtlConsent",
+      "IABGPP_GppSID",
+      "IABGPP_HDR_GppString",
+      "IABGPP_TCFEU2_gdprApplies",
+      "IABGPP_TCFEU2_PurposesConsent",
+      "IABUSPrivacy_String",
+      "IABGPP_USP1_OptOut",
+    ]
+    let usPrefixes = [
+      "USNAT", "USCA", "USVA", "USCO", "USUT", "USCT", "USFL",
+      "USMT", "USOR", "USTX", "USDE", "USIA", "USNE", "USNH",
+      "USNJ", "USTN", "USMN", "USMD", "USIN", "USKY", "USRI",
+    ]
+    for prefix in usPrefixes {
+      keys.append("IABGPP_\(prefix)_SaleOptOut")
+      keys.append("IABGPP_\(prefix)_SharingOptOut")
+      keys.append("IABGPP_\(prefix)_TargetedAdvertisingOptOut")
+      keys.append("IABGPP_\(prefix)_Gpc")
+    }
+    return keys
+  }()
 
   /// The REAL permission state, so Dart never has to trust a cached flag.
   private func getNotificationPermissionStatus(result: @escaping FlutterResult) {

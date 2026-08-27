@@ -167,7 +167,7 @@ class _RulesHeader extends StatelessWidget {
               child: Text(
                 'BARA REFERRAL CONTEST',
                 textAlign: TextAlign.center,
-                style: PixelText.display(size: 16, color: colors.textLight),
+                style: PixelText.title(size: 16, color: colors.textLight),
               ),
             ),
           ),
@@ -283,7 +283,7 @@ class _RulesTitle extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               'OFFICIAL RULES',
-              style: PixelText.display(size: 17, color: colors.textLight),
+              style: PixelText.title(size: 17, color: colors.textLight),
             ),
           ),
         ),
@@ -344,7 +344,7 @@ class _RuleSection extends StatelessWidget {
             children: [
               Text(
                 section.heading,
-                style: PixelText.display(size: 15, color: colors.grassDark),
+                style: PixelText.title(size: 15, color: colors.grassDark),
               ),
               const SizedBox(height: 5),
               if (section.sponsor case final sponsor?) ...[

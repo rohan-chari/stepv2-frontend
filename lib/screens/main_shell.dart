@@ -21,6 +21,7 @@ import '../models/race_handoff_result.dart';
 import '../models/race_payout_double_offer.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
+import '../models/step_sync_v2_result.dart';
 import '../services/async_ttl_cache.dart';
 import '../services/activation_analytics_service.dart';
 import '../services/admin_metrics_telemetry_service.dart';
@@ -127,7 +128,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   static const _homeTabIndex = 0;
   static const _racesTabIndex = 1;
-  static const _friendsTabIndex = 3;
+  static const _friendsTabIndex = 2;
 
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
@@ -145,7 +146,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _getCoinsWarmKey;
   Future<void>? _getCoinsWarmFuture;
   bool _globalSummaryShowing = false;
-  Map<String, dynamic>? _pendingGlobalEventSummary;
+  _PendingGlobalEventSummary? _pendingGlobalEventSummary;
+  Timer? _globalSummaryExpiryTimer;
+  int _globalSummaryWorkPollToken = 0;
+  _ActiveGlobalEventSummaryWork? _activeGlobalEventSummaryWork;
+  AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -703,8 +708,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _homePresentationResolved = false;
         _homeFriendsResolved = false;
         _pendingGlobalEventSummary = null;
+        _globalSummaryExpiryTimer?.cancel();
+        _globalSummaryExpiryTimer = null;
+        _activeGlobalEventSummaryWork = null;
       }
     });
+    if (userChanged || nextToken == null || nextToken.isEmpty) {
+      _globalSummaryWorkPollToken += 1;
+      if (nextToken == null || nextToken.isEmpty) {
+        _activeGlobalEventSummaryWork = null;
+      }
+    }
     // A cold-start suggestions request can begin before /me establishes the
     // backend user id. setUser intentionally invalidates that response so it
     // cannot cross accounts; immediately replace it for the newly known user.
@@ -749,6 +763,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             coordinator: injectedCoordinator,
             analytics: _activationAnalytics,
           );
+      _maybeWarmRaceDetail();
       return;
     }
     final userId = widget.authService.userId;
@@ -757,6 +772,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _interstitialBoundToken == token &&
         userId != null &&
         userId.isNotEmpty) {
+      _maybeWarmRaceDetail();
       return;
     }
     _interstitialCoordinator?.dispose();
@@ -785,6 +801,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!_isOnboarding) {
       _ignoreInterstitialFuture(coordinator.flushPendingImpressions());
     }
+    _maybeWarmRaceDetail();
+  }
+
+  void _maybeWarmRaceDetail() {
+    final coordinator = _interstitialCoordinator;
+    final userId = widget.authService.userId;
+    final token = widget.authService.authToken;
+    if (coordinator == null ||
+        userId == null ||
+        userId.isEmpty ||
+        token == null ||
+        token.isEmpty ||
+        coordinator.ownerUserId != userId ||
+        _interstitialBoundToken != token ||
+        _appLifecycleState != AppLifecycleState.resumed ||
+        _isOnboarding ||
+        !AdService.adRequestsAllowed) {
+      return;
+    }
+    if (coordinator is InterstitialAdCoordinator &&
+        !AdService.interstitialSupportedFor(
+          InterstitialPlacement.raceDetailExit,
+        )) {
+      return;
+    }
+    _ignoreInterstitialFuture(
+      coordinator.warm(InterstitialPlacement.raceDetailExit),
+    );
+  }
+
+  void _onInterstitialConsentChanged() {
+    if (AdService.adRequestsAllowed) _maybeWarmRaceDetail();
   }
 
   ExtraSpinAdController get _sessionGetCoinsAdController =>
@@ -855,6 +903,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _appLifecycleState =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
     _healthService = widget.healthService ?? HealthService();
     _backendApiService = widget.backendApiService ?? BackendApiService();
     _friendsRepository = FriendsSummaryRepository(_backendApiService);
@@ -864,6 +914,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _reviewPromptService = widget.reviewPromptService ?? ReviewPromptService();
     _activationAnalytics = ActivationAnalyticsService(
       backendApiService: _backendApiService,
+    );
+    AdService.adRequestPermissionListenable.addListener(
+      _onInterstitialConsentChanged,
     );
     _bindInterstitialAccount();
     _adminMetricsTelemetry = AdminMetricsTelemetryService(
@@ -921,11 +974,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     widget.authService.removeListener(_handleAuthServiceChanged);
+    AdService.adRequestPermissionListenable.removeListener(
+      _onInterstitialConsentChanged,
+    );
     widget.notificationService?.pendingAction.removeListener(
       _onNotificationAction,
     );
     _foregroundPollTimer?.cancel();
     _jobPollToken += 1; // invalidate any in-flight job polling loop
+    _globalSummaryWorkPollToken += 1;
+    _globalSummaryExpiryTimer?.cancel();
     _pageController.dispose();
     _bannerHeight.dispose();
     _getCoinsAdController?.dispose();
@@ -1428,10 +1486,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appLifecycleState = state;
     switch (state) {
       case AppLifecycleState.resumed:
         _interstitialCoordinator?.didResume();
+        _maybeWarmRaceDetail();
         _resumeGetCoinsWarm();
+        _restartActiveGlobalEventSummaryWorkPolling();
         unawaited(
           _adminMetricsTelemetry.didResume(
             widget.authService.authToken,
@@ -1478,11 +1539,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       // results modals only once all calls have settled.
       unawaited(_loadHomeAndShowResults());
       _startForegroundPolling();
-    } else if (state == AppLifecycleState.paused) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
       _stopForegroundPolling();
-      // Stop background job polling so a paused app issues no requests / leaks
-      // no timers (§6.5).
+      // Stop background job polling so a paused/hidden app issues no requests
+      // or leaks timers (§6.5). Active summary work is retained and restarted
+      // on resume; only the owner status endpoint can terminalize it.
       _jobPollToken += 1;
+      _globalSummaryWorkPollToken += 1;
     }
   }
 
@@ -1625,6 +1689,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _shopCatalogCache.clear();
         _backendApiService.resetSessionCapabilities();
         _jobPollToken += 1; // cancel any in-flight job polling
+        _globalSummaryWorkPollToken += 1;
+        _activeGlobalEventSummaryWork = null;
         await widget.authService.signOut();
         if (!mounted) return false;
 
@@ -1884,6 +1950,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final outcome = await _persistSteps();
+      _startGlobalEventSummaryWorkPollingIfPresent(outcome);
       setState(() {
         _isLoading = false;
         _error = null;
@@ -1970,6 +2037,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       error: v2.isError,
       jobId: v2.jobId,
       generation: v2.generation,
+      globalEventSummaryWork: v2.globalEventSummaryWork,
     );
   }
 
@@ -2055,6 +2123,115 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     unawaited(poll(0));
+  }
+
+  void _startGlobalEventSummaryWorkPollingIfPresent(_StepSyncOutcome outcome) {
+    final work = outcome.globalEventSummaryWork;
+    if (work != null) _acceptGlobalEventSummaryWorkReceipt(work);
+  }
+
+  /// Polls summary readiness independently of the race-resolution job. The
+  /// first three waits back off; later requests remain serialized and no more
+  /// frequent than once every five seconds until the server reports a terminal
+  /// state, or lifecycle/auth changes suspend the work.
+  void _acceptGlobalEventSummaryWorkReceipt(
+    GlobalEventSummaryWorkReceipt receipt,
+  ) {
+    final authToken = widget.authService.authToken;
+    if (authToken == null || authToken.isEmpty) {
+      _activeGlobalEventSummaryWork = null;
+      _globalSummaryWorkPollToken += 1;
+      return;
+    }
+
+    if (receipt.state.isCreated) {
+      _activeGlobalEventSummaryWork = null;
+      _globalSummaryWorkPollToken += 1;
+      unawaited(_refetchHomeForCreatedGlobalEventSummary());
+      return;
+    }
+    if (receipt.state.isTerminal) {
+      _activeGlobalEventSummaryWork = null;
+      _globalSummaryWorkPollToken += 1;
+      return;
+    }
+
+    final existing = _activeGlobalEventSummaryWork;
+    final active = existing != null && existing.id == receipt.id
+        ? (existing..applyServerStatus(receipt))
+        : _ActiveGlobalEventSummaryWork.fromReceipt(receipt);
+    _activeGlobalEventSummaryWork = active;
+    _startActiveGlobalEventSummaryWorkPolling(active);
+  }
+
+  void _restartActiveGlobalEventSummaryWorkPolling() {
+    final active = _activeGlobalEventSummaryWork;
+    if (active == null) return;
+    _startActiveGlobalEventSummaryWorkPolling(active);
+  }
+
+  void _startActiveGlobalEventSummaryWorkPolling(
+    _ActiveGlobalEventSummaryWork active,
+  ) {
+    if (_appLifecycleState == AppLifecycleState.paused ||
+        _appLifecycleState == AppLifecycleState.hidden) {
+      return;
+    }
+    final token = ++_globalSummaryWorkPollToken;
+
+    const initialSchedule = [
+      Duration(milliseconds: 750),
+      Duration(milliseconds: 1500),
+      Duration(seconds: 3),
+    ];
+
+    Future<void> poll(int index) async {
+      final delay = index < initialSchedule.length
+          ? initialSchedule[index]
+          : const Duration(seconds: 5);
+      await Future<void>.delayed(delay);
+      final authToken = widget.authService.authToken;
+      if (!mounted ||
+          token != _globalSummaryWorkPollToken ||
+          !identical(active, _activeGlobalEventSummaryWork) ||
+          authToken == null ||
+          authToken.isEmpty) {
+        return;
+      }
+
+      final status = await _backendApiService.fetchGlobalEventSummaryWorkStatus(
+        identityToken: authToken,
+        workId: active.id,
+      );
+      if (!mounted ||
+          token != _globalSummaryWorkPollToken ||
+          !identical(active, _activeGlobalEventSummaryWork) ||
+          status == null) {
+        return;
+      }
+
+      // The owner-only status response is authoritative. Work expiry is a
+      // server state transition (EXPIRED_UNDELIVERED), never a comparison
+      // between server expiresAt and the device wall clock.
+      active.applyServerStatus(status);
+      if (status.state.isCreated) {
+        _activeGlobalEventSummaryWork = null;
+        await _refetchHomeForCreatedGlobalEventSummary();
+        return;
+      }
+      if (status.state.isTerminal) {
+        _activeGlobalEventSummaryWork = null;
+        return;
+      }
+      await poll(index + 1);
+    }
+
+    unawaited(poll(0));
+  }
+
+  Future<void> _refetchHomeForCreatedGlobalEventSummary() async {
+    await _fetchRaceCard();
+    if (mounted) await _coordinateHomeOverlays();
   }
 
   Future<void> _fetchFriendsSteps() async {
@@ -2363,6 +2540,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _StepSyncOutcome? outcome;
     try {
       outcome = await _persistSteps();
+      _startGlobalEventSummaryWorkPollingIfPresent(outcome);
     } catch (_) {
       // Keep prior surfaces; continue loading the rest.
     }
@@ -2762,6 +2940,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
     final resultsCoordinator = _interstitialCoordinator;
     if (resultsCoordinator != null && !_isOnboarding) {
+      _ignoreInterstitialFuture(
+        resultsCoordinator.warm(InterstitialPlacement.raceResultsExit),
+      );
       _ignoreInterstitialFuture(
         resultsCoordinator.prime(InterstitialPlacement.raceResultsExit),
       );
@@ -3279,6 +3460,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     try {
       // Stages 2-4: read health, persist (v2/legacy), update _stepData.
       outcome = await _persistSteps(homePull: true);
+      _startGlobalEventSummaryWorkPollingIfPresent(outcome);
     } catch (_) {
       // Local health read failed: keep prior server-derived surfaces and end
       // the pull (existing error presentation lives in the step display).
@@ -3333,10 +3515,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       setState(() => _raceCardLoading = true);
     }
     try {
+      final requestRoundTrip = Stopwatch()..start();
       final data = await _backendApiService.fetchHomeRaceCard(
         identityToken: identityToken,
         usePersistedTotals: usePersistedTotals,
       );
+      requestRoundTrip.stop();
       if (!mounted ||
           generation != _raceCardGeneration ||
           identityToken != widget.authService.authToken ||
@@ -3411,12 +3595,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _raceCardLoading = false;
         });
         final rawGlobalSummary = data['globalEventSummary'];
-        _pendingGlobalEventSummary = rawGlobalSummary is Map
-            ? <String, dynamic>{
-                for (final entry in rawGlobalSummary.entries)
-                  if (entry.key is String) entry.key as String: entry.value,
-              }
-            : null;
+        _replacePendingGlobalEventSummary(
+          _PendingGlobalEventSummary.tryParse(
+            rawGlobalSummary,
+            requestRoundTrip: requestRoundTrip.elapsed,
+          ),
+        );
         // During the coordinated Home load, race results cannot be evaluated
         // until the core race list has settled. The outer loader drains this
         // summary after both requests complete. Standalone card refreshes can
@@ -3458,6 +3642,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  void _replacePendingGlobalEventSummary(_PendingGlobalEventSummary? summary) {
+    _globalSummaryExpiryTimer?.cancel();
+    _globalSummaryExpiryTimer = null;
+    _pendingGlobalEventSummary = summary;
+    if (summary == null) return;
+
+    final remaining = summary.remaining;
+    if (remaining <= Duration.zero) {
+      _pendingGlobalEventSummary = null;
+      return;
+    }
+    _globalSummaryExpiryTimer = Timer(remaining, () {
+      if (identical(_pendingGlobalEventSummary, summary)) {
+        _pendingGlobalEventSummary = null;
+      }
+    });
+  }
+
   Future<void> _showPendingGlobalEventSummaryIfEligible() async {
     if (!mounted ||
         _globalSummaryShowing ||
@@ -3471,13 +3673,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (route != null && !route.isCurrent) return;
     final raw = _pendingGlobalEventSummary;
     if (raw == null) return;
-    final id = raw['id'];
-    final extra = raw['extraRaceSteps'];
-    final count = raw['raceCount'];
-    if (id is! String || id.isEmpty || extra is! num || count is! num) return;
-    final races = count.toInt();
-    if (races <= 0) return;
-    final steps = extra.toInt();
+    if (raw.isExpired) {
+      _replacePendingGlobalEventSummary(null);
+      return;
+    }
+    final id = raw.id;
+    final steps = raw.extraRaceSteps;
     final presentationToken = widget.authService.authToken;
     final presentationUserId = widget.authService.userId;
     if (presentationToken == null || presentationToken.isEmpty) return;
@@ -3551,8 +3752,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           );
         } catch (_) {}
       }
-      if (_pendingGlobalEventSummary?['id'] == id) {
-        _pendingGlobalEventSummary = null;
+      if (_pendingGlobalEventSummary?.id == id) {
+        _replacePendingGlobalEventSummary(null);
       }
     } finally {
       _globalSummaryShowing = false;
@@ -4464,6 +4665,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _homeReachedRecorded = true;
       unawaited(_activationAnalytics.record('home_reached'));
     }
+    if (!_isOnboarding) _maybeWarmRaceDetail();
     if (!_isOnboarding) _scheduleGetCoinsWarm();
 
     // Once per render-session: the denominator for invite_code_applied /
@@ -4692,13 +4894,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           raceDetailNavigator: _raceDetailNavigator,
                           onOpenProfile: _openProfile,
                         ),
-                        LeaderboardTab(
-                          authService: widget.authService,
-                          backendApiService: _backendApiService,
-                          stepData: _stepData,
-                          displayName: _displayName,
-                          onOpenProfile: _openProfile,
-                        ),
                         FriendsTab(
                           authService: widget.authService,
                           onFriendsChanged: () {},
@@ -4727,6 +4922,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             _incomingFriendRequests = incoming;
                             if (mounted) setState(() {});
                           },
+                          backendApiService: _backendApiService,
+                          stepData: _stepData,
+                          displayName: _displayName,
+                          onOpenProfile: _openProfile,
+                        ),
+                        LeaderboardTab(
+                          authService: widget.authService,
                           backendApiService: _backendApiService,
                           stepData: _stepData,
                           displayName: _displayName,
@@ -4816,13 +5018,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     label: 'Races',
                   ),
                   WoodenTabItem(
-                    icon: Icons.emoji_events_rounded,
-                    label: 'Boards',
-                  ),
-                  WoodenTabItem(
                     icon: Icons.people_rounded,
                     label: 'Friends',
                     badgeCount: _incomingFriendRequests,
+                  ),
+                  const WoodenTabItem(
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Boards',
                   ),
                   const WoodenTabItem(
                     icon: Icons.person_rounded,
@@ -4886,6 +5088,7 @@ class _StepSyncOutcome {
     this.generation,
     this.cooldown = false,
     this.cooldownSeconds,
+    this.globalEventSummaryWork,
   });
 
   /// Step/sample data is (very likely) on the server.
@@ -4902,4 +5105,110 @@ class _StepSyncOutcome {
   final int? generation;
   final bool cooldown;
   final int? cooldownSeconds;
+  final GlobalEventSummaryWorkReceipt? globalEventSummaryWork;
+}
+
+class _ActiveGlobalEventSummaryWork {
+  _ActiveGlobalEventSummaryWork({
+    required this.id,
+    required this.state,
+    required this.expiresAt,
+  });
+
+  factory _ActiveGlobalEventSummaryWork.fromReceipt(
+    GlobalEventSummaryWorkReceipt receipt,
+  ) {
+    return _ActiveGlobalEventSummaryWork(
+      id: receipt.id,
+      state: receipt.state,
+      expiresAt: receipt.expiresAt,
+    );
+  }
+
+  final String id;
+  GlobalEventSummaryWorkState state;
+  DateTime expiresAt;
+
+  void applyServerStatus(GlobalEventSummaryWorkStatus status) {
+    state = status.state;
+    expiresAt = status.expiresAt;
+  }
+}
+
+class _PendingGlobalEventSummary {
+  _PendingGlobalEventSummary({
+    required this.id,
+    required this.eventId,
+    required this.extraRaceSteps,
+    required this.raceCount,
+    required this.settledAt,
+    required this.expiresAt,
+    required this.validFor,
+  }) : _lifetime = Stopwatch()..start();
+
+  final String id;
+  final String eventId;
+  final int extraRaceSteps;
+  final int raceCount;
+  final DateTime settledAt;
+  final DateTime expiresAt;
+  final Duration validFor;
+  final Stopwatch _lifetime;
+
+  Duration get remaining {
+    final value = validFor - _lifetime.elapsed;
+    return value.isNegative ? Duration.zero : value;
+  }
+
+  bool get isExpired => remaining <= Duration.zero;
+
+  static _PendingGlobalEventSummary? tryParse(
+    Object? raw, {
+    required Duration requestRoundTrip,
+  }) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final eventId = raw['eventId'];
+    final extra = raw['extraRaceSteps'];
+    final count = raw['raceCount'];
+    final rawSettledAt = raw['settledAt'];
+    final rawExpiresAt = raw['expiresAt'];
+    final validForMs = raw['validForMs'];
+    final settledAt = rawSettledAt is String
+        ? DateTime.tryParse(rawSettledAt)?.toUtc()
+        : null;
+    final expiresAt = rawExpiresAt is String
+        ? DateTime.tryParse(rawExpiresAt)?.toUtc()
+        : null;
+    if (id is! String ||
+        id.isEmpty ||
+        eventId is! String ||
+        eventId.isEmpty ||
+        extra is! num ||
+        !extra.isFinite ||
+        extra != extra.roundToDouble() ||
+        count is! num ||
+        !count.isFinite ||
+        count != count.roundToDouble() ||
+        count <= 0 ||
+        settledAt == null ||
+        expiresAt == null ||
+        validForMs is! num ||
+        !validForMs.isFinite ||
+        validForMs <= 0) {
+      return null;
+    }
+
+    final adjustedMs = validForMs.toDouble() - requestRoundTrip.inMilliseconds;
+    if (!adjustedMs.isFinite || adjustedMs <= 0) return null;
+    return _PendingGlobalEventSummary(
+      id: id,
+      eventId: eventId,
+      extraRaceSteps: extra.toInt(),
+      raceCount: count.toInt(),
+      settledAt: settledAt,
+      expiresAt: expiresAt,
+      validFor: Duration(milliseconds: adjustedMs.floor()),
+    );
+  }
 }

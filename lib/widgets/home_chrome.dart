@@ -8,7 +8,13 @@ abstract final class HomeText {
     double size = 34,
     Color color = AppColors.textDark,
   }) {
-    return PixelText.display(size: size, color: color, letterSpacing: 0.35);
+    return GoogleFonts.spaceGrotesk(
+      fontSize: size,
+      height: 1.0,
+      fontWeight: FontWeight.w800,
+      color: color,
+      letterSpacing: 0,
+    );
   }
 
   static TextStyle title({double size = 20, Color color = AppColors.textDark}) {

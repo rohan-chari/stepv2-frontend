@@ -177,7 +177,7 @@ void main() {
           theme: night ? AppThemeData.night() : AppThemeData.light(),
         );
         await tester.dragUntilVisible(
-          find.text('SUGGESTED RACES'),
+          find.text('Suggested Races'),
           find.byType(Scrollable).first,
           const Offset(0, -200),
         );
@@ -204,10 +204,10 @@ void main() {
       });
     }
 
-    testWidgets('the SUGGESTED RACES header keeps its padding', (tester) async {
+    testWidgets('the Suggested Races header keeps its padding', (tester) async {
       await _pumpHome(tester, theme: AppThemeData.light());
       await tester.dragUntilVisible(
-        find.text('SUGGESTED RACES'),
+        find.text('Suggested Races'),
         find.byType(Scrollable).first,
         const Offset(0, -200),
       );
@@ -216,7 +216,7 @@ void main() {
       final paddings = tester
           .widgetList<Padding>(
             find.ancestor(
-              of: find.text('SUGGESTED RACES'),
+              of: find.text('Suggested Races'),
               matching: find.byType(Padding),
             ),
           )

@@ -8,19 +8,9 @@ import '../styles.dart';
 BoxDecoration referralContestPanelDecoration(BuildContext context) {
   final colors = AppColors.of(context);
   return BoxDecoration(
-    color: colors.parchment,
-    borderRadius: BorderRadius.circular(15),
-    border: Border.all(
-      color: colors.roofDark.withValues(alpha: .48),
-      width: 1.5,
-    ),
-    boxShadow: [
-      BoxShadow(
-        color: colors.roofEdge.withValues(alpha: .62),
-        offset: const Offset(0, 5),
-        blurRadius: 1,
-      ),
-    ],
+    color: colors.parchmentLight,
+    borderRadius: BorderRadius.circular(10),
+    border: Border.all(color: colors.woodDark.withValues(alpha: .28), width: 1),
   );
 }
 

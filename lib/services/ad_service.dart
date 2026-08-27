@@ -4,10 +4,12 @@ import 'dart:io' show Platform;
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:gma_mediation_liftoffmonetize/gma_mediation_liftoffmonetize.dart';
 import 'package:gma_mediation_unity/unity_privacy_api.g.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../models/interstitial_ad.dart';
+import 'ad_consent_coordinator.dart';
 import 'interstitial_ad_service.dart';
 
 enum RewardedAdPlacement {
@@ -247,8 +249,6 @@ class AdSdkInitializationSteps {
     required this.isIos,
     required this.resolveTrackingAuthorization,
     required this.setMetaTrackingEnabled,
-    required this.setUnityGdprConsent,
-    required this.setUnityCcpaConsent,
     required this.updateRequestConfiguration,
     required this.initializeMobileAds,
   });
@@ -256,8 +256,6 @@ class AdSdkInitializationSteps {
   final bool isIos;
   final Future<bool> Function() resolveTrackingAuthorization;
   final Future<void> Function(bool enabled) setMetaTrackingEnabled;
-  final Future<void> Function() setUnityGdprConsent;
-  final Future<void> Function() setUnityCcpaConsent;
   final Future<void> Function() updateRequestConfiguration;
   final Future<void> Function() initializeMobileAds;
 
@@ -276,16 +274,6 @@ class AdSdkInitializationSteps {
       }
     }
     try {
-      await setUnityGdprConsent();
-    } catch (error) {
-      debugPrint('Unity GDPR initialization failed: $error');
-    }
-    try {
-      await setUnityCcpaConsent();
-    } catch (error) {
-      debugPrint('Unity CCPA initialization failed: $error');
-    }
-    try {
       await updateRequestConfiguration();
     } catch (error) {
       debugPrint('Ad request configuration failed: $error');
@@ -296,6 +284,50 @@ class AdSdkInitializationSteps {
     } catch (error) {
       debugPrint('Mobile Ads initialization failed: $error');
       return false;
+    }
+  }
+}
+
+/// Determinate partner consent values are independently propagated before the
+/// Google Mobile Ads SDK initializes. A missing IAB value invokes no setter;
+/// an individual adapter failure cannot prevent the other adapters or AdMob
+/// from starting.
+@visibleForTesting
+class PartnerConsentPropagationSteps {
+  const PartnerConsentPropagationSteps({
+    required this.signals,
+    required this.setUnityGdprConsent,
+    required this.setUnityCcpaConsent,
+    required this.setLiftoffCcpaConsent,
+  });
+
+  final PartnerConsentSignals signals;
+  final Future<void> Function(bool optedIn) setUnityGdprConsent;
+  final Future<void> Function(bool optedIn) setUnityCcpaConsent;
+  final Future<void> Function(bool optedIn) setLiftoffCcpaConsent;
+
+  Future<void> run() async {
+    final gdpr = signals.gdprConsent;
+    if (gdpr != null) {
+      try {
+        await setUnityGdprConsent(gdpr);
+      } catch (error) {
+        debugPrint('Unity GDPR consent propagation failed: $error');
+      }
+    }
+    final ccpa = signals.ccpaConsent;
+    if (ccpa != null) {
+      try {
+        await setUnityCcpaConsent(ccpa);
+      } catch (error) {
+        debugPrint('Unity CCPA consent propagation failed: $error');
+      }
+      try {
+        // Liftoff defines true as opted in and false as opted out.
+        await setLiftoffCcpaConsent(ccpa);
+      } catch (error) {
+        debugPrint('Liftoff CCPA consent propagation failed: $error');
+      }
     }
   }
 }
@@ -368,7 +400,9 @@ class AdService
        _sdkInitializer = sdkInitializer ?? _productionSdkInitializer,
        _rewardedAdLoader = rewardedAdLoader ?? _loadGoogleRewardedAd,
        _now = now ?? DateTime.now,
-       _maxCacheAge = maxCacheAge;
+       _maxCacheAge = maxCacheAge {
+    _liveInstances.add(this);
+  }
 
   static const _metaAdsChannel = MethodChannel('com.steptracker/meta_ads');
 
@@ -478,8 +512,13 @@ class AdService
   static const _testNativeAndroid = 'ca-app-pub-3940256099942544/2247696110';
 
   static final ValueNotifier<bool> _bannerAdsEnabledNotifier =
-      ValueNotifier<bool>(true);
-  static bool _sdkOperational = true;
+      ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> _adRequestPermissionNotifier =
+      ValueNotifier<bool>(false);
+  static final Set<AdService> _liveInstances = <AdService>{};
+  static Future<bool> Function()? _consentBootstrap;
+  static bool _bannerAdsAdminEnabled = true;
+  static bool _consentAllowsAds = false;
   static bool? _testStandardBannerUnitAvailable;
   static bool? _testBoxTopBannerUnitAvailable;
   static bool? _testNativeUnitAvailable;
@@ -487,11 +526,41 @@ class AdService
   static ValueListenable<bool> get bannerAdsEnabledListenable =>
       _bannerAdsEnabledNotifier;
 
+  static ValueListenable<bool> get adRequestPermissionListenable =>
+      _adRequestPermissionNotifier;
+
+  static bool get adRequestsAllowed => _consentAllowsAds;
+
   static bool get bannerAdsRuntimeEnabled => _bannerAdsEnabledNotifier.value;
 
   static void setBannerAdsEnabled(bool enabled) {
-    if (_bannerAdsEnabledNotifier.value == enabled) return;
-    _bannerAdsEnabledNotifier.value = enabled;
+    _bannerAdsAdminEnabled = enabled;
+    _publishBannerGate();
+  }
+
+  /// Installs the one app-lifetime UMP bootstrap before any production ad path
+  /// can initialize Google Mobile Ads. Tests that inject their own initializer
+  /// remain independent of platform channels.
+  static void configureConsentBootstrap(Future<bool> Function() bootstrap) {
+    _consentBootstrap = bootstrap;
+    setConsentPermission(false);
+  }
+
+  static void setConsentPermission(bool allowed) {
+    if (_consentAllowsAds == allowed) return;
+    _consentAllowsAds = allowed;
+    _adRequestPermissionNotifier.value = allowed;
+    _publishBannerGate();
+    if (!allowed) {
+      for (final service in _liveInstances.toList(growable: false)) {
+        service._invalidateForConsentWithdrawal();
+      }
+    }
+  }
+
+  static void _publishBannerGate() {
+    _bannerAdsEnabledNotifier.value =
+        _bannerAdsAdminEnabled && _consentAllowsAds;
   }
 
   @visibleForTesting
@@ -643,22 +712,15 @@ class AdService
   /// (and web) show nothing at all. When off, [AdBannerSlot] collapses to zero
   /// size.
   static bool get bannersEnabled =>
-      _sdkOperational &&
-      bannerAdsRuntimeEnabled &&
-      !kIsWeb &&
-      _platformBannerUnitId.isNotEmpty;
+      bannerAdsRuntimeEnabled && !kIsWeb && _platformBannerUnitId.isNotEmpty;
 
   static bool get boxTopBannerEnabled =>
-      _sdkOperational &&
       bannerAdsRuntimeEnabled &&
       !kIsWeb &&
       _platformBoxTopBannerUnitId.isNotEmpty;
 
   static bool get nativeAdsEnabled =>
-      _sdkOperational &&
-      bannerAdsRuntimeEnabled &&
-      !kIsWeb &&
-      _platformNativeUnitId.isNotEmpty;
+      bannerAdsRuntimeEnabled && !kIsWeb && _platformNativeUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner for this platform (only reached in
@@ -698,19 +760,34 @@ class AdService
       RewardedAdSdkInitializer(_initializeProductionSdk);
 
   static Future<bool> ensureInitialized() async {
-    if (!_sdkOperational) return false;
-    final initialized = await _productionSdkInitializer.ensureInitialized();
-    if (!initialized && _sdkOperational) {
-      _sdkOperational = false;
-      // Every banner/native surface listens to this gate and disposes or
-      // collapses immediately when SDK bootstrap is unavailable.
-      _bannerAdsEnabledNotifier.value = false;
+    final consentBootstrap = _consentBootstrap;
+    if (consentBootstrap == null) return false;
+    final initialized = await consentBootstrap();
+    if (!initialized) {
+      setConsentPermission(false);
     }
     return initialized;
   }
 
-  static Future<bool> _initializeProductionSdk() async {
+  /// Called by [AdConsentCoordinator] only after a fresh UMP grant.
+  static Future<bool> initializeMobileAdsAfterConsent(
+    PartnerConsentSignals _,
+  ) => _productionSdkInitializer.ensureInitialized();
+
+  static Future<void> applyPartnerConsentSignals(
+    PartnerConsentSignals signals,
+  ) async {
     final unityPrivacy = UnityPrivacyApi();
+    final liftoffPrivacy = GmaMediationLiftoffmonetize();
+    await PartnerConsentPropagationSteps(
+      signals: signals,
+      setUnityGdprConsent: unityPrivacy.setGDPRConsent,
+      setUnityCcpaConsent: unityPrivacy.setCCPAConsent,
+      setLiftoffCcpaConsent: liftoffPrivacy.setCCPAStatus,
+    ).run();
+  }
+
+  static Future<bool> _initializeProductionSdk() async {
     return AdSdkInitializationSteps(
       isIos: !kIsWeb && Platform.isIOS,
       resolveTrackingAuthorization: () async {
@@ -724,8 +801,6 @@ class AdService
         'setAdvertiserTrackingEnabled',
         enabled,
       ),
-      setUnityGdprConsent: () => unityPrivacy.setGDPRConsent(false),
-      setUnityCcpaConsent: () => unityPrivacy.setCCPAConsent(false),
       updateRequestConfiguration: () async {
         if (!kDebugMode) return;
         await MobileAds.instance.updateRequestConfiguration(
@@ -785,7 +860,9 @@ class AdService
   @override
   bool get isReady {
     final context = _adContext;
-    return context != null && isReadyFor(context);
+    return AdService.adRequestsAllowed &&
+        context != null &&
+        isReadyFor(context);
   }
 
   @override
@@ -827,6 +904,7 @@ class AdService
   @override
   Future<void> warm(RewardedAdContext context) {
     if (_disposed ||
+        !AdService.adRequestsAllowed ||
         !isSupported ||
         context.userId.trim().isEmpty ||
         context.customData.isEmpty) {
@@ -915,6 +993,7 @@ class AdService
 
   bool _accepts(RewardedAdContext context, int generation) =>
       !_disposed &&
+      AdService.adRequestsAllowed &&
       generation == _generation &&
       _activeContext == context &&
       (_desiredContext == null || _desiredContext == context);
@@ -922,7 +1001,10 @@ class AdService
   @override
   bool isReadyFor(RewardedAdContext context) {
     _evictStale();
-    return !_disposed && _ad != null && _adContext == context;
+    return !_disposed &&
+        AdService.adRequestsAllowed &&
+        _ad != null &&
+        _adContext == context;
   }
 
   void _evictStale() {
@@ -979,10 +1061,18 @@ class AdService
     _loadedAt = null;
   }
 
+  void _invalidateForConsentWithdrawal() {
+    if (_disposed) return;
+    _generation++;
+    _desiredContext = null;
+    _disposeReadyAd();
+  }
+
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _liveInstances.remove(this);
     _generation++;
     _desiredContext = null;
     _disposeReadyAd();

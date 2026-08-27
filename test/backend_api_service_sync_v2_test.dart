@@ -234,6 +234,78 @@ void main() {
       expect(api.syncV2Support, EndpointSupport.supported);
     });
 
+    test('parses optional global event summary work receipt defensively', () async {
+      final body = jsonDecode(successBody('CURRENT')) as Map<String, dynamic>;
+      body['globalEventSummaryWork'] = {
+        'id': 'work-1',
+        'state': 'WAITING_RACES',
+        'expiresAt': '2026-08-27T04:00:00.000Z',
+      };
+      final api = BackendApiService(
+        httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
+      );
+
+      final result = await api.recordStepSyncV2(
+        identityToken: 't',
+        idempotencyKey: 'work-receipt',
+        payload: payload(),
+      );
+
+      expect(result.globalEventSummaryWork?.id, 'work-1');
+      expect(
+        result.globalEventSummaryWork?.state,
+        GlobalEventSummaryWorkState.waitingRaces,
+      );
+      expect(result.globalEventSummaryWork?.expiresAt.isUtc, isTrue);
+    });
+
+    test('parses existing active work from a later no-op sync response', () async {
+      final body = jsonDecode(successBody('DEFERRED')) as Map<String, dynamic>;
+      body['globalEventSummaryWork'] = {
+        'id': 'existing-work-1',
+        'state': 'WAITING_RACES',
+        'expiresAt': '2026-08-27T04:00:00.000Z',
+      };
+      final api = BackendApiService(
+        httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
+      );
+
+      final result = await api.recordStepSyncV2(
+        identityToken: 't',
+        idempotencyKey: 'later-existing-work',
+        payload: payload(),
+        homePull: true,
+      );
+
+      expect(result.kind, StepSyncV2Kind.deferred);
+      expect(result.globalEventSummaryWork?.id, 'existing-work-1');
+      expect(
+        result.globalEventSummaryWork?.state,
+        GlobalEventSummaryWorkState.waitingRaces,
+      );
+    });
+
+    test('malformed summary work receipt does not invalidate sync success', () async {
+      final body = jsonDecode(successBody('CURRENT')) as Map<String, dynamic>;
+      body['globalEventSummaryWork'] = {
+        'id': 'work-1',
+        'state': 'A_NEW_UNKNOWN_STATE',
+        'expiresAt': null,
+      };
+      final api = BackendApiService(
+        httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
+      );
+
+      final result = await api.recordStepSyncV2(
+        identityToken: 't',
+        idempotencyKey: 'bad-work-receipt',
+        payload: payload(),
+      );
+
+      expect(result.kind, StepSyncV2Kind.current);
+      expect(result.globalEventSummaryWork, isNull);
+    });
+
     test('Home pull sends the exact opt-in header and parses cooldown', () async {
       final http = _FakeHttpClient([
         _Scripted(
@@ -526,6 +598,64 @@ void main() {
       );
       expect(r.state, RaceResolutionState.unknown);
       expect(r.isTerminal, isFalse);
+    });
+  });
+
+  group('fetchGlobalEventSummaryWorkStatus', () {
+    test('parses every locked state and uses the owner-only path', () async {
+      const wireStates = [
+        'WAITING_SYNC',
+        'QUEUED',
+        'PROCESSING',
+        'WAITING_RACES',
+        'CREATED',
+        'ALL_ZERO',
+        'UNSCORABLE',
+        'EXPIRED_UNDELIVERED',
+      ];
+      for (final wireState in wireStates) {
+        final http = _FakeHttpClient([
+          _Scripted(
+            200,
+            jsonEncode({
+              'state': wireState,
+              'expiresAt': '2026-08-27T04:00:00.000Z',
+            }),
+          ),
+        ]);
+        final api = BackendApiService(httpClient: http);
+
+        final result = await api.fetchGlobalEventSummaryWorkStatus(
+          identityToken: 't',
+          workId: 'work-1',
+        );
+
+        expect(result, isNotNull, reason: wireState);
+        expect(
+          http.requests.single.uri.path,
+          '/home/global-event-summary-work/work-1',
+        );
+      }
+    });
+
+    test('not-found, auth, invalid id, and malformed success fail soft', () async {
+      for (final script in [
+        _Scripted(404, '{"code":"NOT_FOUND"}'),
+        _Scripted(401, '{"code":"UNAUTHORIZED"}'),
+        _Scripted(400, '{"code":"INVALID_ID"}'),
+        _Scripted(200, '{"state":"WAITING_RACES"}'),
+      ]) {
+        final api = BackendApiService(
+          httpClient: _FakeHttpClient([script]),
+        );
+        expect(
+          await api.fetchGlobalEventSummaryWorkStatus(
+            identityToken: 't',
+            workId: 'work-1',
+          ),
+          isNull,
+        );
+      }
     });
   });
 

@@ -214,6 +214,67 @@ flutter build ipa --release \
 > box-reroll rewarded unit (`/9184830227`, created 2026-08-09) live under the
 > same iOS AdMob app.
 
+### Liftoff Monetize mediation and UMP release gate
+
+Liftoff is an AdMob **bidding** source. Its application and placement IDs live
+only in the Liftoff/AdMob dashboards; never add them as dart-defines or commit
+them to application code. The iOS mappings activated for this release are:
+
+| Format | Liftoff value |
+| --- | --- |
+| Application ID | `6a8fa46cee6b3074e0dd0999` |
+| Interstitial placement | `LIFTOFF_INTERSTITIAL-9752413` |
+| Rewarded placement | `LIFTOFF_REWARDED-3621920` |
+| Banner placement | `LIFTOFF_BANNER-2753052` |
+
+The two iOS interstitial AdMob units share the interstitial mapping, all three
+iOS rewarded units share the rewarded mapping, and both iOS banner units share
+the banner mapping. Native demand is not mapped in this release. Keep bidding
+floors unset initially. The public seller authorization must remain available
+at `https://barastep.com/app-ads.txt`:
+
+```text
+vungle.com, 6a8fa2a9a58d1846183babbd, DIRECT, c107d686becd2d77
+```
+
+Before every iOS or Android release carrying ads:
+
+- [ ] In AdMob Privacy & messaging, confirm Liftoff is selected in both the
+      European regulations and US-state ad-partner lists.
+- [ ] Confirm the published UMP messages are active for the production iOS and
+      Android AdMob app IDs. Bara refreshes UMP on every launch and does not
+      initialize/request ads until the fresh result allows it.
+- [ ] Verify the conditional `PRIVACY AND COOKIE SETTINGS` action in Settings
+      opens Google's privacy-options form when UMP requires an entry point.
+- [ ] Review App Store privacy nutrition labels and Play Data safety against
+      Liftoff's current SDK disclosures; record the review in the release notes.
+- [ ] Enable Liftoff test mode only for device validation. In Ad Inspector,
+      single-source-test every mapped iOS banner, rewarded, and interstitial
+      unit and confirm rewarded SSV behavior is unchanged. Disable Liftoff test
+      mode and verify normal bidding status before release.
+- [ ] On physical iOS and Android devices, use debug-only UMP geography/test
+      device settings to verify first-run form, accepted, denied/limited, and
+      privacy-options flows. Remove every debug override before archiving.
+- [ ] Inspect `ios/Podfile.lock` for
+      `GoogleMobileAdsMediationVungle (7.7.6.0)` and `VungleAds (7.7.6)` and run
+      Android `dependencyInsight` for adapter `7.7.7.0` and SDK `7.7.7`.
+- [ ] Fetch `https://barastep.com/app-ads.txt` immediately before submission and
+      confirm the Vungle seller line above is still public.
+
+Android ships the same Liftoff adapter and UMP path but has no active Liftoff
+dashboard mapping yet. Later activation is dashboard-only: create the Android
+application plus bidding banner/rewarded/interstitial placements, record their
+IDs below, add the matching AdMob mappings, then repeat physical-device test
+mode and Ad Inspector validation. No code, flag, dart-define, or backend change
+is needed.
+
+```text
+Android Liftoff Application ID: <pending>
+Android Liftoff Interstitial Reference ID: <pending>
+Android Liftoff Rewarded Reference ID: <pending>
+Android Liftoff Banner Reference ID: <pending>
+```
+
 Upload via Transporter to "Bara" in App Store Connect.
 
 ### 5. Submit for App Store review

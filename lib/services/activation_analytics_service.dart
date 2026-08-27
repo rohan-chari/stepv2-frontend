@@ -191,6 +191,7 @@ class ActivationAnalyticsService {
 
   final BackendApiService _api;
   final bool _isIos;
+  static Future<void>? _recordInFlight;
   Future<void>? _flushInFlight;
   String? _activeUserId;
   int _accountGeneration = 0;
@@ -238,6 +239,31 @@ class ActivationAnalyticsService {
     String? sessionId,
     String? ownerUserId,
     Map<String, String> context = const {},
+  }) {
+    final capturedContext = Map<String, String>.unmodifiable(context);
+    Future<void> run() => _record(
+      name,
+      sessionId: sessionId,
+      ownerUserId: ownerUserId,
+      context: capturedContext,
+    );
+    final active = _recordInFlight;
+    final operation = active == null
+        ? run()
+        : active.catchError((_) {}).then((_) => run());
+    late final Future<void> tracked;
+    tracked = operation.whenComplete(() {
+      if (identical(_recordInFlight, tracked)) _recordInFlight = null;
+    });
+    _recordInFlight = tracked;
+    return tracked;
+  }
+
+  Future<void> _record(
+    String name, {
+    required String? sessionId,
+    required String? ownerUserId,
+    required Map<String, String> context,
   }) async {
     if (!allowedEventNames.contains(name)) return;
     if (name == 'health_connected') {

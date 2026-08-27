@@ -487,7 +487,7 @@ void main() {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
       await tester.pump();
 
-      expect(find.text('SUGGESTED RACES'), findsOneWidget);
+      expect(find.text('Suggested Races'), findsOneWidget);
       expect(find.text('RACES'), findsNothing);
       final dailyX = tester.getTopLeft(find.text('DAILY')).dx;
       final publicX = tester.getTopLeft(find.text('PUBLIC')).dx;

@@ -18,7 +18,7 @@ import 'tutorial_screen.dart' show TutorialMockPage;
 /// Spotlight anchors are passed down as optional `GlobalKey`s that the real
 /// screens expose; the overlay measures them by [keys]. The bottom
 /// [WoodenTabBar] is reproduced (and wrapped in [AbsorbPointer]) so the framing
-/// matches the live app and the Ranked tab can be spotlighted.
+/// matches the live app and the Boards tab can be spotlighted.
 class TutorialRealHost extends StatelessWidget {
   const TutorialRealHost({
     super.key,
@@ -36,7 +36,7 @@ class TutorialRealHost extends StatelessWidget {
   int? get _tabIndex => switch (page) {
     TutorialMockPage.home => 0,
     TutorialMockPage.races => 1,
-    TutorialMockPage.friends => 3,
+    TutorialMockPage.friends => 2,
     TutorialMockPage.profile => null,
     // Race detail is a pushed screen in the real app — no bottom bar.
     TutorialMockPage.raceDetail => null,
@@ -67,20 +67,17 @@ class TutorialRealHost extends StatelessWidget {
               child: WoodenTabBar(
                 currentIndex: tabIndex,
                 onTap: (_) {},
-                // Index 3 = Friends; keyed so the tutorial can spotlight the
+                // Index 2 = Friends; keyed so the tutorial can spotlight the
                 // real tab. Mirrors MainShell's live tab set.
-                itemKeys: [null, null, null, keys['nav.friends'], null],
+                itemKeys: [null, null, keys['nav.friends'], null, null],
                 items: const [
                   WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
                   WoodenTabItem(
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
-                  WoodenTabItem(
-                    icon: Icons.emoji_events_rounded,
-                    label: 'Boards',
-                  ),
                   WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
+                  WoodenTabItem(icon: Icons.bar_chart_rounded, label: 'Boards'),
                   WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
                 ],
               ),
@@ -103,6 +100,9 @@ class TutorialRealHost extends StatelessWidget {
           displayName: 'Rohan',
           authService: authService,
           backendApiService: api,
+          // Keep the tutorial fixture representative of the real header so
+          // the unread badge is exercised in the Home preview too.
+          unreadNotificationCount: 2,
           getCoinsAdController: _tutorialUnsupportedRewardedAds,
           onRefresh: () async {},
           onEnableHealth: () {},
@@ -122,6 +122,7 @@ class TutorialRealHost extends StatelessWidget {
           // The shared ticket stays visible, but a preview tap must not escape
           // the tutorial route.
           onOpenLeaderboardTab: () {},
+          onOpenNotifications: () {},
           onOpenProfile: () {},
         );
       case TutorialMockPage.races:

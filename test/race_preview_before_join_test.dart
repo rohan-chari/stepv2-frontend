@@ -375,7 +375,7 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('narrow large-text payout action opens its detail sheet', (
+  testWidgets('narrow top-right payout chip opens its detail sheet', (
     tester,
   ) async {
     await _pump(
@@ -385,7 +385,7 @@ void main() {
       textScaler: const TextScaler.linear(1.2),
     );
 
-    final payouts = find.byKey(const Key('race-payouts-open'));
+    final payouts = find.byKey(const Key('race-prize-pool-board'));
     expect(payouts, findsOneWidget);
     expect(tester.getSize(payouts).height, greaterThanOrEqualTo(44));
     await tester.tap(payouts);

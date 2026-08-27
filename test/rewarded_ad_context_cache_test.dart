@@ -65,6 +65,7 @@ void main() {
     late _FakeLoader loader;
 
     setUp(() {
+      AdService.setConsentPermission(true);
       now = DateTime(2026, 8, 25, 12);
       initializeCalls = 0;
       initializer = RewardedAdSdkInitializer(() async {
@@ -73,6 +74,7 @@ void main() {
       });
       loader = _FakeLoader();
     });
+    tearDown(() => AdService.setConsentPermission(false));
 
     AdService service() => AdService(
       adUnitId: 'real-unit',

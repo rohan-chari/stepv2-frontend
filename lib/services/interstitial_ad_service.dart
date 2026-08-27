@@ -229,6 +229,7 @@ abstract class InterstitialPresentationCoordinator {
   String get ownerUserId;
   String get sessionId;
   Future<void> flushPendingImpressions();
+  Future<void> warm(InterstitialPlacement placement);
   Future<void> prime(InterstitialPlacement placement);
   bool presentIfReady(
     InterstitialPlacement placement, {
@@ -279,6 +280,38 @@ class _EligibilityCacheEntry {
   }
 }
 
+enum _InterstitialLoadPhase { idle, loading, ready }
+
+class _InterstitialLoadEntry {
+  _InterstitialLoadEntry(this.placement);
+
+  final InterstitialPlacement placement;
+  String unitId = '';
+  _InterstitialLoadPhase phase = _InterstitialLoadPhase.idle;
+  Future<void>? inFlight;
+  InterstitialAdController? ad;
+  DateTime? loadedAt;
+  int generation = 0;
+  DateTime? lastFailureAt;
+  DateTime? retryDueAt;
+  int attemptCount = 0;
+  bool? lastLoadSucceeded;
+  Timer? retryTimer;
+  bool restartAfterInFlight = false;
+}
+
+class _InterstitialPermitFlow {
+  _InterstitialPermitFlow({required this.placement, required this.generation});
+
+  final InterstitialPlacement placement;
+  final int generation;
+  Future<void>? primeFuture;
+  InterstitialAdController? boundAd;
+  InterstitialPermitGrant? grant;
+  String? appVersion;
+  String? lastReadinessReason;
+}
+
 class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   InterstitialAdCoordinator({
     required this.ownerUserId,
@@ -295,6 +328,8 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
     InterstitialAdLoader? loader,
     String? sessionId,
     DateTime? sessionStartedAt,
+    Future<String> Function()? appVersionProvider,
+    List<Duration>? retryDelays,
   }) : _identityToken = identityToken,
        _api = backendApiService,
        _analytics = analytics,
@@ -310,8 +345,15 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
        _now = now ?? DateTime.now,
        _tracker = fullScreenTracker ?? FullScreenPresentationTracker.production,
        _loader = loader ?? _loadGoogleInterstitial,
+       _appVersionProvider = appVersionProvider ?? _appVersion,
+       _retryDelays =
+           retryDelays ?? const [Duration(seconds: 30), Duration(minutes: 2)],
        _sessionId = sessionId ?? _uuid(),
-       _sessionStartedAt = sessionStartedAt?.toUtc() ?? DateTime.now().toUtc();
+       _sessionStartedAt = sessionStartedAt?.toUtc() ?? DateTime.now().toUtc() {
+    AdService.adRequestPermissionListenable.addListener(
+      _onAdRequestPermissionChanged,
+    );
+  }
 
   static const _queueKey = 'interstitial_impression_facts_v1';
   static const _maxFacts = 20;
@@ -330,20 +372,23 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   final DateTime Function() _now;
   final FullScreenPresentationTracker _tracker;
   final InterstitialAdLoader _loader;
+  final Future<String> Function() _appVersionProvider;
+  final List<Duration> _retryDelays;
   String _sessionId;
   DateTime _sessionStartedAt;
   DateTime? _backgroundedAt;
-  InterstitialPlacement? _placement;
-  InterstitialAdController? _ad;
-  DateTime? _loadedAt;
-  String? _loadedAdUnitId;
-  InterstitialPermitGrant? _grant;
-  String? _grantAppVersion;
   bool _disposed = false;
+  bool _foreground = true;
   bool _showPending = false;
+  bool _impressionConfirmedThisSession = false;
   bool _backendUnsupported = false;
-  String? _lastSkipReason;
-  int _generation = 0;
+  int _flowGeneration = 0;
+  _InterstitialPermitFlow? _flow;
+  final Set<String> _cancelledPermitIds = <String>{};
+  final Map<InterstitialPlacement, _InterstitialLoadEntry> _loads =
+      <InterstitialPlacement, _InterstitialLoadEntry>{};
+  final Map<InterstitialPlacement, String> _lastReadinessReasons =
+      <InterstitialPlacement, String>{};
   final Map<InterstitialPlacement, _EligibilityCacheEntry> _eligibilityCache =
       <InterstitialPlacement, _EligibilityCacheEntry>{};
 
@@ -351,33 +396,239 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   String get sessionId => _sessionId;
 
   @override
+  Future<void> warm(InterstitialPlacement placement) {
+    final adUnitId = _adUnitIdForPlacement(placement);
+    if (_disposed ||
+        !_foreground ||
+        _impressionConfirmedThisSession ||
+        _tracker.wasPresentedRecentlySync ||
+        !AdService.adRequestsAllowed ||
+        adUnitId.isEmpty ||
+        _platform == 'other') {
+      return Future<void>.value();
+    }
+
+    final entry = _loads.putIfAbsent(
+      placement,
+      () => _InterstitialLoadEntry(placement),
+    );
+    if (entry.unitId != adUnitId) {
+      entry.generation++;
+      if (entry.inFlight != null) entry.restartAfterInFlight = true;
+      entry.retryTimer?.cancel();
+      entry.retryTimer = null;
+      entry.retryDueAt = null;
+      entry.attemptCount = 0;
+      _disposeEntryAd(entry);
+      entry.unitId = adUnitId;
+    }
+    _evictExpiredEntry(entry, refresh: false);
+    if (entry.ad != null) return Future<void>.value();
+    final inFlight = entry.inFlight;
+    if (inFlight != null) return inFlight;
+    if (entry.attemptCount >= 3) return Future<void>.value();
+
+    final now = _now().toUtc();
+    final retryDueAt = entry.retryDueAt;
+    if (retryDueAt != null && now.isBefore(retryDueAt)) {
+      _scheduleRetryTimer(entry);
+      return Future<void>.value();
+    }
+
+    entry.retryTimer?.cancel();
+    entry.retryTimer = null;
+    entry.retryDueAt = null;
+    entry.restartAfterInFlight = false;
+    entry.phase = _InterstitialLoadPhase.loading;
+    entry.attemptCount++;
+    final generation = ++entry.generation;
+    final completer = Completer<void>();
+    entry.inFlight = completer.future;
+    unawaited(
+      _performWarmLoad(entry, adUnitId, generation).whenComplete(() {
+        if (identical(entry.inFlight, completer.future)) {
+          entry.inFlight = null;
+        }
+        if (!completer.isCompleted) completer.complete();
+        if (entry.retryDueAt != null) _scheduleRetryTimer(entry);
+        if (entry.restartAfterInFlight &&
+            !_disposed &&
+            _foreground &&
+            AdService.adRequestsAllowed) {
+          entry.restartAfterInFlight = false;
+          unawaited(warm(entry.placement));
+        }
+      }),
+    );
+    return completer.future;
+  }
+
+  Future<void> _performWarmLoad(
+    _InterstitialLoadEntry entry,
+    String adUnitId,
+    int generation,
+  ) async {
+    InterstitialAdController? ad;
+    try {
+      ad = await _loader(adUnitId);
+    } catch (_) {
+      ad = null;
+    }
+    if (!_acceptsLoadCallback(entry, adUnitId, generation)) {
+      ad?.dispose();
+      return;
+    }
+
+    if (ad == null) {
+      entry.phase = _InterstitialLoadPhase.idle;
+      entry.lastLoadSucceeded = false;
+      entry.lastFailureAt = _now().toUtc();
+      _event(
+        'interstitial_load_failed',
+        entry.placement,
+        context: const {'result': 'failed'},
+      );
+      _queueRetry(entry);
+      return;
+    }
+
+    _disposeEntryAd(entry);
+    entry.ad = ad;
+    entry.loadedAt = _now().toUtc();
+    entry.phase = _InterstitialLoadPhase.ready;
+    entry.lastLoadSucceeded = true;
+    entry.lastFailureAt = null;
+    entry.retryDueAt = null;
+    entry.attemptCount = 0;
+    entry.retryTimer?.cancel();
+    entry.retryTimer = null;
+    _event(
+      'interstitial_load_succeeded',
+      entry.placement,
+      context: const {'result': 'completed'},
+    );
+  }
+
+  bool _acceptsLoadCallback(
+    _InterstitialLoadEntry entry,
+    String adUnitId,
+    int generation,
+  ) =>
+      !_disposed &&
+      AdService.adRequestsAllowed &&
+      entry.generation == generation &&
+      entry.unitId == adUnitId &&
+      _adUnitIdForPlacement(entry.placement) == adUnitId;
+
+  void _queueRetry(_InterstitialLoadEntry entry) {
+    if (_disposed ||
+        _impressionConfirmedThisSession ||
+        entry.attemptCount >= 3) {
+      return;
+    }
+    final index = entry.attemptCount - 1;
+    if (index < 0 || index >= _retryDelays.length) return;
+    entry.retryDueAt = _now().toUtc().add(_retryDelays[index]);
+    if (_foreground) _scheduleRetryTimer(entry);
+  }
+
+  void _scheduleRetryTimer(_InterstitialLoadEntry entry) {
+    if (_disposed ||
+        !_foreground ||
+        _impressionConfirmedThisSession ||
+        !AdService.adRequestsAllowed ||
+        entry.ad != null ||
+        entry.inFlight != null ||
+        entry.attemptCount >= 3 ||
+        entry.retryTimer != null) {
+      return;
+    }
+    final dueAt = entry.retryDueAt;
+    if (dueAt == null) return;
+    final remaining = dueAt.difference(_now().toUtc());
+    entry.retryTimer = Timer(
+      remaining.isNegative ? Duration.zero : remaining,
+      () {
+        entry.retryTimer = null;
+        if (_now().toUtc().isBefore(dueAt)) {
+          _scheduleRetryTimer(entry);
+          return;
+        }
+        unawaited(warm(entry.placement));
+      },
+    );
+  }
+
+  @override
   Future<void> prime(InterstitialPlacement placement) async {
     final adUnitId = _adUnitIdForPlacement(placement);
-    if (_disposed || adUnitId.isEmpty || _platform == 'other') return;
-    final priorPlacement = _placement;
-    if (priorPlacement != null) {
-      await cancel(priorPlacement);
+    if (_disposed ||
+        !_foreground ||
+        _showPending ||
+        _impressionConfirmedThisSession ||
+        !AdService.adRequestsAllowed ||
+        adUnitId.isEmpty ||
+        _platform == 'other') {
+      return;
     }
-    _lastSkipReason = null;
-    final generation = ++_generation;
-    // Claim the flow before the first await so a route exit, coverage loss, or
-    // account teardown can invalidate eligibility/load work already in flight.
-    _placement = placement;
+
+    final existingEntry = _loads[placement];
+    final Future<void>? warmFuture = existingEntry?.ad != null
+        ? Future<void>.value()
+        : existingEntry?.inFlight;
+    final existing = _flow;
+    if (existing != null) {
+      if (existing.placement == placement) {
+        final inFlight = existing.primeFuture;
+        if (inFlight != null) await inFlight;
+        return;
+      }
+      if (_flowHasUsablePermit(existing)) {
+        _lastReadinessReasons[placement] = 'permit_active';
+        await (warmFuture ?? warm(placement));
+        return;
+      }
+      await _invalidateFlow(existing);
+    }
+
+    final flow = _InterstitialPermitFlow(
+      placement: placement,
+      generation: ++_flowGeneration,
+    );
+    _flow = flow;
+    final primeFuture = _preparePermitFlow(flow, warmFuture);
+    flow.primeFuture = primeFuture;
+    try {
+      await primeFuture;
+    } finally {
+      if (identical(_flow, flow)) flow.primeFuture = null;
+    }
+  }
+
+  Future<void> _preparePermitFlow(
+    _InterstitialPermitFlow flow,
+    Future<void>? warmFuture,
+  ) async {
+    final placement = flow.placement;
     await flushPendingImpressions();
-    if (!_accepts(generation, placement)) return;
+    if (!_acceptsFlow(flow)) return;
     if (_backendUnsupported) {
-      _lastSkipReason = 'backend_unsupported';
+      _setFlowReason(flow, 'backend_unsupported');
       return;
     }
     if (await _tracker.wasPresentedRecently()) {
-      _lastSkipReason = 'recent_fullscreen';
+      if (!_acceptsFlow(flow)) return;
+      _setFlowReason(flow, 'recent_fullscreen');
       return;
     }
+    if (!_acceptsFlow(flow)) return;
     final localCapReason = await _localCapReason();
+    if (!_acceptsFlow(flow)) return;
     if (localCapReason != null) {
-      _lastSkipReason = localCapReason;
+      _setFlowReason(flow, localCapReason);
       return;
     }
+
     try {
       String? effectiveTimeZone;
       try {
@@ -385,7 +636,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
       } catch (_) {
         effectiveTimeZone = null;
       }
-      if (!_accepts(generation, placement)) return;
+      if (!_acceptsFlow(flow)) return;
       var eligibility = effectiveTimeZone == null
           ? null
           : _cachedEligibility(placement, effectiveTimeZone);
@@ -401,42 +652,34 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
       }
       if (!_api.interstitialSupported) {
         _backendUnsupported = true;
-        _lastSkipReason = 'backend_unsupported';
+        _setFlowReason(flow, 'backend_unsupported');
         return;
       }
-      if (!_accepts(generation, placement)) return;
+      if (!_acceptsFlow(flow)) return;
       if (fetchedEligibility && effectiveTimeZone != null) {
         _cacheEligibility(placement, eligibility, effectiveTimeZone);
       }
       if (!eligibility.eligible) {
-        _lastSkipReason = eligibility.reason ?? 'backend_unavailable';
+        _setFlowReason(flow, eligibility.reason ?? 'backend_unavailable');
         return;
       }
-      final ad = await _loader(adUnitId);
-      if (!_accepts(generation, placement)) {
-        ad?.dispose();
+
+      await (warmFuture ?? warm(placement));
+      if (!_acceptsFlow(flow)) return;
+      final entry = _loads[placement];
+      _evictExpiredEntry(entry, refresh: true);
+      if (!_acceptsFlow(flow)) return;
+      final ad = entry?.ad;
+      if (entry == null ||
+          ad == null ||
+          entry.unitId != _adUnitIdForPlacement(placement)) {
+        _setFlowReason(flow, 'not_ready');
         return;
       }
-      if (ad == null) {
-        _event(
-          'interstitial_load_failed',
-          placement,
-          context: const {'result': 'failed'},
-        );
-        return;
-      }
-      _disposeReady();
-      _ad = ad;
-      _loadedAt = _now().toUtc();
-      _loadedAdUnitId = adUnitId;
-      _placement = placement;
-      _event(
-        'interstitial_load_succeeded',
-        placement,
-        context: const {'result': 'completed'},
-      );
-      final version = await _appVersion();
-      if (!_accepts(generation, placement)) return;
+      flow.boundAd = ad;
+
+      final version = await _appVersionProvider();
+      if (!_acceptsFlow(flow) || !identical(entry.ad, ad)) return;
       final grant = await _api.createInterstitialPermit(
         identityToken: _identityToken,
         placement: placement,
@@ -446,42 +689,49 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
         platform: _platform,
         now: _now().toUtc(),
       );
-      if (!_accepts(generation, placement)) {
+      if (!_acceptsFlow(flow) || !identical(entry.ad, ad)) {
         if (grant.permit != null) {
-          unawaited(
-            _api.cancelInterstitialPermit(
-              identityToken: _identityToken,
-              permitId: grant.permit!.id,
-            ),
-          );
+          await _cancelPermitOnce(grant.permit!.id);
         }
         return;
       }
       if (!grant.eligible || grant.permit == null) {
-        _lastSkipReason = grant.reason ?? 'not_ready';
-        _disposeReady();
+        _setFlowReason(flow, grant.reason ?? 'not_ready');
         return;
       }
-      _grant = grant;
-      _grantAppVersion = version;
+      flow.grant = grant;
+      flow.appVersion = version;
+      flow.lastReadinessReason = null;
+      _lastReadinessReasons.remove(placement);
     } on ApiException catch (error) {
       if (error.statusCode == 404 || error.statusCode == 405) {
         _backendUnsupported = true;
-        _lastSkipReason = 'backend_unsupported';
+        _setFlowReason(flow, 'backend_unsupported');
       } else {
-        _lastSkipReason = 'backend_unavailable';
+        _setFlowReason(flow, 'backend_unavailable');
       }
-      _disposeReady();
     } catch (_) {
-      _lastSkipReason = 'backend_unavailable';
-      _disposeReady();
+      _setFlowReason(flow, 'backend_unavailable');
     }
   }
 
-  bool _accepts(int generation, InterstitialPlacement placement) =>
+  bool _acceptsFlow(_InterstitialPermitFlow flow) =>
       !_disposed &&
-      generation == _generation &&
-      (_placement == null || _placement == placement);
+      _foreground &&
+      AdService.adRequestsAllowed &&
+      identical(_flow, flow) &&
+      flow.generation == _flowGeneration;
+
+  bool _flowHasUsablePermit(_InterstitialPermitFlow flow) {
+    final permit = flow.grant?.permit;
+    return permit != null && permit.canBeginShow(_now().toUtc());
+  }
+
+  void _setFlowReason(_InterstitialPermitFlow flow, String reason) {
+    if (!_acceptsFlow(flow)) return;
+    flow.lastReadinessReason = reason;
+    _lastReadinessReasons[flow.placement] = reason;
+  }
 
   InterstitialEligibility? _cachedEligibility(
     InterstitialPlacement placement,
@@ -535,27 +785,32 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
       placement,
       context: const {'result': 'back_exit'},
     );
-    _evictExpired();
-    final grant = _grant;
+    final entry = _loads[placement];
+    _evictExpiredEntry(entry, refresh: true);
+    final flow = _flow;
+    final grant = flow?.grant;
     final permit = grant?.permit;
+    final ad = entry?.ad;
     String? skipReason;
     if (_disposed) {
       skipReason = 'account_changed';
+    } else if (!AdService.adRequestsAllowed) {
+      skipReason = 'not_ready';
     } else if (_adUnitIdForPlacement(placement).isEmpty) {
       skipReason = 'unconfigured';
     } else if (excludedFlow) {
       skipReason = 'excluded_flow';
     } else if (rewardedPresented || _tracker.wasPresentedRecentlySync) {
       skipReason = 'recent_fullscreen';
-    } else if (_backendUnsupported) {
-      skipReason = 'backend_unsupported';
+      if (rewardedPresented && entry != null) _disposeEntryAd(entry);
     } else if (_showPending ||
-        _ad == null ||
+        ad == null ||
         permit == null ||
-        _placement != placement ||
-        _loadedAdUnitId != _adUnitIdForPlacement(placement) ||
+        flow?.placement != placement ||
+        !identical(flow?.boundAd, ad) ||
+        entry?.unitId != _adUnitIdForPlacement(placement) ||
         !permit.canBeginShow(_now().toUtc())) {
-      skipReason = _lastSkipReason ?? 'not_ready';
+      skipReason = 'not_ready';
     }
     if (skipReason != null) {
       _event(
@@ -569,17 +824,20 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
       if (!_showPending) unawaited(cancel(placement));
       return false;
     }
-    final ad = _ad!;
-    final appVersion = _grantAppVersion ?? 'unknown';
-    _ad = null;
-    _loadedAt = null;
+    final appVersion = flow?.appVersion ?? 'unknown';
+    entry!.ad = null;
+    entry.loadedAt = null;
+    entry.phase = _InterstitialLoadPhase.idle;
+    flow!.boundAd = null;
+    _flow = null;
+    _flowGeneration++;
     _showPending = true;
     _event(
       'interstitial_show_attempted',
       placement,
       context: const {'result': 'completed'},
     );
-    unawaited(_show(ad, grant!, appVersion));
+    unawaited(_show(ad!, grant!, appVersion));
     return true;
   }
 
@@ -590,12 +848,19 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   ) async {
     final permit = grant.permit!;
     var impressionRecorded = false;
+    var showConfirmed = false;
+    var showFailed = false;
     try {
       final outcome = await ad.show(
-        onShowed: () => unawaited(_tracker.recordPresented()),
+        onShowed: () {
+          showConfirmed = true;
+          unawaited(_tracker.recordPresented());
+        },
         onImpression: () {
           if (impressionRecorded) return;
           impressionRecorded = true;
+          _impressionConfirmedThisSession = true;
+          _suppressInventoryAfterImpression();
           unawaited(_recordImpression(grant, appVersion));
         },
       );
@@ -606,6 +871,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
           context: const {'result': 'dismissed'},
         );
       } else {
+        showFailed = true;
         _event(
           'interstitial_show_failed',
           permit.placement,
@@ -613,6 +879,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
         );
       }
     } catch (_) {
+      showFailed = true;
       _event(
         'interstitial_show_failed',
         permit.placement,
@@ -621,17 +888,31 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
     } finally {
       ad.dispose();
       _showPending = false;
-      _grant = null;
-      _grantAppVersion = null;
-      _placement = null;
       if (!impressionRecorded) {
-        unawaited(
-          _api.cancelInterstitialPermit(
-            identityToken: _identityToken,
-            permitId: permit.id,
-          ),
-        );
+        unawaited(_cancelPermitOnce(permit.id));
       }
+      if (showFailed && !showConfirmed && !impressionRecorded) {
+        final entry = _loads.putIfAbsent(
+          permit.placement,
+          () => _InterstitialLoadEntry(permit.placement),
+        );
+        entry.unitId = _adUnitIdForPlacement(permit.placement);
+        entry.phase = _InterstitialLoadPhase.idle;
+        entry.lastLoadSucceeded = false;
+        entry.lastFailureAt = _now().toUtc();
+        entry.attemptCount = 1;
+        _queueRetry(entry);
+      }
+    }
+  }
+
+  void _suppressInventoryAfterImpression() {
+    for (final entry in _loads.values) {
+      entry.retryTimer?.cancel();
+      entry.retryTimer = null;
+      entry.retryDueAt = null;
+      entry.generation++;
+      _disposeEntryAd(entry);
     }
   }
 
@@ -805,62 +1086,139 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
 
   @override
   Future<void> cancel(InterstitialPlacement placement) async {
-    if (_placement != placement) return;
-    _generation++;
-    final permitId = _grant?.permit?.id;
-    _disposeReady();
-    _placement = null;
-    _grant = null;
-    _grantAppVersion = null;
-    if (permitId != null) {
-      try {
-        await _api.cancelInterstitialPermit(
-          identityToken: _identityToken,
-          permitId: permitId,
-        );
-      } catch (_) {}
-    }
+    final flow = _flow;
+    if (flow == null || flow.placement != placement) return;
+    await _invalidateFlow(flow);
   }
 
-  void _evictExpired() {
-    final loadedAt = _loadedAt;
-    if (loadedAt != null && _now().toUtc().difference(loadedAt) >= _maxAdAge) {
-      unawaited(cancel(_placement ?? InterstitialPlacement.raceDetailExit));
-    }
+  Future<void> _invalidateFlow(_InterstitialPermitFlow flow) async {
+    if (!identical(_flow, flow)) return;
+    _flow = null;
+    _flowGeneration++;
+    final permitId = flow.grant?.permit?.id;
+    flow.boundAd = null;
+    flow.grant = null;
+    flow.appVersion = null;
+    if (permitId != null) await _cancelPermitOnce(permitId);
   }
 
-  void _disposeReady() {
-    _ad?.dispose();
-    _ad = null;
-    _loadedAt = null;
-    _loadedAdUnitId = null;
+  Future<void> _cancelPermitOnce(String permitId) async {
+    if (!_cancelledPermitIds.add(permitId)) return;
+    try {
+      await _api.cancelInterstitialPermit(
+        identityToken: _identityToken,
+        permitId: permitId,
+      );
+    } catch (_) {}
+  }
+
+  void _evictExpiredEntry(
+    _InterstitialLoadEntry? entry, {
+    required bool refresh,
+  }) {
+    if (entry == null) return;
+    final loadedAt = entry.loadedAt;
+    if (loadedAt == null || _now().toUtc().difference(loadedAt) < _maxAdAge) {
+      return;
+    }
+    _disposeEntryAd(entry);
+    if (refresh) unawaited(warm(entry.placement));
+  }
+
+  void _disposeEntryAd(_InterstitialLoadEntry entry) {
+    final ad = entry.ad;
+    if (ad == null) {
+      entry.loadedAt = null;
+      if (entry.phase == _InterstitialLoadPhase.ready) {
+        entry.phase = _InterstitialLoadPhase.idle;
+      }
+      return;
+    }
+    entry.ad = null;
+    entry.loadedAt = null;
+    entry.phase = _InterstitialLoadPhase.idle;
+    final flow = _flow;
+    if (flow != null && identical(flow.boundAd, ad)) {
+      _flow = null;
+      _flowGeneration++;
+      final permitId = flow.grant?.permit?.id;
+      flow.boundAd = null;
+      flow.grant = null;
+      flow.appVersion = null;
+      if (permitId != null) unawaited(_cancelPermitOnce(permitId));
+    }
+    ad.dispose();
+  }
+
+  void _onAdRequestPermissionChanged() {
+    if (_disposed) return;
+    if (AdService.adRequestsAllowed) {
+      if (!_foreground) return;
+      for (final entry in _loads.values) {
+        if (entry.inFlight == null && entry.ad == null) {
+          unawaited(warm(entry.placement));
+        }
+      }
+      return;
+    }
+    final flow = _flow;
+    if (flow != null && !_showPending) unawaited(_invalidateFlow(flow));
+    for (final entry in _loads.values) {
+      entry.generation++;
+      if (entry.inFlight != null) entry.restartAfterInFlight = true;
+      entry.retryTimer?.cancel();
+      entry.retryTimer = null;
+      _disposeEntryAd(entry);
+    }
   }
 
   @override
   void didEnterBackground() {
     _backgroundedAt ??= _now().toUtc();
-    if (_showPending) return;
-    final placement = _placement;
-    if (placement != null) unawaited(cancel(placement));
+    _foreground = false;
+    for (final entry in _loads.values) {
+      entry.retryTimer?.cancel();
+      entry.retryTimer = null;
+    }
+    if (!_showPending) {
+      final flow = _flow;
+      if (flow != null) unawaited(_invalidateFlow(flow));
+    }
   }
 
   @override
   void didResume() {
     final backgroundedAt = _backgroundedAt;
     _backgroundedAt = null;
-    if (backgroundedAt == null ||
-        _now().toUtc().difference(backgroundedAt) <
-            const Duration(seconds: 30)) {
-      return;
+    _foreground = true;
+    final renewed =
+        backgroundedAt != null &&
+        _now().toUtc().difference(backgroundedAt) >=
+            const Duration(seconds: 30);
+    if (renewed) {
+      _flowGeneration++;
+      _sessionId = _uuid();
+      _sessionStartedAt = _now().toUtc();
+      _eligibilityCache.clear();
+      _lastReadinessReasons.clear();
+      _impressionConfirmedThisSession = false;
+      for (final entry in _loads.values) {
+        entry.retryTimer?.cancel();
+        entry.retryTimer = null;
+        entry.retryDueAt = null;
+        entry.attemptCount = 0;
+        entry.lastFailureAt = null;
+        if (entry.inFlight != null) {
+          entry.generation++;
+          entry.restartAfterInFlight = true;
+        }
+      }
     }
-    _generation++;
-    _sessionId = _uuid();
-    _sessionStartedAt = _now().toUtc();
-    _eligibilityCache.clear();
-    _disposeReady();
-    _grant = null;
-    _grantAppVersion = null;
-    _placement = null;
+    if (!AdService.adRequestsAllowed || _disposed) return;
+    for (final entry in _loads.values) {
+      _evictExpiredEntry(entry, refresh: false);
+      if (entry.ad == null) unawaited(warm(entry.placement));
+    }
   }
 
   void _event(
@@ -881,13 +1239,24 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   @override
   void dispose() {
     if (_disposed) return;
+    AdService.adRequestPermissionListenable.removeListener(
+      _onAdRequestPermissionChanged,
+    );
     _disposed = true;
-    _generation++;
+    _foreground = false;
+    _flowGeneration++;
     _eligibilityCache.clear();
-    if (_showPending) return;
-    final placement = _placement;
-    if (placement != null) unawaited(cancel(placement));
-    _disposeReady();
+    final flow = _flow;
+    _flow = null;
+    if (!_showPending && flow?.grant?.permit != null) {
+      unawaited(_cancelPermitOnce(flow!.grant!.permit!.id));
+    }
+    for (final entry in _loads.values) {
+      entry.generation++;
+      entry.retryTimer?.cancel();
+      entry.retryTimer = null;
+      _disposeEntryAd(entry);
+    }
   }
 }
 

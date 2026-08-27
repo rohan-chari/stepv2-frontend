@@ -208,7 +208,7 @@ void main() {
     });
   });
 
-  testWidgets('quick-create uses the bundled arcade display face for its hero heading', (
+  testWidgets('quick-create uses the established sans face for its hero heading', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -223,7 +223,7 @@ void main() {
     );
 
     final heading = tester.widget<Text>(find.text('START A RACE'));
-    expect(heading.style?.fontFamily, 'Jersey25');
+    expect(heading.style?.fontFamily, startsWith('SpaceGrotesk'));
   });
 
   test('retired Imposter is removed from usable race inventory residue', () {
