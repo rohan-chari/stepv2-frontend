@@ -186,9 +186,7 @@ void main() {
     expect(message, findsOneWidget);
     expect(reply, findsOneWidget);
     expect(
-      find.text(
-        'Your feedback is emailed to Bara Support.',
-      ),
+      find.text('Your feedback is emailed to Bara Support.'),
       findsOneWidget,
     );
     expect(
@@ -200,11 +198,20 @@ void main() {
     await tester.enterText(message, '  a thoughtful note  ');
     await tester.enterText(reply, '  person@example.com  ');
     await tester.tap(submit);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('feedback-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('info-toast-shell')), findsNothing);
+
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
 
     expect(api.text, 'a thoughtful note');
     expect(api.replyToEmail, 'person@example.com');
     expect(find.text('Sent to Bara Support'), findsOneWidget);
+    expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
+    expect(find.byKey(const Key('feedback-sheet')), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('old or unknown delivery response uses honest generic copy', (
@@ -220,10 +227,14 @@ void main() {
     await tester.ensureVisible(submit);
     await tester.pump();
     await tester.tap(submit);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
 
     expect(find.text('Feedback received'), findsOneWidget);
     expect(find.text('Sent to Bara Support'), findsNothing);
+    expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('uncertain delivery keeps draft and warns duplicate on retry', (
@@ -309,7 +320,9 @@ void main() {
     expect(api.submissions, 1);
 
     completion.complete(FeedbackSubmissionDelivery.email);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
     expect(find.text('Sent to Bara Support'), findsOneWidget);
   });
 

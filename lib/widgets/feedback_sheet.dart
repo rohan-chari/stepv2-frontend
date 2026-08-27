@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import 'info_toast.dart';
 import 'pill_button.dart';
 
 /// Opens the suggestion sheet with the exact `showModalBottomSheet`
@@ -18,18 +19,30 @@ Future<void> showFeedbackSheet({
   required BuildContext context,
   required AuthService authService,
   required BackendApiService backendApiService,
-}) {
-  return showModalBottomSheet<void>(
+}) async {
+  TransitionRoute<dynamic>? sheetRoute;
+  final delivery = await showModalBottomSheet<FeedbackSubmissionDelivery>(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.of(context).parchment,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => FeedbackSheet(
-      authService: authService,
-      backendApiService: backendApiService,
-    ),
+    builder: (ctx) {
+      sheetRoute = ModalRoute.of(ctx);
+      return FeedbackSheet(
+        authService: authService,
+        backendApiService: backendApiService,
+      );
+    },
+  );
+  await sheetRoute?.completed;
+  if (!context.mounted || delivery == null) return;
+  showInfoToast(
+    context,
+    delivery == FeedbackSubmissionDelivery.email
+        ? 'Sent to Bara Support'
+        : 'Feedback received',
   );
 }
 
@@ -110,17 +123,7 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
         replyToEmail: replyToEmail.isEmpty ? null : replyToEmail,
       );
       if (!mounted) return;
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      Navigator.of(context).pop();
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            delivery == FeedbackSubmissionDelivery.email
-                ? 'Sent to Bara Support'
-                : 'Feedback received',
-          ),
-        ),
-      );
+      Navigator.of(context).pop(delivery);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
