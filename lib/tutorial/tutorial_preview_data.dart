@@ -138,10 +138,12 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   // the opaque GestureDetector in spotlight_overlay.dart, which is incidental
   // chrome, not a guarantee (architect R4 / ui-test-planner risk 2).
   @override
-  Future<void> submitSuggestion({
+  Future<FeedbackSubmissionDelivery> submitSuggestion({
     required String identityToken,
     required String text,
-  }) async {}
+    String? replyToEmail,
+    String? category,
+  }) async => FeedbackSubmissionDelivery.email;
 
   // -- Home: step milestones (StepMilestonesSection) --
   @override

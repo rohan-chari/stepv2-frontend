@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -28,6 +29,13 @@ import '../models/step_sync_v2_result.dart';
 /// never does. Additive endpoint support is process-scoped so sign-out and
 /// ordinary token/user rotation do not probe a known-missing route again.
 enum EndpointSupport { unknown, supported, unsupported }
+
+/// Honest client-facing interpretation of the feedback submission response.
+///
+/// Older backends return `{ok:true}` without a delivery discriminator. Unknown
+/// future values deliberately use [generic] so the app never claims an email
+/// was sent unless the running backend explicitly confirms it.
+enum FeedbackSubmissionDelivery { email, generic }
 
 /// Capability metadata returned by the additive device-registration endpoint.
 ///
@@ -1637,20 +1645,34 @@ class BackendApiService {
     return value is bool ? value : enabled;
   }
 
-  /// POST /feedback/suggestions (feature batch 2026-08-08, Item 7).
-  /// New endpoint — an older backend 404s, which surfaces as an
-  /// [ApiException] the sheet turns into a retryable error state.
-  Future<void> submitSuggestion({
+  /// POST /feedback/suggestions.
+  ///
+  /// [replyToEmail] and [category] are additive for old-backend compatibility.
+  /// Missing/unknown `delivery` is a successful legacy receipt, never proof of
+  /// email delivery.
+  Future<FeedbackSubmissionDelivery> submitSuggestion({
     required String identityToken,
     required String text,
+    String? replyToEmail,
+    String? category,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/feedback/suggestions',
-      body: {'text': text},
+      body: {
+        'text': text,
+        'category': ?category,
+        'replyToEmail': ?replyToEmail,
+      },
       identityToken: identityToken,
     );
-    await _decodeJsonResponse(response);
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+    return raw.json?['delivery'] == 'email'
+        ? FeedbackSubmissionDelivery.email
+        : FeedbackSubmissionDelivery.generic;
   }
 
   /// GET /admin/feedback/suggestions (admin-gated). Returns the raw payload;
@@ -5760,6 +5782,7 @@ class BackendApiService {
       request.headers.set('X-Timezone', await _getTimeZone());
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
+      _setPlatformHeader(request.headers);
       // Declares renderable feature set; the backend hides CHARACTER-slot shop
       // items (base animals) and the rewarded-ad extra-spin offer from clients
       // that don't send the matching capability.
@@ -5800,6 +5823,7 @@ class BackendApiService {
       request.headers.set('X-Timezone', await _getTimeZone());
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
+      _setPlatformHeader(request.headers);
       // Declares renderable feature set; the backend hides CHARACTER-slot shop
       // items (base animals) and the rewarded-ad extra-spin offer from clients
       // that don't send the matching capability.
@@ -5818,6 +5842,17 @@ class BackendApiService {
     } on HttpException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
     }
+  }
+
+  String? get _platformHeader => switch (defaultTargetPlatform) {
+    TargetPlatform.iOS => 'ios',
+    TargetPlatform.android => 'android',
+    _ => null,
+  };
+
+  void _setPlatformHeader(HttpHeaders headers) {
+    final platform = _platformHeader;
+    if (platform != null) headers.set('X-Platform', platform);
   }
 
   Future<Map<String, dynamic>> _decodeJsonResponse(

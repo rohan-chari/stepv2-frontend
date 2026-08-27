@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -52,24 +53,49 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
   static const int _maxChars = 2000;
 
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _replyEmailController = TextEditingController();
   bool _sending = false;
   String? _error;
+  String? _replyEmailError;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(() => setState(() {}));
+    _replyEmailController.addListener(_clearReplyEmailError);
+  }
+
+  void _clearReplyEmailError() {
+    if (_replyEmailError != null) setState(() => _replyEmailError = null);
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _replyEmailController.dispose();
     super.dispose();
+  }
+
+  bool _isPlausibleMailbox(String value) {
+    if (value.isEmpty) return true;
+    if (value.length > 254 || RegExp(r'[\x00-\x20\x7f]').hasMatch(value)) {
+      return false;
+    }
+    if (RegExp(r'[,;<>\[\]()]').hasMatch(value)) return false;
+    final at = value.indexOf('@');
+    return at > 0 && at == value.lastIndexOf('@') && at < value.length - 1;
   }
 
   Future<void> _submit() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
+    final replyToEmail = _replyEmailController.text.trim();
+    if (!_isPlausibleMailbox(replyToEmail)) {
+      setState(() {
+        _replyEmailError = 'Enter one email address, like you@example.com.';
+      });
+      return;
+    }
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
 
@@ -78,27 +104,42 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
       _error = null;
     });
     try {
-      await widget.backendApiService.submitSuggestion(
+      final delivery = await widget.backendApiService.submitSuggestion(
         identityToken: token,
         text: text,
+        replyToEmail: replyToEmail.isEmpty ? null : replyToEmail,
       );
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop();
-      // The toast belongs to the screen underneath, which outlives the sheet.
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            delivery == FeedbackSubmissionDelivery.email
+                ? 'Sent to Bara Support'
+                : 'Feedback received',
+          ),
+        ),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _sending = false;
         // Keep the text. The retry button re-posts exactly what they wrote.
-        _error = e.statusCode == 429
-            ? "That's plenty for today. Thanks! Try again tomorrow."
-            : "Couldn't send that. Check your connection and try again.";
+        _error = switch ((e.statusCode, e.code)) {
+          (429, _) => "That's plenty for today. Thanks! Try again tomorrow.",
+          (_, 'INVALID_REPLY_TO_EMAIL') =>
+            'Enter one email address, like you@example.com.',
+          (503, 'EMAIL_DELIVERY_UNCERTAIN') || (null, _) =>
+            "We couldn't confirm delivery. Retrying may send a duplicate.",
+          _ => "Couldn't send that. Check your connection and try again.",
+        };
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _sending = false;
-        _error = "Couldn't send that. Check your connection and try again.";
+        _error = "We couldn't confirm delivery. Retrying may send a duplicate.";
       });
     }
   }
@@ -110,89 +151,128 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
     final tooLong = length > _maxChars;
     final canSend = _controller.text.trim().isNotEmpty && !tooLong && !_sending;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        key: const Key('feedback-sheet'),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'SEND FEEDBACK',
-                textAlign: TextAlign.center,
-                style: PixelText.title(size: 17, color: colors.textDark),
+    return SafeArea(
+      key: const Key('feedback-sheet'),
+      child: SingleChildScrollView(
+        key: const Key('feedback-scroll'),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'SEND FEEDBACK',
+              textAlign: TextAlign.center,
+              style: PixelText.title(size: 17, color: colors.textDark),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ideas, bugs, gripes. We read every one.',
+              textAlign: TextAlign.center,
+              style: PixelText.body(size: 12, color: colors.textMid),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('feedback-input'),
+              controller: _controller,
+              autofocus: true,
+              maxLines: 5,
+              minLines: 3,
+              enabled: !_sending,
+              textCapitalization: TextCapitalization.sentences,
+              style: PixelText.body(size: 14, color: colors.textDark),
+              decoration: InputDecoration(
+                hintText: 'What would make Bara better?',
+                hintStyle: PixelText.body(size: 13, color: colors.textMid),
+                filled: true,
+                fillColor: colors.parchmentLight,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: colors.parchmentBorder,
+                    width: 1.5,
+                  ),
+                ),
               ),
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '$length / $_maxChars',
+                style: PixelText.body(
+                  size: 11,
+                  color: tooLong ? colors.error : colors.textMid,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'EMAIL FOR A REPLY',
+              style: PixelText.pill(size: 11, color: colors.textMid),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              key: const Key('feedback-reply-email'),
+              controller: _replyEmailController,
+              enabled: !_sending,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.email],
+              autocorrect: false,
+              enableSuggestions: false,
+              inputFormatters: [LengthLimitingTextInputFormatter(254)],
+              style: PixelText.body(size: 14, color: colors.textDark),
+              decoration: InputDecoration(
+                hintText: 'Optional',
+                errorText: _replyEmailError,
+                hintStyle: PixelText.body(size: 13, color: colors.textMid),
+                filled: true,
+                fillColor: colors.parchmentLight,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: colors.parchmentBorder,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              onSubmitted: (_) => canSend ? _submit() : null,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Your feedback is emailed to Bara Support.',
+              key: const Key('feedback-retention-disclosure'),
+              textAlign: TextAlign.center,
+              style: PixelText.body(size: 11, color: colors.textMid),
+            ),
+            if (_error != null) ...[
               const SizedBox(height: 4),
               Text(
-                'Ideas, bugs, gripes. We read every one.',
-                textAlign: TextAlign.center,
-                style: PixelText.body(size: 12, color: colors.textMid),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('feedback-input'),
-                controller: _controller,
-                autofocus: true,
-                maxLines: 5,
-                minLines: 3,
-                enabled: !_sending,
-                textCapitalization: TextCapitalization.sentences,
-                style: PixelText.body(size: 14, color: colors.textDark),
-                decoration: InputDecoration(
-                  hintText: 'What would make Bara better?',
-                  hintStyle: PixelText.body(size: 13, color: colors.textMid),
-                  filled: true,
-                  fillColor: colors.parchmentLight,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: colors.parchmentBorder,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  '$length / $_maxChars',
-                  style: PixelText.body(
-                    size: 11,
-                    color: tooLong ? colors.error : colors.textMid,
-                  ),
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  _error!,
-                  key: const Key('feedback-error'),
-                  style: PixelText.body(size: 12, color: colors.error),
-                ),
-              ],
-              const SizedBox(height: 10),
-              PillButton(
-                key: const Key('feedback-submit'),
-                // The label becomes RETRY once a send has failed, so the
-                // button says what it will do rather than repeating itself.
-                label: _error == null ? 'SUBMIT' : 'RETRY',
-                variant: PillButtonVariant.primary,
-                fullWidth: true,
-                loading: _sending,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: canSend ? _submit : null,
+                _error!,
+                key: const Key('feedback-error'),
+                style: PixelText.body(size: 12, color: colors.error),
               ),
             ],
-          ),
+            const SizedBox(height: 10),
+            PillButton(
+              key: const Key('feedback-submit'),
+              // The label becomes RETRY once a send has failed, so the
+              // button says what it will do rather than repeating itself.
+              label: _error == null ? 'SUBMIT' : 'RETRY',
+              variant: PillButtonVariant.primary,
+              fullWidth: true,
+              loading: _sending,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: canSend ? _submit : null,
+            ),
+          ],
         ),
       ),
     );

@@ -29,13 +29,16 @@ class _FakeApi extends BackendApiService {
   }) async => const {'claimedToday': true};
 
   @override
-  Future<void> submitSuggestion({
+  Future<FeedbackSubmissionDelivery> submitSuggestion({
     required String identityToken,
     required String text,
+    String? replyToEmail,
+    String? category,
   }) async {
     suggestions++;
     lastSuggestion = text;
     if (throwOnSuggestion) throw const ApiException('offline');
+    return FeedbackSubmissionDelivery.email;
   }
 }
 
