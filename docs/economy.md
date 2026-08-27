@@ -2218,6 +2218,83 @@ The following are the minimum facts/controls to preserve in any implementation:
 
 These are safeguards for the proposed removal, not new live configuration.
 
+## 15. Daily local-time 2x Race Steps event — verified 2026-08-27
+
+| Fact | Live value | Source |
+|---|---:|---|
+| Frequency / duration / multiplier | once per logical event day / 30 minutes / 2x race steps | `CODE src/modules/steps/globalStepEvent.js`; `DB global_step_events` |
+| **Materialized v1 local start draws** | event days through 2026-08-31 remain one uniformly random minute in `[480,1320)`, i.e. 08:00–21:59 local; **1/840 per minute, 1/14 per start hour** | `DB global_step_events.local_start_minute`, `schedule_policy_version=1`; immutable after creation |
+| Timezone rule | same drawn wall-clock minute in each user's snapshotted `global_event_timezone`; missing values fall back to `America/New_York` | `CODE globalStepEvent.js`, `globalStepEventEntitlement.js` |
+| Live timezone coverage | 944 / 1,099 non-review accounts have a stored event timezone; 155 use fallback; 62 stored zones | `DB users`, aggregate-only read-only query |
+| Completed local events observed | 6 event days, 2026-08-21 through 2026-08-26; 780–978 non-review entitlements/day | `DB global_step_events × global_step_event_entitlements` |
+| Users with positive overlapping raw steps | 44.0%–50.4% per event; event-level mean 140.7–188.7 raw steps per entitlement | `DB entitlements × step_samples`, overlap-prorated, n=5,195 entitlements |
+
+The event changes race score only. It does not advance mystery boxes, raw-step
+milestones, or direct coin faucets, so changing only the start-time distribution
+has approximately zero direct coin-source/sink delta. It can redistribute race
+placement and changes the situational value of timed multipliers. Six live days
+are not enough to infer a causal hour-of-day participation curve.
+
+### 15.1 Weighted-v2 policy — deployed 2026-08-27
+
+The permanent v2 policy keeps the live frequency, duration,
+multiplier, eligible support, stable-timezone snapshot, and immutable persisted
+draw. It changes only the probability assigned to each local start minute.
+It was deployed at backend commit `d553d2b` on 2026-08-27. Event days through
+2026-08-31 had already been persisted under v1 and remain unchanged; the first
+weighted-v2 event day is 2026-09-01. Source: `SPEC
+docs/weighted-local-2x-event-schedule-requirements.md`; production migration,
+process census, health, and persisted policy versions verified 2026-08-27.
+
+| Local start window | Probability | Minutes | Tickets/minute | Band tickets | Probability/hour |
+|---|---:|---:|---:|---:|---:|
+| 08:00–11:59 | 15% | 240 | 45 | 10,800 | 3.75% |
+| 12:00–14:59 | 18% | 180 | 72 | 12,960 | 6.00% |
+| 15:00–16:59 | 18% | 120 | 108 | 12,960 | 9.00% |
+| 17:00–18:59 | 21% | 120 | 126 | 15,120 | 10.50% |
+| 19:00–20:59 | 21% | 120 | 126 | 15,120 | 10.50% |
+| 21:00–21:59 | 7% | 60 | 84 | 5,040 | 7.00% |
+| **Total** | **100%** | **840** | — | **72,000** | — |
+
+The integer ticket construction is exact: all 840 minutes remain reachable,
+every minute within a band has equal probability, and one cryptographic ticket
+in `[0,72000)` determines the persisted minute. The expected local start moves
+from **14:59:30 under uniform v1 to 16:17:12 under weighted v2**. V2 assigns
+33% before 15:00, 67% from 15:00 through 21:59, and 42% from 17:00 through
+20:59.
+
+**Historical activity-profile EV estimate.** A read-only prod calculation over
+1,031 non-review users who have held a local-event entitlement and 31 complete
+days of five-minute `step_samples` bucketed in each user's stable/fallback event
+timezone estimates the following expected raw-step overlap for one 30-minute
+event. This is an observational time-of-day estimate, not a causal forecast;
+it assumes the historical activity profile continues and does not imply that
+all overlapping raw steps score in a race.
+
+| Per-entitled-user expected event-window raw steps | Uniform v1 | Weighted v2 | Change |
+|---|---:|---:|---:|
+| Mean | 57.7 | 58.8 | **+2.0%** |
+| p50 | 37.5 | 37.7 | +0.3% |
+| p90 | 136.2 | 136.7 | +0.4% |
+| p99 | 360.7 | 376.6 | +4.4% |
+
+Direct coin-source/sink EV remains **zero**: event timing changes race score,
+not raw steps, box progress, milestones, payout-pool size, or direct coin
+issuance. A zero-step player still receives zero value. For a walking player,
+event score value scales with the signed timed-effect multiplier already active
+in that race, so the policy can redistribute placement without changing total
+prize funding.
+
+**Timed-effect predictability bound.** If a player blindly activates an effect
+before the event is revealed, the maximum chance that the event starts during
+the effect is 10.5% / 21% / 31.5% / 42% for a 1h / 2h / 3h / 4h effect under
+v2, versus 7.14% / 14.29% / 21.43% / 28.57% under uniform v1. The strongest
+four-hour window is 17:00–21:00 and still misses 58% of event starts. Reacting
+after the start notification can guarantee partial overlap, but that behavior
+already exists under v1. Future draws remain secret; stable timezone snapshots,
+one persisted draw, the event-day advisory lock, and immutable entitlements
+prevent timezone chasing, duplicate windows, and redraw farming.
+
 ---
 
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
@@ -2231,4 +2308,8 @@ SELECT-only, aggregates only).
 §3.2 / §3.4 / §3.4b / §3.4c / §3.5 / §3.6 / §9 verified and added 2026-08-09
 (prod SELECT-only, aggregates only). §8 Option H and §9 are analysis only —
 nothing in either has been applied. §14 verified/added 2026-08-23 (prod
-SELECT-only aggregates + current backend code; no production data changed).*
+SELECT-only aggregates + current backend code; no production data changed).
+§15/§15.1 verified/added 2026-08-27 (prod SELECT-only aggregates + current
+backend code + weighted-v2 spec); weighted-v2 deployed and post-deploy verified
+2026-08-27 at backend commit `d553d2b`, with v1 rows preserved through
+2026-08-31 and the first v2 event day on 2026-09-01.*
