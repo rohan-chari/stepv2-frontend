@@ -2,10 +2,12 @@
 
 ## Status
 
-Implemented and production-artifact verified on 2026-08-28. Architecture,
+Implemented and shipped to the production backend on 2026-08-28. Architecture,
 game-economy, UI-placement, and final code reviews completed; the final code
-review verdict is SHIP. Production deployment, store upload, review submission,
-and customer release remain separately authorized actions.
+review verdict is SHIP. The matching Bara 2.3.11 (1) archive was uploaded
+successfully to App Store Connect for TestFlight processing, and the Android
+2.3.11 production bundle was built and verified. App Review submission and
+customer release remain separately authorized actions.
 
 ## Summary and user stories
 
