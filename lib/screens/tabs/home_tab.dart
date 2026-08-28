@@ -11,6 +11,7 @@ import '../../widgets/app_refresh_indicator.dart';
 import '../../models/step_data.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
+import '../../utils/race_participant_display.dart';
 import '../../utils/team_race.dart';
 import '../../services/auth_service.dart';
 import '../../services/ad_service.dart';
@@ -906,10 +907,11 @@ class HomeTab extends StatelessWidget {
   /// user is in. Driven by the opt-in `ACTIVE_RACES` backend state. Reads the
   /// response defensively (missing/null fields default safely) so a backend on
   /// a different version can't crash the row.
-  // Kept as a private legacy renderer while frozen /home/race-card clients and
-  // its serializers remain supported; Home discovery no longer calls it.
-  // ignore: unused_element
-  Widget _buildActiveRacesRow(Map<String, dynamic> cardData) {
+  // Kept as a compatibility renderer while frozen /home/race-card clients and
+  // its serializers remain supported; Home discovery no longer calls it. It is
+  // public so the complete legacy surface remains pumpable in compatibility
+  // tests even though it is no longer part of the live Home composition.
+  Widget buildLegacyActiveRacesRow(Map<String, dynamic> cardData) {
     final data = cardData['data'];
     final races = (data is Map<String, dynamic>)
         ? ((data['races'] as List?)
@@ -941,16 +943,25 @@ class HomeTab extends StatelessWidget {
           if (endsAtRaw is String) {
             endsAt = DateTime.tryParse(endsAtRaw);
           }
-          final top3 =
-              (race['top3'] as List?)
-                  ?.whereType<Map<String, dynamic>>()
-                  .toList() ??
-              const <Map<String, dynamic>>[];
-          final placement = (race['userPlacement'] as num?)?.toInt();
+          final placementPrivacyKnown = race['placementPrivacyActive'] is bool;
+          final placementPrivacyActive = race['placementPrivacyActive'] == true;
+          final top3 = privacySafeHomeTopThree(race);
+          final rawPlacement = placementPrivacyActive
+              ? race['userDisplayPlacement']
+              : (!placementPrivacyKnown ? null : race['userPlacement']);
+          final placement =
+              rawPlacement is num &&
+                  rawPlacement.isFinite &&
+                  rawPlacement == rawPlacement.roundToDouble() &&
+                  rawPlacement > 0
+              ? rawPlacement.toInt()
+              : null;
           // participantCount is sent by newer backends; fall back to the
-          // ranked racers we do have so older backends still render a count.
+          // raw podium size, not the privacy-suppressed display projection.
+          final rawTopThreeCount =
+              (race['top3'] as List?)?.whereType<Map>().length ?? 0;
           final participantCount =
-              (race['participantCount'] as num?)?.toInt() ?? top3.length;
+              (race['participantCount'] as num?)?.toInt() ?? rawTopThreeCount;
           const itemWidth = 168.0;
 
           return Padding(
@@ -2964,7 +2975,13 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                           // placement.
                           child: isTeamRace && teamSize != null
                               ? TeamFormatChip(teamSize: teamSize)
-                              : PlacementPill(placement: placement),
+                              : PlacementPill(
+                                  placement: placement,
+                                  fallbackLabel:
+                                      race['placementPrivacyActive'] == true
+                                      ? '???'
+                                      : 'LIVE',
+                                ),
                         ),
                       ),
                     ),

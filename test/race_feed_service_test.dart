@@ -565,4 +565,31 @@ void main() {
     expect(service.lastError, isNotNull);
     expect(service.events, isEmpty);
   });
+
+  test(
+    'malformed private expiry row never suppresses valid shared copy',
+    () async {
+      final api = _FakeRaceFeedApi()
+        ..nextFetchMessages = [_event('shared-expiry')]
+        ..nextPrivateEvents = const [
+          {
+            'id': 'impact:malformed-expiry',
+            'eventType': 'EFFECT_IMPACT',
+            'powerupType': 'LEG_CRAMP',
+            'description': '',
+            'sourceFeedEventId': 'shared-expiry',
+            'createdAt': '2026-05-18T20:00:00.000Z',
+          },
+        ];
+      final service = RaceFeedService(
+        authService: await _authService(),
+        raceId: 'race-1',
+        api: api,
+      );
+
+      await service.loadInitial();
+
+      expect(service.events.map((event) => event.id), ['shared-expiry']);
+    },
+  );
 }

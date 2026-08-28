@@ -14,6 +14,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/models/race_resolution_status.dart';
 import 'package:step_tracker/widgets/powerup_reveal_modal.dart';
 import 'package:step_tracker/widgets/item_slot.dart';
+import 'package:step_tracker/widgets/leaderboard_plank.dart';
 
 class _WireResponse {
   const _WireResponse(this.statusCode, this.body);
@@ -124,6 +125,20 @@ class _ActiveImpactApi extends BackendApiService {
     this.heldPowerupType = 'SECOND_WIND',
     this.useResult = const <String, dynamic>{},
     this.starterRewardEligible = false,
+    this.progressParticipants = const [
+      {
+        'userId': 'user-1',
+        'displayName': 'Trail Walker',
+        'totalSteps': 42000,
+        'finishedAt': null,
+      },
+      {
+        'userId': 'user-2',
+        'displayName': 'Hill Climber',
+        'totalSteps': 38000,
+        'finishedAt': null,
+      },
+    ],
     this.privateEvents = const [
       {
         'id': 'impact:final-leech',
@@ -142,6 +157,7 @@ class _ActiveImpactApi extends BackendApiService {
   final String heldPowerupType;
   final Map<String, dynamic> useResult;
   final bool starterRewardEligible;
+  final List<Map<String, dynamic>> progressParticipants;
   final List<Map<String, dynamic>> privateEvents;
   final List<ActiveImpactNoticesResult> responses;
   int activeNoticeFetches = 0;
@@ -192,20 +208,7 @@ class _ActiveImpactApi extends BackendApiService {
       // legacy `_loadProgress` -> `_loadDetails` terminal refresh loop; the
       // detail payload remains the authoritative route state under test.
       'status': raceStatus == 'COMPLETED' ? 'ACTIVE' : raceStatus,
-      'participants': const [
-        {
-          'userId': 'user-1',
-          'displayName': 'Trail Walker',
-          'totalSteps': 42000,
-          'finishedAt': null,
-        },
-        {
-          'userId': 'user-2',
-          'displayName': 'Hill Climber',
-          'totalSteps': 38000,
-          'finishedAt': null,
-        },
-      ],
+      'participants': progressParticipants,
       'powerupData': {
         'enabled': includeHeldPowerup,
         'inventory': [
@@ -704,6 +707,7 @@ void main() {
           'eventType': 'EFFECT_IMPACT',
           'powerupType': 'LEECH',
           'description': description,
+          'attackerDisplayName': 'TrailRunner',
           'impactScope': 'ACTIVE_SYNCED_SNAPSHOT',
           'createdAt': '2026-08-19T16:30:00.000Z',
         },
@@ -715,6 +719,7 @@ void main() {
             'powerupType': 'LEECH',
             'deltaSteps': -426,
             'description': description,
+            'attackerDisplayName': 'TrailRunner',
             'valueStatus': 'SYNCED_SNAPSHOT',
             'resolvedAt': '2026-08-19T16:30:00.000Z',
           },
@@ -726,6 +731,7 @@ void main() {
     // One copy is the Activity row already rendered behind the popup; the
     // second is the popup subtitle sourced from the same canonical event.
     expect(find.text(description, findRichText: true), findsNWidgets(2));
+    expect(find.text('Attacked by @TrailRunner'), findsOneWidget);
 
     await tester.tap(find.text('Continue').last);
     await tester.pump();
@@ -1231,4 +1237,45 @@ void main() {
       await _tearDownScreen(tester);
     },
   );
+
+  testWidgets('real race detail compacts visible ranks around Stealth', (
+    tester,
+  ) async {
+    final api = _ActiveImpactApi(
+      progressParticipants: const [
+        {
+          'userId': 'user-2',
+          'displayName': '???',
+          'totalSteps': null,
+          'placement': null,
+          'stealthed': true,
+          'finishedAt': null,
+        },
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'totalSteps': 42000,
+          'placement': 1,
+          'stealthed': false,
+          'finishedAt': null,
+        },
+        {
+          'userId': 'user-3',
+          'displayName': 'Creek Runner',
+          'totalSteps': 35000,
+          'placement': 3,
+          'stealthed': false,
+          'finishedAt': null,
+        },
+      ],
+    );
+
+    await _pumpRace(tester, api);
+    final planks = tester
+        .widgetList<LeaderboardPlank>(find.byType(LeaderboardPlank))
+        .toList();
+    expect(planks.map((plank) => plank.rankLabel), ['?', '1', '2']);
+    expect(planks.where((plank) => plank.rankLabel == '3'), isEmpty);
+    await _tearDownScreen(tester);
+  });
 }

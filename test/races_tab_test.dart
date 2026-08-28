@@ -135,6 +135,7 @@ void main() {
                     'creator': {'displayName': 'RaceMaker'},
                     'isCreator': false,
                     'myPlacement': 1,
+                    'placementPrivacyActive': false,
                     'queuedBoxCount': 2,
                   },
                 ],

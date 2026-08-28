@@ -37,6 +37,7 @@ Map<String, dynamic> _activeRace({bool includeLeader = true}) => {
       .toIso8601String(),
   'participantCount': 4,
   'myPlacement': 2,
+  'placementPrivacyActive': false,
   'slotItems': const [
     {'id': 'held-1', 'type': 'RUNNERS_HIGH', 'status': 'HELD'},
   ],

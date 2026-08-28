@@ -375,6 +375,8 @@ class BackendApiService {
       'home_invite_modal',
       'race_participants_paging',
       'race_preview',
+      'privacy_safe_display_ranks',
+      'powerup_stacking_guide_v1',
       'impact_notices',
       'active_impact_notices_v1',
       'resolved_impact_events_v2',
@@ -395,8 +397,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -3300,6 +3302,35 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> updateRaceFavorite({
+    required String identityToken,
+    required String raceId,
+    required bool favorite,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/races/$raceId/favorite',
+      body: {'favorite': favorite},
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final returnedRaceId = payload['raceId'];
+    final returnedFavorite = payload['isFavorite'];
+    if (returnedRaceId is! String ||
+        returnedRaceId.isEmpty ||
+        returnedFavorite is! bool) {
+      throw const ApiException('Could not update favorite. Try again.');
+    }
+    return <String, dynamic>{
+      ...payload,
+      'raceId': returnedRaceId,
+      'isFavorite': returnedFavorite,
+      'favoritedAt': payload['favoritedAt'] is String
+          ? payload['favoritedAt']
+          : null,
+    };
+  }
+
   /// Capability-scoped Home invitation preflight. A 404 or an old payload is
   /// explicitly unsupported: never substitute `GET /races`, whose legacy
   /// buckets are not a Home-modal contract.
@@ -4845,6 +4876,18 @@ class BackendApiService {
       final stealthed = participant?['stealthed'];
       final targetable = participant?['targetable'];
       final totalSteps = participant?['totalSteps'];
+      int? positiveInt(Object? raw) {
+        if (raw is! num ||
+            !raw.isFinite ||
+            raw != raw.roundToDouble() ||
+            raw <= 0) {
+          return null;
+        }
+        return raw.toInt();
+      }
+
+      final placement = positiveInt(participant?['placement']);
+      final displayPlacement = positiveInt(participant?['displayPlacement']);
       if (participant == null ||
           userId is! String ||
           userId.isEmpty ||
@@ -4855,7 +4898,10 @@ class BackendApiService {
           (typed && stealthed is! bool) ||
           (targetable != null && targetable is! bool) ||
           (totalSteps != null && totalSteps is! num) ||
-          (typed && powerupType == 'BOUNTY' && totalSteps is! num) ||
+          (typed &&
+              powerupType == 'BOUNTY' &&
+              totalSteps is! num &&
+              stealthed != true) ||
           (typed &&
               powerupType != 'BOUNTY' &&
               participant.containsKey('totalSteps'))) {
@@ -4868,6 +4914,9 @@ class BackendApiService {
         'team': team,
         'forfeitedAt': forfeitedAt,
         'stealthed': participant['stealthed'] == true,
+        'placement': placement,
+        if (payload?['placementPrivacyActive'] == true)
+          'displayPlacement': displayPlacement,
         if (targetable is bool) 'targetable': targetable,
         if (totalSteps is num) 'totalSteps': totalSteps.toInt(),
       });
@@ -4882,6 +4931,7 @@ class BackendApiService {
     final powerupSlots = powerupData['powerupSlots'];
     final queuedBoxCount = powerupData['queuedBoxCount'];
     final myPlacement = powerupData['myPlacement'];
+    final myDisplayPlacement = powerupData['myDisplayPlacement'];
     if (powerupSlots is! num ||
         queuedBoxCount is! num ||
         (myPlacement != null && myPlacement is! num)) {
@@ -4895,7 +4945,13 @@ class BackendApiService {
         'inventory': normalizedInventory,
         'queuedBoxCount': queuedBoxCount.toInt(),
         'myPlacement': myPlacement is num ? myPlacement.toInt() : null,
+        if (payload?['placementPrivacyActive'] == true)
+          'myDisplayPlacement': myDisplayPlacement is num
+              ? myDisplayPlacement.toInt()
+              : null,
       },
+      if (payload?['placementPrivacyActive'] is bool)
+        'placementPrivacyActive': payload?['placementPrivacyActive'] == true,
     };
   }
 

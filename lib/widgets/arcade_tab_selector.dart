@@ -70,33 +70,47 @@ class _TabPill extends StatelessWidget {
         ? Colors.white
         : AppColors.of(context).textMid.withValues(alpha: 0.8);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: PixelText.title(size: 14, color: textColor)),
-            if (showUnread) ...[
-              const SizedBox(width: 6),
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).error,
-                  shape: BoxShape.circle,
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: PixelText.title(size: 14, color: textColor),
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                  maxLines: 2,
                 ),
               ),
+              if (showUnread) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).error,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

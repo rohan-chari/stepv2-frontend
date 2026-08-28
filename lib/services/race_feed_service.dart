@@ -15,6 +15,8 @@ class RaceFeedEvent {
   final String? targetUserId;
   final String? sourceFeedEventId;
   final String? impactScope;
+  final int? deltaSteps;
+  final String? attackerDisplayName;
   final DateTime createdAt;
 
   const RaceFeedEvent({
@@ -27,6 +29,8 @@ class RaceFeedEvent {
     this.targetUserId,
     this.sourceFeedEventId,
     this.impactScope,
+    this.deltaSteps,
+    this.attackerDisplayName,
   });
 
   static RaceFeedEvent? tryFromJson(Object? raw) {
@@ -36,6 +40,15 @@ class RaceFeedEvent {
     final createdRaw = raw['createdAt'];
     final sourceFeedEventId = raw['sourceFeedEventId'];
     final impactScope = raw['impactScope'];
+    final rawDelta = raw['deltaSteps'];
+    final rawAttacker = raw['attackerDisplayName'];
+    final deltaSteps =
+        rawDelta is num &&
+            rawDelta.isFinite &&
+            rawDelta == rawDelta.roundToDouble()
+        ? rawDelta.toInt()
+        : null;
+    final attacker = rawAttacker is String ? rawAttacker.trim() : '';
     return RaceFeedEvent(
       id: id,
       eventType: raw['eventType'] is String ? raw['eventType'] as String : '',
@@ -59,6 +72,10 @@ class RaceFeedEvent {
           : null,
       impactScope: impactScope is String && impactScope.isNotEmpty
           ? impactScope
+          : null,
+      deltaSteps: deltaSteps,
+      attackerDisplayName: attacker.isNotEmpty && attacker.runes.length <= 30
+          ? attacker
           : null,
       createdAt: createdRaw != null
           ? DateTime.tryParse(
@@ -353,12 +370,18 @@ class RaceFeedService extends ChangeNotifier {
     final parsed = page.events
         .map(RaceFeedEvent.tryFromJson)
         .whereType<RaceFeedEvent>()
-        .where((event) => event.id.startsWith('impact:'))
+        .where(
+          (event) =>
+              event.id.startsWith('impact:') &&
+              event.description.trim().isNotEmpty,
+        )
         .toList(growable: false);
     for (final event in parsed) {
       _privateEventIds.add(event.id);
       final sourceId = event.sourceFeedEventId;
-      if (sourceId != null) _suppressedSourceFeedEventIds.add(sourceId);
+      if (sourceId != null && event.description.trim().isNotEmpty) {
+        _suppressedSourceFeedEventIds.add(sourceId);
+      }
     }
     for (final event in _events) {
       if (_suppressedSourceFeedEventIds.contains(event.id)) {

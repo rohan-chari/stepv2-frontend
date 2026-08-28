@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/powerup_copy.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 import 'game_container.dart';
 import 'home_chrome.dart';
 import 'pill_button.dart';
@@ -87,6 +88,7 @@ class PowerupRevealModal extends StatelessWidget {
     required this.accent,
     required this.onDismiss,
     this.signedSteps,
+    this.attackerDisplayName,
   });
 
   final String iconType;
@@ -95,12 +97,15 @@ class PowerupRevealModal extends StatelessWidget {
   final Color accent;
   final VoidCallback onDismiss;
   final int? signedSteps;
+  final String? attackerDisplayName;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 500),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 500),
       curve: Curves.easeOutBack,
       builder: (context, value, child) {
         return Transform.scale(
@@ -136,10 +141,26 @@ class PowerupRevealModal extends StatelessWidget {
                   border: Border.all(color: accent, width: 2),
                 ),
                 alignment: Alignment.center,
-                child: PowerupIcon(type: iconType, size: 82, spinning: true),
+                child: PowerupIcon(
+                  type: iconType,
+                  size: 82,
+                  spinning: !MediaQuery.disableAnimationsOf(context),
+                ),
               ),
             ),
             const SizedBox(height: 16),
+            if (attackerDisplayName != null) ...[
+              Text(
+                'Attacked by ${atName(attackerDisplayName)}',
+                key: const Key('powerup-impact-attacker'),
+                style: PixelText.title(
+                  size: 13,
+                  color: AppColors.of(context).textDark,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+            ],
             if (signedSteps != null) ...[
               SignedStepAmount(steps: signedSteps!),
               const SizedBox(height: 8),
@@ -175,6 +196,7 @@ Future<void> showPowerupRevealModal(
   required String subtitle,
   Color? accent,
   int? signedSteps,
+  String? attackerDisplayName,
 }) {
   final resolvedAccent = accent ?? AppColors.of(context).accent;
   return showGeneralDialog(
@@ -182,7 +204,9 @@ Future<void> showPowerupRevealModal(
     barrierDismissible: true,
     barrierLabel: 'Powerup reveal',
     barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 280),
+    transitionDuration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 280),
     pageBuilder: (dialogContext, _, _) {
       return Material(
         color: Colors.transparent,
@@ -208,6 +232,7 @@ Future<void> showPowerupRevealModal(
                       subtitle: subtitle,
                       accent: resolvedAccent,
                       signedSteps: signedSteps,
+                      attackerDisplayName: attackerDisplayName,
                       onDismiss: () => Navigator.of(dialogContext).pop(),
                     ),
                   ),

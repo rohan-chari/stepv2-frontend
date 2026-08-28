@@ -280,8 +280,10 @@ class RacerAvatarStack extends StatelessWidget {
     Map<String, dynamic> entry,
     int fallbackRank,
   ) {
-    final rank = (entry['rank'] as num?)?.toInt() ?? fallbackRank;
-    final isStealthed = entry['isStealthed'] == true;
+    final isStealthed =
+        entry['isStealthed'] == true || entry['stealthed'] == true;
+    final rawRank = entry['displayPlacement'] ?? entry['rank'];
+    final rank = rawRank is num && rawRank > 0 ? rawRank.toInt() : fallbackRank;
     final accessories = isStealthed
         ? const <Map<String, dynamic>>[]
         : ((entry['equippedAccessories'] as List?)
@@ -299,6 +301,7 @@ class RacerAvatarStack extends StatelessWidget {
       size: size,
       animal: animal,
       ringColor: team != null ? TeamRace.color(team, context) : null,
+      showMedalRing: !isStealthed,
     );
   }
 }

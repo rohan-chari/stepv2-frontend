@@ -10,115 +10,8 @@ import '../widgets/home_chrome.dart';
 import '../widgets/odds_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
+import '../widgets/powerup_guide_sheet.dart';
 import '../constants/powerup_copy.dart';
-
-const _powerupEntries = [
-  (
-    type: 'LEG_CRAMP',
-    name: 'Leg Cramp',
-    description: 'Freeze a rival\'s steps for 2 hours',
-  ),
-  (
-    type: 'RED_CARD',
-    name: 'Red Card',
-    description: 'Remove 10% of the leader\'s steps',
-  ),
-  (
-    type: 'SHORTCUT',
-    name: 'Shortcut',
-    description: 'Steal 1,000 steps from a rival',
-  ),
-  (
-    type: 'COMPRESSION_SOCKS',
-    name: 'Compression Socks',
-    description: 'Shield against the next attack',
-  ),
-  (
-    type: 'PROTEIN_SHAKE',
-    name: 'Protein Shake',
-    description: '+1,500 bonus steps instantly',
-  ),
-  (
-    type: 'RUNNERS_HIGH',
-    name: "Runner's High",
-    description: '2x steps for 3 hours',
-  ),
-  (
-    type: 'SECOND_WIND',
-    name: 'Second Wind',
-    description: 'Bonus steps based on how far behind',
-  ),
-  (
-    type: 'STEALTH_MODE',
-    name: 'Stealth Mode',
-    description: 'Hide your progress for 4 hours',
-  ),
-  (
-    type: 'WRONG_TURN',
-    name: 'Wrong Turn',
-    description: 'Reverse a rival\'s steps for 1 hour',
-  ),
-  (
-    type: 'FANNY_PACK',
-    name: 'Fanny Pack',
-    description: 'Unlock an extra powerup slot',
-  ),
-  (
-    type: 'TRAIL_MIX',
-    name: 'Trail Mix',
-    description: '+100 steps per unique powerup type used',
-  ),
-  (
-    type: 'DETOUR_SIGN',
-    name: 'Detour Sign',
-    description: 'Hide the entire leaderboard from a rival for 3 hours',
-  ),
-  (
-    type: 'LUCKY_HORSESHOE',
-    name: 'Lucky Horseshoe',
-    description: 'Guarantee a better next mystery box',
-  ),
-  (
-    type: 'CAMPFIRE_REST',
-    name: 'Campfire Rest',
-    description: 'Freeze for 30 min, then multiply steps for up to 90 min',
-  ),
-  (
-    type: 'TRAIL_MAGNET',
-    name: 'Trail Magnet',
-    description: 'Pull your next mystery box closer',
-  ),
-  (
-    type: 'POCKET_WATCH',
-    name: 'Pocket Watch',
-    description: 'Extend all active timed buffs',
-  ),
-  (
-    type: 'TRAIL_MINE',
-    name: 'Trail Mine',
-    description: 'Drop a trap at your current steps',
-  ),
-  (
-    type: 'PINECONE_TOSS',
-    name: 'Pinecone Toss',
-    description: 'Hit the runner ahead or behind',
-  ),
-  (
-    type: 'SNEAKY_SWAP',
-    name: 'Pickpocket',
-    description: 'Steal a random powerup from a rival',
-  ),
-  (
-    type: 'MIRROR',
-    name: 'Mirror',
-    description: 'Reflect the next attack back at the attacker',
-  ),
-  (
-    type: 'CLEANSE',
-    name: 'Cleanse',
-    description: 'Remove all debuffs an opponent placed on you',
-  ),
-];
 
 /// Full-screen overlay for opening a mystery box with CSGO-style animation.
 class CaseOpeningScreen extends StatefulWidget {
@@ -478,17 +371,11 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
     );
   }
 
-  // Prefer the backend copy catalog so duration text stays truthful when the
-  // backend restandardizes powerup windows (spec §3.4/§6). The bundled
-  // `_powerupEntries` string is only a last-resort fallback for a type the
-  // catalog somehow doesn't cover.
+  // Prefer the validated backend catalog with PowerupCopy's bundled fallback.
   String? _descriptionFor(String type) {
     final catalogDesc = PowerupCopy.descriptionFor(type);
     if (catalogDesc.trim().isNotEmpty) {
       return catalogDesc;
-    }
-    for (final entry in _powerupEntries) {
-      if (entry.type == type) return entry.description;
     }
     return null;
   }
@@ -609,94 +496,14 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   }
 
   void _showPowerupGuide(BuildContext context) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.of(context).parchmentLight,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       isScrollControlled: true,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.4,
-          maxChildSize: 0.85,
-          expand: false,
-          builder: (context, scrollController) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).woodMid,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'POWERUP GUIDE',
-                    style: PixelText.title(
-                      size: 20,
-                      color: AppColors.of(context).textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: ListView.separated(
-                      controller: scrollController,
-                      itemCount: _powerupEntries.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final entry = _powerupEntries[index];
-                        return GameContainer(
-                          padding: const EdgeInsets.all(10),
-                          frameColor: AppColors.of(context).parchmentBorder,
-                          child: Row(
-                            children: [
-                              PowerupIcon(
-                                type: entry.type,
-                                size: 34,
-                                spinning: true,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      entry.name,
-                                      style: PixelText.title(
-                                        size: 14,
-                                        color: AppColors.of(context).textDark,
-                                      ),
-                                    ),
-                                    Text(
-                                      _descriptionFor(entry.type) ??
-                                          entry.description,
-                                      style: PixelText.body(
-                                        size: 12,
-                                        color: AppColors.of(context).textMid,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => const PowerupGuideSheet(),
     );
   }
 }

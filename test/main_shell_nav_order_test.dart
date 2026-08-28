@@ -65,6 +65,26 @@ class _MissingRaceApi extends _FakeBackendApiService {
   );
 }
 
+class _DelayedSessionMissingRaceApi extends _MissingRaceApi {
+  final Completer<Map<String, dynamic>> session = Completer();
+
+  @override
+  Future<Map<String, dynamic>> refreshSessionToken({
+    required String authToken,
+  }) => session.future;
+
+  void completeSession(String token) {
+    session.complete({
+      'sessionToken': token,
+      'user': {
+        'firstRaceOnboardingSeen': true,
+        'tutorialOnboardingSeen': true,
+        'featureFlags': {'onboardingV3Enabled': false},
+      },
+    });
+  }
+}
+
 class _FakeBackgroundSyncBootstrapService
     extends BackgroundSyncBootstrapService {
   @override
@@ -953,6 +973,43 @@ void main() {
       },
     );
   }
+
+  testWidgets('cold race action waits for session readiness before draining', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _DelayedSessionMissingRaceApi();
+    final notifications = NotificationService(isIosForTesting: false);
+    await notifications.handleNotificationTapForTesting(const {
+      'type': 'POWERUP_USED',
+      'params': '{"raceId":"race-deleted"}',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          notificationService: notifications,
+          forceHomeInviteEligibilityForTesting: true,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(notifications.pendingAction.value, isNotNull);
+    expect(find.text('That race is no longer available.'), findsNothing);
+
+    api.completeSession(authService.authToken!);
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(notifications.pendingAction.value, isNull);
+    expect(find.text('That race is no longer available.'), findsOneWidget);
+  });
 
   testWidgets('Decoy Inbox public shape falls back from deleted race', (
     WidgetTester tester,

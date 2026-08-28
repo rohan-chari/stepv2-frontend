@@ -35,6 +35,15 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.11',
+    title: 'RACES, YOUR WAY',
+    bullets: <String>[
+      'Favorite important races to keep them at the top of your race shelves.',
+      'Stealth Mode now hides live placement without leaving revealing rank gaps.',
+      'Powerup guides, attack alerts, activity details, and large Profile totals are clearer.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.3.10',
     title: 'RACES, REFINED',
     bullets: <String>[

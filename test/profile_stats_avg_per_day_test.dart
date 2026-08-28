@@ -172,4 +172,19 @@ void main() {
       expect(find.text('150,000'), findsOneWidget);
     },
   );
+
+  testWidgets('All Time renders million-scale totals with one decimal M', (
+    tester,
+  ) async {
+    await _pumpProfileTab(tester, {
+      'thisWeek': 1,
+      'thisMonth': 1,
+      'thisYear': 1,
+      'allTime': 1503300,
+      'streak': 1,
+    });
+
+    expect(find.text('1.5M'), findsOneWidget);
+    expect(find.text('1503.3k'), findsNothing);
+  });
 }

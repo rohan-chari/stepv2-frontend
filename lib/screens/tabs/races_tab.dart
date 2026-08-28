@@ -193,6 +193,10 @@ class _RacesTabState extends State<RacesTab> {
 
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _navigatingToRace = false;
+  final Map<String, bool> _favoriteOverrides = {};
+  final Map<String, int> _favoriteMutationEpoch = {};
+  final Set<String> _favoriteInFlight = {};
+  String? _favoriteOwnerUserId;
 
   /// §4.1: the selected personal-list state. Always initialised to ACTIVE for a
   /// freshly created state — that's where the actionable races live.
@@ -220,9 +224,10 @@ class _RacesTabState extends State<RacesTab> {
             .toList(growable: false)
       : const [];
 
-  List<Map<String, dynamic>> get _active => _safeRows(
-    _raceData?['active'],
-  ).where((r) => r['myStatus'] != 'DECLINED').toList();
+  List<Map<String, dynamic>> get _active => _safeRows(_raceData?['active'])
+      .where((r) => r['myStatus'] != 'DECLINED')
+      .map(_withFavoriteOverlay)
+      .toList();
 
   List<Map<String, dynamic>> get _invites => _safeRows(
     _raceData?['pending'],
@@ -230,10 +235,26 @@ class _RacesTabState extends State<RacesTab> {
 
   List<Map<String, dynamic>> get _waiting => _safeRows(_raceData?['pending'])
       .where((r) => r['myStatus'] != 'INVITED' && r['myStatus'] != 'DECLINED')
+      .map(_withFavoriteOverlay)
       .toList();
 
   List<Map<String, dynamic>> get _completed =>
-      _safeRows(_raceData?['completed']);
+      _safeRows(_raceData?['completed']).map(_withFavoriteOverlay).toList();
+
+  bool _favoriteOf(Map<String, dynamic> race) => race['isFavorite'] == true;
+
+  Map<String, dynamic> _withFavoriteOverlay(Map<String, dynamic> race) {
+    final id = race['id'];
+    final override = id is String ? _favoriteOverrides[id] : null;
+    if (override == null) return race;
+    return <String, dynamic>{
+      ...race,
+      'isFavorite': override,
+      'favoritedAt': override
+          ? race['favoritedAt'] ?? DateTime.now().toUtc().toIso8601String()
+          : null,
+    };
+  }
 
   BackendApiService? _lazyApi;
   BackendApiService get _api =>
@@ -262,16 +283,113 @@ class _RacesTabState extends State<RacesTab> {
   /// The merged personal list for one state: ordinary races first (soonest
   /// ending first for ACTIVE), then tournaments in the same state.
   List<_ListEntry> _entriesFor(_PersonalState state) {
-    final races = switch (state) {
+    final secondaryOrdered = switch (state) {
       _PersonalState.active => _sortByTimeLeft(_active),
       _PersonalState.pending => _waiting,
       _PersonalState.completed => _completed,
     };
+    final races = <Map<String, dynamic>>[
+      ...secondaryOrdered.where(_favoriteOf),
+      ...secondaryOrdered.where((race) => !_favoriteOf(race)),
+    ];
     return [
       for (final r in races) _ListEntry.race(r),
       for (final t in _tournamentsIn(state.tournamentState))
         _ListEntry.tournament(t),
     ];
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _favoriteOwnerUserId = widget.authService.userId;
+  }
+
+  @override
+  void didUpdateWidget(covariant RacesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final owner = widget.authService.userId;
+    if (owner != _favoriteOwnerUserId) {
+      _favoriteOwnerUserId = owner;
+      _favoriteOverrides.clear();
+      _favoriteMutationEpoch.clear();
+      _favoriteInFlight.clear();
+      return;
+    }
+    // An authoritative refresh that agrees with our last mutation can take
+    // ownership. A stale response that disagrees leaves the optimistic overlay
+    // in place, so it cannot visibly undo a newer successful tap.
+    final rows = <Map<String, dynamic>>[
+      ..._safeRows(_raceData?['active']),
+      ..._safeRows(_raceData?['pending']),
+      ..._safeRows(_raceData?['completed']),
+    ];
+    for (final row in rows) {
+      final id = row['id'];
+      if (id is! String || !_favoriteOverrides.containsKey(id)) continue;
+      final raw = row['isFavorite'];
+      if (raw is bool && raw == _favoriteOverrides[id]) {
+        _favoriteOverrides.remove(id);
+      }
+    }
+  }
+
+  Future<void> _toggleFavorite(Map<String, dynamic> race) async {
+    final raceId = race['id'];
+    final token = widget.authService.authToken;
+    if (raceId is! String ||
+        raceId.isEmpty ||
+        token == null ||
+        token.isEmpty ||
+        _favoriteInFlight.contains(raceId)) {
+      return;
+    }
+    final previous = _favoriteOf(_withFavoriteOverlay(race));
+    final desired = !previous;
+    final epoch = (_favoriteMutationEpoch[raceId] ?? 0) + 1;
+    setState(() {
+      _favoriteMutationEpoch[raceId] = epoch;
+      _favoriteOverrides[raceId] = desired;
+      _favoriteInFlight.add(raceId);
+    });
+    try {
+      final response = await _api.updateRaceFavorite(
+        identityToken: token,
+        raceId: raceId,
+        favorite: desired,
+      );
+      if (!mounted ||
+          _favoriteMutationEpoch[raceId] != epoch ||
+          widget.authService.authToken != token) {
+        return;
+      }
+      final acknowledged = response['isFavorite'];
+      if (acknowledged is! bool || acknowledged != desired) {
+        throw const ApiException('Could not update favorite. Try again.');
+      }
+    } on ApiException catch (error) {
+      if (mounted && _favoriteMutationEpoch[raceId] == epoch) {
+        setState(() {
+          if (_favoriteOverrides[raceId] == desired) {
+            _favoriteOverrides[raceId] = previous;
+          }
+        });
+        showErrorToast(context, error.message);
+      }
+    } catch (_) {
+      if (mounted && _favoriteMutationEpoch[raceId] == epoch) {
+        setState(() {
+          if (_favoriteOverrides[raceId] == desired) {
+            _favoriteOverrides[raceId] = previous;
+          }
+        });
+        showErrorToast(context, 'Could not update favorite. Try again.');
+      }
+    } finally {
+      if (mounted && _favoriteMutationEpoch[raceId] == epoch) {
+        setState(() => _favoriteInFlight.remove(raceId));
+      }
+    }
   }
 
   /// Badge count for a pill. Derived entirely from the already-loaded
@@ -1462,11 +1580,35 @@ class _RacesTabState extends State<RacesTab> {
     // `winner` fallback) block. It fed a leading rank-1 portrait that users
     // mistook for their own racer. The backend still sends the field for
     // frozen older builds; it is simply ignored here.
-    final myPlacement = race['myPlacement'] as int?;
+    int? positiveInt(Object? raw) {
+      if (raw is! num ||
+          !raw.isFinite ||
+          raw != raw.roundToDouble() ||
+          raw <= 0) {
+        return null;
+      }
+      return raw.toInt();
+    }
+
+    final placementPrivacyKnown = race['placementPrivacyActive'] is bool;
+    final placementPrivacyActive = race['placementPrivacyActive'] == true;
+    final legacyActiveRankUnsafe = status == 'ACTIVE' && !placementPrivacyKnown;
+    // Canonical myPlacement is never painted while the capable backend says a
+    // privacy projection is active. It remains untouched in the payload for
+    // payout math elsewhere.
+    final myPlacement = placementPrivacyActive
+        ? positiveInt(race['myDisplayPlacement'])
+        : (legacyActiveRankUnsafe ? null : positiveInt(race['myPlacement']));
     // Detour Sign: the backend nulls myPlacement and sets this additive flag
     // so the list shows "???" instead of a placement (matches the race-detail
     // masking). Absent on older backends -> false.
-    final myPlacementHidden = race['myPlacementHidden'] as bool? ?? false;
+    final myPlacementHidden =
+        race['myPlacementHidden'] == true ||
+        ((placementPrivacyActive || legacyActiveRankUnsafe) &&
+            myPlacement == null);
+    final isFavorite = _favoriteOf(_withFavoriteOverlay(race));
+    final favoriteBusy = _favoriteInFlight.contains(raceId);
+    final canFavorite = !isInvite && raceId.isNotEmpty;
     final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
     // Canonical per-slot inventory. A well-formed list (including an empty
     // one) owns the mystery-box count; older/malformed payloads retain the
@@ -1770,6 +1912,60 @@ class _RacesTabState extends State<RacesTab> {
                         statusLabel,
                         style: PixelText.title(size: 12, color: badgeColor),
                         textAlign: TextAlign.right,
+                      ),
+                    ],
+                    if (canFavorite) ...[
+                      const SizedBox(width: 2),
+                      Semantics(
+                        button: true,
+                        toggled: isFavorite,
+                        label: isFavorite
+                            ? 'Remove $name from favorites'
+                            : 'Add $name to favorites',
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Material(
+                            color: Colors.transparent,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              key: Key('race-favorite-$raceId'),
+                              customBorder: const CircleBorder(),
+                              onTap: favoriteBusy
+                                  ? null
+                                  : () => _toggleFavorite(race),
+                              child: Container(
+                                margin: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isFavorite
+                                      ? AppColors.of(
+                                          context,
+                                        ).pillGold.withValues(alpha: 0.22)
+                                      : AppColors.of(
+                                          context,
+                                        ).parchmentDark.withValues(alpha: 0.35),
+                                  border: Border.all(
+                                    color: isFavorite
+                                        ? AppColors.of(context).pillGoldDark
+                                        : AppColors.of(context).parchmentBorder,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  isFavorite
+                                      ? Icons.star_rounded
+                                      : Icons.star_border_rounded,
+                                  size: 23,
+                                  color: isFavorite
+                                      ? AppColors.of(context).pillGoldDark
+                                      : AppColors.of(context).textMid,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(width: 4),

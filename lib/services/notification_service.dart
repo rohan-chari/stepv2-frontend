@@ -579,20 +579,7 @@ class NotificationService {
     final typeValue = payload['type'];
     final type = typeValue is String ? typeValue : null;
 
-    final rawNested = payload['params'];
-    final nested = rawNested is Map
-        ? <String, dynamic>{
-            for (final entry in rawNested.entries)
-              if (entry.key is String) entry.key as String: entry.value,
-          }
-        : <String, dynamic>{};
-    final params = <String, String>{};
-    final raceId = nested['raceId'];
-    if (raceId is String) params['raceId'] = raceId;
-    // Tournament pushes carry `tournamentId`; read defensively (older apps that
-    // don't know the type fall through to a null route and just ignore it).
-    final tournamentId = nested['tournamentId'];
-    if (tournamentId is String) params['tournamentId'] = tournamentId;
+    final params = _normalizedTapParams(payload);
 
     final route = resolveRoute(type, params);
     if (route == null) return;
@@ -607,30 +594,41 @@ class NotificationService {
     final rawType = data['type'];
     final type = rawType is String ? rawType : null;
 
-    final params = <String, String>{};
-    final raceId = data['raceId'];
-    if (raceId is String) params['raceId'] = raceId;
-    final tournamentId = data['tournamentId'];
-    if (tournamentId is String) params['tournamentId'] = tournamentId;
-    final rawParams = data['params'];
-    if (rawParams is String && rawParams.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(rawParams);
-        if (decoded is Map) {
-          final nestedRaceId = decoded['raceId'];
-          if (nestedRaceId is String) params['raceId'] = nestedRaceId;
-          final nestedTournamentId = decoded['tournamentId'];
-          if (nestedTournamentId is String) {
-            params['tournamentId'] = nestedTournamentId;
-          }
-        }
-      } catch (_) {}
-    }
+    final params = _normalizedTapParams(data);
 
     final route = resolveRoute(type, params);
     if (route == null) return;
 
     pendingAction.value = NotificationAction(route: route, params: params);
+  }
+
+  Map<String, String> _normalizedTapParams(Map<String, dynamic> payload) {
+    final params = <String, String>{};
+
+    void copyKnown(Map<dynamic, dynamic> source) {
+      for (final key in const ['raceId', 'tournamentId']) {
+        final raw = source[key];
+        if (raw is String && raw.trim().isNotEmpty) {
+          params[key] = raw.trim();
+        }
+      }
+    }
+
+    // Legacy provider payloads carried IDs at the top level.
+    copyKnown(payload);
+    final rawNested = payload['params'];
+    if (rawNested is Map) {
+      copyKnown(rawNested);
+    } else if (rawNested is String && rawNested.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawNested);
+        if (decoded is Map) copyKnown(decoded);
+      } catch (_) {
+        // A malformed nested value cannot prevent a compatible top-level ID
+        // from routing, and never throws into notification initialization.
+      }
+    }
+    return params;
   }
 
   Future<void> _queueOpenReceipt(

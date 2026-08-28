@@ -72,6 +72,75 @@ class PowerupCopyUnavailable implements Exception {
   String toString() => 'PowerupCopyUnavailable($statusCode)';
 }
 
+enum SamePowerupStacking {
+  notApplicable('NOT_APPLICABLE'),
+  blocked('BLOCKED'),
+  extendsDuration('EXTENDS'),
+  allowed('ALLOWED'),
+  limited('LIMITED');
+
+  const SamePowerupStacking(this.wireValue);
+  final String wireValue;
+
+  static SamePowerupStacking? tryParse(Object? raw) {
+    if (raw is! String) return null;
+    for (final value in values) {
+      if (value.wireValue == raw) return value;
+    }
+    return null;
+  }
+}
+
+enum OtherEffectsStacking {
+  notApplicable('NOT_APPLICABLE'),
+  allowed('ALLOWED'),
+  conditional('CONDITIONAL'),
+  conflicts('CONFLICTS');
+
+  const OtherEffectsStacking(this.wireValue);
+  final String wireValue;
+
+  static OtherEffectsStacking? tryParse(Object? raw) {
+    if (raw is! String) return null;
+    for (final value in values) {
+      if (value.wireValue == raw) return value;
+    }
+    return null;
+  }
+}
+
+class PowerupStackingRule {
+  const PowerupStackingRule({
+    required this.samePowerup,
+    required this.otherEffects,
+    required this.summary,
+  });
+
+  final SamePowerupStacking samePowerup;
+  final OtherEffectsStacking otherEffects;
+  final String summary;
+
+  static PowerupStackingRule? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final same = SamePowerupStacking.tryParse(raw['samePowerup']);
+    final other = OtherEffectsStacking.tryParse(raw['otherEffects']);
+    final summary = _trimmedOrNull(raw['summary']);
+    if (same == null || other == null || summary == null) return null;
+    if (summary.runes.length > 240) return null;
+    return PowerupStackingRule(
+      samePowerup: same,
+      otherEffects: other,
+      summary: summary,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'samePowerup': samePowerup.wireValue,
+    'otherEffects': otherEffects.wireValue,
+    'summary': summary,
+  };
+}
+
 /// One validated catalog row.
 class PowerupCopyEntry {
   const PowerupCopyEntry({
@@ -80,6 +149,7 @@ class PowerupCopyEntry {
     required this.description,
     this.shortDescription,
     this.upgradeTierLabels = const [],
+    this.stacking,
   });
 
   final String type;
@@ -94,6 +164,17 @@ class PowerupCopyEntry {
 
   /// 4 entries for upgradeable types, empty otherwise.
   final List<String> upgradeTierLabels;
+  final PowerupStackingRule? stacking;
+
+  PowerupCopyEntry copyWith({PowerupStackingRule? stacking}) =>
+      PowerupCopyEntry(
+        type: type,
+        name: name,
+        description: description,
+        shortDescription: shortDescription,
+        upgradeTierLabels: upgradeTierLabels,
+        stacking: stacking,
+      );
 
   Map<String, dynamic> toJson() => {
     'type': type,
@@ -101,15 +182,21 @@ class PowerupCopyEntry {
     'description': description,
     'shortDescription': shortDescription,
     'upgradeTierLabels': upgradeTierLabels,
+    if (stacking != null) 'stacking': stacking!.toJson(),
   };
 }
 
 /// A fully validated catalog snapshot. Constructed only through
 /// [PowerupCopySnapshot.parse], which rejects anything partial or malformed.
 class PowerupCopySnapshot {
-  const PowerupCopySnapshot({required this.version, required this.entries});
+  const PowerupCopySnapshot({
+    required this.version,
+    required this.entries,
+    this.stackingVersion,
+  });
 
   final String version;
+  final int? stackingVersion;
   final Map<String, PowerupCopyEntry> entries;
 
   /// Validates a `/powerups/catalog` response.
@@ -154,6 +241,9 @@ class PowerupCopySnapshot {
         // Only a complete 4-tier ladder is usable; anything else defers to the
         // bundled labels rather than rendering a half-built tier list.
         upgradeTierLabels: tiers.length == 4 ? tiers : const [],
+        // Stacking is deliberately row-local validation. A future enum or one
+        // malformed rule must never discard otherwise usable catalog copy.
+        stacking: PowerupStackingRule.tryParse(item['stacking']),
       );
     }
 
@@ -161,12 +251,20 @@ class PowerupCopySnapshot {
 
     return PowerupCopySnapshot(
       version: _trimmedOrNull(raw['version']) ?? '',
+      stackingVersion:
+          raw['stackingVersion'] is num &&
+              (raw['stackingVersion'] as num).isFinite &&
+              raw['stackingVersion'] ==
+                  (raw['stackingVersion'] as num).roundToDouble()
+          ? (raw['stackingVersion'] as num).toInt()
+          : null,
       entries: entries,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'version': version,
+    if (stackingVersion != null) 'stackingVersion': stackingVersion,
     'powerups': [for (final e in entries.values) e.toJson()],
   };
 }
@@ -197,6 +295,43 @@ abstract final class PowerupCopy {
   /// `MYSTERY_BOX` is intentionally excluded — it is an unopened-container
   /// inventory state, not a usable powerup with use-sheet or effect copy.
   static Iterable<String> get bundledTypes => _bundledNames.keys;
+
+  /// Rows for the mystery-box field manual in the authoritative catalog order.
+  /// A catalog from an older backend has no [PowerupCopySnapshot.stackingVersion]
+  /// and receives the bundled mechanics table. A v2 catalog with a malformed
+  /// individual rule intentionally keeps that rule null so the UI can say the
+  /// details are unavailable instead of guessing.
+  static List<PowerupCopyEntry> get guideEntries {
+    final snapshot = _memory ?? _persisted;
+    if (snapshot != null) {
+      final result = <PowerupCopyEntry>[
+        for (final entry in snapshot.entries.values)
+          if (entry.type != 'IMPOSTER')
+            snapshot.stackingVersion == null
+                ? entry.copyWith(stacking: _bundledStacking[entry.type])
+                : entry,
+      ];
+      final present = result.map((entry) => entry.type).toSet();
+      for (final type in bundledTypes) {
+        if (type == 'IMPOSTER' || present.contains(type)) continue;
+        result.add(_bundledGuideEntry(type));
+      }
+      return result;
+    }
+    return [
+      for (final type in bundledTypes)
+        if (type != 'IMPOSTER') _bundledGuideEntry(type),
+    ];
+  }
+
+  static PowerupCopyEntry _bundledGuideEntry(String type) => PowerupCopyEntry(
+    type: type,
+    name: _bundledNames[type] ?? type,
+    description: _bundledDescriptions[type] ?? type,
+    shortDescription: _bundledShortDescriptions[type],
+    upgradeTierLabels: _bundledUpgradeTierLabels[type] ?? const [],
+    stacking: _bundledStacking[type],
+  );
 
   // -- Reads ---------------------------------------------------------------
 
@@ -553,7 +688,12 @@ abstract final class PowerupCopy {
     ],
     // 2026-08-15: joined the 15-min upgrade ladder (was 3/4/5/7h here, never
     // matched the backend's real 1/2/3/4h ladder either).
-    'RUNNERS_HIGH': ['2x for 1h', '2x for 1h 15m', '2x for 1h 30m', '2x for 1h 45m'],
+    'RUNNERS_HIGH': [
+      '2x for 1h',
+      '2x for 1h 15m',
+      '2x for 1h 30m',
+      '2x for 1h 45m',
+    ],
     // Item 1 — each upgrade adds 15 minutes on top of the 1h base.
     'LEG_CRAMP': [
       'Freeze 1h',
@@ -597,5 +737,248 @@ abstract final class PowerupCopy {
       '-1,500 steps',
       '-2,250 steps',
     ],
+  };
+
+  static const _bundledStacking = <String, PowerupStackingRule>{
+    'LEG_CRAMP': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conflicts,
+      summary:
+          'Only one Leg Cramp can affect a racer. It cannot coexist with Wrong Turn; Quicksand also rejects a cramped target. Freeze overrides step multipliers.',
+    ),
+    'RED_CARD': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Red Card resolves immediately, so active stacking does not apply.',
+    ),
+    'SHORTCUT': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Shortcut transfers steps immediately, so active stacking does not apply.',
+    ),
+    'COMPRESSION_SOCKS': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Only one shield can be active. Defense resolves Mirror, then Decoy, then Compression Socks; the shield blocks one eligible attack and is consumed.',
+    ),
+    'PROTEIN_SHAKE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Protein Shake grants steps immediately, so active stacking does not apply.',
+    ),
+    'RUNNERS_HIGH': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          "Only one Runner's High can be active. Different boosts add; freeze overrides, Rainstorm reduces, a losing Coin Flip subtracts, and Wrong Turn negates the final rate.",
+    ),
+    'SECOND_WIND': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Second Wind grants its catch-up bonus immediately, so active stacking does not apply.',
+    ),
+    'STEALTH_MODE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Only one Stealth Mode can be active. It can coexist with scoring and defensive effects because it changes presentation privacy, not score.',
+    ),
+    'WRONG_TURN': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conflicts,
+      summary:
+          'Only one Wrong Turn can affect a racer. It cannot coexist with Leg Cramp; when not frozen it negates the final effective step rate.',
+    ),
+    'FANNY_PACK': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Only one Fanny Pack slot expansion can be active. It does not change scoring effects.',
+    ),
+    'TRAIL_MIX': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Trail Mix grants its bonus immediately from unique powerup use history, so active stacking does not apply.',
+    ),
+    'DETOUR_SIGN': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Only one Detour Sign can affect a racer. It hides standings presentation and does not alter scoring effects.',
+    ),
+    'LUCKY_HORSESHOE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Only one Lucky Horseshoe guarantee can wait for the next box. Other active effects do not change that guarantee.',
+    ),
+    'CAMPFIRE_REST': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Only one Campfire Rest can be active. Its rest window freezes progress, so freeze overrides boosts, Rainstorm, Coin Flip, and Wrong Turn during that window.',
+    ),
+    'TRAIL_MAGNET': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Only one Trail Magnet can wait for the next mystery box. It changes box distance, not step scoring.',
+    ),
+    'POCKET_WATCH': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Pocket Watch resolves immediately by extending eligible active timed buffs. It cannot extend excluded, expired, opponent, or non-timed effects.',
+    ),
+    'TRAIL_MINE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Each mine is a separate trap from a separate item. Mines can coexist with other effects and resolve independently when crossed.',
+    ),
+    'PINECONE_TOSS': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Pinecone Toss removes steps immediately, so active stacking does not apply.',
+    ),
+    'SNEAKY_SWAP': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Pickpocket transfers an inventory item immediately, so active stacking does not apply.',
+    ),
+    'MIRROR': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Only one Mirror can be active. Defense resolves Mirror before Decoy and Compression Socks; the next eligible attack reflects and consumes it.',
+    ),
+    'CLEANSE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Cleanse resolves immediately and clears eligible opponent-applied debuffs. Signal Jammer prevents its use; self effects and excluded effects remain.',
+    ),
+    'IMPOSTER': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'Imposter is retired. Historical effects do not accept another active copy.',
+    ),
+    'RAINSTORM': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          "One storm per caster may be active. Storms from different casters can overlap, but each victim's penalty clamps at one 0.5x; Umbrella and Compression Socks can prevent it.",
+    ),
+    'SIGNAL_JAMMER': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Only one Signal Jammer can affect a racer. It can coexist with Power Outage and prevents powerup use, including Cleanse and Quick Rinse.',
+    ),
+    'LEECH': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'One Leech is allowed per attacker-target pair and at most two attackers may leech one victim. Transfers combine with other effective-step modifiers.',
+    ),
+    'DEFENSE_SCAN': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          'X-Ray reveals a defense snapshot immediately, so active stacking does not apply.',
+    ),
+    'HITCHHIKE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          "One active link is allowed per caster and one per target. It copies only the target effective-step behavior supported by the current scorer.",
+    ),
+    'QUICK_RINSE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Quick Rinse resolves immediately, has a once-per-hour race cooldown, and halves remaining time only on eligible opponent effects. Signal Jammer prevents its use.',
+    ),
+    'QUICKSAND': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conflicts,
+      summary:
+          'Quicksand rejects a target already affected by Quicksand or Leg Cramp. Direct Leg Cramp currently may overlap an existing Quicksand; freeze still applies once.',
+    ),
+    'UPRISING': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.extendsDuration,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Repeated casts merge each eligible beneficiary window to the later expiry and do not add another multiplier row. Freeze, Rainstorm, Coin Flip, and Wrong Turn precedence still applies.',
+    ),
+    'GHOST_PEPPER': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Only one Ghost Pepper can be active. Different boosts add; freeze overrides, Rainstorm reduces, a losing Coin Flip subtracts, and Wrong Turn negates the final rate.',
+    ),
+    'COIN_FLIP': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.allowed,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Repeated wins add (2x + 2x = 4x). Losses clamp at M-0.5, and a mixed win/loss is also M-0.5; freeze and Wrong Turn take precedence.',
+    ),
+    'MYSTERY_POTION': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.notApplicable,
+      otherEffects: OtherEffectsStacking.notApplicable,
+      summary:
+          "Mystery Potion resolves into its rolled mechanic immediately; stacking follows the rolled powerup's own rule.",
+    ),
+    'DECOY': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Only one Decoy can be active. Defense resolves Mirror before Decoy, then Compression Socks; the next eligible targeted attack redirects or is absorbed.',
+    ),
+    'POWER_OUTAGE': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Repeated casts are accepted and consumed while already-outaged recipients are skipped. It can coexist with Signal Jammer; Umbrella and Compression Socks can prevent it.',
+    ),
+    'UMBRELLA': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Duplicate Umbrellas add no benefit. Umbrella separately blocks eligible area attacks such as Rainstorm and Power Outage, but not targeted attacks.',
+    ),
+    'RALLY_FLAG': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.extendsDuration,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Repeated casts merge each teammate window to the later expiry and do not add another multiplier row. Freeze, Rainstorm, Coin Flip, and Wrong Turn precedence still applies.',
+    ),
+    'DRILL_SERGEANT': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.conditional,
+      summary:
+          'Each eligible dare has its own target and deadline. Its eventual penalty is a separate impact and defenses are resolved when the dare is cast.',
+    ),
+    'PIGGY_BANK': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.blocked,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'Only one Piggy Bank can be active. It tracks its own coin window and can coexist with step-scoring effects.',
+    ),
+    'BOUNTY': PowerupStackingRule(
+      samePowerup: SamePowerupStacking.limited,
+      otherEffects: OtherEffectsStacking.allowed,
+      summary:
+          'A bounty is a race-end objective tied to its target. It can coexist with scoring effects and does not itself change step rate.',
+    ),
   };
 }

@@ -832,6 +832,10 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'creator': {'displayName': 'Maya Chen'},
         'isCreator': false,
         'myPlacement': 2,
+        'myDisplayPlacement': 2,
+        'placementPrivacyActive': false,
+        'isFavorite': true,
+        'favoritedAt': now.subtract(const Duration(days: 1)).toIso8601String(),
         // One held powerup (sprite) + one unopened mystery box (crate), plus a
         // queued box — showcases all three inventory-slot states in the row.
         'slotItems': const [
@@ -1013,6 +1017,8 @@ List<Map<String, dynamic>> tutorialPreviewRaceParticipants() {
       'accessories': const [],
       'finishedAt': null,
       'stealthed': false,
+      'placement': 1,
+      'displayPlacement': 1,
     },
     {
       'userId': tutorialPreviewUserId,
@@ -1022,15 +1028,19 @@ List<Map<String, dynamic>> tutorialPreviewRaceParticipants() {
       'accessories': tutorialPreviewAccessories,
       'finishedAt': null,
       'stealthed': false,
+      'placement': 2,
+      'displayPlacement': 2,
     },
     {
       'userId': 'rk-3',
-      'displayName': 'Jordan Lee',
-      'totalSteps': 19050,
+      'displayName': '???',
+      'totalSteps': null,
       'profilePhotoUrl': null,
       'accessories': const [],
       'finishedAt': null,
-      'stealthed': false,
+      'stealthed': true,
+      'placement': null,
+      'displayPlacement': null,
     },
     {
       'userId': 'rk-5',
@@ -1040,6 +1050,8 @@ List<Map<String, dynamic>> tutorialPreviewRaceParticipants() {
       'accessories': const [],
       'finishedAt': null,
       'stealthed': false,
+      'placement': 4,
+      'displayPlacement': 3,
     },
     {
       'userId': 'rk-6',
@@ -1049,6 +1061,8 @@ List<Map<String, dynamic>> tutorialPreviewRaceParticipants() {
       'accessories': const [],
       'finishedAt': null,
       'stealthed': false,
+      'placement': 5,
+      'displayPlacement': 4,
     },
   ];
 }
@@ -1061,6 +1075,9 @@ Map<String, dynamic> tutorialPreviewRaceProgress() {
   return {
     'status': 'ACTIVE',
     'participants': tutorialPreviewRaceParticipants(),
+    'myPlacement': 2,
+    'myDisplayPlacement': 2,
+    'placementPrivacyActive': true,
     'powerupData': {
       'enabled': true,
       'powerupSlots': 3,

@@ -14,6 +14,16 @@ import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../settings_screen.dart';
 
+String formatProfileAllTimeSteps(int steps) {
+  if (steps >= 1000000) {
+    return '${(steps / 1000000).toStringAsFixed(1)}M';
+  }
+  if (steps >= 1000) {
+    return '${(steps / 1000).toStringAsFixed(1)}k';
+  }
+  return '$steps';
+}
+
 class ProfileTab extends StatefulWidget {
   final AuthService authService;
   final String? displayName;
@@ -718,13 +728,6 @@ class _StatsSectionState extends State<_StatsSection> {
     return {'first': first, 'second': second, 'third': third};
   }
 
-  String _formatSteps(int steps) {
-    if (steps >= 1000) {
-      return '${(steps / 1000).toStringAsFixed(1)}k';
-    }
-    return '$steps';
-  }
-
   String _formatPlain(int steps) {
     final digits = steps.abs().toString();
     final buffer = StringBuffer();
@@ -778,7 +781,7 @@ class _StatsSectionState extends State<_StatsSection> {
           _formatPlain(_avgPerDayYear ?? _thisYear),
           2,
         ),
-        _buildStatRow('All Time', _formatSteps(_allTime), 3),
+        _buildStatRow('All Time', formatProfileAllTimeSteps(_allTime), 3),
         _buildStatRow('Streak', '$_streak day${_streak == 1 ? '' : 's'}', 4),
       ],
     );

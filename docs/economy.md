@@ -527,7 +527,10 @@ table for position analysis.
 | DETOUR_SIGN | 0 | 0 | 1,654 | information denial only — hides leaderboard |
 | STEALTH_MODE / CLEANSE / MIRROR / COMPRESSION_SOCKS / FANNY_PACK / LUCKY_HORSESHOE | 0 | 0 | — | conditional / meta value |
 
-### 3.3d Buff stacking + Wrong Turn sign rule — `CODE races/services/effectMultiplier.js`
+### 3.3d Buff stacking + Wrong Turn sign rule — verified 2026-08-28
+
+Source: `CODE races/services/effectMultiplier.js` and
+`powerups/commands/usePowerup.js` in the backend repo.
 
 `signedMultiplierAt(t)`, in order:
 
@@ -536,8 +539,12 @@ table for position analysis.
 2. Buffs **SUM** (not multiply): RH 2 + Ghost Pepper 3 = 5. `M = 1` if no buff.
    Contributors: `RUNNERS_HIGH` 2, `CAMPFIRE_REST` meta, `UPRISING` 2,
    `RALLY_FLAG` 1.25, `COIN_FLIP` win, `GHOST_PEPPER` 3.
-3. Reductions subtract additively at the **max** lost fraction among active
-   ones (`RAINSTORM`, `COIN_FLIP` lose), floored at 0 — never stacks to 0.25x.
+3. Reductions do not compound with copies of themselves. Each active Rainstorm
+   independently proposes `M * 0.5`; each losing Coin Flip independently
+   proposes `max(0, M - 0.5)`; the scorer keeps the lowest proposed result.
+   Thus two Rainstorms remain **0.5M**, two losses remain **M - 0.5**, and when
+   both overlap the stronger result at that `M` wins. Rainstorm is genuinely
+   multiplicative; a losing Coin Flip is subtractive.
 4. **`WRONG_TURN` returns `−M`** — it negates the *full* effective rate.
 
 Consequence: Wrong Turn on a player running Runner's High is **−2×**, i.e. the
@@ -546,6 +553,23 @@ victim's paid buff is converted into double damage. Prod: **113 / 1,341
 
 Box progress is separate and immune to all of the above
 (`CODE powerups/boxSteps.js` — raw walked steps only, additive bonuses excluded).
+
+Same-type admission is not one global rule. Direct Runner's High, Ghost Pepper,
+Stealth, Wrong Turn, Detour Sign, Lucky Horseshoe, Campfire Rest, Compression
+Socks, Mirror, Fanny Pack, Decoy, Signal Jammer, Leg Cramp, Piggy Bank, and
+Bounty paths reject another live copy in their respective user/target/race
+scope. Quicksand rejects a selected target who already has either Quicksand or
+Leg Cramp; the reverse direct Leg Cramp path checks Leg Cramp but not Quicksand,
+so that accepted overlap is redundant under freeze precedence. Leech permits
+one caster→victim link and at most two leechers per victim;
+Hitchhike permits one link per caster and one per target. A caster may run only
+one Rainstorm, while different casters' storms may overlap without multiplying
+the 0.5x penalty. Uprising and Rally Flag merge a repeated beneficiary window to
+the later expiry instead of adding a second multiplier row. Quick Rinse resolves
+instantly but has a one-use-per-user-per-race-per-hour cooldown. Other
+instantaneous actions have no active window to stack. Several effects without a
+same-type guard can coexist; their payoff may still be redundant or clamped, so
+"accepted twice" does not imply "twice the benefit."
 
 ### 3.3e Realised position data — prod, 90d to 2026-08-08
 
@@ -1327,8 +1351,9 @@ Affordability at p50 income (3/day): 250 ⇒ 83 days. At p90 (98/day): 2.5 days.
 
 ## 7. Known structural properties (carry forward)
 
-- **Buff stacking** is sum-of-multipliers with a signed rate; Wrong Turn can net
-  a paid buff to −1 (see `wrong-turn-silently-cancels-paid-buffs`).
+- **Buff stacking** is sum-of-multipliers with a signed rate; Wrong Turn negates
+  the complete effective rate after reductions (for example, Runner's High
+  becomes −2x, not −1x). See §3.3d.
 - **Effect scoring** uses closed buckets only; open-bucket inclusion once paid
   ~1.48×.
 - **Box progress** uses raw walked steps only — never buffed/debuffed.

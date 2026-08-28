@@ -30,9 +30,13 @@ Map<String, dynamic> _activeRace(int i) => {
       .toIso8601String(),
   'participantCount': 4,
   'myPlacement': 2,
+  'placementPrivacyActive': false,
 };
 
-Future<void> _pump(WidgetTester tester, List<Map<String, dynamic>> races) async {
+Future<void> _pump(
+  WidgetTester tester,
+  List<Map<String, dynamic>> races,
+) async {
   tester.view.physicalSize = const Size(390, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);

@@ -141,6 +141,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   InterstitialPresentationCoordinator? _interstitialCoordinator;
   RaceDetailNavigator? _raceDetailNavigator;
   String? _interstitialBoundToken;
+  String? _notificationReadyUserId;
+  String? _notificationReadyToken;
   ExtraSpinAdController? _getCoinsAdController;
   int _getCoinsAuthGeneration = 0;
   String? _getCoinsWarmKey;
@@ -271,6 +273,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _jobPollToken = 0;
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _openingRaceDetail = false;
+  String? _notificationRaceInFlightId;
   bool _openingTournament = false;
   bool _openingDailyReward = false;
   bool _drainingTournament = false;
@@ -823,6 +826,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _maybeWarmRaceDetail() {
+    if (_notificationNavigationReady &&
+        widget.notificationService?.pendingAction.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onNotificationAction();
+      });
+    }
     final coordinator = _interstitialCoordinator;
     final userId = widget.authService.userId;
     final token = widget.authService.authToken;
@@ -847,6 +856,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _ignoreInterstitialFuture(
       coordinator.warm(InterstitialPlacement.raceDetailExit),
     );
+  }
+
+  bool get _notificationNavigationReady {
+    final userId = widget.authService.userId;
+    final token = widget.authService.authToken;
+    return mounted &&
+        _appLifecycleState == AppLifecycleState.resumed &&
+        !_isOnboarding &&
+        userId != null &&
+        userId.isNotEmpty &&
+        token != null &&
+        token.isNotEmpty &&
+        _notificationReadyUserId == userId &&
+        _notificationReadyToken == token &&
+        _raceDetailNavigator != null &&
+        _pageController.hasClients;
   }
 
   void _onInterstitialConsentChanged() {
@@ -1014,16 +1039,30 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _onNotificationAction() {
     final action = widget.notificationService?.pendingAction.value;
-    if (action == null) return;
+    if (action == null || !_notificationNavigationReady) return;
 
     switch (action.route) {
       case NotificationRoute.raceDetail:
         final raceId = action.params['raceId'];
         if (raceId is String && raceId.isNotEmpty) {
-          widget.notificationService?.pendingAction.value = null;
+          if (_openingRaceDetail && _notificationRaceInFlightId == raceId) {
+            // APNs/FCM/local-notification startup callbacks can report the same
+            // launch tap twice. The destination is already being fulfilled.
+            widget.notificationService?.pendingAction.value = null;
+            return;
+          }
           // Shares the tap guard so a notification tap can't stack a second
-          // detail screen over one already opening.
-          _openRaceFromCard(raceId, fallbackOnUnavailable: true);
+          // detail screen over one already opening. Busy/unready navigation
+          // leaves the action queued; it is retried when the current route or
+          // auth/navigator setup becomes ready.
+          final accepted = _openRaceFromCard(
+            raceId,
+            fallbackOnUnavailable: true,
+          );
+          if (accepted) {
+            _notificationRaceInFlightId = raceId;
+            widget.notificationService?.pendingAction.value = null;
+          }
         }
         break;
       case NotificationRoute.races:
@@ -1634,6 +1673,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery(),
       _checkNotificationState(),
     ]);
+    _notificationReadyUserId = widget.authService.userId;
+    _notificationReadyToken = widget.authService.authToken;
     // Notification initialization can finish before this shell exists on a
     // cold start. ValueNotifier retains that launch action but does not replay
     // it to listeners, so drain it once the authenticated shell can navigate.
@@ -3921,12 +3962,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
   }
 
-  void _openRaceFromCard(String raceId, {bool fallbackOnUnavailable = false}) {
+  bool _openRaceFromCard(String raceId, {bool fallbackOnUnavailable = false}) {
     // Rapid taps during the push transition used to stack duplicate detail
     // screens, each running the full details/progress/chat load.
-    if (_openingRaceDetail) return;
+    if (_openingRaceDetail) return false;
     final raceNavigator = _raceDetailNavigator;
-    if (raceNavigator == null) return;
+    if (raceNavigator == null) return false;
     _openingRaceDetail = true;
     raceNavigator
         .push(
@@ -3970,7 +4011,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           // Home refresh. Always resync on return, not just on the
           // not-a-participant branch above.
         })
-        .whenComplete(() => _openingRaceDetail = false);
+        .whenComplete(() {
+          _openingRaceDetail = false;
+          if (_notificationRaceInFlightId == raceId) {
+            _notificationRaceInFlightId = null;
+          }
+          if (mounted) _onNotificationAction();
+        });
+    return true;
   }
 
   Future<void> _joinDiscoveredRace(String raceId) async {

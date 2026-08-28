@@ -68,7 +68,23 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
 
   @override
   Widget build(BuildContext context) {
-    final entries = widget.top3.take(3).toList();
+    final rawEntries = widget.top3.take(3).toList();
+    final legacyPrivacy = rawEntries.any(
+      (entry) => entry['isStealthed'] == true || entry['stealthed'] == true,
+    );
+    var visibleRank = 0;
+    final entries = legacyPrivacy
+        ? [
+            for (final entry in rawEntries)
+              <String, dynamic>{
+                ...entry,
+                'rank':
+                    entry['isStealthed'] == true || entry['stealthed'] == true
+                    ? null
+                    : (entry['displayPlacement'] ?? ++visibleRank),
+              },
+          ]
+        : rawEntries;
     if (entries.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -92,8 +108,17 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
   }
 
   Widget _buildRacer(Map<String, dynamic> entry, int index, int frameIndex) {
-    final rank = (entry['rank'] as num?)?.toInt() ?? (index + 1);
-    final isStealthed = entry['isStealthed'] == true;
+    final isStealthed =
+        entry['isStealthed'] == true || entry['stealthed'] == true;
+    final rawRank = entry['displayPlacement'] ?? entry['rank'];
+    final rank =
+        !isStealthed &&
+            rawRank is num &&
+            rawRank.isFinite &&
+            rawRank == rawRank.roundToDouble() &&
+            rawRank > 0
+        ? rawRank.toInt()
+        : (!isStealthed ? index + 1 : null);
     final displayName = isStealthed
         ? '???'
         : (entry['displayName'] as String? ?? 'Anonymous');
@@ -105,7 +130,9 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
               const <Map<String, dynamic>>[]);
     final animal = isStealthed ? null : animalFromJson(entry['animal']);
     final totalSteps = entry['totalSteps'];
-    final medal = _medalColor(rank);
+    final medal = rank == null
+        ? AppColors.of(context).parchmentBorder
+        : _medalColor(rank);
 
     return Row(
       children: [
@@ -136,7 +163,10 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
             children: [
               Row(
                 children: [
-                  Text('$rank.', style: PixelText.body(size: 11, color: medal)),
+                  Text(
+                    rank == null ? '?' : '$rank.',
+                    style: PixelText.body(size: 11, color: medal),
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(

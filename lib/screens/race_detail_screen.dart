@@ -230,6 +230,7 @@ class _ActiveImpactNotice {
     required this.deltaSteps,
     required this.resolvedAt,
     this.description,
+    this.attackerDisplayName,
   });
 
   final String id;
@@ -237,6 +238,7 @@ class _ActiveImpactNotice {
   final int deltaSteps;
   final DateTime resolvedAt;
   final String? description;
+  final String? attackerDisplayName;
 
   static _ActiveImpactNotice? tryParse(Object? raw) {
     if (raw is! Map) return null;
@@ -246,6 +248,7 @@ class _ActiveImpactNotice {
     final valueStatus = raw['valueStatus'];
     final resolvedAt = raw['resolvedAt'];
     final rawDescription = raw['description'];
+    final rawAttacker = raw['attackerDisplayName'];
     if (id is! String ||
         id.isEmpty ||
         powerupType is! String ||
@@ -260,6 +263,13 @@ class _ActiveImpactNotice {
     }
     final parsedResolvedAt = DateTime.tryParse(resolvedAt);
     if (parsedResolvedAt == null) return null;
+    String? attackerDisplayName;
+    if (rawAttacker is String) {
+      final trimmed = rawAttacker.trim();
+      if (trimmed.isNotEmpty && trimmed.runes.length <= 30) {
+        attackerDisplayName = trimmed;
+      }
+    }
     return _ActiveImpactNotice(
       id: id,
       powerupType: powerupType,
@@ -268,6 +278,7 @@ class _ActiveImpactNotice {
       description: rawDescription is String && rawDescription.trim().isNotEmpty
           ? rawDescription
           : null,
+      attackerDisplayName: attackerDisplayName,
     );
   }
 }
@@ -1399,6 +1410,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             title: 'POWERUP SUMMARY',
             subtitle: notice.description ?? 'Your race steps changed.',
             signedSteps: notice.deltaSteps,
+            attackerDisplayName: notice.attackerDisplayName,
             accent: accent,
           );
           if (!_impactAttemptStillCurrent(attempt, token)) return;
@@ -5768,6 +5780,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // remains the fallback for an older backend that omits the field.
     final participants = orderRaceParticipantsForDisplay(
       (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+      placementPrivacyActive: progress['placementPrivacyActive'] == true,
     );
     final isTeamRace = TeamRace.isTeamRace(_race!);
 
@@ -8743,6 +8756,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// line is then omitted entirely.
   int? get _myViewerPlacement {
     final progress = _progressState.data ?? _progress;
+    final rawRows = progress?['participants'];
+    final hasMaskedRow =
+        rawRows is List &&
+        rawRows.whereType<Map>().any(
+          (row) => row['stealthed'] == true && row['finishedAt'] == null,
+        );
+    // A gapped old-backend response has no explicit privacy contract. Keep the
+    // standings safe by compacting locally, but do not pretend that compact UI
+    // rank is a payout tier. A capable response retains canonical myPlacement
+    // for the server-authored payout projection.
+    if (hasMaskedRow && progress?['placementPrivacyActive'] is! bool) {
+      return null;
+    }
     // Page projections keep the requester's authoritative placement at the
     // top level when their row is outside the visible page. Older/full
     // responses omit it, so retain the existing visible-row fallback.
@@ -8750,7 +8776,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (projectedPlacement != null && projectedPlacement > 0) {
       return projectedPlacement;
     }
-    final raw = progress?['participants'];
+    final raw = rawRows;
     if (raw is! List) return null;
     final rows = raw
         .whereType<Map>()
@@ -8762,7 +8788,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       (p) => (p['userId'] as String?) == _myUserId,
     );
     if (index < 0) return null;
-    return serverPlacementOf(ordered[index]) ?? index + 1;
+    return serverPlacementOf(ordered[index]);
   }
 
   Widget _buildPayoutSummary(
@@ -10624,28 +10650,40 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // authoritative `placement` (1-based) that wins, so the number on screen is
     // the same one home and the races list show. Absent => the index, exactly
     // as before.
-    final serverPlacement = serverPlacementOf(p);
-    if (serverPlacement != null && serverPlacement > 0) {
-      rank = serverPlacement - 1;
+    final displayPlacement = displayPlacementOf(p);
+    if (displayPlacement != null && displayPlacement > 0) {
+      rank = displayPlacement - 1;
     }
-    final name = p['displayName'] as String? ?? '???';
-    final totalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
-    final userId = p['userId'] as String? ?? '';
+    final rawName = p['displayName'];
+    final name = rawName is String && rawName.trim().isNotEmpty
+        ? rawName
+        : '???';
+    final rawSteps = p['totalSteps'];
+    final totalSteps = rawSteps is num && rawSteps.isFinite
+        ? rawSteps.toInt()
+        : 0;
+    final rawUserId = p['userId'];
+    final userId = rawUserId is String ? rawUserId : '';
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
     final isFinished = p['finishedAt'] != null;
     // Item 18: a stealthed row has no server placement (the backend masks it),
     // so the array index behind `rank` is meaningless for it. Show "?" rather
     // than a number that would collide with the visible rows' real ranks.
-    final rankHidden = isStealthed && serverPlacement == null;
+    final rankHidden = isStealthed && displayPlacement == null;
     // Additive backend field (item 6). Absent/null on older backends → no
     // multiplier badge.
-    final currentMultiplier = (p['currentMultiplier'] as num?)?.toDouble();
+    final rawMultiplier = p['currentMultiplier'];
+    final currentMultiplier = rawMultiplier is num && rawMultiplier.isFinite
+        ? rawMultiplier.toDouble()
+        : null;
+    final rawPhotoUrl = p['profilePhotoUrl'];
+    final profilePhotoUrl = rawPhotoUrl is String ? rawPhotoUrl : null;
 
     final plank = LeaderboardPlank(
       rank: rank,
       name: name,
-      profilePhotoUrl: p['profilePhotoUrl'] as String?,
+      profilePhotoUrl: profilePhotoUrl,
       steps: totalSteps,
       formattedSteps: _formatSteps(totalSteps),
       isUser: isMe,
@@ -10659,8 +10697,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       nameSize: large ? 17 : 15,
       stepsSize: large ? 18 : 16,
       verticalPadding: large ? 11 : 8,
-      effectIcons: _effectIconsFor(userId),
-      currentMultiplier: currentMultiplier,
+      effectIcons: isStealthed ? const [] : _effectIconsFor(userId),
+      currentMultiplier: isStealthed ? null : currentMultiplier,
       onProfileTap: (!isMe && !isStealthed && userId.isNotEmpty)
           ? () => showPublicProfileSheet(
               context: context,
@@ -10668,7 +10706,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               backendApiService: _api,
               userId: userId,
               fallbackName: name,
-              fallbackPhotoUrl: p['profilePhotoUrl'] as String?,
+              fallbackPhotoUrl: profilePhotoUrl,
             )
           : null,
     );

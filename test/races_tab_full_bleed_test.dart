@@ -54,6 +54,7 @@ Future<double> _pumpRaces(
                     'creator': {'displayName': 'RaceMaker'},
                     'isCreator': false,
                     'myPlacement': 1,
+                    'placementPrivacyActive': false,
                   },
                 ],
                 'pending': [],
