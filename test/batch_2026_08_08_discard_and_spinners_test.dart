@@ -3,6 +3,8 @@
 //
 // Pumps the REAL race detail screen against a stubbed HTTP layer so the
 // assertions are about what a user sees, not about a mocked collaborator.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -44,6 +46,7 @@ class _StubApi extends BackendApiService {
   _StubApi({
     this.discardResponse = const {'ok': true},
     this.serverDiscardPrices,
+    this.useCompleter,
   });
 
   /// `powerupData.discardPrices` from the backend. Null = an older backend
@@ -53,8 +56,10 @@ class _StubApi extends BackendApiService {
   /// What POST .../discard returns. Defaults to the OLD shape (no new fields)
   /// so the degradation path is the default, not the exception.
   final Map<String, dynamic> discardResponse;
+  final Completer<Map<String, dynamic>>? useCompleter;
 
   int discardCalls = 0;
+  int useCalls = 0;
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -121,6 +126,20 @@ class _StubApi extends BackendApiService {
   }) async {
     discardCalls++;
     return discardResponse;
+  }
+
+  @override
+  Future<Map<String, dynamic>> usePowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+    String? targetUserId,
+    String? targetDirection,
+    String? targetEffectId,
+    int upgradeLevel = 0,
+  }) async {
+    useCalls++;
+    return useCompleter?.future ?? const {'result': {}};
   }
 }
 
@@ -294,11 +313,7 @@ void main() {
       await _pump(
         tester,
         _StubApi(
-          serverDiscardPrices: const {
-            'COMMON': 4,
-            'UNCOMMON': 9,
-            'RARE': 25,
-          },
+          serverDiscardPrices: const {'COMMON': 4, 'UNCOMMON': 9, 'RARE': 25},
         ),
       );
       await openDiscardDialog(tester);
@@ -341,13 +356,72 @@ void main() {
     ) async {
       // RARE is missing from the server table -> fall back to the server's
       // own COMMON price (4), not the bundled RARE price (10).
-      await _pump(
-        tester,
-        _StubApi(serverDiscardPrices: const {'COMMON': 4}),
-      );
+      await _pump(tester, _StubApi(serverDiscardPrices: const {'COMMON': 4}));
       await openDiscardDialog(tester);
 
       expect(find.textContaining('for 4 coins'), findsOneWidget);
+      await _teardown(tester);
+    });
+  });
+
+  group('Powerup activation processing state', () {
+    testWidgets('held powerup covers inventory while use is in flight', (
+      tester,
+    ) async {
+      final completer = Completer<Map<String, dynamic>>();
+      final api = _StubApi(useCompleter: completer);
+      await _pump(tester, api);
+      await _openPowerupSheet(tester);
+
+      await tester.tap(find.textContaining('USE BASE'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.useCalls, 1);
+      expect(
+        find.byKey(const Key('powerup-processing-overlay')),
+        findsOneWidget,
+      );
+      expect(find.text('ACTIVATING'), findsOneWidget);
+      expect(find.text('Protein Shake'), findsOneWidget);
+
+      completer.complete(const {'result': {}});
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('failed use removes processing and restores the held slot', (
+      tester,
+    ) async {
+      final completer = Completer<Map<String, dynamic>>();
+      final api = _StubApi(useCompleter: completer);
+      await _pump(tester, api);
+      await _openPowerupSheet(tester);
+
+      await tester.tap(find.textContaining('USE BASE'));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('powerup-processing-overlay')),
+        findsOneWidget,
+      );
+
+      completer.completeError(
+        const ApiException('Powerup unavailable', statusCode: 409),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is ItemSlot && w.state == ItemSlotState.held,
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Powerup unavailable'), findsOneWidget);
       await _teardown(tester);
     });
   });

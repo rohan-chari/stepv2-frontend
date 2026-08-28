@@ -384,6 +384,15 @@ RacePollLifecycleAction racePollLifecycleAction(
   }
 }
 
+enum _PowerupProcessingPhase { preparing, activating }
+
+class _PendingPowerupAction {
+  const _PendingPowerupAction({required this.powerupType, required this.phase});
+
+  final String powerupType;
+  final _PowerupProcessingPhase phase;
+}
+
 class _RaceDetailScreenState extends State<RaceDetailScreen>
     with WidgetsBindingObserver, RouteAware {
   Map<String, dynamic>? _race;
@@ -458,6 +467,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// synchronously, and a spinner that outlives the response freezes a
   /// tutorial button mid-script (ui-test-planner risk 6).
   String? _actingPowerupId;
+  _PendingPowerupAction? _pendingPowerupAction;
 
   // Demo-only overlay state. Polls may return an older mystery-box snapshot
   // while the non-opaque reel is spinning; these ids keep that snapshot from
@@ -482,6 +492,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       _isActing = false;
       _actingPowerupId = null;
     });
+  }
+
+  void _showPowerupProcessing(
+    String powerupType,
+    _PowerupProcessingPhase phase,
+  ) {
+    if (!mounted) return;
+    setState(() {
+      _pendingPowerupAction = _PendingPowerupAction(
+        powerupType: powerupType,
+        phase: phase,
+      );
+    });
+  }
+
+  void _clearPowerupProcessing() {
+    if (!mounted || _pendingPowerupAction == null) return;
+    setState(() => _pendingPowerupAction = null);
   }
 
   // The viewer is not (or is no longer) a participant: `GET /races/:id/details`
@@ -2501,7 +2529,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final wasRedeemedFromStash =
         powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
     final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      _clearPowerupProcessing();
+      return;
+    }
 
     String? targetUserId;
     List<String>? targetUserIds;
@@ -2520,6 +2551,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         type == 'SNEAKY_SWAP' ||
         kTargetedPowerupTypes.contains(type);
     if (typeTargets && type != 'PINECONE_TOSS' && needsTargetingContext) {
+      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       final useContextParticipants = await _loadRacePowerupTargetContext(
         token,
         type,
@@ -2539,19 +2571,30 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     if (type == 'QUICKSAND') {
       if (targets.isEmpty) {
+        _clearPowerupProcessing();
         if (mounted) showErrorToast(context, 'No targets available');
         return;
       }
+      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetUserIds = await _showQuicksandTargetPicker(targets);
-      if (targetUserIds == null) return;
+      if (targetUserIds == null) {
+        _clearPowerupProcessing();
+        return;
+      }
     } else if (type == 'PINECONE_TOSS') {
+      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetDirection = await _showPineconeDirectionPicker();
-      if (targetDirection == null) return;
+      if (targetDirection == null) {
+        _clearPowerupProcessing();
+        return;
+      }
     } else if (type == 'SNEAKY_SWAP') {
       // Only offer racers who actually hold something stealable. New endpoint;
       // on an older backend (or any failure) fall back to all eligible racers.
+      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       final swapTargets = await _resolveSneakySwapTargets(token, targets);
       if (swapTargets.isEmpty) {
+        _clearPowerupProcessing();
         if (mounted) {
           showInfoToast(context, 'No one has a powerup to steal right now');
         }
@@ -2561,7 +2604,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // stealable powerup from them — nothing of yours is given up, so the
       // old two-step SWAP AWAY / TAKE FROM TARGET pickers are gone.
       targetUserId = await _showTargetPicker(swapTargets, type);
-      if (targetUserId == null) return;
+      if (targetUserId == null) {
+        _clearPowerupProcessing();
+        return;
+      }
     } else if (type == 'BOUNTY') {
       // §7 powerups5 — Bounty may only wager on a rival currently AHEAD of me.
       // Pre-filter the picker client-side (server still validates on a fresher
@@ -2578,15 +2624,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         myTotalSteps: myTotalSteps,
       );
       if (aheadTargets.isEmpty) {
+        _clearPowerupProcessing();
         if (mounted) {
           showInfoToast(context, 'No rivals are ahead of you to target');
         }
         return;
       }
+      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetUserId = await _showTargetPicker(aheadTargets, type);
-      if (targetUserId == null) return;
+      if (targetUserId == null) {
+        _clearPowerupProcessing();
+        return;
+      }
     } else if (kTargetedPowerupTypes.contains(type)) {
       if (targets.isEmpty) {
+        _clearPowerupProcessing();
         if (mounted) {
           showErrorToast(
             context,
@@ -2598,10 +2650,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         return;
       }
 
+      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetUserId = await _showTargetPicker(targets, type);
-      if (targetUserId == null) return;
+      if (targetUserId == null) {
+        _clearPowerupProcessing();
+        return;
+      }
     }
 
+    if (!mounted) return;
+    _showPowerupProcessing(type, _PowerupProcessingPhase.activating);
     setState(() => _isActing = true);
     // Optimistically empty the slot the moment the user commits (mirrors the
     // optimistic coin deduction below) — on a slow connection the item used
@@ -2644,6 +2702,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
 
       if (!mounted) return;
+      _clearPowerupProcessing();
 
       // Read the outcome defensively: an older backend only returns `blocked`,
       // a newer one also returns the `outcome` discriminator + `reflected`.
@@ -2779,11 +2838,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       } else {
         restoreInventory();
       }
+      _clearPowerupProcessing();
       // B3 — map redeem/use rejection codes to friendly copy; unknown/absent
       // codes fall back to the server message (old-backend compat).
       if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
     } finally {
-      if (mounted) setState(() => _isActing = false);
+      if (mounted) {
+        _clearPowerupProcessing();
+        setState(() => _isActing = false);
+      }
     }
   }
 
@@ -2982,6 +3045,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (token == null || token.isEmpty) return;
 
     // Item 12: the stash row for THIS type is the button that spins.
+    _showPowerupProcessing(powerupType, _PowerupProcessingPhase.preparing);
     _beginAction('stash:$powerupType');
     Map<String, dynamic>? redeemedPowerup;
     try {
@@ -3007,6 +3071,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // RAINSTORM_ACTIVE / NO_ELIGIBLE_TARGETS) BEFORE inventory is spent, so
       // the item stays in the global stash. Friendly copy, server fallback.
       if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
+      _clearPowerupProcessing();
       _endAction();
       return;
     } finally {
@@ -3018,6 +3083,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // Redeem succeeded but no powerup returned — refresh so it shows in the
       // tray and the user can use it manually.
       _loadProgress();
+      _clearPowerupProcessing();
       return;
     }
 
@@ -4176,182 +4242,189 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // Checkered arcade green — the same below-the-fold surface as the tabs,
-      // so pushing into a race no longer flips back to the old parchment look.
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: ColoredBox(
-              color: AppColors.of(context).roofLight,
-              child: CustomPaint(
-                painter: ArcadeCheckerPainter(drawBottomStripe: false),
+    return PopScope(
+      canPop: _pendingPowerupAction == null,
+      child: Scaffold(
+        // Checkered arcade green — the same below-the-fold surface as the tabs,
+        // so pushing into a race no longer flips back to the old parchment look.
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: ColoredBox(
+                color: AppColors.of(context).roofLight,
+                child: CustomPaint(
+                  painter: ArcadeCheckerPainter(drawBottomStripe: false),
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                // Header (fixed, does not scroll) — light chrome on the checker.
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    // Opaque, so scrolled content can't show through the fixed
-                    // header (guarded by race_detail_screen_header_test).
-                    color: AppColors.of(context).roofLight,
-                    border: Border(
-                      bottom: BorderSide(
-                        color: AppColors.of(context).roofDark,
-                        width: 1,
+            SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  // Header (fixed, does not scroll) — light chrome on the checker.
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      // Opaque, so scrolled content can't show through the fixed
+                      // header (guarded by race_detail_screen_header_test).
+                      color: AppColors.of(context).roofLight,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppColors.of(context).roofDark,
+                          width: 1,
+                        ),
                       ),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.of(
-                          context,
-                        ).pop(RaceDetailRouteResult.backExit),
-                        child: Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Icon(
-                            Icons.arrow_back,
-                            color: AppColors.of(context).textLight,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            raceDisplayName(
-                              _race?['seedKind'] as String?,
-                              _race?['name'] as String? ?? 'Race',
-                            ),
-                            maxLines: 1,
-                            softWrap: false,
-                            style: PixelText.title(
-                              size: 22,
-                              color: AppColors.of(context).textLight,
-                            ).copyWith(shadows: _headerTextShadows),
-                            overflow: TextOverflow.visible,
-                          ),
-                        ),
-                      ),
-                      if (_canShareRace())
+                    child: Row(
+                      children: [
                         GestureDetector(
-                          key: _shareButtonKey,
-                          onTap: _sharingRace ? null : _shareRace,
+                          onTap: () => Navigator.of(
+                            context,
+                          ).pop(RaceDetailRouteResult.backExit),
                           child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: _sharingRace
-                                ? SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.of(context).textLight,
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.ios_share,
-                                    color: AppColors.of(context).textLight,
-                                    size: 24,
-                                  ),
-                          ),
-                        ),
-                      if (_hasRaceOptions())
-                        GestureDetector(
-                          onTap: _showRaceOptionsSheet,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
+                            padding: EdgeInsets.all(8),
                             child: Icon(
-                              Icons.more_vert,
+                              Icons.arrow_back,
                               color: AppColors.of(context).textLight,
                               size: 24,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  // Checked before loading/empty: a mid-session prune leaves a
-                  // fully-loaded `_race` behind, and a stale link leaves none.
-                  // Both land here.
-                  child: _notAParticipant
-                      ? _buildNotAParticipantState()
-                      : _isLoading
-                      ? Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.of(context).accent,
-                          ),
-                        )
-                      : _race == null
-                      ? AppRefreshIndicator(
-                          onRefresh: _refreshDetailsFromPull,
-                          child: ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(12, 80, 12, 0),
-                            children: [
-                              // Missing auth can't be fixed by retrying the same
-                              // request, so it gets its own copy and no button
-                              // that would silently do nothing when tapped.
-                              _authMissing
-                                  ? const LoadErrorPanel(
-                                      icon: Icons.lock_outline,
-                                      title: 'Signed out',
-                                      message:
-                                          'Sign back in to view this race.',
-                                    )
-                                  : LoadErrorPanel(
-                                      title: 'Failed to load race',
-                                      message:
-                                          _detailsError ?? 'Pull to retry.',
-                                      onRetry: () => _loadDetails(),
-                                    ),
-                            ],
-                          ),
-                        )
-                      : NotificationListener<ScrollNotification>(
-                          onNotification: (_) {
-                            _scheduleLeaderboardVisibilityCheck();
-                            return false;
-                          },
-                          child: AppRefreshIndicator(
-                            onRefresh: _refreshDetailsFromPull,
-                            child: SingleChildScrollView(
-                              key: _leaderboardViewportKey,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: EdgeInsets.zero,
-                              child: _buildContent(),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              raceDisplayName(
+                                _race?['seedKind'] as String?,
+                                _race?['name'] as String? ?? 'Race',
+                              ),
+                              maxLines: 1,
+                              softWrap: false,
+                              style: PixelText.title(
+                                size: 22,
+                                color: AppColors.of(context).textLight,
+                              ).copyWith(shadows: _headerTextShadows),
+                              overflow: TextOverflow.visible,
                             ),
                           ),
                         ),
-                ),
-                // Anchored bottom banner, in-flow below the scrollable so it
-                // reserves its own space. SafeArea above excludes the bottom, so
-                // the slot pads itself clear of the home indicator when an ad is
-                // showing; it collapses to zero size otherwise, and also while
-                // the keyboard is open so it can't cover the chat composer.
-                AdBannerSlot(
-                  withBottomSafeArea: true,
-                  hideWhenKeyboardOpen: true,
-                  // F5/§5.6: no ad is requested or rendered inside the demo.
-                  hidden: widget.demoMode,
-                ),
-              ],
+                        if (_canShareRace())
+                          GestureDetector(
+                            key: _shareButtonKey,
+                            onTap: _sharingRace ? null : _shareRace,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: _sharingRace
+                                  ? SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.of(context).textLight,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.ios_share,
+                                      color: AppColors.of(context).textLight,
+                                      size: 24,
+                                    ),
+                            ),
+                          ),
+                        if (_hasRaceOptions())
+                          GestureDetector(
+                            onTap: _showRaceOptionsSheet,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.more_vert,
+                                color: AppColors.of(context).textLight,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  Expanded(
+                    // Checked before loading/empty: a mid-session prune leaves a
+                    // fully-loaded `_race` behind, and a stale link leaves none.
+                    // Both land here.
+                    child: _notAParticipant
+                        ? _buildNotAParticipantState()
+                        : _isLoading
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.of(context).accent,
+                            ),
+                          )
+                        : _race == null
+                        ? AppRefreshIndicator(
+                            onRefresh: _refreshDetailsFromPull,
+                            child: ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(12, 80, 12, 0),
+                              children: [
+                                // Missing auth can't be fixed by retrying the same
+                                // request, so it gets its own copy and no button
+                                // that would silently do nothing when tapped.
+                                _authMissing
+                                    ? const LoadErrorPanel(
+                                        icon: Icons.lock_outline,
+                                        title: 'Signed out',
+                                        message:
+                                            'Sign back in to view this race.',
+                                      )
+                                    : LoadErrorPanel(
+                                        title: 'Failed to load race',
+                                        message:
+                                            _detailsError ?? 'Pull to retry.',
+                                        onRetry: () => _loadDetails(),
+                                      ),
+                              ],
+                            ),
+                          )
+                        : NotificationListener<ScrollNotification>(
+                            onNotification: (_) {
+                              _scheduleLeaderboardVisibilityCheck();
+                              return false;
+                            },
+                            child: AppRefreshIndicator(
+                              onRefresh: _refreshDetailsFromPull,
+                              child: SingleChildScrollView(
+                                key: _leaderboardViewportKey,
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: EdgeInsets.zero,
+                                child: _buildContent(),
+                              ),
+                            ),
+                          ),
+                  ),
+                  // Anchored bottom banner, in-flow below the scrollable so it
+                  // reserves its own space. SafeArea above excludes the bottom, so
+                  // the slot pads itself clear of the home indicator when an ad is
+                  // showing; it collapses to zero size otherwise, and also while
+                  // the keyboard is open so it can't cover the chat composer.
+                  AdBannerSlot(
+                    withBottomSafeArea: true,
+                    hideWhenKeyboardOpen: true,
+                    // F5/§5.6: no ad is requested or rendered inside the demo.
+                    hidden: widget.demoMode,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            if (_pendingPowerupAction case final pending?)
+              Positioned.fill(
+                child: _PowerupProcessingOverlay(action: pending),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -10928,6 +11001,75 @@ class _RaceProgressSkeleton extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _PowerupProcessingOverlay extends StatelessWidget {
+  const _PowerupProcessingOverlay({required this.action});
+
+  final _PendingPowerupAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    final preparing = action.phase == _PowerupProcessingPhase.preparing;
+    final heading = preparing ? 'PREPARING POWERUP' : 'ACTIVATING';
+    final name = PowerupCopy.nameFor(action.powerupType);
+    final semanticsLabel = preparing ? 'Preparing $name' : 'Activating $name';
+
+    return Semantics(
+      key: const Key('powerup-processing-overlay'),
+      container: true,
+      liveRegion: true,
+      label: semanticsLabel,
+      child: Stack(
+        children: [
+          const ModalBarrier(dismissible: false, color: Color(0x99000000)),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: TrailSign(
+                  width: 300,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PowerupIcon(
+                        type: action.powerupType,
+                        size: 54,
+                        spinning: true,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        heading,
+                        style: PixelText.title(
+                          size: 17,
+                          color: AppColors.of(context).textDark,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        name,
+                        style: PixelText.body(
+                          size: 14,
+                          color: AppColors.of(context).textMid,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      PillButtonSpinner(
+                        size: 20,
+                        color: AppColors.of(context).accent,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

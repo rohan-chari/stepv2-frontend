@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +13,10 @@ import 'package:step_tracker/widgets/item_slot.dart';
 // Invalid targets are never presented (no grayed-out teammates).
 
 class _TeamPowerupApi extends BackendApiService {
+  _TeamPowerupApi({this.useCompleter, this.targetContextCompleter});
+
+  final Completer<Map<String, dynamic>>? useCompleter;
+  final Completer<Map<String, dynamic>>? targetContextCompleter;
   String? lastTargetUserId;
 
   @override
@@ -115,7 +121,18 @@ class _TeamPowerupApi extends BackendApiService {
         'powerupStepInterval': 5000,
         'stepsUntilNextPowerup': 1000,
       },
+      if (targetContextCompleter != null)
+        'pagination': {'offset': 0, 'total': 5, 'hasMore': true},
     };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async {
+    return targetContextCompleter?.future ?? const {'participants': []};
   }
 
   @override
@@ -136,7 +153,7 @@ class _TeamPowerupApi extends BackendApiService {
     int upgradeLevel = 0,
   }) async {
     lastTargetUserId = targetUserId;
-    return const {'result': {}};
+    return useCompleter?.future ?? const {'result': {}};
   }
 
   @override
@@ -241,4 +258,80 @@ void main() {
 
     expect(api.lastTargetUserId, 'enemy-1');
   });
+
+  testWidgets(
+    'target confirmation is replaced by ACTIVATING until use resolves',
+    (tester) async {
+      final completer = Completer<Map<String, dynamic>>();
+      final api = _TeamPowerupApi(useCompleter: completer);
+      await _openPicker(tester, api);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('powerup-target-list')),
+          matching: find.textContaining('Enemy Eve'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.lastTargetUserId, 'enemy-1');
+      expect(find.byKey(const Key('powerup-target-list')), findsNothing);
+      expect(
+        find.byKey(const Key('powerup-processing-overlay')),
+        findsOneWidget,
+      );
+      expect(find.text('ACTIVATING'), findsOneWidget);
+      expect(find.text('Signal Jammer'), findsOneWidget);
+
+      completer.complete(const {'result': {}});
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'PREPARING blocks the race route and picker cancellation clears it',
+    (tester) async {
+      final targetContextCompleter = Completer<Map<String, dynamic>>();
+      final api = _TeamPowerupApi(
+        targetContextCompleter: targetContextCompleter,
+      );
+      await _openPicker(tester, api);
+
+      expect(
+        find.byKey(const Key('powerup-processing-overlay')),
+        findsOneWidget,
+      );
+      expect(find.text('PREPARING POWERUP'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(RaceDetailScreen), findsOneWidget);
+      expect(
+        find.byKey(const Key('powerup-processing-overlay')),
+        findsOneWidget,
+      );
+
+      targetContextCompleter.complete({
+        'participants': await api
+            .fetchRaceProgress(
+              identityToken: 'session-token',
+              raceId: 'race-pu',
+            )
+            .then((value) => value['participants']),
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('powerup-target-list')), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('powerup-target-list')), findsNothing);
+      expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
+      expect(find.byType(RaceDetailScreen), findsOneWidget);
+    },
+  );
 }
