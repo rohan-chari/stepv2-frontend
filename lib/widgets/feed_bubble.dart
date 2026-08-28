@@ -125,19 +125,13 @@ class FeedBubble extends StatelessWidget {
             );
           }
         }
-        return RichText(
-          text: TextSpan(children: spans),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-        );
+        return RichText(text: TextSpan(children: spans));
       }
     }
 
     return Text(
       description,
       style: PixelText.body(size: 16, color: colors.textDark),
-      maxLines: 3,
-      overflow: TextOverflow.ellipsis,
     );
   }
 }

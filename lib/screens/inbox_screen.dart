@@ -62,6 +62,12 @@ class InboxDestination {
         return id is String && id.isNotEmpty
             ? InboxDestination._(InboxDestinationRoute.raceDetail, raceId: id)
             : null;
+      case 'race_detail':
+        final params = raw['params'];
+        final id = raw['raceId'] ?? (params is Map ? params['raceId'] : null);
+        return id is String && id.isNotEmpty
+            ? InboxDestination._(InboxDestinationRoute.raceDetail, raceId: id)
+            : null;
       case 'tournamentDetail':
         final id = raw['tournamentId'];
         return id is String && id.isNotEmpty
@@ -651,6 +657,25 @@ class _InboxScreenState extends State<InboxScreen>
           }
           if (kind != 'alert') return true;
           if (!_visibleAlertTypes.contains(row['type'])) return false;
+          if (row['destination'] == null && row['route'] is String) {
+            row['destination'] = {
+              'route': row['route'],
+              if (row['params'] is Map) 'params': row['params'],
+            };
+          }
+          if (row['type'] == 'POWERUP_USED') {
+            if (row['subtype'] != 'DECOY_CONSUMED') return false;
+            final rawDestination = row['destination'];
+            final parsed = InboxDestination.tryParse(rawDestination);
+            if (parsed?.route != InboxDestinationRoute.raceDetail ||
+                parsed?.raceId == null) {
+              return false;
+            }
+            row['destination'] = {
+              'route': 'raceDetail',
+              'raceId': parsed!.raceId,
+            };
+          }
           if (row['type'] == 'PRIVATE_RACE_JOIN_APPROVAL') {
             final rawDestination = row['destination'];
             if (rawDestination is Map) {
@@ -731,6 +756,7 @@ class _InboxScreenState extends State<InboxScreen>
     'PRIVATE_RACE_JOIN_APPROVAL',
     'PRIVATE_RACE_JOIN_RESULT',
     'UNCLAIMED_REWARD',
+    'POWERUP_USED',
   };
 
   static String _categoryLabel(Object? type) {

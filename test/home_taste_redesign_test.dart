@@ -6,16 +6,41 @@ import 'package:step_tracker/models/home_race_suggestion.dart';
 import 'package:step_tracker/models/loadable.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
+import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/arcade_fx.dart';
 
 class _TasteHomeApi extends BackendApiService {
+  _TasteHomeApi({this.dailyStatus = const {'claimedToday': false}});
+
+  final Map<String, dynamic> dailyStatus;
+
   @override
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
     required String identityToken,
     required String localDate,
-  }) async => const {'claimedToday': false};
+  }) async => dailyStatus;
+}
+
+class _SupportedDailyRewardAds implements ExtraSpinAdController {
+  @override
+  bool get isReady => true;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<void> load({
+    required String userId,
+    required String localDate,
+  }) async {}
+
+  @override
+  Future<bool> showAndAwaitReward() async => true;
+
+  @override
+  void dispose() {}
 }
 
 Future<AuthService> _auth(_TasteHomeApi api, {bool hasPhoto = true}) async {
@@ -48,6 +73,7 @@ Widget _home(
   _TasteHomeApi api, {
   Map<String, dynamic>? raceCard,
   Loadable<List<HomeRaceSuggestion>> suggestions = const Loadable.success([]),
+  ExtraSpinAdController? dailyRewardAdController,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -67,6 +93,7 @@ Widget _home(
         friendsSteps: const [],
         raceCard: raceCard ?? const {'state': 'EMPTY'},
         suggestedRacesState: suggestions,
+        dailyRewardAdController: dailyRewardAdController,
         onOpenShop: () {},
         onAcceptRaceInvite: (_) async {},
         onDeclineRaceInvite: (_) async {},
@@ -108,11 +135,11 @@ void main() {
     expect(reward, findsOneWidget);
     expect(shop, findsOneWidget);
     expect(tester.getSize(reward), tester.getSize(shop));
-    expect(tester.getSize(shop).height, 44);
+    expect(tester.getSize(shop).height, greaterThanOrEqualTo(48));
     final compactReward = find.byKey(
       const Key('home-daily-reward-compact-layout'),
     );
-    expect(tester.getSize(compactReward).height, 44);
+    expect(tester.getSize(compactReward).height, greaterThanOrEqualTo(44));
     final rewardIcon = find.descendant(
       of: compactReward,
       matching: find.byType(Icon),
@@ -133,8 +160,95 @@ void main() {
     final shopStyle = tester.widget<Text>(find.text('SHOP')).style!;
     expect(rewardStyle.fontFamily, shopStyle.fontFamily);
     expect(rewardStyle.fontSize, shopStyle.fontSize);
+    expect(rewardStyle.fontSize, greaterThanOrEqualTo(13));
     expect(find.text('ALERTS'), findsNothing);
   });
+
+  testWidgets(
+    'quick-action labels stay at 13px and inside every supported button state',
+    (WidgetTester tester) async {
+      for (final width in const [320.0, 360.0, 390.0, 430.0]) {
+        for (final state in const <(String, Map<String, dynamic>)>[
+          ('unclaimed', {'claimedToday': false}),
+          (
+            'claimed',
+            {
+              'claimedToday': true,
+              'adExtraSpin': {
+                'available': false,
+                'pendingGrant': false,
+                'used': true,
+              },
+            },
+          ),
+          (
+            'bonus',
+            {
+              'claimedToday': true,
+              'adExtraSpin': {
+                'available': true,
+                'pendingGrant': false,
+                'used': false,
+              },
+            },
+          ),
+        ]) {
+          await tester.binding.setSurfaceSize(Size(width, 844));
+          final api = _TasteHomeApi(dailyStatus: state.$2);
+          final auth = await _auth(api);
+          await tester.pumpWidget(
+            _home(
+              auth,
+              api,
+              dailyRewardAdController: _SupportedDailyRewardAds(),
+            ),
+          );
+          await _flush(tester);
+
+          final reward = find.byKey(const Key('home-daily-reward-button'));
+          final shop = find.byKey(const Key('home-shop-button'));
+          expect(tester.getSize(reward), tester.getSize(shop));
+          expect(
+            find.descendant(of: reward, matching: find.byType(FittedBox)),
+            findsNothing,
+            reason: 'reward width=$width state=${state.$1}',
+          );
+          expect(
+            find.descendant(of: shop, matching: find.byType(FittedBox)),
+            findsNothing,
+            reason: 'shop width=$width state=${state.$1}',
+          );
+          final rewardTextFinders = find.descendant(
+            of: reward,
+            matching: find.byType(Text),
+          );
+          final rewardRect = tester.getRect(reward);
+          for (final textFinder in rewardTextFinders.evaluate().map(
+            (element) =>
+                find.byElementPredicate((candidate) => candidate == element),
+          )) {
+            final text = tester.widget<Text>(textFinder);
+            expect(
+              text.style?.fontSize,
+              greaterThanOrEqualTo(13),
+              reason: 'reward width=$width state=${state.$1}',
+            );
+            final textRect = tester.getRect(textFinder);
+            expect(textRect.left, greaterThanOrEqualTo(rewardRect.left));
+            expect(textRect.right, lessThanOrEqualTo(rewardRect.right));
+            expect(textRect.top, greaterThanOrEqualTo(rewardRect.top));
+            expect(textRect.bottom, lessThanOrEqualTo(rewardRect.bottom));
+          }
+          expect(
+            tester.widget<Text>(find.text('SHOP')).style?.fontSize,
+            greaterThanOrEqualTo(13),
+          );
+          expect(tester.takeException(), isNull);
+        }
+      }
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+    },
+  );
 
   testWidgets('a pending invite outranks incomplete setup', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 2400));

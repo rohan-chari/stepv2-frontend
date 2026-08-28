@@ -601,7 +601,7 @@ class DemoRaceEngine {
         'powerupSlots': 3,
         'queuedBoxCount': 0,
         'powerupStepInterval': 2000,
-        'stepsUntilNextPowerup': 0,
+        'stepsUntilNextPowerup': 1500,
         'inventory': [
           for (final row in _inventory) Map<String, dynamic>.from(row),
         ],

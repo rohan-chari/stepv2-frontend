@@ -306,6 +306,7 @@ class _FriendsTabState extends State<FriendsTab> {
     required String? userId,
     required String fallbackName,
     String? fallbackPhotoUrl,
+    String? fallbackRealName,
     required PublicProfileRelationship relationship,
     String? friendshipId,
   }) {
@@ -318,6 +319,7 @@ class _FriendsTabState extends State<FriendsTab> {
       userId: id,
       fallbackName: fallbackName,
       fallbackPhotoUrl: fallbackPhotoUrl,
+      fallbackRealName: fallbackRealName,
       initialRelationship: relationship,
       friendshipId: friendshipId,
       onChanged: () {
@@ -767,12 +769,19 @@ class _FriendsTabState extends State<FriendsTab> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            title,
-            style: PixelText.title(
-              size: 16,
-              color: AppColors.of(context).textLight,
-            ).copyWith(shadows: _textShadows),
+          Expanded(
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.3,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: PixelText.title(
+                  size: 16,
+                  color: AppColors.of(context).textLight,
+                ).copyWith(shadows: _textShadows),
+              ),
+            ),
           ),
         ],
       ),
@@ -897,6 +906,20 @@ class _FriendsTabState extends State<FriendsTab> {
   String? _safeString(Object? raw) =>
       raw is String && raw.trim().isNotEmpty ? raw.trim() : null;
 
+  String? _pendingRealName(Map<String, dynamic> user) {
+    String? part(Object? raw) {
+      final value = _safeString(raw);
+      if (value == null) return null;
+      return value.length <= 80 ? value : value.substring(0, 80);
+    }
+
+    final parts = [
+      part(user['firstName']),
+      part(user['lastName']),
+    ].whereType<String>().toList(growable: false);
+    return parts.isEmpty ? null : parts.join(' ');
+  }
+
   Map<String, dynamic> _safeMap(Object? raw) => raw is Map
       ? <String, dynamic>{
           for (final entry in raw.entries)
@@ -952,6 +975,7 @@ class _FriendsTabState extends State<FriendsTab> {
     required String? profilePhotoUrl,
     required PublicProfileRelationship relationship,
     required String? friendshipId,
+    String? realName,
     Widget? child,
   }) {
     final identity = Row(
@@ -961,14 +985,40 @@ class _FriendsTabState extends State<FriendsTab> {
         Expanded(
           child:
               child ??
-              Text(
-                atName(displayName),
-                style: PixelText.body(
-                  size: 16,
-                  color: AppColors.of(context).textDark,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
+              (realName == null
+                  ? Text(
+                      atName(displayName),
+                      style: PixelText.body(
+                        size: 16,
+                        color: AppColors.of(context).textDark,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          realName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: PixelText.title(
+                            size: 14,
+                            color: AppColors.of(context).textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          atName(displayName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: PixelText.body(
+                            size: 12,
+                            color: AppColors.of(context).textMid,
+                          ),
+                        ),
+                      ],
+                    )),
         ),
       ],
     );
@@ -986,6 +1036,7 @@ class _FriendsTabState extends State<FriendsTab> {
           userId: userId,
           fallbackName: displayName,
           fallbackPhotoUrl: profilePhotoUrl,
+          fallbackRealName: realName,
           relationship: relationship,
           friendshipId: friendshipId,
         ),
@@ -1139,45 +1190,78 @@ class _FriendsTabState extends State<FriendsTab> {
     final displayName = _safeString(user['displayName']) ?? 'Runner';
     final profilePhotoUrl = _safeString(user['profilePhotoUrl']);
     final friendshipId = _safeString(req['friendshipId']);
+    final realName = _pendingRealName(user);
 
     return Container(
       color: index.isOdd
           ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
           : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: _profileIdentity(
-              userId: _extractUserId(req),
-              displayName: displayName,
-              profilePhotoUrl: profilePhotoUrl,
-              relationship: PublicProfileRelationship.incoming,
-              friendshipId: friendshipId,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final identity = _profileIdentity(
+            userId: _extractUserId(req),
+            displayName: displayName,
+            profilePhotoUrl: profilePhotoUrl,
+            relationship: PublicProfileRelationship.incoming,
+            friendshipId: friendshipId,
+            realName: realName,
+          );
+          final actions = MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.3,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PulseGlow(
+                  child: PillButton(
+                    label: 'ACCEPT',
+                    variant: PillButtonVariant.primary,
+                    fontSize: 11,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    onPressed: friendshipId == null
+                        ? null
+                        : () => _respond(friendshipId, true),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                PillButton(
+                  label: 'DECLINE',
+                  variant: PillButtonVariant.accent,
+                  fontSize: 11,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  onPressed: friendshipId == null
+                      ? null
+                      : () => _respond(friendshipId, false),
+                ),
+              ],
             ),
-          ),
-          PulseGlow(
-            child: PillButton(
-              label: 'ACCEPT',
-              variant: PillButtonVariant.primary,
-              fontSize: 11,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              onPressed: friendshipId == null
-                  ? null
-                  : () => _respond(friendshipId, true),
-            ),
-          ),
-          const SizedBox(width: 6),
-          PillButton(
-            label: 'DECLINE',
-            variant: PillButtonVariant.accent,
-            fontSize: 11,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            onPressed: friendshipId == null
-                ? null
-                : () => _respond(friendshipId, false),
-          ),
-        ],
+          );
+          final reflow =
+              constraints.maxWidth < 370 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.3;
+          if (reflow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                identity,
+                const SizedBox(height: 8),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: identity),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }

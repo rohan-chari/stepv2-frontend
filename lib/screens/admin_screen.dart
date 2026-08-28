@@ -31,11 +31,13 @@ class AdminFlagsPanel extends StatefulWidget {
     super.key,
     required this.authService,
     required this.showErrorToast,
+    this.showInfoToast,
     this.backendApiService,
   });
 
   final AuthService authService;
   final void Function(BuildContext context, String message) showErrorToast;
+  final void Function(BuildContext context, String message)? showInfoToast;
   final BackendApiService? backendApiService;
 
   @override
@@ -53,11 +55,132 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
   final TextEditingController _serviceBannerContestSlug =
       TextEditingController();
   bool _serviceBannerEnabled = false;
+  final TextEditingController _activeLimitController = TextEditingController();
+  bool _activeLimitLoading = true;
+  bool _activeLimitSaving = false;
+  bool _activeLimitUnavailable = false;
+  bool _activeLimitFailed = false;
+  int? _activeLimit;
+  int _activeLimitMinimum = 1;
+  int _activeLimitMaximum = 20;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadActiveLimit();
+  }
+
+  Future<void> _loadActiveLimit() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _activeLimitLoading = false;
+          _activeLimitFailed = true;
+        });
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _activeLimitLoading = true;
+        _activeLimitFailed = false;
+      });
+    }
+    try {
+      final response = await _api.fetchAdminActiveCompetitionLimit(
+        identityToken: token,
+      );
+      final limit = response['activeCompetitionLimit'];
+      final minimum = response['minimum'];
+      final maximum = response['maximum'];
+      if (limit is! int ||
+          minimum is! int ||
+          maximum is! int ||
+          minimum != 1 ||
+          maximum != 20 ||
+          limit < minimum ||
+          limit > maximum) {
+        throw const ApiException('Invalid active competition limit response');
+      }
+      if (!mounted) return;
+      setState(() {
+        _activeLimit = limit;
+        _activeLimitMinimum = minimum;
+        _activeLimitMaximum = maximum;
+        _activeLimitController.text = '$limit';
+        _activeLimitLoading = false;
+        _activeLimitUnavailable = false;
+        _activeLimitFailed = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _activeLimitLoading = false;
+        _activeLimitUnavailable = error.statusCode == 404;
+        _activeLimitFailed = error.statusCode != 404;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _activeLimitLoading = false;
+        _activeLimitFailed = true;
+      });
+    }
+  }
+
+  int? get _enteredActiveLimit {
+    final parsed = int.tryParse(_activeLimitController.text.trim());
+    if (parsed == null ||
+        parsed < _activeLimitMinimum ||
+        parsed > _activeLimitMaximum) {
+      return null;
+    }
+    return parsed;
+  }
+
+  Future<void> _saveActiveLimit() async {
+    final token = widget.authService.authToken;
+    final next = _enteredActiveLimit;
+    if (token == null ||
+        token.isEmpty ||
+        next == null ||
+        next == _activeLimit ||
+        _activeLimitSaving) {
+      return;
+    }
+    setState(() => _activeLimitSaving = true);
+    try {
+      final response = await _api.updateAdminActiveCompetitionLimit(
+        identityToken: token,
+        activeCompetitionLimit: next,
+      );
+      final returned = response['activeCompetitionLimit'];
+      final minimum = response['minimum'];
+      final maximum = response['maximum'];
+      if (returned is! int ||
+          minimum is! int ||
+          maximum is! int ||
+          minimum != 1 ||
+          maximum != 20 ||
+          returned < minimum ||
+          returned > maximum) {
+        throw const ApiException('Invalid active competition limit response');
+      }
+      if (!mounted) return;
+      setState(() {
+        _activeLimit = returned;
+        _activeLimitController.text = '$returned';
+      });
+      widget.showInfoToast?.call(context, 'Active race limit saved.');
+    } catch (_) {
+      if (mounted) {
+        widget.showErrorToast(context, 'Couldn’t save the active race limit.');
+      }
+    } finally {
+      if (mounted) setState(() => _activeLimitSaving = false);
+    }
   }
 
   Future<void> _load() async {
@@ -118,6 +241,7 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
 
   @override
   void dispose() {
+    _activeLimitController.dispose();
     _serviceBannerMessage.dispose();
     _serviceBannerContestSlug.dispose();
     super.dispose();
@@ -185,6 +309,8 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _buildActiveLimitCard(context),
+        const SizedBox(height: 18),
         Text(
           'ADVERTISING',
           style: PixelText.title(
@@ -247,6 +373,94 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
           onPressed: _saving ? null : _saveHomeServiceBanner,
         ),
       ],
+    );
+  }
+
+  Widget _buildActiveLimitCard(BuildContext context) {
+    final colors = AppColors.of(context);
+    if (_activeLimitLoading) {
+      return const SizedBox(
+        height: 52,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    return Container(
+      key: const Key('admin-active-race-limit-card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.parchmentLight,
+        border: Border.all(color: colors.parchmentBorder, width: 2),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(color: colors.woodShadow, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: _activeLimitUnavailable
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ACTIVE RACE LIMIT',
+                  style: PixelText.title(size: 13, color: colors.textDark),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Update backend to edit',
+                  style: PixelText.body(size: 12, color: colors.textMid),
+                ),
+              ],
+            )
+          : _activeLimitFailed
+          ? Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Couldn’t load the active race limit.',
+                    style: PixelText.body(size: 12, color: colors.textMid),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _loadActiveLimit,
+                  child: const Text('RETRY'),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'ACTIVE RACE LIMIT',
+                  style: PixelText.title(size: 13, color: colors.textDark),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Accepted pending or active competitions per runner ($_activeLimitMinimum–$_activeLimitMaximum).',
+                  style: PixelText.body(size: 11, color: colors.textMid),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const Key('admin-active-race-limit-field'),
+                  controller: _activeLimitController,
+                  enabled: !_activeLimitSaving,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'Active races'),
+                ),
+                const SizedBox(height: 10),
+                PillButton(
+                  key: const Key('admin-active-race-limit-save'),
+                  label: _activeLimitSaving ? 'SAVING…' : 'SAVE LIMIT',
+                  fullWidth: true,
+                  onPressed:
+                      !_activeLimitSaving &&
+                          _enteredActiveLimit != null &&
+                          _enteredActiveLimit != _activeLimit
+                      ? _saveActiveLimit
+                      : null,
+                ),
+              ],
+            ),
     );
   }
 }
@@ -606,6 +820,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         authService: widget.authService,
                         backendApiService: widget.backendApiService,
                         showErrorToast: widget.showErrorToast,
+                        showInfoToast: widget.showInfoToast,
                       ),
                       const SizedBox(height: 16),
                       PillButton(
@@ -1022,6 +1237,7 @@ class _AdminScreenState extends State<AdminScreen> {
           authService: widget.authService,
           backendApiService: widget.backendApiService,
           showErrorToast: widget.showErrorToast,
+          showInfoToast: widget.showInfoToast,
         ),
         const SizedBox(height: 16),
         for (final item in [

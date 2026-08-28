@@ -331,7 +331,9 @@ void main() {
 
     expect(find.byType(CreateRaceScreen), findsOneWidget);
     expect(
-      find.text('Finish or leave another funded race before joining this one.'),
+      find.text(
+        'You’ve reached the active competition limit. Finish or leave an active competition, then try again.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Conflict'), findsNothing);
@@ -429,7 +431,10 @@ void main() {
     for (final entry in {1: '1 DAY', 7: '7 DAYS', 14: '14 DAYS'}.entries) {
       await _tap(tester, Key('duration-option-${entry.key}'));
       await _tap(tester, const Key('duration-option-custom'));
-      expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
+      expect(
+        find.byKey(const Key('create-prize-pool-derivation')),
+        findsNothing,
+      );
       expect(_createEnabled(tester), isTrue);
     }
   });

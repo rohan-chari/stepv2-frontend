@@ -474,6 +474,45 @@ void main() {
     );
   });
 
+  group('/admin/settings/active-competition-limit', () {
+    test('GET and PATCH consume the dedicated direct envelope exactly', () async {
+      final client = _FakeHttpClient([
+        const _Scripted(
+          200,
+          '{"activeCompetitionLimit":17,"minimum":1,"maximum":20,"updatedAt":null}',
+        ),
+        const _Scripted(
+          200,
+          '{"activeCompetitionLimit":16,"minimum":1,"maximum":20,"updatedAt":"2026-08-28T12:00:00.000Z"}',
+        ),
+      ]);
+      final api = BackendApiService(httpClient: client);
+
+      final loaded = await api.fetchAdminActiveCompetitionLimit(
+        identityToken: 'tok',
+      );
+      final saved = await api.updateAdminActiveCompetitionLimit(
+        identityToken: 'tok',
+        activeCompetitionLimit: 16,
+      );
+
+      expect(client.requests[0].method, 'GET');
+      expect(
+        client.requests[0].uri.path,
+        '/admin/settings/active-competition-limit',
+      );
+      expect(loaded['activeCompetitionLimit'], 17);
+      expect(client.requests[1].method, 'PATCH');
+      expect(
+        client.requests[1].uri.path,
+        '/admin/settings/active-competition-limit',
+      );
+      expect(_bodyOf(client.requests[1]), {'activeCompetitionLimit': 16});
+      expect(saved['activeCompetitionLimit'], 16);
+      expect(saved['maximum'], 20);
+    });
+  });
+
   group('PATCH /admin/powerup-shop/items/:itemId', () {
     test('sends ONLY the keys that were provided', () async {
       final client = _FakeHttpClient([

@@ -279,9 +279,9 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text('BONUS SPIN - WATCH AD'), findsOneWidget);
+        expect(find.text('BONUS SPIN'), findsOneWidget);
         expect(
-          _truncated(tester, 'BONUS SPIN - WATCH AD'),
+          _truncated(tester, 'BONUS SPIN'),
           isFalse,
           reason: 'bonus-spin ticket must fit at ${width.toInt()}pt',
         );

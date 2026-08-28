@@ -13,6 +13,7 @@ import '../../styles.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../utils/effect_polarity.dart';
+import '../../utils/funded_exposure_error_copy.dart';
 import '../../utils/race_participant_display.dart';
 import '../../utils/tournament.dart';
 import '../../widgets/arcade_fx.dart';
@@ -350,7 +351,11 @@ class _RacesTabState extends State<RacesTab> {
       if (mounted) {
         showErrorToast(
           context,
-          e.code != null ? tournamentErrorCopy(e.code) : e.message,
+          isActiveCompetitionLimitError(e)
+              ? fundedExposureErrorCopy(e)
+              : e.code != null
+              ? tournamentErrorCopy(e.code)
+              : e.message,
         );
       }
     } catch (_) {

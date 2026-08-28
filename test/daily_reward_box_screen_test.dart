@@ -125,6 +125,7 @@ Future<void> _pumpScreen(
   ThemeMode themeMode = ThemeMode.light,
   Size? surfaceSize,
   TextScaler textScaler = TextScaler.noScaling,
+  TargetPlatform platform = TargetPlatform.iOS,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -132,13 +133,16 @@ Future<void> _pumpScreen(
   }
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppThemeData.light(),
-      darkTheme: AppThemeData.night(),
+      theme: AppThemeData.light().copyWith(platform: platform),
+      darkTheme: AppThemeData.night().copyWith(platform: platform),
       themeMode: themeMode,
       home: MediaQuery(
         data: MediaQueryData(
           size: surfaceSize ?? const Size(390, 844),
           textScaler: textScaler,
+          padding: platform == TargetPlatform.iOS
+              ? const EdgeInsets.only(top: 47, bottom: 34)
+              : const EdgeInsets.only(top: 24),
         ),
         child: DailyRewardScreen(authService: auth, backendApiService: api),
       ),
@@ -211,25 +215,101 @@ void main() {
     expect(find.text('CLAIM TODAY'), findsNothing);
   });
 
-  testWidgets('? tooltip explains streak odds with percentages', (
+  testWidgets('popup hides odds/help and pins a tappable close affordance', (
     WidgetTester tester,
   ) async {
     final auth = await _authService();
     await _pumpScreen(tester, _BoxModeApi(), auth);
 
-    await tester.tap(find.text('?').first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('HOW IT WORKS'), findsOneWidget);
-    expect(find.textContaining('longer your streak'), findsOneWidget);
-    expect(find.text('60%'), findsOneWidget);
-    expect(find.text('27%'), findsOneWidget);
-    expect(find.text('13%'), findsOneWidget);
-
-    await tester.tap(find.text('GOT IT'));
-    await tester.pumpAndSettle();
-    expect(find.text('HOW IT WORKS'), findsNothing);
+    expect(find.text('% ODDS'), findsNothing);
+    expect(find.text('?'), findsNothing);
+    final close = find.bySemanticsLabel('Close daily reward');
+    expect(close, findsOneWidget);
+    expect(tester.getSize(close).width, greaterThanOrEqualTo(44));
+    expect(tester.getSize(close).height, greaterThanOrEqualTo(44));
+    expect(tester.takeException(), isNull);
   });
+
+  testWidgets('claimed box uses the exact tomorrow copy on a narrow phone', (
+    WidgetTester tester,
+  ) async {
+    final auth = await _authService();
+    await _pumpScreen(
+      tester,
+      _BoxModeApi(claimedToday: true),
+      auth,
+      surfaceSize: const Size(320, 568),
+      textScaler: const TextScaler.linear(2),
+    );
+
+    expect(find.text('Come back tomorrow.'), findsOneWidget);
+    expect(find.text('COME BACK TOMORROW'), findsOneWidget);
+    expect(
+      find.textContaining('Today\'s reward has been claimed'),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'popup honors accessible type across phone and platform metrics',
+    (WidgetTester tester) async {
+      const sizes = [
+        Size(320, 568),
+        Size(360, 640),
+        Size(390, 844),
+        Size(430, 932),
+      ];
+      for (final platform in const [
+        TargetPlatform.iOS,
+        TargetPlatform.android,
+      ]) {
+        for (final size in sizes) {
+          for (final scale in const [1.0, 1.3, 2.0]) {
+            final auth = await _authService();
+            await _pumpScreen(
+              tester,
+              _BoxModeApi(claimedToday: true),
+              auth,
+              surfaceSize: size,
+              textScaler: TextScaler.linear(scale),
+              platform: platform,
+            );
+
+            expect(find.text('Come back tomorrow.'), findsOneWidget);
+            expect(find.text('COME BACK TOMORROW'), findsOneWidget);
+            expect(find.text('% ODDS'), findsNothing);
+            expect(find.text('?'), findsNothing);
+            final body = tester
+                .widgetList<RichText>(find.byType(RichText))
+                .firstWhere(
+                  (rich) => rich.text.toPlainText() == 'Come back tomorrow.',
+                );
+            expect(
+              body.textScaler.scale(10),
+              closeTo(10 * scale, 0.01),
+              reason: '$platform $size scale=$scale',
+            );
+            final close = find.bySemanticsLabel('Close daily reward');
+            expect(tester.getSize(close), const Size(44, 44));
+            expect(close.hitTestable(), findsOneWidget);
+            expect(
+              tester.getSemantics(close),
+              matchesSemantics(
+                label: 'Close daily reward',
+                isButton: true,
+                hasTapAction: true,
+              ),
+            );
+            final closeRect = tester.getRect(close);
+            expect(closeRect.right, lessThanOrEqualTo(size.width));
+            expect(closeRect.top, greaterThanOrEqualTo(0));
+            expect(tester.takeException(), isNull);
+          }
+        }
+      }
+    },
+  );
 
   testWidgets('opening the box spins the case reel and reveals rarity', (
     WidgetTester tester,
@@ -360,7 +440,7 @@ void main() {
     expect(find.text('This reward is no longer available.'), findsOneWidget);
   });
 
-  testWidgets('odds sheet describes RARE as accessory or powerup', (
+  testWidgets('popup omits odds even when the backend supplies a rare mix', (
     WidgetTester tester,
   ) async {
     final auth = await _authService();
@@ -376,9 +456,9 @@ void main() {
     );
     await _pumpScreen(tester, api, auth);
 
-    await tester.tap(find.text('?').first);
-    await tester.pumpAndSettle();
-    expect(find.text('new accessory or powerup'), findsOneWidget);
+    expect(find.text('?'), findsNothing);
+    expect(find.text('% ODDS'), findsNothing);
+    expect(find.text('new accessory or powerup'), findsNothing);
   });
 
   testWidgets('already-claimed box mode shows come-back state, no claim', (

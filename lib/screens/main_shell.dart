@@ -189,7 +189,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _notificationAskShowing = false;
   bool _isLoading = false;
   String? _error;
-  StepData? _stepData;
+  Loadable<StepData> _stepDataState = const Loadable.initial();
+  StepData? get _stepData => _stepDataState.data;
+  static bool _sameLocalDay(DateTime? left, DateTime right) =>
+      left != null &&
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+
+  void _publishStepLoadError() {
+    if (!mounted) return;
+    final retained = _sameLocalDay(_stepData?.date, DateTime.now())
+        ? _stepData
+        : null;
+    setState(() {
+      _stepDataState = Loadable.error('Failed to fetch steps.', data: retained);
+    });
+  }
+
   int _incomingFriendRequests = 0;
   int? _inboxUnreadCount;
   bool _hasInboxUnreadSnapshot = false;
@@ -711,6 +728,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _globalSummaryExpiryTimer?.cancel();
         _globalSummaryExpiryTimer = null;
         _activeGlobalEventSummaryWork = null;
+        _stepDataState = const Loadable.initial();
       }
     });
     if (userChanged || nextToken == null || nextToken.isEmpty) {
@@ -1005,7 +1023,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           widget.notificationService?.pendingAction.value = null;
           // Shares the tap guard so a notification tap can't stack a second
           // detail screen over one already opening.
-          _openRaceFromCard(raceId);
+          _openRaceFromCard(raceId, fallbackOnUnavailable: true);
         }
         break;
       case NotificationRoute.races:
@@ -1172,7 +1190,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         raceId = result['raceId'] is String ? result['raceId'] as String : null;
       }
     } on ApiException catch (e) {
-      if (e.code == kFundedExposureLimitCode) {
+      if (isActiveCompetitionLimitError(e)) {
         errorMessage = fundedExposureErrorCopy(e);
       } else {
         // Already a member / full / closed: still try to land them on the race by
@@ -1348,7 +1366,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final t = result['tournament'];
       tournamentId = t is Map ? t['id'] as String? : null;
     } on ApiException catch (e) {
-      if (e.code == kFundedExposureLimitCode) {
+      if (isActiveCompetitionLimitError(e)) {
         errorMessage = fundedExposureErrorCopy(e);
       } else {
         // Already a member / full / started: still try to land them on the
@@ -1467,7 +1485,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         onboarding: true,
       );
     } on ApiException catch (error) {
-      if (error.code == kFundedExposureLimitCode) {
+      if (isActiveCompetitionLimitError(error)) {
         if (mounted) showErrorToast(context, fundedExposureErrorCopy(error));
         return;
       }
@@ -1946,6 +1964,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() {
       _isLoading = true;
       _error = null;
+      final retained = _sameLocalDay(_stepData?.date, DateTime.now())
+          ? _stepData
+          : null;
+      _stepDataState = Loadable.loading(data: retained);
     });
 
     try {
@@ -1968,6 +1990,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _isLoading = false;
         _error = 'Failed to fetch steps:\n$e';
       });
+      _publishStepLoadError();
     }
   }
 
@@ -1980,6 +2003,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// read fails — callers decide how to surface that.
   Future<_StepSyncOutcome> _persistSteps({bool homePull = false}) async {
     final identityToken = widget.authService.authToken;
+    final ownerUserId = widget.authService.userId;
     final now = DateTime.now();
     final results = await Future.wait([
       _healthService.getStepsToday(),
@@ -1992,8 +2016,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final stepData = results[0] as StepData;
     final hourlySamples = results[1] as List<StepSampleData>;
 
+    if (identityToken != widget.authService.authToken ||
+        ownerUserId != widget.authService.userId) {
+      return const _StepSyncOutcome(persisted: false, error: true);
+    }
+
+    // The device is the source of truth for the Home HUD. Publish it before
+    // any network persistence so poor service can never prolong a false zero.
+    if (mounted) setState(() => _stepDataState = Loadable.success(stepData));
+
     if (identityToken == null || identityToken.isEmpty) {
-      if (mounted) setState(() => _stepData = stepData);
       return const _StepSyncOutcome(persisted: false, error: true);
     }
 
@@ -2009,10 +2041,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       payload: payload,
       homePull: homePull,
     );
-
-    // Local step display is always truthful from the device read, regardless of
-    // the server outcome.
-    if (mounted) setState(() => _stepData = stepData);
 
     if (v2.shouldLegacyFallback) {
       final ok = await _legacySyncSteps(identityToken, stepData, hourlySamples);
@@ -2542,6 +2570,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       outcome = await _persistSteps();
       _startGlobalEventSummaryWorkPollingIfPresent(outcome);
     } catch (_) {
+      _publishStepLoadError();
       // Keep prior surfaces; continue loading the rest.
     }
 
@@ -2824,7 +2853,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         return;
       }
       throw ApiException(
-        error.code == kFundedExposureLimitCode
+        isActiveCompetitionLimitError(error)
             ? fundedExposureErrorCopy(error)
             : error.code == 'TEAM_FULL'
             ? 'That team is full. Try another invitation.'
@@ -3266,7 +3295,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (mounted) {
         showErrorToast(
           context,
-          e.code != null ? tournamentErrorCopy(e.code) : e.message,
+          isActiveCompetitionLimitError(e)
+              ? fundedExposureErrorCopy(e)
+              : e.code != null
+              ? tournamentErrorCopy(e.code)
+              : e.message,
         );
       }
       return false;
@@ -3462,6 +3495,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       outcome = await _persistSteps(homePull: true);
       _startGlobalEventSummaryWorkPollingIfPresent(outcome);
     } catch (_) {
+      _publishStepLoadError();
       // Local health read failed: keep prior server-derived surfaces and end
       // the pull (existing error presentation lives in the step display).
       return;
@@ -3821,7 +3855,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       case InboxDestinationRoute.raceDetail:
         final raceId = destinationModel.raceId;
         if (raceId == null) return;
-        _openRaceFromCard(raceId);
+        _openRaceFromCard(raceId, fallbackOnUnavailable: true);
       case InboxDestinationRoute.tournamentDetail:
         final tournamentId = destinationModel.tournamentId;
         if (tournamentId == null) return;
@@ -3887,7 +3921,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
   }
 
-  void _openRaceFromCard(String raceId) {
+  void _openRaceFromCard(String raceId, {bool fallbackOnUnavailable = false}) {
     // Rapid taps during the push transition used to stack duplicate detail
     // screens, each running the full details/progress/chat load.
     if (_openingRaceDetail) return;
@@ -3901,6 +3935,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           entrySurface: RaceDetailEntrySurface.home,
           friends: _friendsSteps,
           notificationService: widget.notificationService,
+          fallbackOnUnavailable: fallbackOnUnavailable,
           onBoxOpened: () =>
               maybeAskForNotifications(NotificationAskTrigger.boxOpen),
           scheduleRefresh: () {
@@ -3918,7 +3953,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           // The detail screen pops `true` from its not-a-participant state's
           // "Find it on Races" button. This entry point (a push tap or a card
           // on the home tab) is the one that can be sitting on another tab.
-          if (mounted && result == RaceDetailRouteResult.forwardExit) {
+          if (mounted && result == RaceDetailRouteResult.unavailableExit) {
+            // Inbox is itself a pushed route. A deleted-race deep link must
+            // land on the shell's Races tab instead of revealing Inbox again
+            // after the failed detail route dismisses itself.
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            _openRacesTab();
+            showInfoToast(context, 'That race is no longer available.');
+          } else if (mounted && result == RaceDetailRouteResult.forwardExit) {
             _openRacesTab();
           }
           // This is also the preview-tap entry point for a Home suggestion
@@ -3999,7 +4041,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         final membershipLimitMessage = e.message.trim();
         showErrorToast(
           context,
-          e.code == kFundedExposureLimitCode
+          isActiveCompetitionLimitError(e)
               ? fundedExposureErrorCopy(e)
               : e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
               ? (membershipLimitMessage.isNotEmpty
@@ -4012,8 +4054,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     : 'Could not join. Give it another try!'),
         );
       }
-      return e.code == kFundedExposureLimitCode
-          ? kFundedExposureLimitCode
+      return isActiveCompetitionLimitError(e)
+          ? e.code
           : e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
           ? 'QUICK_RACE_MEMBERSHIP_LIMIT'
           : 'UNKNOWN';
@@ -4159,7 +4201,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           onboarding: true,
         );
       } on ApiException catch (error) {
-        if (error.code == kFundedExposureLimitCode) {
+        if (isActiveCompetitionLimitError(error)) {
           if (mounted) showErrorToast(context, fundedExposureErrorCopy(error));
           return;
         }
@@ -4349,7 +4391,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (mounted) {
         showErrorToast(
           context,
-          e.code != null
+          isActiveCompetitionLimitError(e)
+              ? fundedExposureErrorCopy(e)
+              : e.code != null
               ? teamRaceErrorCopy(e.code)
               : (e.message.trim().isNotEmpty
                     ? e.message
@@ -4417,6 +4461,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _openRacesTab() {
+    if (!_pageController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openRacesTab();
+      });
+      return;
+    }
     _pageController.animateToPage(
       _racesTabIndex,
       duration: const Duration(milliseconds: 250),
@@ -4805,6 +4855,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           streakChipKey: _streakChipKey,
                           stepMilestonesKey: _stepMilestonesKey,
                           stepData: _stepData,
+                          stepDataState: _stepDataState,
                           isLoading: _isLoading,
                           error: _error,
                           backendApiService: _backendApiService,

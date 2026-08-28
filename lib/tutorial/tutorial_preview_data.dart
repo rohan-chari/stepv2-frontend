@@ -355,8 +355,12 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     _socialState.forEach((id, state) {
       final user = <String, dynamic>{
         'id': id,
-        'displayName': names[id] ?? 'Runner',
+        'displayName': id == 'tutorial-dana'
+            ? 'DanaDashes'
+            : names[id] ?? 'Runner',
         'profilePhotoUrl': null,
+        if (id == 'tutorial-dana') 'firstName': 'Dana',
+        if (id == 'tutorial-dana') 'lastName': 'Fox',
       };
       final friendshipId = _socialIds[id];
       if (state == 'friends') {

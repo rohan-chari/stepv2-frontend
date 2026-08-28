@@ -48,30 +48,29 @@ void main() {
     });
 
     test('banner settings reactivate the runtime ad gate', () async {
-        SharedPreferences.setMockInitialValues(const {
-          'auth_banner_ads_enabled': false,
-          'auth_dual_box_banners_enabled': false,
-        });
-        final auth = AuthService();
-        await auth.restoreSession();
+      SharedPreferences.setMockInitialValues(const {
+        'auth_banner_ads_enabled': false,
+        'auth_dual_box_banners_enabled': false,
+      });
+      final auth = AuthService();
+      await auth.restoreSession();
 
-        expect(auth.bannerAdsEnabled, isTrue);
-        expect(auth.dualBoxBannersEnabled, isTrue);
+      expect(auth.bannerAdsEnabled, isTrue);
+      expect(auth.dualBoxBannersEnabled, isTrue);
 
-        auth.applyBackendUser(const {
-          'featureFlags': {
-            'bannerAdsEnabled': false,
-            'dualBoxBannersEnabled': false,
-          },
-        }, authoritative: true);
+      auth.applyBackendUser(const {
+        'featureFlags': {
+          'bannerAdsEnabled': false,
+          'dualBoxBannersEnabled': false,
+        },
+      }, authoritative: true);
 
-        expect(auth.bannerAdsEnabled, isFalse);
-        expect(auth.dualBoxBannersEnabled, isTrue);
-        final prefs = await SharedPreferences.getInstance();
-        expect(prefs.containsKey('auth_banner_ads_enabled'), isFalse);
-        expect(prefs.containsKey('auth_dual_box_banners_enabled'), isFalse);
-      },
-    );
+      expect(auth.bannerAdsEnabled, isFalse);
+      expect(auth.dualBoxBannersEnabled, isTrue);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('auth_banner_ads_enabled'), isFalse);
+      expect(prefs.containsKey('auth_dual_box_banners_enabled'), isFalse);
+    });
 
     test('missing and malformed old-backend fields retain safe downgrade', () {
       final auth = AuthService();
@@ -139,7 +138,10 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const Key('admin-settings-banner-ads-toggle')), findsOneWidget);
+    expect(
+      find.byKey(const Key('admin-settings-banner-ads-toggle')),
+      findsOneWidget,
+    );
     expect(find.text('Banner ads'), findsOneWidget);
     expect(find.text('Dual box banners'), findsNothing);
     expect(find.text('Team races'), findsNothing);
@@ -167,7 +169,7 @@ void main() {
 
       expect(
         fundedExposureErrorCopy(error),
-        'Finish or leave another funded race before joining this one.',
+        'You’ve reached the active competition limit. Finish or leave an active competition, then try again.',
       );
     });
 
@@ -200,7 +202,7 @@ void main() {
       expect(find.byType(QuickCreateRaceSheet), findsOneWidget);
       expect(
         find.text(
-          'Finish or leave another funded race before joining this one.',
+          'You’ve reached the active competition limit. Finish or leave an active competition, then try again.',
         ),
         findsOneWidget,
       );
@@ -208,23 +210,24 @@ void main() {
     });
   });
 
-  testWidgets('quick-create uses the established sans face for its hero heading', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: QuickCreateRaceSheet(
-            onCreate: (_) async {},
-            onCustomize: () {},
+  testWidgets(
+    'quick-create uses the established sans face for its hero heading',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: QuickCreateRaceSheet(
+              onCreate: (_) async {},
+              onCustomize: () {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final heading = tester.widget<Text>(find.text('START A RACE'));
-    expect(heading.style?.fontFamily, startsWith('SpaceGrotesk'));
-  });
+      final heading = tester.widget<Text>(find.text('START A RACE'));
+      expect(heading.style?.fontFamily, startsWith('SpaceGrotesk'));
+    },
+  );
 
   test('retired Imposter is removed from usable race inventory residue', () {
     final inventory = normalizePowerupInventory(const [

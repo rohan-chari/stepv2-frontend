@@ -48,6 +48,7 @@ const _homeCardShadow = [
 
 class HomeTab extends StatelessWidget {
   final StepData? stepData;
+  final Loadable<StepData>? stepDataState;
   final bool isLoading;
   final String? error;
   final bool healthAuthorized;
@@ -56,6 +57,7 @@ class HomeTab extends StatelessWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final ExtraSpinAdController? getCoinsAdController;
+  final ExtraSpinAdController? dailyRewardAdController;
   final Future<void> Function() onRefresh;
   final VoidCallback onEnableHealth;
   final VoidCallback onEnableNotifications;
@@ -127,6 +129,7 @@ class HomeTab extends StatelessWidget {
   const HomeTab({
     super.key,
     required this.stepData,
+    this.stepDataState,
     required this.isLoading,
     required this.error,
     required this.healthAuthorized,
@@ -135,6 +138,7 @@ class HomeTab extends StatelessWidget {
     required this.authService,
     required this.backendApiService,
     this.getCoinsAdController,
+    this.dailyRewardAdController,
     required this.onRefresh,
     required this.onEnableHealth,
     required this.onEnableNotifications,
@@ -1234,35 +1238,31 @@ class HomeTab extends StatelessWidget {
     const groundHeight = 84.0;
     final capySize = compact ? 126.0 : 148.0;
 
+    final state = stepDataState;
+    final truthfulSteps = state?.data ?? stepData;
+    final unresolved =
+        state?.shouldShowInitialLoading ?? (isLoading && stepData == null);
+    final unresolvedError = state?.isError == true && state?.data == null
+        ? state?.error
+        : error;
     final Widget hud;
-    if (isLoading && stepData == null) {
-      // Mirror the loaded HUD (big step-count block above a small label bar)
-      // rather than a bare spinner. Uses the same static-bar skeleton style as
-      // the race-strip tickets below, in a parchment tone so it reads on the
-      // sky. Sits where the real number lands via the HUD's Positioned offset.
+    if (unresolved) {
       hud = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: compact ? 168 : 196,
-            height: compact ? 52 : 60,
-            decoration: BoxDecoration(
-              color: AppColors.of(context).textLight.withValues(alpha: 0.30),
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: 120,
-            height: 13,
-            decoration: BoxDecoration(
-              color: AppColors.of(context).textLight.withValues(alpha: 0.26),
-              borderRadius: BorderRadius.circular(999),
-            ),
+          KeyedSubtree(key: tutorialStepsKey, child: const _PixelStepLoader()),
+          const SizedBox(height: 8),
+          Text(
+            'STEPS TODAY',
+            textAlign: TextAlign.center,
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textLight.withValues(alpha: 0.85),
+            ).copyWith(shadows: _heroShadows, letterSpacing: 3),
           ),
         ],
       );
-    } else if (error != null) {
+    } else if (unresolvedError != null && truthfulSteps == null) {
       hud = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1276,7 +1276,7 @@ class HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            error!,
+            unresolvedError,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
@@ -1288,7 +1288,7 @@ class HomeTab extends StatelessWidget {
         ],
       );
     } else {
-      final steps = stepData?.steps ?? 0;
+      final steps = truthfulSteps?.steps ?? 0;
       hud = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1297,6 +1297,7 @@ class HomeTab extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: CountUpText(
+                key: const Key('home-step-count'),
                 value: steps,
                 format: _formatNumber,
                 style: PixelText.display(
@@ -1440,7 +1441,7 @@ class HomeTab extends StatelessWidget {
 
   /// Daily reward and Shop share the first row under the hero.
   double _quickActionFontSize(BuildContext context) =>
-      (MediaQuery.sizeOf(context).width * 0.031).clamp(11.0, 12.0).toDouble();
+      (MediaQuery.sizeOf(context).width * 0.038).clamp(13.0, 14.0).toDouble();
 
   Widget _buildQuickActionsRow(BuildContext context) {
     return Row(
@@ -1448,7 +1449,7 @@ class HomeTab extends StatelessWidget {
       children: [
         Expanded(
           child: SizedBox(
-            height: 44,
+            height: 48,
             child: KeyedSubtree(
               key: const Key('home-daily-reward-button'),
               child: StreakChip(
@@ -1461,15 +1462,16 @@ class HomeTab extends StatelessWidget {
                 initialData: raceCard?['dailyReward'] as Map<String, dynamic>?,
                 awaitingBatch: raceCardLoading,
                 compactFontSize: _quickActionFontSize(context),
+                adController: dailyRewardAdController,
                 onClaimedToday: onDailyRewardClaimed,
               ),
             ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 6),
         Expanded(
           child: SizedBox(
-            height: 44,
+            height: 48,
             child: KeyedSubtree(
               key: tutorialShopKey,
               child: PillButton(
@@ -1479,10 +1481,11 @@ class HomeTab extends StatelessWidget {
                 variant: PillButtonVariant.secondary,
                 fontSize: _quickActionFontSize(context),
                 fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
+                padding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.sizeOf(context).width <= 340 ? 4 : 8,
                   vertical: 10,
                 ),
+                scaleDownContent: false,
                 onPressed: onOpenShop,
               ),
             ),
@@ -1601,6 +1604,86 @@ class HomeTab extends StatelessWidget {
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+}
+
+class _PixelStepLoader extends StatefulWidget {
+  const _PixelStepLoader();
+
+  @override
+  State<_PixelStepLoader> createState() => _PixelStepLoaderState();
+}
+
+class _PixelStepLoaderState extends State<_PixelStepLoader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppColors.of(context).textLight;
+    return Semantics(
+      label: 'Loading today’s steps',
+      child: ExcludeSemantics(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final phase = (_controller.value * 3).floor() % 3;
+            return SizedBox(
+              width: 64,
+              height: 32,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (var index = 0; index < 3; index++) ...[
+                    Container(
+                      width: 12,
+                      height: index == phase ? 26 : 14,
+                      decoration: BoxDecoration(
+                        color: color.withValues(
+                          alpha: index == phase ? 1 : 0.55,
+                        ),
+                        border: Border.all(
+                          color: AppColors.of(context).textDark,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.of(context).textDark,
+                            offset: const Offset(2, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (index != 2) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 

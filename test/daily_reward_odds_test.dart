@@ -5,10 +5,8 @@ import 'package:step_tracker/screens/daily_reward_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
-/// Spec §6.3.B.9-10 / test plan 24: the daily-reward box exposes an exact-odds
-/// sheet built from `box.itemOdds` (including the COINS slice of `rareMix`,
-/// which the legacy `rarePrizeMix` omits), and hides the affordance entirely
-/// when the field is absent or malformed.
+/// The Daily Reward popup intentionally omits odds/help chrome regardless of
+/// whether a new or old backend includes the historical odds payload.
 class _ItemOddsApi extends BackendApiService {
   _ItemOddsApi({this.itemOdds, this.claimedToday = true});
 
@@ -88,27 +86,14 @@ Future<void> _pumpScreen(WidgetTester tester, BackendApiService api) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('itemOdds present -> ODDS sheet renders rarity, the rareMix '
-      'COINS slice, and the accessory + powerup slices', (
+  testWidgets('itemOdds present -> popup still omits odds and help', (
     WidgetTester tester,
   ) async {
     await _pumpScreen(tester, _ItemOddsApi(itemOdds: _validItemOdds));
 
-    expect(find.text('ODDS'), findsOneWidget);
-    await tester.tap(find.text('ODDS'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
-    expect(find.text('BOX ODDS'), findsOneWidget);
-    expect(find.text('44%'), findsOneWidget);
-    expect(find.text('31%'), findsOneWidget);
-    expect(find.text('25%'), findsOneWidget);
-
-    // rareMix INCLUDING the coins slice — the fix for audit register #9.
-    expect(find.text('ACCESSORY'), findsOneWidget);
-    expect(find.text('POWERUP'), findsOneWidget);
-    expect(find.text('COINS'), findsOneWidget);
-    expect(find.text('20%'), findsOneWidget);
+    expect(find.text('ODDS'), findsNothing);
+    expect(find.text('?'), findsNothing);
+    expect(find.text('BOX ODDS'), findsNothing);
   });
 
   testWidgets('itemOdds absent -> no ODDS affordance (old backend)', (
@@ -117,8 +102,7 @@ void main() {
     await _pumpScreen(tester, _ItemOddsApi());
 
     expect(find.text('ODDS'), findsNothing);
-    // The legacy "?" HOW IT WORKS affordance is untouched.
-    expect(find.text('?'), findsWidgets);
+    expect(find.text('?'), findsNothing);
   });
 
   testWidgets('malformed itemOdds -> no ODDS affordance, no crash', (

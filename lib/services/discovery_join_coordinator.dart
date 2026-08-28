@@ -89,7 +89,7 @@ class DiscoveryJoinCoordinator {
       if (context.mounted) {
         showErrorToast(
           context,
-          error.code == kFundedExposureLimitCode
+          isActiveCompetitionLimitError(error)
               ? fundedExposureErrorCopy(error)
               : error.code != null
               ? teamRaceErrorCopy(error.code)
@@ -146,7 +146,7 @@ class DiscoveryJoinCoordinator {
       if (context.mounted) {
         showErrorToast(
           context,
-          error.code == kFundedExposureLimitCode
+          isActiveCompetitionLimitError(error)
               ? fundedExposureErrorCopy(error)
               : error.code != null
               ? tournamentErrorCopy(error.code)

@@ -578,7 +578,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         setState(() => _isCreating = false);
         showErrorToast(
           context,
-          e.code == kFundedExposureLimitCode
+          isActiveCompetitionLimitError(e)
               ? fundedExposureErrorCopy(e)
               : _isTournament && e.code != null
               ? tournamentErrorCopy(e.code)

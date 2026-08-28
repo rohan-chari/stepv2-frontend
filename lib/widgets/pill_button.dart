@@ -35,6 +35,12 @@ class PillButton extends StatefulWidget {
   /// jank this item exists to remove.
   final bool loading;
 
+  /// Full-width labels normally scale down as a legacy overflow safeguard.
+  /// Responsive callers that guarantee enough room can disable that behavior
+  /// so accessibility-critical text retains its requested painted size.
+  final bool scaleDownContent;
+  final int labelMaxLines;
+
   /// The side/vertical padding a button carries unless the caller overrides it.
   static const defaultPadding = EdgeInsets.symmetric(
     horizontal: 32,
@@ -60,6 +66,8 @@ class PillButton extends StatefulWidget {
     this.leading,
     this.trailing,
     this.loading = false,
+    this.scaleDownContent = true,
+    this.labelMaxLines = 1,
   });
 
   @override
@@ -119,7 +127,7 @@ class _PillButtonState extends State<PillButton> {
   /// ("EXTRA SPIN" → "EXTRA SP…"), which is why the bug shipped. Scaling the
   /// whole row down keeps the word intact. Auto-width buttons size themselves
   /// to their label, so they never need it.
-  Widget _fit(Widget row) => widget.fullWidth
+  Widget _fit(Widget row) => widget.fullWidth && widget.scaleDownContent
       ? FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.center,
@@ -134,11 +142,15 @@ class _PillButtonState extends State<PillButton> {
     final text = Text(
       widget.label,
       textAlign: TextAlign.center,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+      maxLines: widget.labelMaxLines,
+      overflow: widget.labelMaxLines == 1
+          ? TextOverflow.ellipsis
+          : TextOverflow.visible,
       style: PixelText.pill(size: widget.fontSize, color: textColor),
     );
-    return widget.fullWidth ? text : Flexible(child: text);
+    return widget.fullWidth && widget.scaleDownContent
+        ? text
+        : Flexible(child: text);
   }
 
   /// The button's inner row. While [PillButton.loading] the same row stays in
@@ -146,7 +158,13 @@ class _PillButtonState extends State<PillButton> {
   /// button keeps its exact resting width.
   Widget _content(Color textColor) {
     final row = Row(
-      mainAxisSize: MainAxisSize.min,
+      // Responsive full-width buttons give their Flexible label the actual
+      // available width. A min-sized flex row can allocate that child zero
+      // space before centering, which incorrectly marks even short labels as
+      // ellipsized when scaling is deliberately disabled.
+      mainAxisSize: widget.fullWidth && !widget.scaleDownContent
+          ? MainAxisSize.max
+          : MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (widget.leading != null) ...[

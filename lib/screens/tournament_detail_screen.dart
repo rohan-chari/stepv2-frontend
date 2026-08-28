@@ -258,7 +258,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       if (mounted) {
         showErrorToast(
           context,
-          e.code == kFundedExposureLimitCode
+          isActiveCompetitionLimitError(e)
               ? fundedExposureErrorCopy(e)
               : e.code != null
               ? tournamentErrorCopy(e.code)

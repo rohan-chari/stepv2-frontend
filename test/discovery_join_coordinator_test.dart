@@ -141,7 +141,7 @@ void main() {
 
       expect(
         find.text(
-          'Finish or leave another funded race before joining this one.',
+          'You’ve reached the active competition limit. Finish or leave an active competition, then try again.',
         ),
         findsOneWidget,
       );

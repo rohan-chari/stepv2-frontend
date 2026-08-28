@@ -1019,7 +1019,7 @@ minted 1,680 (800 each). The ledger's `race_prize_pool_payout` source is
 coin_transactions`; `created_at::date` is used in SQL to avoid node-pg
 timezone shifts.
 
-### 4.1a Seeded Daily/Weekly V2 payout stamp — verified 2026-08-24 (prod, read-only)
+### 4.1a Seeded Daily/Weekly V2 payout stamp — verified 2026-08-28 (prod, read-only)
 
 Seeded `DAILY_10K`/`WEEKLY_50K` races use the creation-time V2 stamp from
 `CODE backend src/modules/races/services/fundedExposure.js` (`unit=10`,
@@ -1034,6 +1034,18 @@ The current prod weekly private stream has 48 active bucket races / 604
 accepted participants; their rows are stamped `funded_prize=true`,
 `payout_curve=GEOMETRIC`, `payout_rounding_version=1`, `prize_coin_unit=10`,
 and `prize_pool_max_coins=8000` (`DB races × seeded_race_buckets`).
+
+The 2026-08-28 Daily private stream has 22 active bucket races / 750 accepted
+participants. Its planned capacities are
+`[97,39,37,35,33,33,33,32,31,31,31,31,31,30,30,30,30,30,30,30,30,30]`;
+every row is stamped calculation v2, `unit=10`, `max=8,000`, `TOP_HALF`,
+`GEOMETRIC`, and payout-rounding v1. The latest three completed Daily windows
+(2026-08-25..27 ET) had accepted membership exceed the sum of stored
+`max_participants` by 41, 31, and 18 respectively. The 2026-08-27 window had
+22 cohorts, 743 stored capacity, 761 accepted, 679 walkers, and 8,395 settled
+payout coins; one stored-30 cohort settled 59 walkers. These are aggregate
+facts, not a recommended cohort policy. Source: `DB seeded_race_buckets ×
+races × race_participants`, prod read-only.
 
 ### 4.2 Individual payout presets — `CODE races/racePayoutPresets.js`
 
@@ -1106,7 +1118,7 @@ Non-funded seeded races only (retired for funded).
 
 Split by descending linear weights (`computeGradedPayouts`).
 
-### 4.5 Live Daily/Weekly challenge configuration — verified 2026-08-18
+### 4.5 Live Daily/Weekly challenge configuration — verified 2026-08-28
 
 | Item | Daily (`seed-daily-10k`) | Weekly (`seed-weekly-50k`) | Source |
 |---|---:|---:|---|
@@ -1115,7 +1127,7 @@ Split by descending linear weights (`computeGradedPayouts`).
 | Funding | app-funded | app-funded | `DB app_settings` has no `fundedPrizePoolsEnabled` row, so `CODE` default is `true` |
 | New-race curve | `GEOMETRIC` | `GEOMETRIC` | `DB app_settings.seededGeometricPayoutsEnabled=true`; stamped by renewal |
 | New-race payout rounding | v1: each positive award rounds up to 5 | same | `DB app_settings.payoutRoundingV1Enabled=true`; stamped by renewal |
-| Pool EV per eligible walker | 20 coins / 1-day race | 80 coins / 7-day race | `CODE shared/economy/prizePool.js`; pool = walkers × durationPoints × 20 |
+| Raw pool EV per eligible walker, newly created rows | 10 coins / 1-day race | 40 coins / 7-day race | `CODE races/services/fundedExposure.js` v2 stamp; confirmed by current `DB races` rows. Rounding v1 raises realised EV above raw pool EV |
 
 The active rows observed at verification had 61 accepted / 50 walkers (Daily)
 and 68 accepted / 57 walkers (Weekly). These are live operational counts, not
@@ -2295,6 +2307,86 @@ already exists under v1. Future draws remain secret; stable timezone snapshots,
 one persisted draw, the event-day advisory lock, and immutable entitlements
 prevent timezone chasing, duplicate windows, and redraw farming.
 
+## 16. Active-competition and Hitchhike-v3 review inputs — verified 2026-08-28
+
+This section records the factual inputs used to review
+`docs/feature-batch-2026-08-28-requirements.md`. Release A and Hitchhike
+Release B are live as of 2026-08-28. The checked production connection is a snapshot whose
+latest ledger, daily-step, and sample dates are 2026-08-19, 2026-08-23, and
+2026-08-22 respectively.
+
+### 16.1 Proposed active-competition limit
+
+Before Release A, the backend admitted at most five newly accepted memberships
+in user-created funded races/tournaments. The live replacement setting defaults to 20,
+allows administrators to save 1–20, and counts all accepted, non-terminal
+memberships in PENDING/ACTIVE user-created races and tournaments while excluding
+seeded competitions and tournament matchup races.
+
+At the verification snapshot, that proposed count covered **589 memberships /
+322 non-review users**: p50 1, p90 3.9, max 15. Twenty-two users were above five
+because existing memberships are never ejected; zero were above 20. All 589
+memberships were app-funded, and **518 / 589 (87.9%)** had powerups enabled.
+Source: `DB races × race_participants × tournaments ×
+tournament_participants × users`, aggregate-only read-only query.
+
+For a one-day, non-team funded race, raw symmetric payout EV is 10 coins per
+entrant. A two-player winner-takes-all field mints 20 coins when both entrants
+record positive eligible score. The same walked steps can qualify in every
+concurrent race. At the proposed numeric bounds:
+
+| Concurrent one-day funded memberships | Raw symmetric payout EV/player/day | Controlled two-account WTA payoff to one winner/day | Boxes/day at p10 / p50 / p90 steps |
+|---:|---:|---:|---:|
+| 5 (live prospective guard) | 50 | 100 | 4.42 / 14.72 / 28.52 |
+| 20 (`SPEC` default and validation maximum) | 200 | 400 | 17.66 / 58.86 / 114.08 |
+
+The box calculation is `memberships × daily raw steps / 2,000`, using the
+latest feature-batch p10/p50/p90 per-user daily rates 1,766 / 5,886 / 11,408
+from section 0f and assuming every membership is powerup-enabled. Boxes do not
+directly mint race-prize coins; historically each extra box correlated with
+1.49 coins of upgrade sink and about 0.17 coins of discard issuance, with strong
+leader concentration and possible store-purchase cannibalization (sections 2b,
+3.3, and 3.5). Payout rounding v1 can raise realised awards above the raw values
+in the table.
+
+### 16.2 Deferred creator removal/reinvite
+
+Participant removal and reinvite changes are explicitly outside this batch.
+The live behavior remains unchanged and any later proposal requires its own
+payout, griefing, effect-cleanup, and repeated-reentry economy review. Source:
+`SPEC docs/feature-batch-2026-08-28-requirements.md` non-goals.
+
+### 16.3 Hitchhike v3 value boundary
+
+The authoritative production Hitchhike catalog row remains **150 coins,
+`active=false`, `test_only=false`**; retained history has one effect row from
+one caster. Thus the v3 scoring correction has zero current catalog purchase
+volume unless availability changes separately. Source: `DB
+powerup_shop_items × race_active_effects`.
+
+Positive sampled user-hours over 2026-07-24 through 2026-08-22 were p10 19,
+p50 234, p90 1,460, p99 4,288, max 12,568, mean 551.59 (n=62,390). At a 1:1
+copy and 150-coin price those are 0.13 / 1.56 / 9.73 / 28.59 / 83.79 copied
+steps per coin before target selection or score multipliers. Source: `DB
+step_samples × users`, UTC-hour aggregate, non-review users.
+
+The live v1/v2 scorer excludes the in-progress hour. For a cast minute uniformly
+distributed over 0–59 and constant walking rate, its final closed-hour window
+contains an average **50.83%** of the promised 60 minutes; a full-window v3
+therefore raises copied-step EV by about **96.7%** relative to that timing path.
+Existing v1/v2 rows retain that interpretation unchanged throughout the rollout.
+Release A added v3 read/support paths without creating v3 effects. After all
+production workers ran A and the owner separately authorized the cutover,
+Release B began stamping v3 on new casts at backend commit `a16670a`. Existing
+v1/v2 effects remain on their immutable versioned paths; no runtime feature
+flag is used. Source: `SPEC docs/feature-batch-2026-08-28-requirements.md`
+rollout and the deployed backend release tags.
+
+V3 changes placement only: copied steps do not advance boxes, milestones, or
+prize-pool size, and the target loses nothing. If Hitchhike is later made
+purchasable, each store-origin cast preserves the 150-coin purchase sink while
+redistributing the already-funded race payout by placement.
+
 ---
 
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
@@ -2312,4 +2404,6 @@ SELECT-only aggregates + current backend code; no production data changed).
 §15/§15.1 verified/added 2026-08-27 (prod SELECT-only aggregates + current
 backend code + weighted-v2 spec); weighted-v2 deployed and post-deploy verified
 2026-08-27 at backend commit `d553d2b`, with v1 rows preserved through
-2026-08-31 and the first v2 event day on 2026-09-01.*
+2026-08-31 and the first v2 event day on 2026-09-01. §16 verified/added
+2026-08-28 (prod SELECT-only aggregates + current backend code + feature-batch
+spec); Release A deployed at `51ab388` and Hitchhike Release B at `a16670a`.*

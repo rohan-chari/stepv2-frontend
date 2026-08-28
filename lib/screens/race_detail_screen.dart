@@ -138,6 +138,7 @@ class RaceDetailScreen extends StatefulWidget {
   /// builds a real [AdService] on its own dedicated ad unit.
   final ExtraSpinAdController? boxRerollAdController;
   final bool showPostCreateSharePrompt;
+  final bool fallbackOnUnavailable;
 
   RaceDetailScreen({
     super.key,
@@ -159,6 +160,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.demoMode = false,
     this.boxRerollAdController,
     this.showPostCreateSharePrompt = false,
+    this.fallbackOnUnavailable = false,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -376,6 +378,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
+  int? _lastValidStepsUntilNextPowerup;
 
   /// Raw `powerupData.dropOdds` (spec §5.3), passed to the box-opening reel
   /// untouched — parsing/validation lives in [OddsBreakdown] so a malformed
@@ -1271,6 +1274,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
     } on ApiException catch (e) {
       if (!mounted) return;
+      if (widget.fallbackOnUnavailable &&
+          (e.statusCode == 404 || e.statusCode == 410)) {
+        Navigator.of(context).maybePop(RaceDetailRouteResult.unavailableExit);
+        return;
+      }
       // 403 is the backend's "you are not a participant in this race". It is a
       // state, not a failure — say so once instead of toasting the raw message
       // over an empty board.
@@ -1655,12 +1663,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       totalFromServer);
           _participantsLoadingMore = false;
           final rawPowerupData = resolvedProgress['powerupData'];
-          _powerupData = rawPowerupData is Map
+          final nextPowerupData = rawPowerupData is Map
               ? <String, dynamic>{
                   for (final entry in rawPowerupData.entries)
                     if (entry.key is String) entry.key as String: entry.value,
                 }
               : null;
+          final remaining = _readNullableInt(
+            nextPowerupData?['stepsUntilNextPowerup'],
+          );
+          if (remaining != null && remaining > 0) {
+            _lastValidStepsUntilNextPowerup = remaining;
+          } else if (nextPowerupData != null &&
+              _lastValidStepsUntilNextPowerup != null) {
+            nextPowerupData['stepsUntilNextPowerup'] =
+                _lastValidStepsUntilNextPowerup;
+          }
+          _powerupData = nextPowerupData;
           final rawEvent = resolvedProgress['globalEvent'];
           _globalEvent = rawEvent is Map
               ? <String, dynamic>{
@@ -1976,7 +1995,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) {
         showErrorToast(
           context,
-          e.code != null ? teamRaceErrorCopy(e.code) : e.message,
+          isActiveCompetitionLimitError(e)
+              ? fundedExposureErrorCopy(e)
+              : e.code != null
+              ? teamRaceErrorCopy(e.code)
+              : e.message,
         );
       }
     } catch (e) {
@@ -6337,9 +6360,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final powerupStepInterval = _readNullableInt(
       _powerupData?['powerupStepInterval'],
     );
-    final stepsUntilNextPowerup = _readNullableInt(
-      _powerupData?['stepsUntilNextPowerup'],
-    );
+    final stepsUntilNextPowerup =
+        _readNullableInt(_powerupData?['stepsUntilNextPowerup']) ??
+        _lastValidStepsUntilNextPowerup;
 
     if (powerupStepInterval == null ||
         powerupStepInterval <= 0 ||
@@ -6350,8 +6373,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     return Text(
       'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps. ${_formatSteps(stepsUntilNextPowerup)} to go.',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+      softWrap: true,
       style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
     );
   }

@@ -92,7 +92,7 @@ class _ActivePaidRaceBackendApiService extends BackendApiService {
   });
 
   final bool numericValuesAsDouble;
-  final Map<String, dynamic> powerupData;
+  Map<String, dynamic> powerupData;
 
   num _number(int value) {
     return numericValuesAsDouble ? value.toDouble() : value;
@@ -1628,7 +1628,7 @@ void main() {
   );
 
   testWidgets(
-    'RaceDetailScreen shows the next powerup helper near the race target copy',
+    'RaceDetailScreen shows the full next powerup helper without truncation',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final backendApiService = _ActivePaidRaceBackendApiService(
@@ -1655,10 +1655,64 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(
-        find.text('You earn a powerup every 5,000 steps. 1,240 to go.'),
-        findsOneWidget,
+      final helper = find.text(
+        'You earn a powerup every 5,000 steps. 1,240 to go.',
       );
+      expect(helper, findsOneWidget);
+      final helperText = tester.widget<Text>(helper);
+      expect(helperText.maxLines, isNull);
+      expect(helperText.overflow, isNot(TextOverflow.ellipsis));
+    },
+  );
+
+  testWidgets(
+    'RaceDetailScreen retains the last valid countdown when refresh omits it',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final backendApiService = _ActivePaidRaceBackendApiService(
+        powerupData: const {
+          'enabled': true,
+          'inventory': [],
+          'powerupSlots': 3,
+          'queuedBoxCount': 0,
+          'activeEffects': [],
+          'powerupStepInterval': 5000,
+          'stepsUntilNextPowerup': 1240,
+        },
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-refresh-countdown',
+            backendApiService: backendApiService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      const copy = 'You earn a powerup every 5,000 steps. 1,240 to go.';
+      expect(find.text(copy), findsOneWidget);
+
+      backendApiService.powerupData = const {
+        'enabled': true,
+        'inventory': [],
+        'powerupSlots': 3,
+        'queuedBoxCount': 0,
+        'activeEffects': [],
+        'powerupStepInterval': 5000,
+      };
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, 300),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text(copy), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
 

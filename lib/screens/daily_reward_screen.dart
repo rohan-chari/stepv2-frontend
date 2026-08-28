@@ -15,7 +15,6 @@ import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
-import '../widgets/odds_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_coin.dart';
@@ -173,12 +172,6 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
     final box = _status?['box'];
     return box is Map<String, dynamic> ? box : null;
   }
-
-  /// Exact box odds (spec §5.3 `box.itemOdds`). Null when the backend omits it
-  /// OR sends something incoherent — both hide the ODDS affordance entirely,
-  /// because a wrong odds display is worse than none (§6.3.B.10).
-  OddsBreakdown? get _itemOdds =>
-      OddsBreakdown.parseItemOdds(_box?['itemOdds']);
 
   /// Rewarded-ad extra spin offer — present only when the backend has the
   /// feature enabled AND this build declared the `ads` capability. Older
@@ -622,6 +615,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
             PillButton(
               label: 'CLOSE',
               fullWidth: true,
+              scaleDownContent: false,
+              labelMaxLines: 2,
               onPressed: () => Navigator.of(context).pop(false),
             ),
           ],
@@ -643,28 +638,21 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'DAILY REWARD',
-                    style: HomeText.display(
-                      size: 26,
-                      color: AppColors.of(context).ink,
-                    ),
-                  ),
-                ),
-              ),
-              _CloseButton(onTap: () => Navigator.of(context).pop(false)),
-            ],
-          ),
+          _DailyRewardHeader(onClose: () => Navigator.of(context).pop(false)),
           const SizedBox(height: 4),
+          if (claimedToday && !_extraSpinOffered) ...[
+            Text(
+              'REWARD CLAIMED',
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+            const SizedBox(height: 3),
+          ],
           Text(
             claimedToday
-                ? 'You\'ve claimed today. Come back tomorrow!'
+                ? 'Come back tomorrow.'
                 : 'Day $currentDay of 6. Claim to keep your streak.',
             style: HomeText.body(
               size: 13,
@@ -693,6 +681,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
                 : 'CLAIM TODAY',
             variant: PillButtonVariant.primary,
             fullWidth: true,
+            scaleDownContent: false,
+            labelMaxLines: 2,
             onPressed: (claimedToday || _isClaiming) ? null : _claim,
           ),
         ],
@@ -716,39 +706,24 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'DAILY REWARD',
-                    style: HomeText.display(
-                      size: 26,
-                      color: AppColors.of(context).ink,
-                    ),
-                  ),
-                ),
-              ),
-              _OddsEntry(odds: _itemOdds),
-              _InfoButton(onTap: _showOddsInfo),
-              _CloseButton(onTap: () => Navigator.of(context).pop(false)),
-            ],
-          ),
+          _DailyRewardHeader(onClose: () => Navigator.of(context).pop(false)),
           const SizedBox(height: 4),
+          if (claimedToday && !_extraSpinOffered) ...[
+            Text(
+              'REWARD CLAIMED',
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+            const SizedBox(height: 3),
+          ],
           Text(
             !claimedToday
                 ? 'Open today\'s mystery box to keep your streak going.'
-                : _rewardClaimed
-                ? 'Today\'s reward has been claimed.'
                 : _extraSpinOffered
                 ? 'You\'ve opened today\'s box. Grab your bonus spin!'
-                : 'You\'ve opened today\'s box. Come back tomorrow!',
+                : 'Come back tomorrow.',
             style: HomeText.body(
               size: 13,
               color: AppColors.of(context).muted,
@@ -768,15 +743,16 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
                 ),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
                 children: [
                   Icon(
                     Icons.local_fire_department_rounded,
                     size: 20,
                     color: AppColors.of(context).error,
                   ),
-                  const SizedBox(width: 6),
                   Text(
                     '$streak-DAY STREAK',
                     style: PixelText.title(
@@ -794,6 +770,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
               label: _isClaiming ? 'OPENING...' : 'OPEN BOX',
               variant: PillButtonVariant.primary,
               fullWidth: true,
+              scaleDownContent: false,
+              labelMaxLines: 2,
               onPressed: _isClaiming ? null : _openBox,
             )
           else if (_extraSpinOffered)
@@ -803,15 +781,19 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
               label: _extraSpinCtaLabel,
               variant: PillButtonVariant.primary,
               fullWidth: true,
+              scaleDownContent: false,
+              labelMaxLines: 2,
               onPressed: (_adFlowBusy || _adLoading)
                   ? null
                   : _retryOrStartExtraSpin,
             )
           else
             PillButton(
-              label: _rewardClaimed ? 'REWARD CLAIMED' : 'COME BACK TOMORROW',
+              label: 'COME BACK TOMORROW',
               variant: PillButtonVariant.primary,
               fullWidth: true,
+              scaleDownContent: false,
+              labelMaxLines: 2,
               onPressed: null,
             ),
         ],
@@ -824,10 +806,6 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
   /// ads.
   bool get _extraSpinOffered {
     return _hasAvailableExtraSpin && !_extraSpinDone && _adCtrl.isSupported;
-  }
-
-  bool get _rewardClaimed {
-    return _extraSpinDone || _adExtraSpin?['used'] == true;
   }
 
   String get _extraSpinCtaLabel {
@@ -853,32 +831,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'DAILY REWARD',
-                    style: HomeText.display(
-                      size: 28,
-                      color: AppColors.of(context).ink,
-                    ),
-                  ),
-                ),
-              ),
-              _OddsEntry(odds: _itemOdds),
-              _InfoButton(onTap: _showOddsInfo),
-              // Before the swipe nothing is claimed — closing keeps today's
-              // box available. After the swipe-gated claim it just skips the
-              // reveal. Either way refresh the caller (pop true).
-              _CloseButton(onTap: () => Navigator.of(context).pop(true)),
-            ],
+          // Before the swipe nothing is claimed — closing keeps today's box
+          // available. After the swipe-gated claim it just skips the reveal.
+          _DailyRewardHeader(
+            onClose: () => Navigator.of(context).pop(true),
+            titleSize: 28,
           ),
           const SizedBox(height: 4),
           Text(
@@ -902,15 +859,16 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
                 ),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
                 children: [
                   Icon(
                     Icons.local_fire_department_rounded,
                     size: 18,
                     color: AppColors.of(context).error,
                   ),
-                  const SizedBox(width: 6),
                   Text(
                     '$streak-DAY STREAK',
                     style: PixelText.title(
@@ -1058,101 +1016,6 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
       }
     }
     return items;
-  }
-
-  void _showOddsInfo() {
-    final box = _box;
-    final odds = box?['odds'] is Map<String, dynamic>
-        ? box!['odds'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    String pct(String key) {
-      final v = (odds[key] as num?)?.toDouble();
-      if (v == null) return '—';
-      return '${(v * 100).round()}%';
-    }
-
-    // RARE can now pay an accessory OR a shop powerup (spinPowerups feature).
-    // Describe whichever the backend says is in play; fall back to the legacy
-    // "new accessory" copy when the mix field is absent (old backend).
-    final mix = box?['rarePrizeMix'] is Map<String, dynamic>
-        ? box!['rarePrizeMix'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    final accessoryShare = (mix['ACCESSORY'] as num?)?.toDouble() ?? 1.0;
-    final powerupShare = (mix['POWERUP'] as num?)?.toDouble() ?? 0.0;
-    final rareDetail = powerupShare > 0 && accessoryShare > 0
-        ? 'new accessory or powerup'
-        : powerupShare > 0
-        ? 'a shop powerup'
-        : 'new accessory';
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: GameContainer(
-          padding: const EdgeInsets.all(18),
-          frameColor: AppColors.of(context).accent,
-          surfaceColor: AppColors.of(context).parchmentLight,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'HOW IT WORKS',
-                textAlign: TextAlign.center,
-                style: HomeText.display(
-                  size: 22,
-                  color: AppColors.of(context).ink,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Open a mystery box every day to build your streak. '
-                'The longer your streak, the better your odds of the top '
-                'rewards. That means more coins and accessories you don\'t own yet. '
-                'Miss a day and your streak resets!',
-                style: HomeText.body(
-                  size: 13,
-                  color: AppColors.of(context).muted,
-                  weight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 14),
-              // Outcome language, not tier names — the rarity keys still drive
-              // the percentages and the row colour, they just aren't spelled
-              // out to the player.
-              _OddsRow(
-                label: 'STANDARD',
-                detail: 'a few coins',
-                pct: pct('COMMON'),
-                color: _rarityColor('COMMON'),
-              ),
-              const SizedBox(height: 6),
-              _OddsRow(
-                label: 'UPGRADED',
-                detail: 'more coins',
-                pct: pct('UNCOMMON'),
-                color: _rarityColor('UNCOMMON'),
-              ),
-              const SizedBox(height: 6),
-              _OddsRow(
-                label: 'TOP REWARD',
-                detail: rareDetail,
-                pct: pct('RARE'),
-                color: _rarityColor('RARE'),
-              ),
-              const SizedBox(height: 16),
-              PillButton(
-                label: 'GOT IT',
-                fullWidth: true,
-                onPressed: () => Navigator.of(dialogContext).pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -1325,112 +1188,6 @@ class _DailyReelTile extends StatelessWidget {
       Icons.checkroom_rounded,
       size: 38,
       color: AppColors.of(context).accent,
-    );
-  }
-}
-
-/// The exact-odds entry point plus its trailing gap, collapsed to nothing
-/// when the backend didn't send usable odds.
-class _OddsEntry extends StatelessWidget {
-  const _OddsEntry({required this.odds});
-  final OddsBreakdown? odds;
-
-  @override
-  Widget build(BuildContext context) {
-    if (odds == null) return const SizedBox.shrink();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        OddsAffordance(
-          odds: odds,
-          title: 'BOX ODDS',
-          subtitle: 'Exactly what today\'s box can pay at your streak.',
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
-  }
-}
-
-class _InfoButton extends StatelessWidget {
-  const _InfoButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Semantics(
-          label: 'How daily rewards work',
-          button: true,
-          child: Ink(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.of(context).parchmentDark,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppColors.of(context).coinDark,
-                width: 2,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                '?',
-                style: PixelText.title(
-                  size: 18,
-                  color: AppColors.of(context).coinDark,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OddsRow extends StatelessWidget {
-  const _OddsRow({
-    required this.label,
-    required this.detail,
-    required this.pct,
-    required this.color,
-  });
-
-  final String label;
-  final String detail;
-  final String pct;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).parchmentDark,
-        border: Border.all(color: color, width: 2),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Text(label, style: PixelText.title(size: 12, color: color)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              detail,
-              style: PixelText.body(
-                size: 11,
-                color: AppColors.of(context).textMid,
-              ),
-            ),
-          ),
-          Text(pct, style: PixelText.number(size: 13, color: color)),
-        ],
-      ),
     );
   }
 }
@@ -1748,6 +1505,8 @@ class _RewardRevealState extends State<_RewardReveal> {
                 label: widget.extraSpinLabel!,
                 variant: PillButtonVariant.rewardedAd,
                 fullWidth: true,
+                scaleDownContent: false,
+                labelMaxLines: 2,
                 onPressed: widget.onExtraSpin,
               ),
               const SizedBox(height: 10),
@@ -1755,6 +1514,8 @@ class _RewardRevealState extends State<_RewardReveal> {
             PillButton(
               label: 'CONTINUE',
               fullWidth: true,
+              scaleDownContent: false,
+              labelMaxLines: 2,
               onPressed: widget.onClose,
             ),
           ],
@@ -1857,14 +1618,12 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    _waiting ? 'TAP OR SWIPE TO SPIN' : 'SPINNING...',
-                    style: PixelText.title(
-                      size: 14,
-                      color: AppColors.of(context).textMid,
-                    ),
+                Text(
+                  _waiting ? 'TAP OR SWIPE TO SPIN' : 'SPINNING...',
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1959,6 +1718,40 @@ class _SpinTile extends StatelessWidget {
         animationFrames: AccessoryThumbnail.framesOf(item),
         errorBuilder: (_, _, _) =>
             Icon(Icons.checkroom_rounded, color: AppColors.of(context).accent),
+      ),
+    );
+  }
+}
+
+/// Popup-only header. The close target is pinned inside a dedicated Stack so
+/// it never joins the title's wrap/scale calculation on narrow phones.
+class _DailyRewardHeader extends StatelessWidget {
+  const _DailyRewardHeader({required this.onClose, this.titleSize = 26});
+
+  final VoidCallback onClose;
+  final double titleSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 52),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Text(
+                'DAILY REWARD',
+                style: HomeText.display(
+                  size: titleSize,
+                  color: AppColors.of(context).ink,
+                ),
+              ),
+            ),
+          ),
+          Positioned(top: 0, right: 0, child: _CloseButton(onTap: onClose)),
+        ],
       ),
     );
   }

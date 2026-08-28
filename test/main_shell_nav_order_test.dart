@@ -21,6 +21,7 @@ import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
 import 'package:step_tracker/services/health_service.dart';
 import 'package:step_tracker/services/interstitial_ad_service.dart';
+import 'package:step_tracker/services/notification_service.dart';
 import 'package:step_tracker/services/race_results_ack_queue.dart';
 import 'package:step_tracker/services/review_prompt_service.dart';
 import 'package:step_tracker/styles.dart';
@@ -42,6 +43,26 @@ class _FakeHealthService extends HealthService {
   }) async {
     return const [];
   }
+}
+
+class _FailingHealthService extends _FakeHealthService {
+  @override
+  Future<StepData> getStepsToday() async => throw StateError('health failed');
+}
+
+class _MissingRaceApi extends _FakeBackendApiService {
+  _MissingRaceApi({super.inboxAlerts});
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async => throw const ApiException(
+    'Race not found',
+    statusCode: 404,
+    code: 'RACE_NOT_FOUND',
+  );
 }
 
 class _FakeBackgroundSyncBootstrapService
@@ -270,6 +291,18 @@ class _DeferredSummaryApi extends _FakeBackendApiService {
     required String identityToken,
     bool usePersistedTotals = false,
   }) => homeCard.future;
+}
+
+class _SlowStepSyncApi extends _FakeBackendApiService {
+  final Completer<StepSyncV2Result> sync = Completer<StepSyncV2Result>();
+
+  @override
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+    bool homePull = false,
+  }) => sync.future;
 }
 
 class _SummaryWorkPollingApi extends _FakeBackendApiService {
@@ -797,6 +830,185 @@ void main() {
     },
   );
 
+  testWidgets('Home publishes local steps before a slow sync completes', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SlowStepSyncApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(api.sync.isCompleted, isFalse);
+    expect(find.bySemanticsLabel('Loading today’s steps'), findsNothing);
+    expect(find.byKey(const Key('home-step-count')), findsOneWidget);
+
+    api.sync.complete(const StepSyncV2Result(kind: StepSyncV2Kind.unsupported));
+    await tester.pump();
+  });
+
+  testWidgets('cold health read failure replaces the step loader with error', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FailingHealthService(),
+          backendApiService: _FakeBackendApiService(),
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.bySemanticsLabel('Loading today’s steps'), findsNothing);
+    expect(find.text('Couldn’t load your pace'), findsOneWidget);
+    expect(find.text('Failed to fetch steps.'), findsOneWidget);
+  });
+
+  for (final entry in const <(String, String)>[
+    ('cold', 'cold'),
+    ('foreground', 'foreground'),
+    ('background', 'background'),
+  ]) {
+    testWidgets(
+      '${entry.$1} missing-race notification falls back to Races with notice',
+      (WidgetTester tester) async {
+        final authService = await _authService();
+        final notifications = NotificationService(isIosForTesting: false);
+        if (entry.$2 == 'cold') {
+          await notifications.handleNotificationTapForTesting(const {
+            'type': 'POWERUP_USED',
+            'subtype': 'DECOY_CONSUMED',
+            'route': 'race_detail',
+            'params': '{"raceId":"race-deleted"}',
+          });
+        }
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MainShell(
+              authService: authService,
+              healthService: _FakeHealthService(),
+              backendApiService: _MissingRaceApi(),
+              notificationService: notifications,
+              forceHomeInviteEligibilityForTesting: true,
+              backgroundSyncBootstrapService:
+                  _FakeBackgroundSyncBootstrapService(),
+            ),
+          ),
+        );
+        await tester.pump();
+        for (var i = 0; i < 5; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+
+        if (entry.$2 == 'background') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.paused,
+          );
+        }
+        if (entry.$2 != 'cold') {
+          await notifications.handleNotificationTapForTesting(const {
+            'type': 'POWERUP_USED',
+            'subtype': 'DECOY_CONSUMED',
+            'raceId': 'race-deleted',
+          });
+        }
+        if (entry.$2 == 'background') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          addTearDown(
+            () => tester.binding.handleAppLifecycleStateChanged(
+              AppLifecycleState.resumed,
+            ),
+          );
+        }
+        await tester.pump();
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+
+        expect(
+          tester
+              .widget<WoodenTabBar>(
+                find.byType(WoodenTabBar, skipOffstage: false),
+              )
+              .currentIndex,
+          1,
+        );
+        expect(find.text('That race is no longer available.'), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets('Decoy Inbox public shape falls back from deleted race', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _MissingRaceApi(
+      inboxAlerts: const {
+        'alerts': [
+          {
+            'id': 'decoy-alert-1',
+            'type': 'POWERUP_USED',
+            'subtype': 'DECOY_CONSUMED',
+            'title': 'Your Decoy was triggered!',
+            'body':
+                'Your Decoy protected you in Sunset Sprint. Tap to view the race.',
+            'route': 'race_detail',
+            'params': {'raceId': 'race-deleted'},
+            'readAt': null,
+          },
+        ],
+        'nextCursor': null,
+        'totalUnreadCount': 1,
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          forceHomeInviteEligibilityForTesting: true,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('home-notifications-card')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Your Decoy was triggered!'), findsOneWidget);
+    await tester.tap(find.text('Your Decoy was triggered!'));
+    await tester.pump();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byType(InboxScreen), findsNothing);
+    expect(
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).currentIndex,
+      1,
+    );
+    expect(find.text('That race is no longer available.'), findsOneWidget);
+  });
+
   testWidgets('MainShell renders tabs in the primary navigation order', (
     WidgetTester tester,
   ) async {
@@ -1034,7 +1246,7 @@ void main() {
       expect(shop, findsOneWidget);
       expect(bell, findsOneWidget);
       expect(tester.getSize(daily), tester.getSize(shop));
-      expect(tester.getSize(shop).height, 44);
+      expect(tester.getSize(shop).height, 48);
       expect(tester.getRect(bell).bottom, lessThan(tester.getRect(shop).top));
       final longName = find.byKey(const Key('home-username'));
       expect(longName, findsOneWidget);
@@ -1144,7 +1356,7 @@ void main() {
     final bell = find.byKey(const Key('home-notifications-card'));
     final daily = find.byKey(const Key('home-daily-reward-button'));
     expect(tester.getSize(daily), tester.getSize(shop));
-    expect(tester.getSize(shop).height, 44);
+    expect(tester.getSize(shop).height, 48);
     expect(tester.getSize(bell), const Size(44, 44));
     expect(tester.getTopRight(bell).dx, closeTo(636, 2));
     expect(tester.getRect(bell).bottom, lessThan(tester.getRect(shop).top));

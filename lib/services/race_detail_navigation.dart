@@ -45,6 +45,7 @@ class RaceDetailNavigator {
     NotificationService? notificationService,
     Future<void> Function()? onBoxOpened,
     bool showPostCreateSharePrompt = false,
+    bool fallbackOnUnavailable = false,
     FutureOr<void> Function()? scheduleRefresh,
   }) async {
     final boundUserId = authService.userId;
@@ -84,6 +85,7 @@ class RaceDetailNavigator {
                 activationAnalyticsService: analytics,
                 onBoxOpened: onBoxOpened,
                 showPostCreateSharePrompt: showPostCreateSharePrompt,
+                fallbackOnUnavailable: fallbackOnUnavailable,
                 interstitialVisit: visit,
                 raceDetailNavigator: this,
               ),
@@ -119,6 +121,7 @@ class RaceDetailNavigator {
       exitKind: switch (result) {
         RaceDetailRouteResult.backExit => 'back',
         RaceDetailRouteResult.forwardExit => 'forward',
+        RaceDetailRouteResult.unavailableExit => 'unavailable',
         RaceDetailRouteResult.stateChange => 'state_change',
         RaceDetailRouteResult.authReplace => 'auth_replace',
       },

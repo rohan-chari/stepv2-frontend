@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/models/step_data.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:step_tracker/screens/start_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -73,7 +74,9 @@ void main() {
     expect(find.text('LEADERBOARD'), findsNothing);
   });
 
-  testWidgets('HomeTab omits the retired daily reward slots', (WidgetTester tester) async {
+  testWidgets('HomeTab omits the retired daily reward slots', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -130,5 +133,43 @@ void main() {
 
     expect(find.text('@Trail Walker'), findsOneWidget);
     expect(find.text('STEPS TODAY'), findsOneWidget);
+  });
+
+  testWidgets('HomeTab distinguishes unresolved steps from a resolved zero', (
+    WidgetTester tester,
+  ) async {
+    Widget home(Loadable<StepData> state) => MaterialApp(
+      home: Scaffold(
+        body: HomeTab(
+          stepData: state.data,
+          stepDataState: state,
+          isLoading: state.shouldShowInitialLoading,
+          error: state.error,
+          healthAuthorized: true,
+          notificationsState: true,
+          displayName: 'Trail Walker',
+          authService: AuthService(),
+          backendApiService: _FakeBackendApiService(),
+          onRefresh: () async {},
+          onEnableHealth: () {},
+          onEnableNotifications: () {},
+          onDisplayNameChanged: () {},
+          friendsSteps: const [],
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(home(const Loadable.loading()));
+    expect(find.bySemanticsLabel('Loading today’s steps'), findsOneWidget);
+    expect(find.byKey(const Key('home-step-count')), findsNothing);
+    expect(find.text('STEPS TODAY'), findsOneWidget);
+
+    await tester.pumpWidget(
+      home(Loadable.success(StepData(steps: 0, date: DateTime(2026, 8, 28)))),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.bySemanticsLabel('Loading today’s steps'), findsNothing);
+    expect(find.byKey(const Key('home-step-count')), findsOneWidget);
+    expect(find.text('0'), findsWidgets);
   });
 }

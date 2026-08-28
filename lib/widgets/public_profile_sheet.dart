@@ -36,6 +36,7 @@ Future<void> showPublicProfileSheet({
   required String userId,
   required String fallbackName,
   String? fallbackPhotoUrl,
+  String? fallbackRealName,
   PublicProfileRelationship initialRelationship =
       PublicProfileRelationship.unknown,
   String? friendshipId,
@@ -69,6 +70,7 @@ Future<void> showPublicProfileSheet({
           userId: targetId,
           fallbackName: fallbackName,
           fallbackPhotoUrl: fallbackPhotoUrl,
+          fallbackRealName: fallbackRealName,
           initialRelationship: initialRelationship,
           friendshipId: friendshipId,
           onChanged: onChanged,
@@ -87,6 +89,7 @@ class PublicProfilePanel extends StatefulWidget {
     required this.userId,
     required this.fallbackName,
     this.fallbackPhotoUrl,
+    this.fallbackRealName,
     this.initialRelationship = PublicProfileRelationship.unknown,
     this.friendshipId,
     this.onChanged,
@@ -98,6 +101,7 @@ class PublicProfilePanel extends StatefulWidget {
   final String userId;
   final String fallbackName;
   final String? fallbackPhotoUrl;
+  final String? fallbackRealName;
   final PublicProfileRelationship initialRelationship;
   final String? friendshipId;
   final VoidCallback? onChanged;
@@ -452,6 +456,8 @@ class _PublicProfilePanelState extends State<PublicProfilePanel> {
       _nonEmpty(_map(_profile?['user'])['profilePhotoUrl']) ??
       _nonEmpty(widget.fallbackPhotoUrl);
 
+  String? get _requestRealName => _nonEmpty(widget.fallbackRealName);
+
   @override
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
@@ -483,14 +489,25 @@ class _PublicProfilePanelState extends State<PublicProfilePanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (_requestRealName != null) ...[
+                        Text(
+                          _requestRealName!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: PixelText.title(
+                            size: 16,
+                            color: palette.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                      ],
                       Text(
                         atName(_displayName),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: PixelText.title(
-                          size: 18,
-                          color: palette.textDark,
-                        ),
+                        style: _requestRealName == null
+                            ? PixelText.title(size: 18, color: palette.textDark)
+                            : PixelText.body(size: 13, color: palette.textMid),
                       ),
                       const SizedBox(height: 4),
                       _relationshipStatus(),

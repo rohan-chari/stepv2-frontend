@@ -2651,6 +2651,31 @@ class BackendApiService {
     return settings is Map<String, dynamic> ? settings : <String, dynamic>{};
   }
 
+  /// Dedicated numeric product configuration. Kept separate from the legacy
+  /// boolean-only settings PATCH so older clients and workers stay compatible.
+  Future<Map<String, dynamic>> fetchAdminActiveCompetitionLimit({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/settings/active-competition-limit',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateAdminActiveCompetitionLimit({
+    required String identityToken,
+    required int activeCompetitionLimit,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/settings/active-competition-limit',
+      body: {'activeCompetitionLimit': activeCompetitionLimit},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   /// Dedicated atomic command for the retained text-only Home service banner.
   Future<Map<String, dynamic>> updateAdminHomeServiceBanner({
     required String identityToken,

@@ -86,7 +86,9 @@ void main() {
 
     expect(find.byKey(const Key('home-invite-overlay')), findsOneWidget);
     expect(
-      find.text('Finish or leave another funded race before joining this one.'),
+      find.text(
+        'You’ve reached the active competition limit. Finish or leave an active competition, then try again.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Conflict'), findsNothing);

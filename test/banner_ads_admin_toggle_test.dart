@@ -8,10 +8,17 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/ad_banner_slot.dart';
 
 class _BannerAdminApi extends BackendApiService {
-  _BannerAdminApi({this.bannerEnabled = true, this.failUpdate = false});
+  _BannerAdminApi({
+    this.bannerEnabled = true,
+    this.failUpdate = false,
+    this.limitUnavailable = false,
+  });
 
   bool bannerEnabled;
   bool failUpdate;
+  bool limitUnavailable;
+  int activeLimit = 20;
+  int? savedActiveLimit;
   bool? lastUpdate;
 
   @override
@@ -35,6 +42,36 @@ class _BannerAdminApi extends BackendApiService {
       'bannerAdsEnabled': bannerAdsEnabled,
       'homeServiceBannerEnabled': false,
       'homeServiceBannerMessage': '',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchAdminActiveCompetitionLimit({
+    required String identityToken,
+  }) async {
+    if (limitUnavailable) {
+      throw const ApiException('Not found', statusCode: 404);
+    }
+    return {
+      'activeCompetitionLimit': activeLimit,
+      'minimum': 1,
+      'maximum': 20,
+      'updatedAt': null,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateAdminActiveCompetitionLimit({
+    required String identityToken,
+    required int activeCompetitionLimit,
+  }) async {
+    savedActiveLimit = activeCompetitionLimit;
+    activeLimit = activeCompetitionLimit;
+    return {
+      'activeCompetitionLimit': activeLimit,
+      'minimum': 1,
+      'maximum': 20,
+      'updatedAt': '2026-08-28T12:00:00.000Z',
     };
   }
 }
@@ -131,10 +168,7 @@ void main() {
       );
 
       expect(tester.getSize(find.byKey(const Key('banner-slot'))).height, 0);
-      expect(
-        tester.getSize(find.byKey(const Key('banner-spacing'))).height,
-        0,
-      );
+      expect(tester.getSize(find.byKey(const Key('banner-spacing'))).height, 0);
 
       AdService.setBannerAdsEnabled(true);
       await tester.pump();
@@ -157,17 +191,73 @@ void main() {
   });
 
   group('Admin Config banner switch', () {
-    testWidgets('loads and persists the existing PATCH setting', (tester) async {
+    testWidgets('loads and saves the dedicated active-race limit', (
+      tester,
+    ) async {
+      final auth = await _adminAuth();
+      final api = _BannerAdminApi()..activeLimit = 17;
+      String? info;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AdminFlagsPanel(
+                authService: auth,
+                backendApiService: api,
+                showInfoToast: (_, message) => info = message,
+                showErrorToast: (_, _) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('ACTIVE RACE LIMIT'), findsOneWidget);
+      final field = find.byKey(const Key('admin-active-race-limit-field'));
+      expect(tester.widget<TextField>(field).controller?.text, '17');
+      await tester.enterText(field, '16');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('admin-active-race-limit-save')));
+      await tester.pump();
+      expect(api.savedActiveLimit, 16);
+      expect(info, 'Active race limit saved.');
+    });
+
+    testWidgets('shows a compact old-backend state for a 404', (tester) async {
+      final auth = await _adminAuth();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdminFlagsPanel(
+              authService: auth,
+              backendApiService: _BannerAdminApi(limitUnavailable: true),
+              showErrorToast: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Update backend to edit'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('loads and persists the existing PATCH setting', (
+      tester,
+    ) async {
       final auth = await _adminAuth();
       final api = _BannerAdminApi(bannerEnabled: false);
 
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: AdminFlagsPanel(
-              authService: auth,
-              backendApiService: api,
-              showErrorToast: (_, _) {},
+            body: SingleChildScrollView(
+              child: AdminFlagsPanel(
+                authService: auth,
+                backendApiService: api,
+                showErrorToast: (_, _) {},
+              ),
             ),
           ),
         ),
@@ -195,10 +285,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: AdminFlagsPanel(
-              authService: auth,
-              backendApiService: api,
-              showErrorToast: (_, message) => error = message,
+            body: SingleChildScrollView(
+              child: AdminFlagsPanel(
+                authService: auth,
+                backendApiService: api,
+                showErrorToast: (_, message) => error = message,
+              ),
             ),
           ),
         ),

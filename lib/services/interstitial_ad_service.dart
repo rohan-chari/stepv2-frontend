@@ -13,7 +13,13 @@ import 'activation_analytics_service.dart';
 import 'ad_service.dart';
 import 'backend_api_service.dart';
 
-enum RaceDetailRouteResult { backExit, forwardExit, stateChange, authReplace }
+enum RaceDetailRouteResult {
+  backExit,
+  forwardExit,
+  unavailableExit,
+  stateChange,
+  authReplace,
+}
 
 enum RaceDetailEntrySurface {
   home('home'),

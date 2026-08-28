@@ -338,7 +338,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         return _DailyRewardAttention(
           active: !_opening,
           child: _CompactDailyRewardButton(
-            label: 'BONUS SPIN - WATCH AD',
+            label: 'BONUS SPIN',
             semanticsLabel: 'Bonus spin. Watch ad.',
             icon: Icons.card_giftcard_rounded,
             onPressed: openExtraSpin,
@@ -360,7 +360,11 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
       return _DailyRewardAttention(
         active: _unclaimed && !_opening,
         child: _CompactDailyRewardButton(
-          label: _unclaimed ? 'CLAIM REWARD' : claimedLabel,
+          label: _unclaimed
+              ? 'DAILY REWARD'
+              : _extraSpinClaimed
+              ? 'CLAIMED'
+              : claimedLabel,
           semanticsLabel: _unclaimed ? 'Claim daily reward' : claimedSemantics,
           icon: _unclaimed
               ? Icons.card_giftcard_rounded
@@ -405,54 +409,27 @@ class _CompactDailyRewardButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     return Semantics(
       button: true,
       enabled: onPressed != null,
       label: semanticsLabel,
       onTap: onPressed,
       excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(8),
-          child: Ink(
-            key: const Key('home-daily-reward-compact-layout'),
-            width: double.infinity,
-            height: 44,
-            decoration: BoxDecoration(
-              color: colors.pillGold,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: colors.pillGoldDark, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.pillGoldDark.withValues(alpha: 0.24),
-                  offset: const Offset(3, 3),
-                ),
-              ],
-            ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: fontSize + 2, color: colors.textDark),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.pill(
-                      size: fontSize,
-                      color: colors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      child: ExcludeSemantics(
+        child: PillButton(
+          key: const Key('home-daily-reward-compact-layout'),
+          label: label,
+          icon: icon,
+          variant: PillButtonVariant.secondary,
+          fontSize: fontSize.clamp(13, 14),
+          fullWidth: true,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.sizeOf(context).width <= 340 ? 4 : 8,
+            vertical: 2,
           ),
+          scaleDownContent: false,
+          labelMaxLines: 2,
+          onPressed: onPressed,
         ),
       ),
     );
