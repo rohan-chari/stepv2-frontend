@@ -185,6 +185,8 @@ void main() {
     final submit = find.byKey(const Key('feedback-submit'));
     expect(message, findsOneWidget);
     expect(reply, findsOneWidget);
+    expect(find.text('EMAIL (OPTIONAL)'), findsOneWidget);
+    expect(find.text('you@example.com'), findsOneWidget);
     expect(
       find.text('Your feedback is emailed to Bara Support.'),
       findsOneWidget,

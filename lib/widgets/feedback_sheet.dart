@@ -217,7 +217,7 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'EMAIL FOR A REPLY',
+              'EMAIL (OPTIONAL)',
               style: PixelText.pill(size: 11, color: colors.textMid),
             ),
             const SizedBox(height: 6),
@@ -233,7 +233,7 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
               inputFormatters: [LengthLimitingTextInputFormatter(254)],
               style: PixelText.body(size: 14, color: colors.textDark),
               decoration: InputDecoration(
-                hintText: 'Optional',
+                hintText: 'you@example.com',
                 errorText: _replyEmailError,
                 hintStyle: PixelText.body(size: 13, color: colors.textMid),
                 filled: true,
