@@ -9786,7 +9786,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final cells = <Widget>[];
     for (var i = 0; i < participants.length; i++) {
       if (TeamRace.participantTeam(participants[i]) != team) continue;
-      if (cells.isNotEmpty) cells.add(const SizedBox(height: 8));
+      if (cells.isNotEmpty) cells.add(const SizedBox(height: 4));
       cells.add(_teamColumnCell(participants[i], team, laneState));
     }
     if (cells.isEmpty) {
@@ -9950,8 +9950,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     final cell = Container(
       key: ValueKey('team-cell-$userId'),
-      constraints: const BoxConstraints(minHeight: 59),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+      constraints: const BoxConstraints(minHeight: 51),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(10),
@@ -9981,7 +9981,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         children: [
           identityHit,
           if (effects.isNotEmpty) ...[
-            const SizedBox(height: 2),
+            const SizedBox(height: 0),
             _teamEffectTray(userId, effects),
           ],
         ],
@@ -10644,7 +10644,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         const hitTarget = 44.0;
-        const gap = 3.0;
+        const gap = 0.0;
         final contentWidth =
             (effects.length * hitTarget) +
             ((effects.length - 1).clamp(0, effects.length) * gap);
@@ -10679,10 +10679,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     children: [
                       for (var i = 0; i < effects.length; i++) ...[
                         if (i > 0) const SizedBox(width: gap),
-                        _EffectIconWithTooltip(
-                          key: ValueKey('team-effect-$userId-$i'),
-                          effect: effects[i],
-                          remainingLabel: _expiresInLabel(effects[i].expiresAt),
+                        Transform.translate(
+                          // Keep the full 44dp hit target, but overlap its
+                          // transparent side margins so the visible plates
+                          // sit directly beside one another.
+                          offset: Offset(-13.0 * i, 0),
+                          child: _EffectIconWithTooltip(
+                            key: ValueKey('team-effect-$userId-$i'),
+                            effect: effects[i],
+                            remainingLabel: _expiresInLabel(
+                              effects[i].expiresAt,
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -11230,7 +11238,7 @@ OverlayEntry _buildClampedEffectTooltip({
   required VoidCallback onDismiss,
 }) {
   const margin = 8.0;
-  const estBubbleHeight = 96.0;
+  const estBubbleHeight = 48.0;
   final box = anchorContext.findRenderObject() as RenderBox;
   final overlayBox =
       Overlay.of(anchorContext).context.findRenderObject() as RenderBox;
@@ -11242,11 +11250,15 @@ OverlayEntry _buildClampedEffectTooltip({
   final placeLeft = anchorCenter.dx <= overlaySize.width / 2;
   final topSafe =
       (MediaQuery.maybeOf(anchorContext)?.padding.top ?? 0) + margin;
-  var top = anchorCenter.dy - box.size.height / 2 - estBubbleHeight;
+  final aboveTop = anchorCenter.dy - box.size.height / 2 - estBubbleHeight;
+  final bottomSafe = overlaySize.height - margin;
+  // Prefer the tooltip above the tapped powerup. Flip below only when the
+  // bubble would run into the safe area at the top of the screen.
+  var top = aboveTop;
   if (top < topSafe) {
-    // Not enough room above: drop the bubble below the icon.
     top = anchorCenter.dy + box.size.height / 2 + 8;
   }
+  top = top.clamp(topSafe, bottomSafe - estBubbleHeight).toDouble();
 
   return OverlayEntry(
     builder: (ctx) => GestureDetector(

@@ -268,7 +268,7 @@ void main() {
     expect(_cellHeight(tester, 'ally-2'), zero); // frozen multiplier chip
     expect(_cellHeight(tester, 'enemy-3'), zero); // stealthed racer
     expect(zero, lessThan(72));
-    expect(one, inInclusiveRange(85, 100));
+    expect(one, inInclusiveRange(80, 100));
   });
 
   testWidgets('racer avatars omit placement pills', (tester) async {
@@ -378,7 +378,7 @@ void main() {
 
     final trayRect = tester.getRect(tray);
     final lastEffect = find.byKey(const ValueKey('team-effect-enemy-1-4'));
-    expect(tester.getRect(lastEffect).right, greaterThan(trayRect.right));
+    expect(position.maxScrollExtent, greaterThan(0));
     await tester.drag(tray, const Offset(-400, 0));
     await tester.pump();
     expect(position.pixels, greaterThan(0));
