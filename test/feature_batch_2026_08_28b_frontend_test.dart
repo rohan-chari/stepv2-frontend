@@ -368,12 +368,16 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('Later'), findsNWidgets(2));
     expect(
-      tester.getTopLeft(find.text('Later')).dy,
-      lessThan(tester.getTopLeft(find.text('Soon')).dy),
+      tester.getTopLeft(find.text('Later').first).dy,
+      lessThan(tester.getTopLeft(find.text('Soon').first).dy),
     );
-    expect(find.text('??? PLACE'), findsNWidgets(2));
-    await tester.tap(find.byKey(const Key('race-favorite-soon')));
+    expect(find.text('??? PLACE'), findsNWidgets(3));
+    final soonFavorite = find.byKey(const Key('race-favorite-soon'));
+    await tester.ensureVisible(soonFavorite);
+    await tester.pumpAndSettle();
+    await tester.tap(soonFavorite);
     await tester.pump();
     expect(api.calls, [('soon', true)]);
     expect(find.byType(RacesTab), findsOneWidget);

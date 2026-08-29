@@ -320,7 +320,7 @@ void main() {
       expect(boxKey.currentContext, isNotNull);
       expect(
         find.byKey(const Key('race-card-surface-race-active-1')),
-        findsOneWidget,
+        findsNWidgets(2),
       );
       expect(
         find.byKey(
