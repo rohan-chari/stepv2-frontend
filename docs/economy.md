@@ -755,7 +755,8 @@ app version and leaves in-flight effects alone.
 
 | Type | L0 | L1 | L2 | L3 |
 |---|---|---|---|---|
-| `LEG_CRAMP`, `RUNNERS_HIGH`, `STEALTH_MODE`, `WRONG_TURN`, `DETOUR_SIGN`, `POCKET_WATCH` | 1h | 2h | 3h | 4h |
+| `LEG_CRAMP`, `RUNNERS_HIGH`, `STEALTH_MODE`, `WRONG_TURN`, `DETOUR_SIGN` | 1h | 1h 15m | 1h 30m | 1h 45m |
+| `POCKET_WATCH` | 1h | 2h | 3h | 4h |
 | `COMPRESSION_SOCKS` | 24h | 30h | 36h | 48h |
 | `CAMPFIRE_REST` | 45m | 60m | 75m | 90m |
 
@@ -770,12 +771,12 @@ window average; 94% of those uses were L0/1h, so it is a clean per-hour rate):
 
 | | +minutes vs L0 | coins | swing steps bought | steps/coin |
 |---|---|---|---|---|
-| `LEG_CRAMP` L1 | +60 | 10 | 1,737 | 174 |
-| `LEG_CRAMP` L2 | +120 | 30 | 3,474 | 116 |
-| `LEG_CRAMP` L3 | +180 | 90 | 5,211 | 58 |
-| `WRONG_TURN` L1 | +60 | 15 | 3,474 (2× — sign flip) | 232 |
-| `WRONG_TURN` L2 | +120 | 45 | 6,948 | 154 |
-| `WRONG_TURN` L3 | +180 | 135 | 10,422 | 77 |
+| `LEG_CRAMP` L1 | +15 | 10 | 434 | 43 |
+| `LEG_CRAMP` L2 | +30 | 30 | 869 | 29 |
+| `LEG_CRAMP` L3 | +45 | 90 | 1,303 | 14 |
+| `WRONG_TURN` L1 | +15 | 15 | 869 (2× — sign flip) | 58 |
+| `WRONG_TURN` L2 | +30 | 45 | 1,737 | 39 |
+| `WRONG_TURN` L3 | +45 | 135 | 2,606 | 19 |
 
 Market band for comparison (same value table): `PROTEIN_SHAKE` 150/100/67,
 `SHORTCUT` 67/44/30, `PINECONE_TOSS` 50/50/33, `TRAIL_MIX` ≈50/…/22 steps/coin
@@ -2432,3 +2433,9 @@ backend code + weighted-v2 spec); weighted-v2 deployed and post-deploy verified
 2026-08-31 and the first v2 event day on 2026-09-01. §16 verified/added
 2026-08-28 (prod SELECT-only aggregates + current backend code + feature-batch
 spec); Release A deployed at `51ab388` and Hitchhike Release B at `a16670a`.*
+
+*Runner's High stacking and the standardized 15-minute upgrade-duration ladder
+in §3.4c re-verified 2026-08-28 from current backend code
+(`effectMultiplier.js`, `powerupUpgrades.js`) plus a prod SELECT-only aggregate
+of the active team race used for the carousel visual check; no production data
+was changed by this verification.*
