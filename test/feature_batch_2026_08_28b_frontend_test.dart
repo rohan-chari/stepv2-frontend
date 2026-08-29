@@ -270,7 +270,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
-      expect(find.text('POWERUP FIELD MANUAL'), findsOneWidget);
+      expect(find.text('POWERUP CHEAT SHEET'), findsOneWidget);
       expect(
         find.byKey(const Key('powerup-guide-powerups-page')),
         findsOneWidget,

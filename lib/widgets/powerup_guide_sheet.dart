@@ -46,7 +46,7 @@ class _PowerupGuideSheetState extends State<PowerupGuideSheet> {
               ),
               const SizedBox(height: 14),
               Text(
-                'POWERUP FIELD MANUAL',
+                'POWERUP CHEAT SHEET',
                 style: PixelText.title(
                   size: 19,
                   color: AppColors.of(context).textDark,

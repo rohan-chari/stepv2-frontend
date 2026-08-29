@@ -150,6 +150,7 @@ class PowerupCopyEntry {
     this.shortDescription,
     this.upgradeTierLabels = const [],
     this.stacking,
+    this.availability,
   });
 
   final String type;
@@ -165,6 +166,7 @@ class PowerupCopyEntry {
   /// 4 entries for upgradeable types, empty otherwise.
   final List<String> upgradeTierLabels;
   final PowerupStackingRule? stacking;
+  final PowerupAvailability? availability;
 
   PowerupCopyEntry copyWith({PowerupStackingRule? stacking}) =>
       PowerupCopyEntry(
@@ -174,6 +176,7 @@ class PowerupCopyEntry {
         shortDescription: shortDescription,
         upgradeTierLabels: upgradeTierLabels,
         stacking: stacking,
+        availability: availability,
       );
 
   Map<String, dynamic> toJson() => {
@@ -183,7 +186,26 @@ class PowerupCopyEntry {
     'shortDescription': shortDescription,
     'upgradeTierLabels': upgradeTierLabels,
     if (stacking != null) 'stacking': stacking!.toJson(),
+    if (availability != null) 'availability': availability!.toJson(),
   };
+}
+
+class PowerupAvailability {
+  const PowerupAvailability({required this.shop, required this.roll});
+  final bool shop;
+  final bool roll;
+  bool get available => shop || roll;
+  static PowerupAvailability? tryParse(Object? raw) {
+    if (raw is! Map || raw['shop'] is! bool || raw['roll'] is! bool) {
+      return null;
+    }
+    return PowerupAvailability(
+      shop: raw['shop'] as bool,
+      roll: raw['roll'] as bool,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'shop': shop, 'roll': roll};
 }
 
 /// A fully validated catalog snapshot. Constructed only through
@@ -193,10 +215,12 @@ class PowerupCopySnapshot {
     required this.version,
     required this.entries,
     this.stackingVersion,
+    this.availabilityVersion,
   });
 
   final String version;
   final int? stackingVersion;
+  final int? availabilityVersion;
   final Map<String, PowerupCopyEntry> entries;
 
   /// Validates a `/powerups/catalog` response.
@@ -244,6 +268,7 @@ class PowerupCopySnapshot {
         // Stacking is deliberately row-local validation. A future enum or one
         // malformed rule must never discard otherwise usable catalog copy.
         stacking: PowerupStackingRule.tryParse(item['stacking']),
+        availability: PowerupAvailability.tryParse(item['availability']),
       );
     }
 
@@ -258,6 +283,11 @@ class PowerupCopySnapshot {
                   (raw['stackingVersion'] as num).roundToDouble()
           ? (raw['stackingVersion'] as num).toInt()
           : null,
+      availabilityVersion:
+          raw['availabilityVersion'] is num &&
+              (raw['availabilityVersion'] as num).isFinite
+          ? (raw['availabilityVersion'] as num).toInt()
+          : null,
       entries: entries,
     );
   }
@@ -265,6 +295,7 @@ class PowerupCopySnapshot {
   Map<String, dynamic> toJson() => {
     'version': version,
     if (stackingVersion != null) 'stackingVersion': stackingVersion,
+    if (availabilityVersion != null) 'availabilityVersion': availabilityVersion,
     'powerups': [for (final e in entries.values) e.toJson()],
   };
 }
@@ -306,12 +337,15 @@ abstract final class PowerupCopy {
     if (snapshot != null) {
       final result = <PowerupCopyEntry>[
         for (final entry in snapshot.entries.values)
-          if (entry.type != 'IMPOSTER')
+          if (entry.type != 'IMPOSTER' &&
+              (snapshot.availabilityVersion == null ||
+                  entry.availability?.available == true))
             snapshot.stackingVersion == null
                 ? entry.copyWith(stacking: _bundledStacking[entry.type])
                 : entry,
       ];
       final present = result.map((entry) => entry.type).toSet();
+      if (snapshot.availabilityVersion != null) return result;
       for (final type in bundledTypes) {
         if (type == 'IMPOSTER' || present.contains(type)) continue;
         result.add(_bundledGuideEntry(type));
