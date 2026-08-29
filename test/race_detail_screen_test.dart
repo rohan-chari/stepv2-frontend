@@ -1783,4 +1783,46 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'creator can remove another participant only while the race is pending',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(600, 3000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            key: const ValueKey('pending-removal-screen'),
+            authService: await _createAuthService(),
+            raceId: 'race-pending-removal',
+            backendApiService: _PendingAcceptedRaceBackendApiService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byIcon(Icons.person_remove), findsNWidgets(2));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            key: const ValueKey('active-removal-screen'),
+            authService: await _createAuthService(),
+            raceId: 'race-active-removal',
+            backendApiService: _ActivePaidRaceBackendApiService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byIcon(Icons.person_remove),
+        findsNothing,
+        reason: 'Once a race starts, its participant roster is locked.',
+      );
+    },
+  );
 }

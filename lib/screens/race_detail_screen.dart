@@ -9240,10 +9240,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isMe = userId == _myUserId;
     final isCreator = _race?['isCreator'] as bool? ?? false;
     final raceStatus = _race?['status'] as String? ?? '';
-    final canKick =
-        isCreator &&
-        !isMe &&
-        (raceStatus == 'PENDING' || raceStatus == 'ACTIVE');
+    final canKick = isCreator && !isMe && raceStatus == 'PENDING';
 
     Color badgeColor;
     String badgeText;
