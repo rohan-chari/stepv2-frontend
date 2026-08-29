@@ -252,7 +252,7 @@ void main() {
     );
   });
 
-  testWidgets('zero one and five effects keep opposing racer cards aligned', (
+  testWidgets('effects use one full row without growing again for overflow', (
     tester,
   ) async {
     await _pump(tester);
@@ -261,11 +261,14 @@ void main() {
     final one = _cellHeight(tester, 'enemy-2'); // 1 effect
     final five = _cellHeight(tester, 'enemy-1'); // 5 effects (scrolling)
 
-    expect(zero, one);
-    expect(five, one);
+    expect(one, greaterThan(zero));
+    // Overflow stays in the horizontal carousel instead of adding another row.
+    // The one-point difference is the five-effect racer's multiplier chip.
+    expect(five, closeTo(one, 2));
     expect(_cellHeight(tester, 'ally-2'), zero); // frozen multiplier chip
     expect(_cellHeight(tester, 'enemy-3'), zero); // stealthed racer
     expect(zero, lessThan(72));
+    expect(one, inInclusiveRange(85, 100));
   });
 
   testWidgets('racer avatars omit placement pills', (tester) async {
@@ -470,9 +473,9 @@ void main() {
   });
 
   testWidgets(
-    'the one-icon right rail announces horizontally reachable overflow',
+    'the full-width row announces overflow only when content exceeds it',
     (tester) async {
-      const threeEffects = [
+      const fourEffects = [
         {
           'type': 'RAINSTORM',
           'targetUserId': 'enemy-2',
@@ -488,11 +491,16 @@ void main() {
           'targetUserId': 'enemy-2',
           'sourceUserId': 'user-1',
         },
+        {
+          'type': 'RED_CARD',
+          'targetUserId': 'enemy-2',
+          'sourceUserId': 'user-1',
+        },
       ];
       await _pump(
         tester,
         size: const Size(320, 1800),
-        activeEffects: threeEffects,
+        activeEffects: fourEffects,
       );
       var tray = find.byKey(const ValueKey('team-effect-tray-enemy-2'));
       expect(
@@ -503,19 +511,12 @@ void main() {
       await _pump(
         tester,
         size: const Size(700, 1800),
-        activeEffects: [
-          ...threeEffects,
-          const {
-            'type': 'RED_CARD',
-            'targetUserId': 'enemy-2',
-            'sourceUserId': 'user-1',
-          },
-        ],
+        activeEffects: fourEffects,
       );
       tray = find.byKey(const ValueKey('team-effect-tray-enemy-2'));
       expect(
         tester.widget<Semantics>(tray).properties.label,
-        contains('Swipe horizontally'),
+        isNot(contains('Swipe horizontally')),
       );
     },
   );
@@ -576,7 +577,7 @@ void main() {
   });
 
   testWidgets(
-    'exact score sits below the name while effects scroll on the right',
+    'exact score sits below the name with effects on the full row beneath',
     (tester) async {
       await _pump(tester, size: const Size(320, 1800), textScale: 1.3);
 
@@ -585,6 +586,10 @@ void main() {
       expect(tester.takeException(), isNull);
       final cell = find.byKey(const ValueKey('team-cell-enemy-1'));
       final cellRect = tester.getRect(cell);
+      final cellDecoration =
+          tester.widget<Container>(cell).decoration! as BoxDecoration;
+      final cellBorder = cellDecoration.border! as Border;
+      final contentInset = 5 + cellBorder.left.width;
       final avatarRect = tester.getRect(
         find.byKey(const ValueKey('team-avatar-enemy-1')),
       );
@@ -607,9 +612,9 @@ void main() {
       expect(scoreGroupRect.left, closeTo(nameRect.left, 1));
       expect(scoreGroupRect.left, greaterThanOrEqualTo(cellRect.left));
       expect(scoreGroupRect.right, lessThanOrEqualTo(cellRect.right));
-      expect(trayRect.left, greaterThan(nameRect.left));
-      expect(trayRect.center.dy, greaterThan(nameRect.center.dy));
-      expect(trayRect.center.dy, lessThan(scoreGroupRect.bottom + 4));
+      expect(trayRect.left, closeTo(cellRect.left + contentInset, 0.1));
+      expect(trayRect.top, greaterThanOrEqualTo(scoreGroupRect.bottom));
+      expect(trayRect.right, closeTo(cellRect.right - contentInset, 0.1));
       expect(scoreRect.left, closeTo(nameRect.left, 1));
       expect(multiplierRect.left, greaterThanOrEqualTo(scoreRect.left));
       expect(multiplierRect.bottom, lessThanOrEqualTo(cellRect.bottom));

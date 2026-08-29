@@ -9978,13 +9978,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ]
             : null,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(child: identityHit),
+          identityHit,
           if (effects.isNotEmpty) ...[
-            const SizedBox(width: 3),
-            SizedBox(width: 44, child: _teamEffectTray(userId, effects)),
+            const SizedBox(height: 2),
+            _teamEffectTray(userId, effects),
           ],
         ],
       ),
