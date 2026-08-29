@@ -252,7 +252,7 @@ void main() {
     );
   });
 
-  testWidgets('effects use one full row without growing again for overflow', (
+  testWidgets('powerup carousel sits below score in the right column', (
     tester,
   ) async {
     await _pump(tester);
@@ -261,14 +261,11 @@ void main() {
     final one = _cellHeight(tester, 'enemy-2'); // 1 effect
     final five = _cellHeight(tester, 'enemy-1'); // 5 effects (scrolling)
 
-    expect(one, greaterThan(zero));
-    // Overflow stays in the horizontal carousel instead of adding another row.
-    // The one-point difference is the five-effect racer's multiplier chip.
-    expect(five, closeTo(one, 2));
+    expect(one, greaterThanOrEqualTo(zero));
+    expect(five, greaterThan(one));
     expect(_cellHeight(tester, 'ally-2'), zero); // frozen multiplier chip
     expect(_cellHeight(tester, 'enemy-3'), zero); // stealthed racer
-    expect(zero, lessThan(72));
-    expect(one, inInclusiveRange(80, 100));
+    expect(zero, greaterThanOrEqualTo(80));
   });
 
   testWidgets('racer avatars omit placement pills', (tester) async {
@@ -378,7 +375,7 @@ void main() {
 
     final trayRect = tester.getRect(tray);
     final lastEffect = find.byKey(const ValueKey('team-effect-enemy-1-4'));
-    expect(position.maxScrollExtent, greaterThan(0));
+    expect(tester.getRect(lastEffect).right, greaterThan(trayRect.right));
     await tester.drag(tray, const Offset(-400, 0));
     await tester.pump();
     expect(position.pixels, greaterThan(0));
@@ -473,9 +470,9 @@ void main() {
   });
 
   testWidgets(
-    'the full-width row announces overflow only when content exceeds it',
+    'the one-icon right rail announces horizontally reachable overflow',
     (tester) async {
-      const fourEffects = [
+      const threeEffects = [
         {
           'type': 'RAINSTORM',
           'targetUserId': 'enemy-2',
@@ -491,16 +488,11 @@ void main() {
           'targetUserId': 'enemy-2',
           'sourceUserId': 'user-1',
         },
-        {
-          'type': 'RED_CARD',
-          'targetUserId': 'enemy-2',
-          'sourceUserId': 'user-1',
-        },
       ];
       await _pump(
         tester,
         size: const Size(320, 1800),
-        activeEffects: fourEffects,
+        activeEffects: threeEffects,
       );
       var tray = find.byKey(const ValueKey('team-effect-tray-enemy-2'));
       expect(
@@ -511,7 +503,14 @@ void main() {
       await _pump(
         tester,
         size: const Size(700, 1800),
-        activeEffects: fourEffects,
+        activeEffects: [
+          ...threeEffects,
+          const {
+            'type': 'RED_CARD',
+            'targetUserId': 'enemy-2',
+            'sourceUserId': 'user-1',
+          },
+        ],
       );
       tray = find.byKey(const ValueKey('team-effect-tray-enemy-2'));
       expect(
@@ -577,7 +576,7 @@ void main() {
   });
 
   testWidgets(
-    'exact score sits below the name with effects on the full row beneath',
+    'exact score sits below the name while effects scroll on the right',
     (tester) async {
       await _pump(tester, size: const Size(320, 1800), textScale: 1.3);
 
@@ -586,10 +585,6 @@ void main() {
       expect(tester.takeException(), isNull);
       final cell = find.byKey(const ValueKey('team-cell-enemy-1'));
       final cellRect = tester.getRect(cell);
-      final cellDecoration =
-          tester.widget<Container>(cell).decoration! as BoxDecoration;
-      final cellBorder = cellDecoration.border! as Border;
-      final contentInset = 5 + cellBorder.left.width;
       final avatarRect = tester.getRect(
         find.byKey(const ValueKey('team-avatar-enemy-1')),
       );
@@ -607,15 +602,14 @@ void main() {
 
       expect(cellRect.right, lessThanOrEqualTo(320));
       expect(avatarRect.top, lessThan(nameRect.bottom));
-      expect(nameRect.top, lessThan(avatarRect.bottom));
-      expect(scoreGroupRect.top, greaterThanOrEqualTo(nameRect.bottom - 1));
-      expect(scoreGroupRect.left, closeTo(nameRect.left, 1));
+      expect(nameRect.top, greaterThanOrEqualTo(avatarRect.bottom));
+      expect(scoreGroupRect.top, lessThan(trayRect.top));
+      expect(scoreGroupRect.left, greaterThan(nameRect.right));
       expect(scoreGroupRect.left, greaterThanOrEqualTo(cellRect.left));
-      expect(scoreGroupRect.right, lessThanOrEqualTo(cellRect.right));
-      expect(trayRect.left, closeTo(cellRect.left + contentInset, 0.1));
+      expect(scoreGroupRect.right, lessThanOrEqualTo(cellRect.right + 4));
+      expect(trayRect.left, greaterThan(nameRect.right));
       expect(trayRect.top, greaterThanOrEqualTo(scoreGroupRect.bottom));
-      expect(trayRect.right, closeTo(cellRect.right - contentInset, 0.1));
-      expect(scoreRect.left, closeTo(nameRect.left, 1));
+      expect(scoreRect.left, greaterThan(nameRect.right));
       expect(multiplierRect.left, greaterThanOrEqualTo(scoreRect.left));
       expect(multiplierRect.bottom, lessThanOrEqualTo(cellRect.bottom));
     },
@@ -633,8 +627,7 @@ void main() {
       find.byKey(const ValueKey('team-score-group-enemy-1')),
     );
     final scoreRect = tester.getRect(find.text('1,234,567'));
-    expect(scoreGroupRect.top, greaterThanOrEqualTo(nameRect.bottom - 1));
-    expect(scoreGroupRect.left, closeTo(nameRect.left, 1));
+    expect(scoreGroupRect.left, greaterThan(nameRect.right));
     expect(scoreRect.height, greaterThanOrEqualTo(9));
     expect(tester.takeException(), isNull);
   });

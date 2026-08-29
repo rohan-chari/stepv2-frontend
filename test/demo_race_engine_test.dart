@@ -388,6 +388,7 @@ void main() {
       expect(powerupData['enabled'], isTrue);
       expect(powerupData['powerupSlots'], 3);
       expect(powerupData['queuedBoxCount'], 0);
+      expect(powerupData.containsKey('trailMix'), isFalse);
       final inventory = (powerupData['inventory'] as List)
           .cast<Map<String, dynamic>>();
       expect(inventory.length, 3);
@@ -395,6 +396,12 @@ void main() {
       // Shortcut only exists once the third one is opened.
       expect(inventory.where((p) => p['status'] == 'MYSTERY_BOX').length, 3);
       expect(inventory.where((p) => p['status'] == 'HELD'), isEmpty);
+      expect(
+        (powerupData['activeEffects'] as List).whereType<Map>().any(
+          (effect) => effect['type'] == 'GHOST_PEPPER',
+        ),
+        isFalse,
+      );
     });
 
     test('details carry an ACTIVE, ACCEPTED, zero-buy-in race', () {

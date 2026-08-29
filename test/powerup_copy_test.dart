@@ -19,6 +19,7 @@ void main() {
     String? description,
     String? shortDescription,
     List<String>? upgradeTierLabels,
+    Map<String, dynamic>? availability,
   }) {
     return {
       'type': type,
@@ -26,6 +27,7 @@ void main() {
       'description': description ?? 'Server description for $type',
       'shortDescription': ?shortDescription,
       'upgradeTierLabels': upgradeTierLabels ?? const <String>[],
+      'availability': ?availability,
     };
   }
 
@@ -220,6 +222,16 @@ void main() {
       expect(desc.toLowerCase().contains('hour'), isFalse, reason: desc);
     });
 
+    test('Leech fallback stacking explains the one-live-effect victim cap', () {
+      final leech = PowerupCopy.guideEntries.firstWhere(
+        (entry) => entry.type == 'LEECH',
+      );
+      final summary = leech.stacking?.summary ?? '';
+      expect(leech.stacking?.samePowerup, SamePowerupStacking.blocked);
+      expect(summary, contains('one live Leech'));
+      expect(summary, isNot(contains('two attackers')));
+    });
+
     test('bundled copy covers the new store types', () {
       expect(PowerupCopy.nameFor('HITCHHIKE'), 'Hitchhike');
       expect(PowerupCopy.nameFor('QUICK_RINSE'), 'Quick Rinse');
@@ -399,6 +411,34 @@ void main() {
   });
 
   group('older/newer backend shapes never crash', () {
+    test('partial v2 availability fails open for the whole snapshot', () async {
+      await PowerupCopy.refresh(
+        fetch: () async => {
+          'availabilityVersion': 2,
+          'powerups': [
+            entry('RED_CARD', availability: {'shop': false, 'roll': true}),
+            entry('TRAIL_MIX'),
+          ],
+        },
+      );
+
+      final types = PowerupCopy.guideEntries.map((entry) => entry.type).toSet();
+      expect(types, containsAll(<String>{'RED_CARD', 'TRAIL_MIX', 'LEECH'}));
+      expect(
+        PowerupCopy.guideEntries.every((entry) => entry.availability == null),
+        isTrue,
+      );
+    });
+
+    test('fractional availability version is ignored', () {
+      final snapshot = PowerupCopySnapshot.parse({
+        'availabilityVersion': 2.5,
+        'powerups': [entry('RED_CARD')],
+      });
+      expect(snapshot, isNotNull);
+      expect(snapshot!.availabilityVersion, isNull);
+    });
+
     test('unknown extra fields are ignored', () async {
       final ok = await PowerupCopy.refresh(
         fetch: () async => {

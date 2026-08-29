@@ -84,6 +84,23 @@ math uses the database's tz-naive `steps.date` and
 The current median makes a 150-coin item **14.3 active days** of recurring
 income (p10 cannot afford it from recurring income; p90 takes 2.0 active days).
 
+### 0g. Powerup-invariants refresh — verified 2026-08-29 (prod, read-only)
+
+Trailing 30 complete calendar days (`2026-07-30` through `2026-08-28`). Date
+math uses the database's tz-naive `steps.date` and
+`coin_transactions.created_at::date`; review accounts are excluded.
+
+| Metric | Value | Source |
+|---|---:|---|
+| Step-active users / user-days | 698 / 4,682 | `DB steps × users` |
+| Per-user mean steps / active day | p10 1,625 · **p50 5,584** · p90 11,174 | `DB steps` (n=698 users) |
+| Recurring positive coins / active day | p10 0 · **p50 10.80** · p90 78.95 · mean 31.12 | `DB steps × coin_transactions` (excludes tutorial, referral, admin/manual, refunds and redistributed buy-in payouts) |
+| Total positive / negative ledger | **+10,000.63 / -3,839.43 per day**; net **+6,161.20** | `DB coin_transactions` (6,508 positive and 2,341 negative rows) |
+
+At these recurring-income rates, either current 200-coin Leech or Ghost Pepper
+costs **18.5 median active days**; p10 has no recurring income and p90 takes
+**2.53 active days**.
+
 ### 0c. Refresh — verified 2026-08-12 (prod, read-only)
 
 | Metric | Value | Source |
@@ -304,27 +321,25 @@ players convert at well under 1.49.
 
 ## 3. Powerups
 
-### 3.1a Current store catalog — `DB powerup_shop_items`, verified 2026-08-18
+### 3.1a Current store catalog — `DB powerup_shop_items`, verified 2026-08-29
 
 Enum labels are lowercase. Active, non-test-only rows are:
 
 | Price | Types |
 |---:|---|
 | 75 | `decoy`, `defense_scan`, `quick_rinse` |
+| 150 | `hitchhike` (not daily-reward eligible) |
 | 200 | `ghost_pepper`, `leech`, `rainstorm` |
 
-There are six currently purchasable types. This supersedes the 2026-08-13
+There are seven currently purchasable types. This supersedes the 2026-08-13
 snapshot below; the DB remains runtime authority.
 
-### 3.1b Hitchhike availability/value touchpoint — verified 2026-08-26
+### 3.1b Hitchhike availability/value touchpoint — verified 2026-08-29
 
-The authoritative prod row is **150 coins, `active=false`, `test_only=false`**.
-The seed says 150, active, test-only, while its upsert deliberately preserves
-the live admin-tuned availability fields. Lifetime retained-account history is
-one successful 150-coin purchase by one user and one use; current global
-inventory is zero. Sources: `DB powerup_shop_items`,
-`powerup_purchase_requests`, `user_powerup_items`, `race_powerups`; `SEED
-prisma/seed.js`.
+The authoritative prod row is now **150 coins, `active=true`,
+`test_only=false`, `daily_reward_eligible=false`**. The seed agrees on all four
+fields; its upsert deliberately preserves the live admin-tuned price and active
+fields. Sources: `DB powerup_shop_items`; `SEED prisma/seed.js`.
 
 Hitchhike copies one target's eligible effective steps 1:1 for 60 minutes; the
 target loses nothing. One link may be active per caster and per target, but
@@ -336,17 +351,11 @@ steps per coin before any targeting advantage. Sources: `CODE
 powerups/hitchhikeCopies.js`, `powerups/commands/usePowerup.js`; `DB
 step_samples × users`.
 
-The current daily-spinner implementation builds its powerup pool from the
-active visible shop catalog. Therefore activating Hitchhike also makes it a
-daily-spin prize for `powerups3`-capable clients; the balance-config
-`storeOnlyTypes` list excludes it only from in-race mystery boxes. With the
-current six-item pool (three 75-coin and three 200-coin items), adding the
-150-coin Hitchhike gives it conditional powerup-hit probability **10.81% at
-streak 1** and **6.81% at streak 30** under inverse-price weighting. Its
-unconditional per-free-spin probability is 0.27%→1.53% when accessories
-remain, or 0.54%→3.06% when the powerup pool receives the whole RARE slice.
-Sources: `CODE economy/dailyBoxOdds.js`,
-`powerups/queries/getEligiblePowerupPool.js`; `DB balance_config` v4 and
+The daily spinner filters active visible shop rows through
+`dailyRewardEligible !== false`; Hitchhike's explicit false keeps it out of the
+daily-spin pool even while it is purchasable. `balance_config.storeOnlyTypes`
+independently excludes it from in-race mystery boxes. Sources: `CODE
+powerups/queries/getEligiblePowerupPool.js`; `DB balance_config` v4 and
 `powerup_shop_items`.
 
 ### 3.1 Store catalog — `DB powerup_shop_items`, verified 2026-08-13
@@ -561,7 +570,9 @@ Bounty paths reject another live copy in their respective user/target/race
 scope. Quicksand rejects a selected target who already has either Quicksand or
 Leg Cramp; the reverse direct Leg Cramp path checks Leg Cramp but not Quicksand,
 so that accepted overlap is redundant under freeze precedence. Leech permits
-one caster→victim link and at most two leechers per victim;
+one caster→victim link and at most two leechers per victim in live code. `SPEC`
+`docs/powerup-activation-clarity-and-invariants-requirements.md` proposes one
+per victim after a duplicate repair;
 Hitchhike permits one link per caster and one per target. A caster may run only
 one Rainstorm, while different casters' storms may overlap without multiplying
 the 0.5x penalty. Uprising and Rally Flag merge a repeated beneficiary window to
@@ -686,6 +697,20 @@ read-only forensic query).
 | `rarityByType.POWER_OUTAGE` | `UNCOMMON` | `UNCOMMON` | agrees; sets its would-be discard price at 5 |
 | `storeOnlyTypes` | 7 entries | 17 entries | harmless — `enforceStoreOnlyExclusion` unions the code list before filtering `dropPool` |
 | `dailyBoxExcludedTypes` | present | removed | ignored at runtime |
+
+### 3.3h Leech, Ghost Pepper and Trail Mix invariants — verified 2026-08-29
+
+Sources: live mechanics from `CODE powerups/commands/usePowerup.js`,
+`powerups/leechTransfers.js`, `races/services/effectMultiplier.js` and
+`powerups/powerupUpgrades.js`; runtime catalog/config from `DB
+powerup_shop_items` and active `balance_config` v4; proposed presentation and
+Leech cap from `SPEC docs/powerup-activation-clarity-and-invariants-requirements.md`.
+
+| Rule / observed value | Current fact |
+|---|---|
+| Leech | 2:1 attacker-driven, zero-sum transfer; 60m for `powerups3` clients (30m legacy); live victim cap **2**, proposed cap **1**. Prod has 49 retained non-review effects, all in the latest 90d, with **0 historical same-victim overlaps** and **0 live duplicate victims**. Candidate transfer per effect: mean 1,304 · p10 241 · p50 1,263 · p90 2,349 · max 3,058 steps (victim availability can only reduce it). Exact 49×49 empirical pairing, before the victim floor: cap-2 total victim loss mean 2,609 · p10 1,195 · p50 2,529 · p90 4,196 · max 6,116, versus cap-1 mean 1,304 · p10 241 · p50 1,263 · p90 2,349 · max 3,058. Each transferred step is also credited to an attacker, so standings swing is 2× victim loss. Prod price **200**; seed create-path price **300** (DB wins because deploy upsert preserves price). |
+| Ghost Pepper | Every one of 83 retained non-review effects has numeric `boostMs=1,800,000`, `freezeMs=1,800,000`, `multiplier=3`, and a 60m total window: **30m at 3×, then 30m frozen**. Isolated value relative to ordinary 1× walking is `2 × boost-phase raw steps - burnout-phase raw steps`. Canonical sample-prorated observations: mean +4,049 · p10 +2,152 · p50 +4,059 · p90 +6,026 · min +508 · max +9,039 steps; 0/83 negative. The proposed two local countdowns change display only. Prod price **200**; seed create-path price **75** (DB wins because deploy upsert preserves price). |
+| Trail Mix | Instant bonus is `unique used powerup types in this race, including TRAIL_MIX × perType`; perType is **100/150/200/300** at L0/L1/L2/L3. Active config classifies it COMMON, gives upgrade prices **0/5/15/45**, and includes it in the COMMON box pool. Across 2,940 retained non-review authoritative use events, unique count mean 8.11 · p10 2 · p50 7 · p90 15 · range 1–24; bonus mean 986 · p10 200 · p50 800 · p90 1,800 · range 100–7,200. `SPEC` adds a pre-use count and authoritative top-level result fields but does not change this formula. |
 
 ### 3.4 Upgrade ladder — `DB balance_config.upgradeCosts` (verified 2026-08-09)
 
@@ -1012,6 +1037,19 @@ are its single largest source. 79 funded races completed in 30 days minting
 n=8 (1,640) · 7d n=10 (9,520) · 14d n=1 (320). Race durations created in the
 same window: 1d ×107 · 2d ×68 · 7d ×57 · 14d ×28 · 3d ×27.
 `DB coin_transactions`, `DB races`.
+
+**Settlement-ledger safety — re-verified 2026-08-29 (prod, read-only).** The
+durable coin ledger has **0 duplicate payout keys** across
+`race_prize_pool_payout`, `race_buy_in_payout`, and `race_finish_reward`, where
+the database uniqueness boundary is `(user_id, reason, ref_id)`. Ordinary
+funded-race payouts minted 112,376 coins in 2,299 credits over the six complete
+UTC days 2026-08-23 through 2026-08-28 (**18,729.3 coins/day**; retained-account
+ledger caveat applies). Settlement and live resolution share a race-row write
+fence; race completion is conditionally claimed from `ACTIVE`, and each payout
+credit is independently idempotent. Sources: `DB coin_transactions`; `CODE
+prisma/schema.prisma` (`CoinTransaction` unique key),
+`races/services/raceWriteFence.js`, `races/commands/completeRace.js`, and
+`shared/economy/awardCoins.js`.
 
 **Graded presets cannot be a quick-create default.** `startRace.js:87-95` rejects
 the start of any non-`WINNER_TAKES_ALL` preset below

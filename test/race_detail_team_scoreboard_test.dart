@@ -1113,6 +1113,27 @@ void main() {
     );
   });
 
+  testWidgets('team roster avatars center above left-aligned usernames', (
+    tester,
+  ) async {
+    await _pump(tester, _ScoreboardApi());
+
+    for (final userId in ['user-1', 'u3']) {
+      final avatar = find.byKey(ValueKey('team-avatar-$userId'));
+      final name = find.byKey(ValueKey('team-name-$userId'));
+      final identity = find.byKey(ValueKey('team-identity-$userId'));
+
+      expect(avatar, findsOneWidget);
+      expect(name, findsOneWidget);
+      final avatarRect = tester.getRect(avatar);
+      final nameRect = tester.getRect(name);
+      final identityRect = tester.getRect(identity);
+      expect(nameRect.left, identityRect.left);
+      expect(avatarRect.center.dx, identityRect.center.dx);
+      expect(avatarRect.left, greaterThan(nameRect.left));
+    }
+  });
+
   testWidgets('the portrait pictures that side\'s top scorer', (tester) async {
     await _pump(tester, _ScoreboardApi());
 

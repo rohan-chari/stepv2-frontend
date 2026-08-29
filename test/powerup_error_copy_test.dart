@@ -26,6 +26,17 @@ void main() {
     expect(copy, 'You cannot do that yet.');
   });
 
+  test('Leech conflict code keeps the existing server-message fallback', () {
+    final copy = powerupUseErrorCopy(
+      const ApiException(
+        'This rival is already being leeched',
+        statusCode: 409,
+        code: 'LEECH_TARGET_ALREADY_ACTIVE',
+      ),
+    );
+    expect(copy, 'This rival is already being leeched');
+  });
+
   test('no code at all (older backend) falls back to the server message', () {
     final copy = powerupUseErrorCopy(
       ApiException('Rainstorm already going.', statusCode: 400),

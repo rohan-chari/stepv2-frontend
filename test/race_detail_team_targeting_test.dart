@@ -292,7 +292,7 @@ void main() {
   );
 
   testWidgets(
-    'PREPARING blocks the race route and picker cancellation clears it',
+    'target context and picker cancellation never show processing overlay',
     (tester) async {
       final targetContextCompleter = Completer<Map<String, dynamic>>();
       final api = _TeamPowerupApi(
@@ -300,19 +300,13 @@ void main() {
       );
       await _openPicker(tester, api);
 
-      expect(
-        find.byKey(const Key('powerup-processing-overlay')),
-        findsOneWidget,
-      );
-      expect(find.text('PREPARING POWERUP'), findsOneWidget);
+      expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
+      expect(find.text('PREPARING POWERUP'), findsNothing);
 
       await tester.binding.handlePopRoute();
       await tester.pump();
       expect(find.byType(RaceDetailScreen), findsOneWidget);
-      expect(
-        find.byKey(const Key('powerup-processing-overlay')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
 
       targetContextCompleter.complete({
         'participants': await api

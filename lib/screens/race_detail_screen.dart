@@ -327,6 +327,75 @@ class _ActiveImpactReceipt {
   }
 }
 
+@immutable
+class _GhostPepperCountdown {
+  const _GhostPepperCountdown({required this.phase, required this.remaining});
+
+  final String phase;
+  final Duration remaining;
+
+  String get label {
+    final safe = remaining.isNegative ? Duration.zero : remaining;
+    final minutes = safe.inMinutes;
+    final seconds = safe.inSeconds.remainder(60);
+    return '$phase · ${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Parses only the allowlisted Ghost Pepper phase contract. Any absent,
+/// fractional, non-positive, implausibly large, or inconsistent value returns
+/// null so both callers retain their legacy total-expiry countdown.
+_GhostPepperCountdown? _ghostPepperCountdown(
+  Map<String, dynamic> effect,
+  DateTime now,
+) {
+  if (effect['type'] != 'GHOST_PEPPER') return null;
+  final rawStartsAt = effect['startsAt'];
+  final rawExpiresAt = effect['expiresAt'];
+  final rawDurations = effect['phaseDurations'];
+  if (rawStartsAt is! String ||
+      rawExpiresAt is! String ||
+      rawDurations is! Map) {
+    return null;
+  }
+  final startsAt = DateTime.tryParse(rawStartsAt);
+  final expiresAt = DateTime.tryParse(rawExpiresAt);
+  if (startsAt == null || expiresAt == null) return null;
+
+  int? durationMs(Object? raw) {
+    const maxPhaseMs = Duration.millisecondsPerDay * 7;
+    if (raw is! num || !raw.isFinite || raw <= 0) return null;
+    if (raw != raw.roundToDouble()) return null;
+    final value = raw.toInt();
+    return value <= maxPhaseMs ? value : null;
+  }
+
+  final boostMs = durationMs(rawDurations['boostMs']);
+  final burnoutMs = durationMs(rawDurations['burnoutMs']);
+  if (boostMs == null || burnoutMs == null) return null;
+
+  final boostEndsAt = startsAt.add(Duration(milliseconds: boostMs));
+  final expectedExpiresAt = boostEndsAt.add(
+    Duration(milliseconds: burnoutMs),
+  );
+  if (now.isBefore(startsAt) ||
+      expiresAt.toUtc() != expectedExpiresAt.toUtc() ||
+      !now.isBefore(expiresAt)) {
+    return null;
+  }
+  if (now.isBefore(boostEndsAt)) {
+    return _GhostPepperCountdown(
+      phase: 'BOOST',
+      remaining: boostEndsAt.difference(now),
+    );
+  }
+  return _GhostPepperCountdown(
+    phase: 'BURNOUT',
+    remaining: expiresAt.difference(now),
+  );
+}
+
 // Defensively parse a {KEY: [int, int, int, int]} cost table from the backend.
 // Returns null when absent/malformed so callers can fall back to the bundled
 // tables (older backends don't send upgradeCosts at all).
@@ -384,13 +453,10 @@ RacePollLifecycleAction racePollLifecycleAction(
   }
 }
 
-enum _PowerupProcessingPhase { preparing, activating }
-
 class _PendingPowerupAction {
-  const _PendingPowerupAction({required this.powerupType, required this.phase});
+  const _PendingPowerupAction({required this.powerupType});
 
   final String powerupType;
-  final _PowerupProcessingPhase phase;
 }
 
 class _RaceDetailScreenState extends State<RaceDetailScreen>
@@ -420,6 +486,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
     });
     return out.isEmpty ? null : out;
+  }
+
+  /// Viewer-specific advisory count for Trail Mix. Older backends omit the
+  /// whole object; malformed values hide only the preview and never disable
+  /// use. The use response remains authoritative.
+  int? get _trailMixUniqueTypesIfUsedNow {
+    final trailMix = _powerupData?['trailMix'];
+    if (trailMix is! Map) return null;
+    return _readPositiveContractInt(trailMix['uniqueTypesIfUsedNow']);
   }
 
   // Active global step-multiplier event (BeReal-style 2x window), if any. Read
@@ -494,16 +569,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     });
   }
 
-  void _showPowerupProcessing(
-    String powerupType,
-    _PowerupProcessingPhase phase,
-  ) {
+  void _showPowerupProcessing(String powerupType) {
     if (!mounted) return;
     setState(() {
-      _pendingPowerupAction = _PendingPowerupAction(
-        powerupType: powerupType,
-        phase: phase,
-      );
+      _pendingPowerupAction = _PendingPowerupAction(powerupType: powerupType);
     });
   }
 
@@ -711,6 +780,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return int.tryParse(value) ?? double.tryParse(value)?.toInt() ?? fallback;
     }
     return fallback;
+  }
+
+  int? _readPositiveContractInt(Object? value) {
+    if (value is! num || !value.isFinite || value <= 0) return null;
+    if (value != value.roundToDouble()) return null;
+    return value.toInt();
   }
 
   int? _readNullableInt(dynamic value) {
@@ -2551,7 +2626,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         type == 'SNEAKY_SWAP' ||
         kTargetedPowerupTypes.contains(type);
     if (typeTargets && type != 'PINECONE_TOSS' && needsTargetingContext) {
-      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       final useContextParticipants = await _loadRacePowerupTargetContext(
         token,
         type,
@@ -2575,14 +2649,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         if (mounted) showErrorToast(context, 'No targets available');
         return;
       }
-      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetUserIds = await _showQuicksandTargetPicker(targets);
       if (targetUserIds == null) {
         _clearPowerupProcessing();
         return;
       }
     } else if (type == 'PINECONE_TOSS') {
-      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetDirection = await _showPineconeDirectionPicker();
       if (targetDirection == null) {
         _clearPowerupProcessing();
@@ -2591,7 +2663,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     } else if (type == 'SNEAKY_SWAP') {
       // Only offer racers who actually hold something stealable. New endpoint;
       // on an older backend (or any failure) fall back to all eligible racers.
-      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       final swapTargets = await _resolveSneakySwapTargets(token, targets);
       if (swapTargets.isEmpty) {
         _clearPowerupProcessing();
@@ -2630,7 +2701,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         }
         return;
       }
-      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetUserId = await _showTargetPicker(aheadTargets, type);
       if (targetUserId == null) {
         _clearPowerupProcessing();
@@ -2650,7 +2720,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         return;
       }
 
-      _showPowerupProcessing(type, _PowerupProcessingPhase.preparing);
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
         _clearPowerupProcessing();
@@ -2659,7 +2728,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
 
     if (!mounted) return;
-    _showPowerupProcessing(type, _PowerupProcessingPhase.activating);
+    _showPowerupProcessing(type);
     setState(() => _isActing = true);
     // Optimistically empty the slot the moment the user commits (mirrors the
     // optimistic coin deduction below) — on a slow connection the item used
@@ -2686,7 +2755,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               upgradeLevel: upgradeLevel,
             );
 
-      final res = result['result'] as Map<String, dynamic>?;
+      final rawResult = result['result'];
+      final res = rawResult is Map
+          ? <String, dynamic>{
+              for (final entry in rawResult.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            }
+          : null;
       final parsedReceipt = _ActiveImpactReceipt.tryParse(
         result['activeImpactReceipt'],
       );
@@ -2786,6 +2861,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
           );
           inlineModalDismissed = true;
+        } else {
+          showOutcomeToast('${PowerupCopy.nameFor(type)} activated!');
+        }
+      } else if (type == 'TRAIL_MIX') {
+        final uniqueTypes = _readPositiveContractInt(res?['uniqueTypes']);
+        final bonus = _readPositiveContractInt(res?['bonus']);
+        if (uniqueTypes != null && bonus != null) {
+          showOutcomeToast(
+            'Trail Mix: $uniqueTypes unique powerups · +${_formatSteps(bonus)} steps',
+          );
+        } else if (bonus != null) {
+          // Older backends already returned bonus but not the additive count.
+          showOutcomeToast('Trail Mix: +${_formatSteps(bonus)} steps');
         } else {
           showOutcomeToast('${PowerupCopy.nameFor(type)} activated!');
         }
@@ -3045,7 +3133,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (token == null || token.isEmpty) return;
 
     // Item 12: the stash row for THIS type is the button that spins.
-    _showPowerupProcessing(powerupType, _PowerupProcessingPhase.preparing);
     _beginAction('stash:$powerupType');
     Map<String, dynamic>? redeemedPowerup;
     try {
@@ -3885,6 +3972,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     textAlign: TextAlign.center,
                   ),
                 ],
+                if (_trailMixCalculationPlate(
+                      ctx,
+                      type: type,
+                      tierLabels: PowerupCopy.upgradeTierLabelsFor(type),
+                      baseOnly: true,
+                    )
+                    case final plate?) ...[
+                  const SizedBox(height: 10),
+                  plate,
+                ],
                 const SizedBox(height: 12),
                 // Item 12: this sheet is the ONE action sheet that stays open
                 // through its own request. It owns a two-round-trip chain
@@ -4044,6 +4141,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   ),
                   textAlign: TextAlign.center,
                 ),
+                if (_trailMixCalculationPlate(
+                      ctx,
+                      type: type,
+                      tierLabels: tierLabels,
+                    )
+                    case final plate?) ...[
+                  const SizedBox(height: 10),
+                  plate,
+                ],
                 const SizedBox(height: 12),
 
                 // Tier options for upgradeable powerups; single USE button
@@ -4184,6 +4290,79 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       );
     }
     return buttons;
+  }
+
+  int? _trailMixPerTypeFromTierLabel(String label) {
+    final match = RegExp(
+      r'\+?\s*([\d,]+)\s+steps',
+      caseSensitive: false,
+    ).firstMatch(label);
+    if (match == null) return null;
+    return _readPositiveContractInt(
+      int.tryParse(match.group(1)?.replaceAll(',', '') ?? ''),
+    );
+  }
+
+  /// Compact, parchment-native explanation of the advisory Trail Mix reward.
+  /// It deliberately derives each magnitude from the tier copy already shown
+  /// by the action sheet; no second frontend balance table can drift from it.
+  Widget? _trailMixCalculationPlate(
+    BuildContext context, {
+    required String type,
+    required List<String>? tierLabels,
+    bool baseOnly = false,
+  }) {
+    if (type != 'TRAIL_MIX') return null;
+    final uniqueTypes = _trailMixUniqueTypesIfUsedNow;
+    if (uniqueTypes == null || tierLabels == null || tierLabels.isEmpty) {
+      return null;
+    }
+
+    final rows = <({int level, int perType, int bonus})>[];
+    final count = baseOnly ? 1 : tierLabels.length.clamp(0, 4);
+    for (var level = 0; level < count; level++) {
+      final perType = _trailMixPerTypeFromTierLabel(tierLabels[level]);
+      if (perType == null) continue;
+      rows.add((level: level, perType: perType, bonus: uniqueTypes * perType));
+    }
+    if (rows.isEmpty) return null;
+
+    final palette = AppColors.of(context);
+    return Container(
+      key: const Key('trail-mix-calculation-plate'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: palette.pillGold.withValues(alpha: palette.isDark ? 0.16 : 0.1),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: palette.pillGoldDark.withValues(alpha: 0.72),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'PROJECTED BONUS',
+            style: PixelText.title(size: 10, color: palette.pillGoldDark),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Text(
+                '$uniqueTypes unique powerups × ${row.perType} = '
+                '${_formatSteps(row.bonus)} bonus steps',
+                key: ValueKey('trail-mix-calculation-${row.level}'),
+                style: PixelText.body(size: 11, color: palette.textDark),
+                textAlign: TextAlign.center,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   // Soft drop shadow for light text sitting directly on the checker.
@@ -7253,8 +7432,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final expiresAtValue = e['expiresAt'];
     final expiresAtStr = expiresAtValue is String ? expiresAtValue : null;
 
+    final phaseCountdown = type == 'GHOST_PEPPER'
+        ? _ghostPepperCountdown(e, _countdownNow)
+        : null;
     String timeLabel;
-    if (expiresAtStr != null) {
+    if (phaseCountdown != null) {
+      timeLabel = phaseCountdown.label;
+    } else if (expiresAtStr != null) {
       final expiresAt = DateTime.tryParse(expiresAtStr);
       if (expiresAt == null) {
         timeLabel = 'Until used';
@@ -9897,6 +10081,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     Widget scoreGroup() {
       return Wrap(
         key: ValueKey('team-score-group-$userId'),
+        alignment: WrapAlignment.end,
         spacing: 3,
         runSpacing: 1,
         crossAxisAlignment: WrapCrossAlignment.center,
@@ -9905,7 +10090,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             _formatSteps(totalSteps),
             maxLines: 1,
             style: PixelText.number(
-              size: 9.5,
+              size: 16,
               color: TeamRace.textColorOn(team, context),
             ),
           ),
@@ -9914,25 +10099,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       );
     }
 
-    final identity = Row(
+    final identity = Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        avatar(),
-        const SizedBox(width: 3),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(width: double.infinity, child: nameText()),
-              const SizedBox(height: 2),
-              MediaQuery.withClampedTextScaling(
-                maxScaleFactor: 1.3,
-                child: scoreGroup(),
-              ),
-            ],
-          ),
+        SizedBox(
+          width: 74,
+          child: Align(alignment: Alignment.topCenter, child: avatar()),
         ),
+        const SizedBox(height: 2),
+        nameText(),
       ],
     );
     final identityHit = (!isMe && !isStealthed && userId.isNotEmpty)
@@ -9950,8 +10126,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     final cell = Container(
       key: ValueKey('team-cell-$userId'),
-      constraints: const BoxConstraints(minHeight: 51),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      // Every racer occupies the same grid row. Reserve enough height for the
+      // large score plus the 44px carousel, even when this racer has no
+      // effects; otherwise one occupied carousel makes only that card grow.
+      constraints: const BoxConstraints(minHeight: 80),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(10),
@@ -9975,15 +10154,55 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ]
             : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          identityHit,
-          if (effects.isNotEmpty) ...[
-            const SizedBox(height: 0),
-            _teamEffectTray(userId, effects),
-          ],
+          SizedBox(
+            key: ValueKey('team-identity-$userId'),
+            width: 74,
+            child: identityHit,
+          ),
+          const SizedBox(width: 3),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.3,
+                  child: scoreGroup(),
+                ),
+                const SizedBox(height: 3),
+                SizedBox(
+                  height: 44,
+                  child: effects.isEmpty
+                      ? Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.parchmentDark.withValues(
+                                alpha: 0.35,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              'NO ACTIVE BUFFS',
+                              style: PixelText.title(
+                                size: 9,
+                                color: palette.textMid,
+                              ),
+                            ),
+                          ),
+                        )
+                      : _teamEffectTray(userId, effects),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -10630,6 +10849,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             expiresAt: e['expiresAt'] is String
                 ? e['expiresAt'] as String
                 : null,
+            ghostPepperPhaseLabel: _ghostPepperCountdown(
+              e,
+              _countdownNow,
+            )?.label,
           ),
     ];
   }
@@ -10687,9 +10910,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           child: _EffectIconWithTooltip(
                             key: ValueKey('team-effect-$userId-$i'),
                             effect: effects[i],
-                            remainingLabel: _expiresInLabel(
-                              effects[i].expiresAt,
-                            ),
+                            remainingLabel:
+                                effects[i].ghostPepperPhaseLabel ??
+                                _expiresInLabel(effects[i].expiresAt),
                           ),
                         ),
                       ],
@@ -11020,16 +11243,13 @@ class _PowerupProcessingOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final preparing = action.phase == _PowerupProcessingPhase.preparing;
-    final heading = preparing ? 'PREPARING POWERUP' : 'ACTIVATING';
     final name = PowerupCopy.nameFor(action.powerupType);
-    final semanticsLabel = preparing ? 'Preparing $name' : 'Activating $name';
 
     return Semantics(
       key: const Key('powerup-processing-overlay'),
       container: true,
       liveRegion: true,
-      label: semanticsLabel,
+      label: 'Activating $name',
       child: Stack(
         children: [
           const ModalBarrier(dismissible: false, color: Color(0x99000000)),
@@ -11049,7 +11269,7 @@ class _PowerupProcessingOverlay extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        heading,
+                        'ACTIVATING',
                         style: PixelText.title(
                           size: 17,
                           color: AppColors.of(context).textDark,
@@ -11219,12 +11439,14 @@ class _EffectViewData {
     required this.attackerName,
     required this.isBoost,
     required this.expiresAt,
+    required this.ghostPepperPhaseLabel,
   });
 
   final String type;
   final String? attackerName;
   final bool isBoost;
   final String? expiresAt;
+  final String? ghostPepperPhaseLabel;
 }
 
 /// Builds an overlay tooltip bubble anchored to [anchorContext]'s widget but
@@ -11419,9 +11641,9 @@ class _EffectIconWithTooltip extends StatefulWidget {
 
 class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
   OverlayEntry? _entry;
+  Timer? _autoDismissTimer;
 
-  void _show() {
-    _dismiss();
+  String _detail() {
     final effect = widget.effect;
     final name = PowerupCopy.nameFor(effect.type);
     final parts = <String>[];
@@ -11433,23 +11655,41 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
     }
     final remaining = widget.remainingLabel;
     if (remaining != null) parts.add(remaining);
-    final detail = parts.isEmpty ? name : '$name: ${parts.join('. ')}';
+    return parts.isEmpty ? name : '$name: ${parts.join('. ')}';
+  }
 
-    _entry = _buildClampedEffectTooltip(
-      anchorContext: context,
-      onDismiss: _dismiss,
-      child: Text(
-        detail,
-        style: PixelText.body(size: 11, color: AppColors.of(context).textLight),
-      ),
-    );
+  OverlayEntry _createEntry() => _buildClampedEffectTooltip(
+    anchorContext: context,
+    onDismiss: _dismiss,
+    child: Text(
+      _detail(),
+      style: PixelText.body(size: 11, color: AppColors.of(context).textLight),
+    ),
+  );
+
+  void _show() {
+    _dismiss();
+    _entry = _createEntry();
     Overlay.of(context).insert(_entry!);
-    Future.delayed(const Duration(seconds: 3), _dismiss);
+    _autoDismissTimer = Timer(const Duration(seconds: 3), _dismiss);
   }
 
   void _dismiss() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
     _entry?.remove();
     _entry = null;
+  }
+
+  @override
+  void didUpdateWidget(covariant _EffectIconWithTooltip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_entry == null || oldWidget.remainingLabel == widget.remainingLabel) {
+      return;
+    }
+    _entry?.remove();
+    _entry = _createEntry();
+    Overlay.of(context).insert(_entry!);
   }
 
   @override

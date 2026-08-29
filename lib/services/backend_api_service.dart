@@ -437,6 +437,7 @@ class BackendApiService {
   EndpointSupport _racePayoutDoubleSupport = EndpointSupport.unknown;
   EndpointSupport _interstitialSupport = EndpointSupport.unknown;
   EndpointSupport _racePowerupUseContextSupport = EndpointSupport.unknown;
+  EndpointSupport _tournamentFavoriteSupport = EndpointSupport.unknown;
   static EndpointSupport _raceBootstrapSupport = EndpointSupport.unknown;
   static EndpointSupport _raceMessageStreamsSupport = EndpointSupport.unknown;
   static EndpointSupport _shopBootstrapSupport = EndpointSupport.unknown;
@@ -459,6 +460,8 @@ class BackendApiService {
   @visibleForTesting
   EndpointSupport get raceResolutionStatusSupport =>
       _raceResolutionStatusSupport;
+  @visibleForTesting
+  EndpointSupport get tournamentFavoriteSupport => _tournamentFavoriteSupport;
 
   /// False once this session has seen a 404 from the cosmetic ad-unlock
   /// endpoint, so the shop can route to Get-coins without watching an ad first.
@@ -478,6 +481,7 @@ class BackendApiService {
     _friendIdentitySearchSupport = EndpointSupport.unknown;
     _raceProgressParticipantsSupport = EndpointSupport.unknown;
     _racePowerupUseContextSupport = EndpointSupport.unknown;
+    _tournamentFavoriteSupport = EndpointSupport.unknown;
     _racePayoutDoubleSupport = EndpointSupport.unknown;
     _interstitialSupport = EndpointSupport.unknown;
     resetRaceMessageConditionalState();
@@ -498,6 +502,7 @@ class BackendApiService {
       _friendIdentitySearchSupport = EndpointSupport.unknown;
       _raceProgressParticipantsSupport = EndpointSupport.unknown;
       _racePowerupUseContextSupport = EndpointSupport.unknown;
+      _tournamentFavoriteSupport = EndpointSupport.unknown;
       _racePayoutDoubleSupport = EndpointSupport.unknown;
       _interstitialSupport = EndpointSupport.unknown;
       resetRaceMessageConditionalState();
@@ -3324,6 +3329,57 @@ class BackendApiService {
     return <String, dynamic>{
       ...payload,
       'raceId': returnedRaceId,
+      'isFavorite': returnedFavorite,
+      'favoritedAt': payload['favoritedAt'] is String
+          ? payload['favoritedAt']
+          : null,
+    };
+  }
+
+  /// Updates a caller's tournament pin. This is additive to the ordinary race
+  /// favorite route, so a plain 404 is remembered as route absence for this
+  /// session. Coded 404s are membership/domain errors and remain retryable.
+  Future<Map<String, dynamic>> updateTournamentFavorite({
+    required String identityToken,
+    required String tournamentId,
+    required bool favorite,
+  }) async {
+    if (_tournamentFavoriteSupport == EndpointSupport.unsupported) {
+      throw const ApiException(
+        'Tournament favorites are not available yet.',
+        statusCode: 404,
+      );
+    }
+
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/tournaments/$tournamentId/favorite',
+      body: {'favorite': favorite},
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    final isSuccess = raw.statusCode >= 200 && raw.statusCode < 300;
+    if (raw.statusCode == 404 && raw.code == null) {
+      _tournamentFavoriteSupport = EndpointSupport.unsupported;
+    } else if (isSuccess) {
+      _tournamentFavoriteSupport = EndpointSupport.supported;
+    }
+    if (!isSuccess) _throwRawResponseError(raw);
+
+    final payload = raw.json;
+    if (payload == null) {
+      throw const ApiException('Could not update favorite. Try again.');
+    }
+    final returnedTournamentId = payload['tournamentId'];
+    final returnedFavorite = payload['isFavorite'];
+    if (returnedTournamentId is! String ||
+        returnedTournamentId.isEmpty ||
+        returnedFavorite is! bool) {
+      throw const ApiException('Could not update favorite. Try again.');
+    }
+    return <String, dynamic>{
+      ...payload,
+      'tournamentId': returnedTournamentId,
       'isFavorite': returnedFavorite,
       'favoritedAt': payload['favoritedAt'] is String
           ? payload['favoritedAt']

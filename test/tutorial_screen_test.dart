@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/tutorial/spotlight_overlay.dart';
 import 'package:step_tracker/tutorial/tutorial_screen.dart';
 
 /// The tutorial renders the REAL tab screens fed by seeded offline data, so the
@@ -45,6 +46,14 @@ void main() {
     // Step 4 (race detail): powerups.
     await _next(tester);
     expect(find.text('Mess with rivals.'), findsOneWidget);
+    final spotlight = tester.widget<SpotlightOverlay>(
+      find.byType(SpotlightOverlay),
+    );
+    expect(spotlight.targetRect, isNotNull);
+    expect(spotlight.targetRect!.width, greaterThan(0));
+    expect(find.byKey(const Key('trail-mix-calculation-plate')), findsNothing);
+    expect(find.textContaining('BOOST ·'), findsNothing);
+    expect(find.textContaining('BURNOUT ·'), findsNothing);
 
     // Step 5 (home again): the shop, ending on the screen the user lands on.
     await _next(tester);

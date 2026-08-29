@@ -320,6 +320,12 @@ void main() {
     await tester.tap(find.text('USE'));
     await settleDemo(tester);
 
+    expect(
+      find.byKey(const Key('powerup-processing-overlay')),
+      findsNothing,
+      reason: 'the real demo picker must stay unobscured before commitment',
+    );
+
     await tester.tap(find.textContaining('TurtleBot').last);
     await settleDemo(tester);
 
@@ -330,6 +336,7 @@ void main() {
 
     // And the coach is still on screen to carry the shake.
     expect(find.byKey(const Key('demo-coach-card')), findsOneWidget);
+    expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
 
     // CapyBot is accepted.
     await tester.tap(find.textContaining('CapyBot').last);

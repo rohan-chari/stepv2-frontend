@@ -123,6 +123,10 @@ class _PowerupManualRow extends StatelessWidget {
                     color: AppColors.of(context).textDark,
                   ),
                 ),
+                if (entry.availability case final availability?) ...[
+                  const SizedBox(height: 5),
+                  _PowerupSourceChip(availability: availability),
+                ],
                 const SizedBox(height: 3),
                 Text(
                   entry.description,
@@ -135,6 +139,44 @@ class _PowerupManualRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PowerupSourceChip extends StatelessWidget {
+  const _PowerupSourceChip({required this.availability});
+
+  final PowerupAvailability availability;
+
+  String get _label => switch ((availability.roll, availability.shop)) {
+    (true, true) => 'BOX + SHOP',
+    (true, false) => 'BOX',
+    (false, true) => 'SHOP',
+    (false, false) => '',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        key: const Key('powerup-source-chip'),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: palette.pillGold.withValues(
+            alpha: palette.isDark ? 0.2 : 0.13,
+          ),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: palette.pillGoldDark.withValues(alpha: 0.68),
+          ),
+        ),
+        child: Text(
+          _label,
+          style: PixelText.title(size: 9, color: palette.pillGoldDark),
+        ),
       ),
     );
   }

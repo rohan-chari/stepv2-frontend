@@ -243,9 +243,17 @@ class _RacesTabState extends State<RacesTab> {
 
   bool _favoriteOf(Map<String, dynamic> race) => race['isFavorite'] == true;
 
-  Map<String, dynamic> _withFavoriteOverlay(Map<String, dynamic> race) {
+  String _favoriteKey(String id, {required bool isTournament}) =>
+      '${isTournament ? 'tournament' : 'race'}:$id';
+
+  Map<String, dynamic> _withFavoriteOverlay(
+    Map<String, dynamic> race, {
+    bool isTournament = false,
+  }) {
     final id = race['id'];
-    final override = id is String ? _favoriteOverrides[id] : null;
+    final override = id is String
+        ? _favoriteOverrides[_favoriteKey(id, isTournament: isTournament)]
+        : null;
     if (override == null) return race;
     return <String, dynamic>{
       ...race,
@@ -263,9 +271,11 @@ class _RacesTabState extends State<RacesTab> {
   // The additive `tournaments` bucket from GET /races (spec §6.3). Absent on an
   // older backend → empty, so there's simply no tournaments section. Read every
   // field defensively via [Tournament].
-  List<Map<String, dynamic>> get _tournaments => _safeRows(
-    _raceData?['tournaments'],
-  ).where((t) => Tournament.myStatus(t) != 'DECLINED').toList();
+  List<Map<String, dynamic>> get _tournaments =>
+      _safeRows(_raceData?['tournaments'])
+          .where((t) => Tournament.myStatus(t) != 'DECLINED')
+          .map((t) => _withFavoriteOverlay(t, isTournament: true))
+          .toList();
 
   /// §4.2: tournaments classified into one personal-list state.
   List<Map<String, dynamic>> _tournamentsIn(TournamentListState state) {
@@ -299,6 +309,88 @@ class _RacesTabState extends State<RacesTab> {
     ];
   }
 
+  /// Cross-shelf view of accepted/owned rows. Invitations never enter this
+  /// list, and every read is optional so an older `/races` response simply
+  /// produces an empty pinned section (or ordinary race pins only).
+  List<_ListEntry> get _pinnedEntries {
+    final entries = <_ListEntry>[
+      for (final race in [..._active, ..._waiting, ..._completed])
+        if (_favoriteOf(race)) _ListEntry.race(race),
+      for (final tournament in _tournaments)
+        if (Tournament.myStatus(tournament) != 'INVITED' &&
+            _favoriteOf(tournament))
+          _ListEntry.tournament(tournament),
+    ];
+    entries.sort((a, b) {
+      final byGroup = _pinnedGroupRank(a).compareTo(_pinnedGroupRank(b));
+      if (byGroup != 0) return byGroup;
+
+      final byState = _pinnedStateRank(a).compareTo(_pinnedStateRank(b));
+      if (byState != 0) return byState;
+
+      final aDate = _pinnedDate(a);
+      final bDate = _pinnedDate(b);
+      if (aDate == null && bDate != null) return 1;
+      if (aDate != null && bDate == null) return -1;
+      if (aDate != null && bDate != null) {
+        final state = _pinnedStateRank(a);
+        final byDate = state == 2
+            ? bDate.compareTo(aDate)
+            : aDate.compareTo(bDate);
+        if (byDate != 0) return byDate;
+      }
+      return _pinnedId(a).compareTo(_pinnedId(b));
+    });
+    return entries;
+  }
+
+  int _pinnedGroupRank(_ListEntry entry) {
+    if (entry.isTournament) return 2;
+    return TeamRace.isTeamRace(entry.data) ? 1 : 0;
+  }
+
+  int _pinnedStateRank(_ListEntry entry) {
+    final state = entry.isTournament
+        ? switch (Tournament.personalListState(
+            entry.data,
+            userId: widget.authService.userId,
+          )) {
+            TournamentListState.active => 0,
+            TournamentListState.pending => 1,
+            TournamentListState.completed => 2,
+            TournamentListState.invite => 3,
+          }
+        : switch (entry.data['status']) {
+            'ACTIVE' => 0,
+            'PENDING' => 1,
+            'COMPLETED' => 2,
+            _ => 3,
+          };
+    return state;
+  }
+
+  DateTime? _pinnedDate(_ListEntry entry) {
+    if (entry.isTournament) {
+      final state = _pinnedStateRank(entry);
+      final raw = switch (state) {
+        0 => entry.data['startedAt'],
+        1 => entry.data['createdAt'],
+        2 => entry.data['completedAt'],
+        _ => null,
+      };
+      final tournamentDate = raw is String ? DateTime.tryParse(raw) : null;
+      return tournamentDate ??
+          Tournament.matchEndsAt(Tournament.myCurrentMatch(entry.data));
+    }
+    final raw = entry.data['endsAt'];
+    return raw is String ? DateTime.tryParse(raw) : null;
+  }
+
+  String _pinnedId(_ListEntry entry) {
+    final id = entry.data['id'];
+    return id is String ? id : '';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -319,47 +411,72 @@ class _RacesTabState extends State<RacesTab> {
     // An authoritative refresh that agrees with our last mutation can take
     // ownership. A stale response that disagrees leaves the optimistic overlay
     // in place, so it cannot visibly undo a newer successful tap.
-    final rows = <Map<String, dynamic>>[
+    final ordinaryRows = <Map<String, dynamic>>[
       ..._safeRows(_raceData?['active']),
       ..._safeRows(_raceData?['pending']),
       ..._safeRows(_raceData?['completed']),
     ];
-    for (final row in rows) {
+    final tournamentRows = _safeRows(_raceData?['tournaments']);
+    void reconcile(Map<String, dynamic> row, {required bool isTournament}) {
       final id = row['id'];
-      if (id is! String || !_favoriteOverrides.containsKey(id)) continue;
+      if (id is! String) return;
+      final key = _favoriteKey(id, isTournament: isTournament);
+      if (!_favoriteOverrides.containsKey(key)) return;
       final raw = row['isFavorite'];
-      if (raw is bool && raw == _favoriteOverrides[id]) {
-        _favoriteOverrides.remove(id);
+      if (raw is bool && raw == _favoriteOverrides[key]) {
+        _favoriteOverrides.remove(key);
       }
+    }
+
+    for (final row in ordinaryRows) {
+      reconcile(row, isTournament: false);
+    }
+    for (final row in tournamentRows) {
+      reconcile(row, isTournament: true);
     }
   }
 
-  Future<void> _toggleFavorite(Map<String, dynamic> race) async {
+  Future<void> _toggleFavorite(
+    Map<String, dynamic> race, {
+    required bool isTournament,
+  }) async {
     final raceId = race['id'];
     final token = widget.authService.authToken;
+    final favoriteKey = raceId is String
+        ? _favoriteKey(raceId, isTournament: isTournament)
+        : null;
     if (raceId is! String ||
         raceId.isEmpty ||
         token == null ||
         token.isEmpty ||
-        _favoriteInFlight.contains(raceId)) {
+        favoriteKey == null ||
+        _favoriteInFlight.contains(favoriteKey)) {
       return;
     }
-    final previous = _favoriteOf(_withFavoriteOverlay(race));
+    final previous = _favoriteOf(
+      _withFavoriteOverlay(race, isTournament: isTournament),
+    );
     final desired = !previous;
-    final epoch = (_favoriteMutationEpoch[raceId] ?? 0) + 1;
+    final epoch = (_favoriteMutationEpoch[favoriteKey] ?? 0) + 1;
     setState(() {
-      _favoriteMutationEpoch[raceId] = epoch;
-      _favoriteOverrides[raceId] = desired;
-      _favoriteInFlight.add(raceId);
+      _favoriteMutationEpoch[favoriteKey] = epoch;
+      _favoriteOverrides[favoriteKey] = desired;
+      _favoriteInFlight.add(favoriteKey);
     });
     try {
-      final response = await _api.updateRaceFavorite(
-        identityToken: token,
-        raceId: raceId,
-        favorite: desired,
-      );
+      final response = isTournament
+          ? await _api.updateTournamentFavorite(
+              identityToken: token,
+              tournamentId: raceId,
+              favorite: desired,
+            )
+          : await _api.updateRaceFavorite(
+              identityToken: token,
+              raceId: raceId,
+              favorite: desired,
+            );
       if (!mounted ||
-          _favoriteMutationEpoch[raceId] != epoch ||
+          _favoriteMutationEpoch[favoriteKey] != epoch ||
           widget.authService.authToken != token) {
         return;
       }
@@ -368,26 +485,26 @@ class _RacesTabState extends State<RacesTab> {
         throw const ApiException('Could not update favorite. Try again.');
       }
     } on ApiException catch (error) {
-      if (mounted && _favoriteMutationEpoch[raceId] == epoch) {
+      if (mounted && _favoriteMutationEpoch[favoriteKey] == epoch) {
         setState(() {
-          if (_favoriteOverrides[raceId] == desired) {
-            _favoriteOverrides[raceId] = previous;
+          if (_favoriteOverrides[favoriteKey] == desired) {
+            _favoriteOverrides[favoriteKey] = previous;
           }
         });
         showErrorToast(context, error.message);
       }
     } catch (_) {
-      if (mounted && _favoriteMutationEpoch[raceId] == epoch) {
+      if (mounted && _favoriteMutationEpoch[favoriteKey] == epoch) {
         setState(() {
-          if (_favoriteOverrides[raceId] == desired) {
-            _favoriteOverrides[raceId] = previous;
+          if (_favoriteOverrides[favoriteKey] == desired) {
+            _favoriteOverrides[favoriteKey] = previous;
           }
         });
         showErrorToast(context, 'Could not update favorite. Try again.');
       }
     } finally {
-      if (mounted && _favoriteMutationEpoch[raceId] == epoch) {
-        setState(() => _favoriteInFlight.remove(raceId));
+      if (mounted && _favoriteMutationEpoch[favoriteKey] == epoch) {
+        setState(() => _favoriteInFlight.remove(favoriteKey));
       }
     }
   }
@@ -900,6 +1017,7 @@ class _RacesTabState extends State<RacesTab> {
     }
 
     final totalInvites = invites.length + tournamentInvites.length;
+    final pinned = _pinnedEntries;
 
     return <Widget>[
       if (state.isRefreshing)
@@ -914,9 +1032,99 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
       // Invites are pinned ABOVE the pills and omitted entirely at zero.
+      if (pinned.isNotEmpty) ..._pinnedSectionSlivers(pinned),
       if (totalInvites > 0) ..._invitesStripSlivers(invites, tournamentInvites),
       SliverToBoxAdapter(child: _buildStatePills()),
       ..._selectedStateSlivers(),
+    ];
+  }
+
+  List<Widget> _pinnedSectionSlivers(List<_ListEntry> entries) {
+    final classic = entries
+        .where((entry) => _pinnedGroupRank(entry) == 0)
+        .toList(growable: false);
+    final teams = entries
+        .where((entry) => _pinnedGroupRank(entry) == 1)
+        .toList(growable: false);
+    final tournaments = entries
+        .where((entry) => _pinnedGroupRank(entry) == 2)
+        .toList(growable: false);
+    final groups = <({String key, String label, List<_ListEntry> entries})>[
+      (key: 'classic', label: 'CLASSIC', entries: classic),
+      (key: 'teams', label: 'TEAMS', entries: teams),
+      (key: 'tournaments', label: 'TOURNAMENTS', entries: tournaments),
+    ];
+    final slivers = <Widget>[
+      SliverToBoxAdapter(
+        key: const Key('pinned-section-header'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
+          child: Row(
+            children: [
+              Container(
+                width: 6,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).pillGold,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: AppColors.of(context).pillGoldDark),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'PINNED',
+                style: PixelText.title(
+                  size: 20,
+                  color: AppColors.of(context).textLight,
+                ).copyWith(shadows: _textShadows),
+              ),
+              const SizedBox(width: 6),
+              _CountBadge(count: entries.length),
+            ],
+          ),
+        ),
+      ),
+    ];
+    for (final group in groups) {
+      if (group.entries.isEmpty) continue;
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _PersonalGroupHeader(
+            key: Key('pinned-group-${group.key}'),
+            label: group.label,
+          ),
+        ),
+      );
+      slivers.add(
+        SliverList.builder(
+          itemCount: group.entries.length,
+          itemBuilder: (context, index) {
+            final entry = group.entries[index];
+            final id = _pinnedId(entry);
+            if (entry.isTournament) {
+              return KeyedSubtree(
+                key: Key('pinned-tournament-row-$id'),
+                child: _buildTournamentRow(
+                  entry.data,
+                  index,
+                  favoriteKeyPrefix: 'pinned-tournament',
+                ),
+              );
+            }
+            return KeyedSubtree(
+              key: Key('pinned-race-row-$id'),
+              child: _buildRaceRow(
+                entry.data,
+                favoriteKeyPrefix: 'pinned-race',
+              ),
+            );
+          },
+        ),
+      );
+    }
+    return [
+      SliverMainAxisGroup(slivers: slivers),
+      const SliverToBoxAdapter(child: SizedBox(height: 2)),
     ];
   }
 
@@ -1303,7 +1511,11 @@ class _RacesTabState extends State<RacesTab> {
   /// additive `myCurrentMatch` object. Every field is optional: an older
   /// backend (or a partial object) renders empty slots and no countdown rather
   /// than throwing.
-  Widget _buildTournamentRow(Map<String, dynamic> t, int index) {
+  Widget _buildTournamentRow(
+    Map<String, dynamic> t,
+    int index, {
+    String favoriteKeyPrefix = 'tournament',
+  }) {
     final id = Tournament.id(t) ?? '';
     final name = Tournament.name(t);
     final identityName = Tournament.myIdentityDisplayName(t);
@@ -1312,6 +1524,10 @@ class _RacesTabState extends State<RacesTab> {
     final match = Tournament.myCurrentMatch(t);
     final liveRaceId = Tournament.liveMatchRaceId(t);
     final isLive = liveRaceId != null || match != null;
+    final isFavorite = _favoriteOf(_withFavoriteOverlay(t, isTournament: true));
+    final favoriteBusy = _favoriteInFlight.contains(
+      _favoriteKey(id, isTournament: true),
+    );
 
     final round = Tournament.currentRound(t);
     final total = Tournament.totalRounds(t);
@@ -1426,31 +1642,49 @@ class _RacesTabState extends State<RacesTab> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Column(
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              name,
-                              style: PixelText.title(
-                                size: 18,
-                                color: AppColors.of(context).textDark,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: PixelText.title(
+                                      size: 18,
+                                      color: AppColors.of(context).textDark,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: _buildMetaChip(
+                                      roundLabel,
+                                      backgroundColor: AppColors.of(
+                                        context,
+                                      ).pillGold.withValues(alpha: 0.30),
+                                      textColor: AppColors.of(context).textDark,
+                                      borderColor: AppColors.of(
+                                        context,
+                                      ).pillGoldDark,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
                             ),
-                            const SizedBox(height: 4),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: _buildMetaChip(
-                                roundLabel,
-                                backgroundColor: AppColors.of(
-                                  context,
-                                ).pillGold.withValues(alpha: 0.30),
-                                textColor: AppColors.of(context).textDark,
-                                borderColor: AppColors.of(context).pillGoldDark,
-                              ),
+                            const SizedBox(width: 4),
+                            _buildFavoriteButton(
+                              t,
+                              name: name,
+                              isFavorite: isFavorite,
+                              favoriteBusy: favoriteBusy,
+                              isTournament: true,
+                              keyPrefix: favoriteKeyPrefix,
                             ),
                           ],
                         ),
@@ -1561,11 +1795,70 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
+  Widget _buildFavoriteButton(
+    Map<String, dynamic> race, {
+    required String name,
+    required bool isFavorite,
+    required bool favoriteBusy,
+    required bool isTournament,
+    String keyPrefix = 'race',
+  }) {
+    final rawRaceId = race['id'];
+    final raceId = rawRaceId is String ? rawRaceId : '';
+    return Semantics(
+      button: true,
+      toggled: isFavorite,
+      label: isFavorite
+          ? 'Remove $name from favorites'
+          : 'Add $name to favorites',
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: InkWell(
+          key: Key('$keyPrefix-favorite-$raceId'),
+          customBorder: const CircleBorder(),
+          onTap: favoriteBusy
+              ? null
+              : () => _toggleFavorite(race, isTournament: isTournament),
+          child: Center(
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isFavorite
+                    ? AppColors.of(context).pillGold.withValues(alpha: 0.22)
+                    : AppColors.of(
+                        context,
+                      ).parchmentDark.withValues(alpha: 0.35),
+                border: Border.all(
+                  color: isFavorite
+                      ? AppColors.of(context).pillGoldDark
+                      : AppColors.of(context).parchmentBorder,
+                  width: 1,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                isFavorite ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                size: 15,
+                color: isFavorite
+                    ? AppColors.of(context).pillGoldDark
+                    : AppColors.of(context).textMid,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildRaceRow(
     Map<String, dynamic> race, {
     bool isInvite = false,
     GlobalKey? cardKey,
     GlobalKey? boxKey,
+    String favoriteKeyPrefix = 'race',
   }) {
     final raceId = race['id'] as String? ?? '';
     final name = race['name'] as String? ?? 'Race';
@@ -1607,7 +1900,9 @@ class _RacesTabState extends State<RacesTab> {
         ((placementPrivacyActive || legacyActiveRankUnsafe) &&
             myPlacement == null);
     final isFavorite = _favoriteOf(_withFavoriteOverlay(race));
-    final favoriteBusy = _favoriteInFlight.contains(raceId);
+    final favoriteBusy = _favoriteInFlight.contains(
+      _favoriteKey(raceId, isTournament: false),
+    );
     final canFavorite = !isInvite && raceId.isNotEmpty;
     final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
     // Canonical per-slot inventory. A well-formed list (including an empty
@@ -1770,213 +2065,179 @@ class _RacesTabState extends State<RacesTab> {
               onTap: raceId.isEmpty
                   ? null
                   : () => _navigateToRaceDetail(raceId),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
-                child: Row(
-                  key: Key('race-card-header-$raceId'),
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+              child: Stack(
+                children: [
+                  Padding(
+                    // Keep the pin's corner clear of the title and give the
+                    // card's navigation affordance its own visual lane.
+                    padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+                    child: Row(
+                      key: Key('race-card-header-$raceId'),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  name,
-                                  style: PixelText.title(
-                                    size: 18,
-                                    color: AppColors.of(context).textDark,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      name,
+                                      style: PixelText.title(
+                                        size: 18,
+                                        color: AppColors.of(context).textDark,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                  if (isTeamRace && teamSize != null) ...[
+                                    const SizedBox(width: 6),
+                                    TeamFormatChip(teamSize: teamSize),
+                                  ],
+                                  if (placementChip != null) ...[
+                                    const SizedBox(width: 8),
+                                    KeyedSubtree(
+                                      key: Key('race-placement-chip-$raceId'),
+                                      child: placementChip,
+                                    ),
+                                  ],
+                                  if (canFavorite) ...[
+                                    const SizedBox(width: 4),
+                                    _buildFavoriteButton(
+                                      race,
+                                      name: name,
+                                      isFavorite: isFavorite,
+                                      favoriteBusy: favoriteBusy,
+                                      isTournament: false,
+                                      keyPrefix: favoriteKeyPrefix,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              // One time line for every status, directly under the
+                              // name/placement line.
+                              Text(
+                                timeLabel,
+                                key: Key('race-time-label-$raceId'),
+                                style: PixelText.body(
+                                  size: 15,
+                                  color: timeColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                              // Active races then show the user's race inventory
+                              // (4 slots: held powerup sprites, mystery-box crates, then
+                              // queued crates, then empty). Everything else keeps the
+                              // runner count.
+                              if (status == 'ACTIVE') ...[
+                                // TR-806: mini team scoreline (only when the payload
+                                // carries totals — older backends simply omit it).
+                                if (teamTotals != null) ...[
+                                  const SizedBox(height: 4),
+                                  TeamScoreline(
+                                    teamAName: TeamRace.teamName(
+                                      race,
+                                      RaceTeam.teamA,
+                                    ),
+                                    teamBName: TeamRace.teamName(
+                                      race,
+                                      RaceTeam.teamB,
+                                    ),
+                                    teamATotal: teamTotals.$1,
+                                    teamBTotal: teamTotals.$2,
+                                    showRope: false,
+                                  ),
+                                  if (teamsAsOfLabel != null)
+                                    Padding(
+                                      key: Key('team-totals-as-of-$raceId'),
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        teamsAsOfLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: PixelText.body(
+                                          size: 10,
+                                          color: AppColors.of(
+                                            context,
+                                          ).textMid.withValues(alpha: 0.8),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                                const SizedBox(height: 4),
+                                // Boxes and the buff/debuff badges share one row, split
+                                // by a slim muted rule. The separator + cluster only
+                                // render when there are active effects, so a no-effects
+                                // row is just the boxes as before.
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildInventoryRow(
+                                        slotItems,
+                                        mysteryBoxCount,
+                                        queuedBoxCount,
+                                        rowKey: boxKey,
+                                      ),
+                                      if (effectCluster != null) ...[
+                                        Padding(
+                                          key: Key('race-effects-sep-$raceId'),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                          ),
+                                          child: Container(
+                                            width: 1,
+                                            height: 22,
+                                            color: AppColors.of(
+                                              context,
+                                            ).textMid.withValues(alpha: 0.35),
+                                          ),
+                                        ),
+                                        effectCluster,
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ] else ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
+                                  style: PixelText.body(
+                                    size: 14,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
                                 ),
-                              ),
-                              if (isTeamRace && teamSize != null) ...[
-                                const SizedBox(width: 6),
-                                TeamFormatChip(teamSize: teamSize),
-                              ],
-                              if (placementChip != null) ...[
-                                const SizedBox(width: 8),
-                                KeyedSubtree(
-                                  key: Key('race-placement-chip-$raceId'),
-                                  child: placementChip,
-                                ),
                               ],
                             ],
-                          ),
-                          const SizedBox(height: 3),
-                          // One time line for every status, directly under the
-                          // name/placement line.
-                          Text(
-                            timeLabel,
-                            key: Key('race-time-label-$raceId'),
-                            style: PixelText.body(size: 15, color: timeColor),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                          // Active races then show the user's race inventory
-                          // (4 slots: held powerup sprites, mystery-box crates, then
-                          // queued crates, then empty). Everything else keeps the
-                          // runner count.
-                          if (status == 'ACTIVE') ...[
-                            // TR-806: mini team scoreline (only when the payload
-                            // carries totals — older backends simply omit it).
-                            if (teamTotals != null) ...[
-                              const SizedBox(height: 4),
-                              TeamScoreline(
-                                teamAName: TeamRace.teamName(
-                                  race,
-                                  RaceTeam.teamA,
-                                ),
-                                teamBName: TeamRace.teamName(
-                                  race,
-                                  RaceTeam.teamB,
-                                ),
-                                teamATotal: teamTotals.$1,
-                                teamBTotal: teamTotals.$2,
-                                showRope: false,
-                              ),
-                              if (teamsAsOfLabel != null)
-                                Padding(
-                                  key: Key('team-totals-as-of-$raceId'),
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    teamsAsOfLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: PixelText.body(
-                                      size: 10,
-                                      color: AppColors.of(
-                                        context,
-                                      ).textMid.withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                            const SizedBox(height: 4),
-                            // Boxes and the buff/debuff badges share one row, split
-                            // by a slim muted rule. The separator + cluster only
-                            // render when there are active effects, so a no-effects
-                            // row is just the boxes as before.
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _buildInventoryRow(
-                                    slotItems,
-                                    mysteryBoxCount,
-                                    queuedBoxCount,
-                                    rowKey: boxKey,
-                                  ),
-                                  if (effectCluster != null) ...[
-                                    Padding(
-                                      key: Key('race-effects-sep-$raceId'),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 7,
-                                      ),
-                                      child: Container(
-                                        width: 1,
-                                        height: 22,
-                                        color: AppColors.of(
-                                          context,
-                                        ).textMid.withValues(alpha: 0.35),
-                                      ),
-                                    ),
-                                    effectCluster,
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
-                              style: PixelText.body(
-                                size: 14,
-                                color: AppColors.of(context).textMid,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (showTrailingStatus) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        statusLabel,
-                        style: PixelText.title(size: 12, color: badgeColor),
-                        textAlign: TextAlign.right,
-                      ),
-                    ],
-                    if (canFavorite) ...[
-                      const SizedBox(width: 2),
-                      Semantics(
-                        button: true,
-                        toggled: isFavorite,
-                        label: isFavorite
-                            ? 'Remove $name from favorites'
-                            : 'Add $name to favorites',
-                        child: SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: Material(
-                            color: Colors.transparent,
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              key: Key('race-favorite-$raceId'),
-                              customBorder: const CircleBorder(),
-                              onTap: favoriteBusy
-                                  ? null
-                                  : () => _toggleFavorite(race),
-                              child: Container(
-                                margin: const EdgeInsets.all(5),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isFavorite
-                                      ? AppColors.of(
-                                          context,
-                                        ).pillGold.withValues(alpha: 0.22)
-                                      : AppColors.of(
-                                          context,
-                                        ).parchmentDark.withValues(alpha: 0.35),
-                                  border: Border.all(
-                                    color: isFavorite
-                                        ? AppColors.of(context).pillGoldDark
-                                        : AppColors.of(context).parchmentBorder,
-                                    width: 1.5,
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Icon(
-                                  isFavorite
-                                      ? Icons.star_rounded
-                                      : Icons.star_border_rounded,
-                                  size: 23,
-                                  color: isFavorite
-                                      ? AppColors.of(context).pillGoldDark
-                                      : AppColors.of(context).textMid,
-                                ),
-                              ),
-                            ),
                           ),
                         ),
-                      ),
-                    ],
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      key: Key('race-card-arrow-$raceId'),
-                      size: 30,
-                      color: AppColors.of(context).successText,
+                        if (showTrailingStatus) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            statusLabel,
+                            style: PixelText.title(size: 12, color: badgeColor),
+                            textAlign: TextAlign.right,
+                          ),
+                        ],
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          key: Key('race-card-arrow-$raceId'),
+                          size: 30,
+                          color: AppColors.of(context).successText,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

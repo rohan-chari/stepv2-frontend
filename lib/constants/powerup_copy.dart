@@ -168,16 +168,18 @@ class PowerupCopyEntry {
   final PowerupStackingRule? stacking;
   final PowerupAvailability? availability;
 
-  PowerupCopyEntry copyWith({PowerupStackingRule? stacking}) =>
-      PowerupCopyEntry(
-        type: type,
-        name: name,
-        description: description,
-        shortDescription: shortDescription,
-        upgradeTierLabels: upgradeTierLabels,
-        stacking: stacking,
-        availability: availability,
-      );
+  PowerupCopyEntry copyWith({
+    PowerupStackingRule? stacking,
+    bool clearAvailability = false,
+  }) => PowerupCopyEntry(
+    type: type,
+    name: name,
+    description: description,
+    shortDescription: shortDescription,
+    upgradeTierLabels: upgradeTierLabels,
+    stacking: stacking ?? this.stacking,
+    availability: clearAvailability ? null : availability,
+  );
 
   Map<String, dynamic> toJson() => {
     'type': type,
@@ -285,7 +287,9 @@ class PowerupCopySnapshot {
           : null,
       availabilityVersion:
           raw['availabilityVersion'] is num &&
-              (raw['availabilityVersion'] as num).isFinite
+              (raw['availabilityVersion'] as num).isFinite &&
+              raw['availabilityVersion'] ==
+                  (raw['availabilityVersion'] as num).roundToDouble()
           ? (raw['availabilityVersion'] as num).toInt()
           : null,
       entries: entries,
@@ -335,17 +339,21 @@ abstract final class PowerupCopy {
   static List<PowerupCopyEntry> get guideEntries {
     final snapshot = _memory ?? _persisted;
     if (snapshot != null) {
+      final authoritativeAvailability =
+          snapshot.availabilityVersion == 2 &&
+          snapshot.entries.values.every((entry) => entry.availability != null);
       final result = <PowerupCopyEntry>[
         for (final entry in snapshot.entries.values)
           if (entry.type != 'IMPOSTER' &&
-              (snapshot.availabilityVersion == null ||
+              (!authoritativeAvailability ||
                   entry.availability?.available == true))
-            snapshot.stackingVersion == null
-                ? entry.copyWith(stacking: _bundledStacking[entry.type])
-                : entry,
+            (snapshot.stackingVersion == null
+                    ? entry.copyWith(stacking: _bundledStacking[entry.type])
+                    : entry)
+                .copyWith(clearAvailability: !authoritativeAvailability),
       ];
       final present = result.map((entry) => entry.type).toSet();
-      if (snapshot.availabilityVersion != null) return result;
+      if (authoritativeAvailability) return result;
       for (final type in bundledTypes) {
         if (type == 'IMPOSTER' || present.contains(type)) continue;
         result.add(_bundledGuideEntry(type));
@@ -919,10 +927,10 @@ abstract final class PowerupCopy {
           'Only one Signal Jammer can affect a racer. It can coexist with Power Outage and prevents powerup use, including Cleanse and Quick Rinse.',
     ),
     'LEECH': PowerupStackingRule(
-      samePowerup: SamePowerupStacking.limited,
+      samePowerup: SamePowerupStacking.blocked,
       otherEffects: OtherEffectsStacking.conditional,
       summary:
-          'One Leech is allowed per attacker-target pair and at most two attackers may leech one victim. Transfers combine with other effective-step modifiers.',
+          'Only one live Leech can affect a victim at a time, regardless of attacker. Transfers combine with other effective-step modifiers.',
     ),
     'DEFENSE_SCAN': PowerupStackingRule(
       samePowerup: SamePowerupStacking.notApplicable,
