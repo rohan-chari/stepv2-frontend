@@ -8,6 +8,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 class _FakeBackendApiService extends BackendApiService {
   int fetchFriendsCalls = 0;
+  int fetchProfileCalls = 0;
 
   @override
   Future<Map<String, dynamic>> fetchLeaderboard({
@@ -50,6 +51,28 @@ class _FakeBackendApiService extends BackendApiService {
     return {
       'friends': const [],
       'pending': {'incoming': const [], 'outgoing': const []},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async {
+    fetchProfileCalls += 1;
+    return {
+      'contract': 'public-profile-v1',
+      'user': {
+        'id': userId,
+        'displayName': userId == 'user-1' ? 'Trail Walker' : 'AceWinner',
+        'profilePhotoUrl': null,
+        'equippedAnimal': null,
+        'equippedAccessories': const <Map<String, dynamic>>[],
+      },
+      'stats': {
+        'racePodiums': {'first': 2, 'second': 1, 'third': 3},
+        'avgStepsPerDay': 6543,
+      },
     };
   }
 }
@@ -110,22 +133,30 @@ void main() {
     },
   );
 
-  testWidgets('tapping your own row does not open an add-friend sheet', (
-    tester,
-  ) async {
-    final authService = await _createAuthService();
-    final api = _FakeBackendApiService();
+  testWidgets(
+    'tapping your own row opens self profile without friend actions',
+    (tester) async {
+      final authService = await _createAuthService();
+      final api = _FakeBackendApiService();
 
-    await tester.pumpWidget(
-      _buildLeaderboard(authService: authService, backendApiService: api),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildLeaderboard(authService: authService, backendApiService: api),
+      );
+      await tester.pump();
 
-    await tester.tap(find.text('@Trail Walker').last);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('@Trail Walker').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
-    expect(api.fetchFriendsCalls, 0);
-    expect(find.text('ADD FRIEND'), findsNothing);
-  });
+      expect(find.byKey(const Key('public-profile-sheet')), findsOneWidget);
+      expect(find.text('6543'), findsOneWidget);
+      expect(api.fetchProfileCalls, 1);
+      expect(api.fetchFriendsCalls, 0);
+      expect(find.text('ADD FRIEND'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('public-profile-action-remove')),
+        findsNothing,
+      );
+    },
+  );
 }

@@ -17,6 +17,9 @@ class RaceFeedEvent {
   final String? impactScope;
   final int? deltaSteps;
   final String? attackerDisplayName;
+  final String? redirectAttackerUserId;
+  final String? redirectDecoyOwnerUserId;
+  final String? redirectTargetUserId;
   final DateTime createdAt;
 
   const RaceFeedEvent({
@@ -31,6 +34,9 @@ class RaceFeedEvent {
     this.impactScope,
     this.deltaSteps,
     this.attackerDisplayName,
+    this.redirectAttackerUserId,
+    this.redirectDecoyOwnerUserId,
+    this.redirectTargetUserId,
   });
 
   static RaceFeedEvent? tryFromJson(Object? raw) {
@@ -42,6 +48,14 @@ class RaceFeedEvent {
     final impactScope = raw['impactScope'];
     final rawDelta = raw['deltaSteps'];
     final rawAttacker = raw['attackerDisplayName'];
+    final metadata = raw['metadata'];
+    String? metadataUserId(String key) {
+      if (metadata is! Map) return null;
+      final value = metadata[key];
+      if (value is! String || value.trim().isEmpty) return null;
+      return value;
+    }
+
     final deltaSteps =
         rawDelta is num &&
             rawDelta.isFinite &&
@@ -77,6 +91,9 @@ class RaceFeedEvent {
       attackerDisplayName: attacker.isNotEmpty && attacker.runes.length <= 30
           ? attacker
           : null,
+      redirectAttackerUserId: metadataUserId('attackerUserId'),
+      redirectDecoyOwnerUserId: metadataUserId('decoyOwnerUserId'),
+      redirectTargetUserId: metadataUserId('redirectedUserId'),
       createdAt: createdRaw != null
           ? DateTime.tryParse(
                   createdRaw is String ? createdRaw : '',
@@ -124,7 +141,8 @@ class RaceFeedService extends ChangeNotifier {
   Timer? _pollTimer;
   Future<void>? _privateRefreshInFlight;
 
-  List<RaceFeedEvent> get events => List.unmodifiable(_events);
+  List<RaceFeedEvent> get events =>
+      List.unmodifiable(_causalActivityPresentation(_events));
   bool get isLoading => _loading;
   bool get hasMore => _sharedHasMore || _privateHasMore;
   Object? get lastError => _lastError;
@@ -419,6 +437,68 @@ class RaceFeedService extends ChangeNotifier {
       final byTime = b.createdAt.compareTo(a.createdAt);
       return byTime != 0 ? byTime : b.id.compareTo(a.id);
     });
+  }
+
+  /// Activity is newest-first, but a Decoy redirect is the cause of its
+  /// separately persisted terminal Hitchhike block. Swap only those two
+  /// matched rows for causal reading; storage remains newest-first so cursors,
+  /// polling, private-feed suppression, and pagination retain their contract.
+  static List<RaceFeedEvent> _causalActivityPresentation(
+    List<RaceFeedEvent> newestFirst,
+  ) {
+    final presented = List<RaceFeedEvent>.of(newestFirst);
+    final claimedTerminalIds = <String>{};
+    for (final redirect in newestFirst) {
+      if (redirect.eventType != 'POWERUP_REDIRECTED' ||
+          redirect.powerupType != 'HITCHHIKE') {
+        continue;
+      }
+      final attackerId = redirect.redirectAttackerUserId;
+      final decoyOwnerId = redirect.redirectDecoyOwnerUserId;
+      final redirectedId = redirect.redirectTargetUserId;
+      if (attackerId == null ||
+          decoyOwnerId == null ||
+          redirectedId == null ||
+          redirect.actorUserId != decoyOwnerId ||
+          redirect.targetUserId != redirectedId) {
+        continue;
+      }
+      final terminalCreatedAt = redirect.createdAt.add(
+        const Duration(milliseconds: 1),
+      );
+
+      RaceFeedEvent? terminal;
+      for (final candidate in newestFirst) {
+        if (claimedTerminalIds.contains(candidate.id) ||
+            candidate.eventType != 'POWERUP_BLOCKED' ||
+            candidate.powerupType != 'HITCHHIKE' ||
+            candidate.actorUserId != redirectedId ||
+            candidate.targetUserId != attackerId ||
+            !candidate.createdAt.isAtSameMomentAs(terminalCreatedAt)) {
+          continue;
+        }
+        if (terminal == null || candidate.id.compareTo(terminal.id) < 0) {
+          terminal = candidate;
+        }
+      }
+      if (terminal == null) continue;
+      claimedTerminalIds.add(terminal.id);
+      final redirectIndex = presented.indexWhere(
+        (event) => event.id == redirect.id,
+      );
+      final terminalIndex = presented.indexWhere(
+        (event) => event.id == terminal!.id,
+      );
+      if (terminalIndex < 0 ||
+          redirectIndex < 0 ||
+          terminalIndex >= redirectIndex) {
+        continue;
+      }
+      final displaced = presented[terminalIndex];
+      presented[terminalIndex] = presented[redirectIndex];
+      presented[redirectIndex] = displaced;
+    }
+    return presented;
   }
 
   String? _readCursor(Object? raw) =>

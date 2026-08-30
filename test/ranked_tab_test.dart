@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/ranked_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -7,7 +8,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/home_course_track.dart'
     show AnimatedCapybaraWithAccessories;
 
-enum _Mode { ranked, unranked, notFound }
+enum _Mode { ranked, rankedSelfRow, unranked, notFound }
 
 const _kTiers = [
   {'key': 'BRONZE', 'label': 'Bronze', 'floor': 0, 'reward': 100},
@@ -71,10 +72,11 @@ class _FakeRankedApi extends BackendApiService {
       };
     }
 
+    final selfInBody = mode == _Mode.rankedSelfRow;
     return {
       'season': season,
       'currentUser': {
-        'rank': 2,
+        'rank': selfInBody ? 4 : 2,
         'points': 700,
         'tier': 'GOLD',
         'division': 3,
@@ -92,8 +94,26 @@ class _FakeRankedApi extends BackendApiService {
             {'slot': 'HEAD', 'assetKey': 'top-hat'},
           ],
         },
+        if (selfInBody) ...[
+          {
+            'rank': 2,
+            'userId': 'other-2',
+            'displayName': 'FastPaws',
+            'points': 1200,
+            'tier': 'DIAMOND',
+            'division': null,
+          },
+          {
+            'rank': 3,
+            'userId': 'other-3',
+            'displayName': 'HillDancer',
+            'points': 900,
+            'tier': 'GOLD',
+            'division': 2,
+          },
+        ],
         {
-          'rank': 2,
+          'rank': selfInBody ? 4 : 2,
           'userId': 'user-1',
           'displayName': 'Trail Walker',
           'points': 700,
@@ -107,6 +127,25 @@ class _FakeRankedApi extends BackendApiService {
       'tiers': _kTiers,
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async => {
+    'contract': 'public-profile-v1',
+    'user': {
+      'id': userId,
+      'displayName': 'Trail Walker',
+      'profilePhotoUrl': null,
+      'equippedAnimal': null,
+      'equippedAccessories': const <Map<String, dynamic>>[],
+    },
+    'stats': {
+      'racePodiums': {'first': 2, 'second': 1, 'third': 0},
+      'avgStepsPerDay': 7654,
+    },
+  };
 }
 
 Future<AuthService> _createAuthService() async {
@@ -132,6 +171,16 @@ Widget _build(AuthService auth, BackendApiService api) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'com.example.bara',
+      version: '2.3.9',
+      buildNumber: '239',
+      buildSignature: '',
+    );
+  });
 
   testWidgets('shows the tier hero and ladder when the user is ranked', (
     tester,
@@ -178,6 +227,34 @@ void main() {
     expect(
       capybaras.map((capybara) => capybara.accessories.single['assetKey']),
       containsAll(['top-hat', 'hoodie']),
+    );
+  });
+
+  testWidgets('legacy self row opens self profile without friend actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _createAuthService();
+    await tester.pumpWidget(_build(auth, _FakeRankedApi(_Mode.rankedSelfRow)));
+    await tester.pump();
+
+    final selfRow = find.text('@Trail Walker');
+    await tester.ensureVisible(selfRow);
+    await tester.pump();
+    await tester.tap(selfRow);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(const Key('public-profile-sheet')), findsOneWidget);
+    expect(find.text('7654'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('public-profile-action-add')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('public-profile-action-remove')),
+      findsNothing,
     );
   });
 

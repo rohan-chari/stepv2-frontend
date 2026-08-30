@@ -1,39 +1,7 @@
 import 'package:flutter/material.dart';
 import '../styles.dart';
 import 'player_avatar.dart';
-import '../constants/powerup_copy.dart';
-
-const _offensiveTypes = {
-  'LEG_CRAMP',
-  'RED_CARD',
-  'WRONG_TURN',
-  'BANANA_PEEL',
-  'DETOUR_SIGN',
-  // IMPOSTER targets a rival (swaps their leaderboard display); classify it with
-  // the offensive/targeted feed accent.
-  'IMPOSTER',
-  // RAINSTORM debuffs every other racer at once — offensive accent.
-  'RAINSTORM',
-  // SIGNAL_JAMMER stops a rival from using powerups for 1 hour — offensive.
-  'SIGNAL_JAMMER',
-};
-
-// SHELL is the Turtle character's passive block, not a held powerup, but it
-// reads as a defensive event in the feed and gets the same shield accent.
-const _shieldTypes = {'COMPRESSION_SOCKS', 'MIRROR', 'SHELL'};
-
-const _boostTypes = {
-  'PROTEIN_SHAKE',
-  'RUNNERS_HIGH',
-  'SECOND_WIND',
-  'STEALTH_MODE',
-  'FANNY_PACK',
-  'SHORTCUT',
-  'TRAIL_MIX',
-  // CLEANSE is a positive/utility self-powerup (clears opponent debuffs); treat
-  // it as a boost so the feed renders it with the positive accent color.
-  'CLEANSE',
-};
+import '../utils/powerup_feed_presentation.dart';
 
 /// A feed entry with avatar, color-coded accent, and rich text.
 class FeedBubble extends StatelessWidget {
@@ -54,21 +22,14 @@ class FeedBubble extends StatelessWidget {
     this.actorIsUser = false,
   });
 
-  Color _accentColor(BuildContext context) {
+  Color _colorForMention(BuildContext context, PowerupFeedMention mention) {
     final colors = AppColors.of(context);
-    if (eventType == 'POWERUP_BLOCKED' || eventType == 'POWERUP_REFLECTED') {
-      return colors.feedShield;
-    }
-    if (eventType == 'MYSTERY_BOX_EARNED' ||
-        eventType == 'MYSTERY_BOX_OPENED') {
-      return colors.feedGold;
-    }
-    if (eventType == 'POWERUP_USED' && powerupType != null) {
-      if (_offensiveTypes.contains(powerupType)) return colors.feedAttack;
-      if (_shieldTypes.contains(powerupType)) return colors.feedShield;
-      if (_boostTypes.contains(powerupType)) return colors.feedBoost;
-    }
-    return colors.textMid.withValues(alpha: colors.isDark ? 0.9 : 0.4);
+    return switch (mention.valence) {
+      PowerupFeedValence.harmful => colors.feedAttack,
+      PowerupFeedValence.beneficial => colors.feedPositive,
+      PowerupFeedValence.neutral =>
+        mention.type == 'MYSTERY_POTION' ? colors.feedGold : colors.textMid,
+    };
   }
 
   @override
@@ -99,34 +60,42 @@ class FeedBubble extends StatelessWidget {
 
   Widget _buildRichDescription(BuildContext context) {
     final colors = AppColors.of(context);
-    if (powerupType != null) {
-      // Highlights the powerup's name inside the server-authored description.
-      // Resolves through the consolidated copy source so a backend copy change
-      // keeps matching the sentence the backend sent.
-      final powerupName = PowerupCopy.nameFor(powerupType);
-      if (powerupName.isNotEmpty && description.contains(powerupName)) {
-        final parts = description.split(powerupName);
-        final spans = <TextSpan>[];
-        for (int i = 0; i < parts.length; i++) {
-          if (parts[i].isNotEmpty) {
-            spans.add(
-              TextSpan(
-                text: parts[i],
-                style: PixelText.body(size: 16, color: colors.textDark),
-              ),
-            );
-          }
-          if (i < parts.length - 1) {
-            spans.add(
-              TextSpan(
-                text: powerupName,
-                style: PixelText.title(size: 15, color: _accentColor(context)),
-              ),
-            );
-          }
+    final mentions = PowerupFeedPresentation.mentionsIn(
+      description,
+      hintedType: powerupType,
+    );
+    if (mentions.isNotEmpty) {
+      final spans = <TextSpan>[];
+      var cursor = 0;
+      for (final mention in mentions) {
+        if (mention.start > cursor) {
+          spans.add(
+            TextSpan(
+              text: description.substring(cursor, mention.start),
+              style: PixelText.body(size: 16, color: colors.textDark),
+            ),
+          );
         }
-        return RichText(text: TextSpan(children: spans));
+        spans.add(
+          TextSpan(
+            text: description.substring(mention.start, mention.end),
+            style: PixelText.title(
+              size: 15,
+              color: _colorForMention(context, mention),
+            ),
+          ),
+        );
+        cursor = mention.end;
       }
+      if (cursor < description.length) {
+        spans.add(
+          TextSpan(
+            text: description.substring(cursor),
+            style: PixelText.body(size: 16, color: colors.textDark),
+          ),
+        );
+      }
+      return RichText(text: TextSpan(children: spans));
     }
 
     return Text(

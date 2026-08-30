@@ -104,10 +104,13 @@ abstract final class AppColors {
   static const medalBronze = Color(0xFFCD7F32);
 
   // Feed event tints
-  static const feedAttack = error;
+  // Inline feed labels are normal-sized text on parchment. These darker light
+  // palette hues clear WCAG AA while retaining the established red/green pair.
+  static const feedAttack = Color(0xFFAD5543);
   static const feedShield = Color(0xFF4A90D9);
   static const feedGold = Color(0xFFC49A48);
   static const feedBoost = roofLight;
+  static const feedPositive = roofMid;
 
   // Firefly
   static const fireflyGlow = Color(0xFFFFE87C);
@@ -200,6 +203,7 @@ enum _AppColorToken {
   feedShield,
   feedGold,
   feedBoost,
+  feedPositive,
   fireflyGlow,
   coinLight,
   coinMid,
@@ -300,6 +304,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     _AppColorToken.feedShield: AppColors.feedShield,
     _AppColorToken.feedGold: AppColors.feedGold,
     _AppColorToken.feedBoost: AppColors.feedBoost,
+    _AppColorToken.feedPositive: AppColors.feedPositive,
     _AppColorToken.fireflyGlow: AppColors.fireflyGlow,
     _AppColorToken.coinLight: AppColors.coinLight,
     _AppColorToken.coinMid: AppColors.coinMid,
@@ -373,6 +378,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     _AppColorToken.feedShield: const Color(0xFF78AEE8),
     _AppColorToken.feedGold: const Color(0xFFD6AD55),
     _AppColorToken.feedBoost: const Color(0xFF8FC5A5),
+    _AppColorToken.feedPositive: const Color(0xFF8FC5A5),
     // Night medals follow the twilight violet / slate-blue migration (see the
     // pillGold note below) instead of the muddy daytime golds and bronzes,
     // which read as illegible browns on the dark parchment.
@@ -474,6 +480,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
   Color get feedShield => _get(_AppColorToken.feedShield);
   Color get feedGold => _get(_AppColorToken.feedGold);
   Color get feedBoost => _get(_AppColorToken.feedBoost);
+  Color get feedPositive => _get(_AppColorToken.feedPositive);
   Color get fireflyGlow => _get(_AppColorToken.fireflyGlow);
   Color get coinLight => _get(_AppColorToken.coinLight);
   Color get coinMid => _get(_AppColorToken.coinMid);

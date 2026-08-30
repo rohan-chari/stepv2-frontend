@@ -395,8 +395,7 @@ class _RacePodiumState extends State<RacePodium>
     final canOpen =
         widget.onProfileTap != null &&
         finisher.userId != null &&
-        finisher.userId!.isNotEmpty &&
-        !finisher.isViewer;
+        finisher.userId!.isNotEmpty;
     if (!canOpen) return header;
     return Semantics(
       button: true,

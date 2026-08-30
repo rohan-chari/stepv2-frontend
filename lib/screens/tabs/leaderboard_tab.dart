@@ -931,8 +931,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _withFriendTap(_LeaderboardRow row, Widget child) {
     final userId = row.userId;
-    final canAddFriend = !row.isMe && userId != null && userId.isNotEmpty;
-    if (!canAddFriend) return child;
+    final canOpenProfile = userId != null && userId.isNotEmpty;
+    if (!canOpenProfile) return child;
 
     return Material(
       type: MaterialType.transparency,
@@ -957,6 +957,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       userId: userId,
       fallbackName: displayName,
       fallbackPhotoUrl: profilePhotoUrl,
+      initialRelationship: userId == widget.authService.userId
+          ? PublicProfileRelationship.self
+          : PublicProfileRelationship.unknown,
     );
   }
 }

@@ -222,15 +222,17 @@ void main() {
     );
   });
 
-  // §8.3 — the race feed treats a Shell block as a shield ---------------------
-  testWidgets('FeedBubble gives a SHELL use the shield accent', (tester) async {
-    late Color shieldColor;
+  // §8.3 — the race feed treats Shell as a beneficial defense ----------------
+  testWidgets('FeedBubble gives a SHELL use the positive accent', (
+    tester,
+  ) async {
+    late Color positiveColor;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Builder(
             builder: (context) {
-              shieldColor = AppColors.of(context).feedShield;
+              positiveColor = AppColors.of(context).feedPositive;
               return const FeedBubble(
                 eventType: 'POWERUP_USED',
                 powerupType: 'SHELL',
@@ -256,7 +258,7 @@ void main() {
         .whereType<TextSpan>()
         .toList();
     final shellSpan = spans.firstWhere((s) => s.text == 'Shell');
-    expect(shellSpan.style?.color, shieldColor);
+    expect(shellSpan.style?.color, positiveColor);
   });
 
   // §10.5 --------------------------------------------------------------------

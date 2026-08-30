@@ -632,7 +632,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('self highlight and forfeited interaction survive compaction', (
+  testWidgets('self profile and forfeited interaction survive compaction', (
     tester,
   ) async {
     await _pump(tester);
@@ -649,7 +649,9 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pump(const Duration(milliseconds: 300));
 
     final forfeitedCell = find.byKey(const ValueKey('team-cell-ally-2'));
     await tester.ensureVisible(forfeitedCell);

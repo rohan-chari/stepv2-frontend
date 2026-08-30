@@ -70,6 +70,41 @@ Map<String, dynamic> _event(String id, {String? createdAt}) {
   };
 }
 
+Map<String, dynamic> _hitchhikeRedirect({
+  String id = 'redirect',
+  String createdAt = '2026-08-29T12:00:00.000Z',
+  bool includeMetadata = true,
+}) => {
+  'id': id,
+  'kind': 'SYSTEM',
+  'body': "Nathan's Decoy redirected Anjali's Hitchhike to Shefali.",
+  'eventType': 'POWERUP_REDIRECTED',
+  'powerupType': 'HITCHHIKE',
+  'actorUserId': 'decoy-owner',
+  'targetUserId': 'redirected-user',
+  if (includeMetadata)
+    'metadata': {
+      'attackerUserId': 'attacker',
+      'decoyOwnerUserId': 'decoy-owner',
+      'redirectedUserId': 'redirected-user',
+    },
+  'createdAt': createdAt,
+};
+
+Map<String, dynamic> _hitchhikeBlock({
+  String id = 'terminal-block',
+  String createdAt = '2026-08-29T12:00:00.001Z',
+}) => {
+  'id': id,
+  'kind': 'SYSTEM',
+  'body': "Shefali's Compression Socks blocked the redirected Hitchhike.",
+  'eventType': 'POWERUP_BLOCKED',
+  'powerupType': 'HITCHHIKE',
+  'actorUserId': 'redirected-user',
+  'targetUserId': 'attacker',
+  'createdAt': createdAt,
+};
+
 Map<String, dynamic> _privateEvent(
   String id, {
   String? sourceFeedEventId,
@@ -156,6 +191,106 @@ void main() {
     expect(service.events.map((e) => e.id), ['evt-2', 'evt-1']);
     expect(service.hasMore, isFalse);
   });
+
+  test(
+    'Activity presents a matched redirect before its terminal block',
+    () async {
+      final api = _FakeRaceFeedApi()
+        ..nextFetchMessages = [_hitchhikeBlock(), _hitchhikeRedirect()];
+      final service = RaceFeedService(
+        authService: await _authService(),
+        raceId: 'race-1',
+        api: api,
+      );
+
+      await service.loadInitial();
+
+      expect(service.events.map((event) => event.id), [
+        'redirect',
+        'terminal-block',
+      ]);
+    },
+  );
+
+  test(
+    'a redirect discovered across pagination reorders without cursor loss',
+    () async {
+      final api = _FakeRaceFeedApi()
+        ..nextFetchMessages = [
+          _event('newest', createdAt: '2026-08-29T12:00:01.000Z'),
+          _hitchhikeBlock(),
+        ]
+        ..nextCursor = 'opaque-page-2';
+      final service = RaceFeedService(
+        authService: await _authService(),
+        raceId: 'race-1',
+        api: api,
+      );
+      await service.loadInitial();
+
+      api.nextFetchMessages = [
+        _hitchhikeRedirect(),
+        _event('oldest', createdAt: '2026-08-29T11:59:59.000Z'),
+      ];
+      api.nextCursor = null;
+      await service.loadMore();
+
+      expect(api.lastCursor, 'opaque-page-2');
+      expect(service.events.map((event) => event.id), [
+        'newest',
+        'redirect',
+        'terminal-block',
+        'oldest',
+      ]);
+      expect(service.hasMore, isFalse);
+    },
+  );
+
+  test(
+    'missing redirect metadata preserves ordinary newest-first order',
+    () async {
+      final api = _FakeRaceFeedApi()
+        ..nextFetchMessages = [
+          _hitchhikeBlock(),
+          _hitchhikeRedirect(includeMetadata: false),
+        ];
+      final service = RaceFeedService(
+        authService: await _authService(),
+        raceId: 'race-1',
+        api: api,
+      );
+
+      await service.loadInitial();
+
+      expect(service.events.map((event) => event.id), [
+        'terminal-block',
+        'redirect',
+      ]);
+    },
+  );
+
+  test(
+    'same-user block sixty seconds later is not correlated to the redirect',
+    () async {
+      final api = _FakeRaceFeedApi()
+        ..nextFetchMessages = [
+          _hitchhikeBlock(createdAt: '2026-08-29T12:01:00.000Z'),
+          _hitchhikeRedirect(),
+        ];
+      final service = RaceFeedService(
+        authService: await _authService(),
+        raceId: 'race-1',
+        api: api,
+      );
+
+      await service.loadInitial();
+
+      expect(service.events.map((event) => event.id), [
+        'terminal-block',
+        'redirect',
+      ]);
+    },
+  );
 
   test(
     'refreshTop merges new events by id and re-sorts newest-first',

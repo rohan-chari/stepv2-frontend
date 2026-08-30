@@ -308,6 +308,7 @@ class _CompactRaceRequestApi extends BackendApiService {
     this.streamCompleter,
     this.legacyMessagesCompleter,
     this.compactProgressCompleter,
+    this.systemMessages = const [],
   });
 
   final Completer<RaceBootstrapResult>? bootstrapCompleter;
@@ -319,6 +320,7 @@ class _CompactRaceRequestApi extends BackendApiService {
   final Completer<RaceMessageStreamsResult>? streamCompleter;
   final Completer<Map<String, dynamic>>? legacyMessagesCompleter;
   final Completer<RaceProgressResult>? compactProgressCompleter;
+  final List<Map<String, dynamic>> systemMessages;
   int bootstrapCalls = 0;
   int legacyDetailsCalls = 0;
   int legacyProgressCalls = 0;
@@ -424,7 +426,7 @@ class _CompactRaceRequestApi extends BackendApiService {
     return RaceMessageStreamsResult(
       supported: true,
       systemResolved: true,
-      systemStream: const {'messages': [], 'nextCursor': null},
+      systemStream: {'messages': systemMessages, 'nextCursor': null},
       userResolved: includeUser,
       userStream: includeUser
           ? const {'messages': [], 'nextCursor': null}
@@ -506,9 +508,10 @@ class _FinishRewardRaceBackendApiService
 }
 
 class _TimelineRaceApi extends _ActivePaidRaceBackendApiService {
-  _TimelineRaceApi({this.capable = true});
+  _TimelineRaceApi({this.capable = true, this.messages});
 
   final bool capable;
+  final List<Map<String, dynamic>>? messages;
 
   @override
   Future<Map<String, dynamic>> fetchRaceTimeline({
@@ -518,26 +521,45 @@ class _TimelineRaceApi extends _ActivePaidRaceBackendApiService {
     int limit = 30,
   }) async => {
     if (capable) 'timelineVersion': 1,
-    'messages': const [
-      {
-        'kind': 'USER',
-        'id': 'chat-timeline',
-        'createdAt': '2026-08-25T15:04:05.000Z',
-        'body': 'Catch me if you can',
-        'senderId': 'user-2',
-        'senderName': 'Rival',
-      },
-      {
-        'kind': 'SYSTEM',
-        'id': 'event-timeline',
-        'createdAt': '2026-08-25T15:03:05.000Z',
-        'body': 'Rival took the lead',
-        'eventType': 'LEAD_CHANGE',
-        'actorUserId': 'user-2',
-      },
-    ],
+    'messages':
+        messages ??
+        const [
+          {
+            'kind': 'USER',
+            'id': 'chat-timeline',
+            'createdAt': '2026-08-25T15:04:05.000Z',
+            'body': 'Catch me if you can',
+            'senderId': 'user-2',
+            'senderName': 'Rival',
+          },
+          {
+            'kind': 'SYSTEM',
+            'id': 'event-timeline',
+            'createdAt': '2026-08-25T15:03:05.000Z',
+            'body': 'Rival took the lead',
+            'eventType': 'LEAD_CHANGE',
+            'actorUserId': 'user-2',
+          },
+        ],
     'nextCursor': null,
   };
+}
+
+Iterable<TextSpan> _raceDetailLeafSpans(InlineSpan span) sync* {
+  if (span is! TextSpan) return;
+  if (span.text != null) yield span;
+  for (final child in span.children ?? const <InlineSpan>[]) {
+    yield* _raceDetailLeafSpans(child);
+  }
+}
+
+Color? _raceDetailSpanColor(WidgetTester tester, String text) {
+  for (final richText in tester.widgetList<RichText>(find.byType(RichText))) {
+    for (final span in _raceDetailLeafSpans(richText.text)) {
+      if (span.text == text) return span.style?.color;
+    }
+  }
+  return null;
 }
 
 class _MissingPayoutRaceApi extends _ActivePaidRaceBackendApiService {
@@ -673,6 +695,154 @@ void main() {
       reason: 'the newest timeline entry belongs nearest the composer',
     );
   });
+
+  testWidgets('Activity applies semantic color to every named powerup', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _CompactRaceRequestApi(
+      systemMessages: const [
+        {
+          'id': 'activity-reflected',
+          'eventType': 'POWERUP_REFLECTED',
+          'powerupType': 'WRONG_TURN',
+          'body': "Maya's Mirror reflected Jordan's Wrong Turn.",
+          'actorUserId': 'user-1',
+          'createdAt': '2026-08-25T15:05:05.000Z',
+        },
+        {
+          'id': 'activity-blocked',
+          'eventType': 'POWERUP_BLOCKED',
+          'powerupType': 'HITCHHIKE',
+          'body':
+              "Shefali's Compression Socks blocked the redirected Hitchhike.",
+          'actorUserId': 'redirected-user',
+          'targetUserId': 'attacker',
+          'createdAt': '2026-08-25T15:03:05.001Z',
+        },
+        {
+          'id': 'activity-redirected',
+          'eventType': 'POWERUP_REDIRECTED',
+          'powerupType': 'HITCHHIKE',
+          'body': "Nathan's Decoy redirected Anjali's Hitchhike to Shefali.",
+          'actorUserId': 'user-1',
+          'targetUserId': 'redirected-user',
+          'metadata': {
+            'attackerUserId': 'attacker',
+            'decoyOwnerUserId': 'user-1',
+            'redirectedUserId': 'redirected-user',
+          },
+          'createdAt': '2026-08-25T15:03:05.000Z',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.light(),
+        home: RaceDetailScreen(
+          authService: await _createAuthService(),
+          raceId: 'race-activity-semantics',
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text(
+        "Nathan's Decoy redirected Anjali's Hitchhike to Shefali.",
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+    final redirectText = find.text(
+      "Nathan's Decoy redirected Anjali's Hitchhike to Shefali.",
+      findRichText: true,
+    );
+    final terminalText = find.text(
+      "Shefali's Compression Socks blocked the redirected Hitchhike.",
+      findRichText: true,
+    );
+    expect(
+      tester.getCenter(redirectText).dy,
+      lessThan(tester.getCenter(terminalText).dy),
+    );
+    expect(
+      _raceDetailSpanColor(tester, 'Wrong Turn'),
+      AppPalette.light.feedAttack,
+    );
+    for (final name in ['Mirror', 'Compression Socks', 'Decoy', 'Hitchhike']) {
+      expect(
+        _raceDetailSpanColor(tester, name),
+        AppPalette.light.feedPositive,
+        reason: name,
+      );
+    }
+  });
+
+  testWidgets(
+    'Timeline applies semantic color to redirected and blocked rows',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(600, 3000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      const redirected =
+          "Nathan's Decoy redirected Anjali's Hitchhike to Shefali.";
+      const blocked =
+          "Shefali's Compression Socks blocked the redirected Hitchhike.";
+      final api = _TimelineRaceApi(
+        messages: const [
+          {
+            'kind': 'SYSTEM',
+            'id': 'timeline-blocked',
+            'createdAt': '2026-08-25T15:03:05.001Z',
+            'body': blocked,
+            'eventType': 'POWERUP_BLOCKED',
+            'powerupType': 'HITCHHIKE',
+            'actorUserId': 'user-1',
+          },
+          {
+            'kind': 'SYSTEM',
+            'id': 'timeline-redirected',
+            'createdAt': '2026-08-25T15:03:05.000Z',
+            'body': redirected,
+            'eventType': 'POWERUP_REDIRECTED',
+            'powerupType': 'HITCHHIKE',
+            'actorUserId': 'user-1',
+          },
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemeData.light(),
+          home: RaceDetailScreen(
+            authService: await _createAuthService(),
+            raceId: 'race-timeline-semantics',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text(redirected, findRichText: true), findsOneWidget);
+      expect(find.text(blocked, findRichText: true), findsOneWidget);
+      expect(
+        tester.getCenter(find.text(redirected, findRichText: true)).dy,
+        lessThan(tester.getCenter(find.text(blocked, findRichText: true)).dy),
+      );
+      for (final name in ['Decoy', 'Compression Socks', 'Hitchhike']) {
+        expect(
+          _raceDetailSpanColor(tester, name),
+          AppPalette.light.feedPositive,
+          reason: name,
+        );
+      }
+    },
+  );
 
   testWidgets('missing timeline marker preserves the legacy tabs', (
     tester,

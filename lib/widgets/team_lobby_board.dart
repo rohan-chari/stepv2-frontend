@@ -503,7 +503,6 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
         widget.onMemberProfileTap != null &&
         profileId != null &&
         profileId.isNotEmpty &&
-        !isMe &&
         !stealthed;
 
     return Container(

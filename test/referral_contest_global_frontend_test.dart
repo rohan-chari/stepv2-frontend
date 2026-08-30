@@ -39,7 +39,7 @@ const _globalContest = <String, dynamic>{
       {
         'heading': 'Contest window',
         'body':
-            'The contest runs from 2026-08-20T04:00:00.000Z through 2026-10-01T04:00:00.000Z UTC. Referrals count only after you join and before the contest ends.',
+            'The contest runs from 2026-08-20T04:00:00.000Z through 2026-10-01T04:00:00.000Z. These server timestamps are stored in UTC. A referral counts only if it qualifies at or after you join, at or after the contest start, and before the contest end.',
       },
       {
         'heading': 'How to win',
@@ -466,6 +466,14 @@ void main() {
       findsNothing,
     );
     expect(find.textContaining('2026-08-20T04:00:00.000Z'), findsNothing);
+    expect(find.textContaining('[startsAt, endsAt)'), findsNothing);
+    expect(find.textContaining(r'$1.'), findsNothing);
+    expect(
+      find.textContaining(
+        'A referral counts only if it qualifies at or after you join, at or after the contest start, and before the contest end.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Platforms & sponsor'), findsNothing);
 
     final join = find.widgetWithText(PillButton, 'JOIN CONTEST');

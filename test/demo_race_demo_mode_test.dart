@@ -199,6 +199,39 @@ void main() {
     );
   });
 
+  testWidgets(
+    'self course runner opens the fixture-backed public profile dossier',
+    (tester) async {
+      await pumpDemoScreen(tester);
+
+      final marker = find.byKey(
+        const ValueKey('course-runner-marker-Wandering Otter42'),
+      );
+      expect(marker, findsOneWidget);
+      await tester.tap(marker);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('home-course-profile')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('home-course-profile')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        find.byKey(const ValueKey('public-profile-sheet')),
+        findsOneWidget,
+      );
+      expect(find.text('12000'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('public-profile-action-add')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('public-profile-action-remove')),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('16 — the starter reward is never fetched or claimed', (
     tester,
   ) async {

@@ -852,7 +852,10 @@ String _formatEasternIsoInstants(String value) {
       return instant == null ? match.group(0)! : _easternDateTime(instant);
     },
   );
-  return formatted.replaceAll(RegExp(r'\b(EDT|EST) UTC\b'), r'$1');
+  return formatted.replaceAllMapped(
+    RegExp(r'\b(EDT|EST) UTC\b'),
+    (match) => match.group(1) ?? '',
+  );
 }
 
 String _easternDateTime(DateTime instant) {

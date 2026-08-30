@@ -218,8 +218,7 @@ class _GoalTrackState extends State<GoalTrack>
               if (widget.onRunnerProfileTap != null &&
                   target.userId != null &&
                   target.userId!.isNotEmpty &&
-                  !target.isStealthed &&
-                  !target.isUser) ...[
+                  !target.isStealthed) ...[
                 const SizedBox(width: 4),
                 Semantics(
                   button: true,

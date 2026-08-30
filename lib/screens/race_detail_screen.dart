@@ -4816,7 +4816,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   void _openRaceProfileForRunner(GoalTrackRunner runner) {
     final id = runner.userId;
-    if (id == null || id.isEmpty || runner.isUser || runner.isStealthed) return;
+    if (id == null || id.isEmpty || runner.isStealthed) return;
     showPublicProfileSheet(
       context: context,
       authService: widget.authService,
@@ -4824,16 +4824,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       userId: id,
       fallbackName: runner.name,
       fallbackPhotoUrl: runner.profilePhotoUrl,
+      initialRelationship: runner.isUser
+          ? PublicProfileRelationship.self
+          : PublicProfileRelationship.unknown,
     );
   }
 
   void _openRaceProfileForParticipant(Map<String, dynamic> participant) {
     final id = participant['userId'];
     final name = participant['displayName'];
-    if (id is! String ||
-        id.isEmpty ||
-        id == _myUserId ||
-        participant['stealthed'] == true) {
+    if (id is! String || id.isEmpty || participant['stealthed'] == true) {
       return;
     }
     showPublicProfileSheet(
@@ -4845,12 +4845,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       fallbackPhotoUrl: participant['profilePhotoUrl'] is String
           ? participant['profilePhotoUrl'] as String
           : null,
+      initialRelationship: id == _myUserId
+          ? PublicProfileRelationship.self
+          : PublicProfileRelationship.unknown,
     );
   }
 
   void _openRaceProfileForFinisher(PodiumFinisher finisher) {
     final id = finisher.userId;
-    if (id == null || id.isEmpty || finisher.isViewer) return;
+    if (id == null || id.isEmpty) return;
     showPublicProfileSheet(
       context: context,
       authService: widget.authService,
@@ -4858,6 +4861,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       userId: id,
       fallbackName: finisher.displayName,
       fallbackPhotoUrl: finisher.profilePhotoUrl,
+      initialRelationship: finisher.isViewer
+          ? PublicProfileRelationship.self
+          : PublicProfileRelationship.unknown,
     );
   }
 
@@ -8864,7 +8870,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
       ],
     );
-    final canOpen = id != null && id.isNotEmpty && id != _myUserId;
+    final canOpen = id != null && id.isNotEmpty;
     return Column(
       children: [
         if (canOpen)
@@ -9463,10 +9469,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       ],
     );
     final canOpen =
-        !isMe &&
-        userId.isNotEmpty &&
-        p['stealthed'] != true &&
-        p['isStealthed'] != true;
+        userId.isNotEmpty && p['stealthed'] != true && p['isStealthed'] != true;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -9788,7 +9791,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
       ],
     );
-    if (id == null || id.isEmpty || id == _myUserId || isStealthed) {
+    if (id == null || id.isEmpty || isStealthed) {
       return identity;
     }
     return Semantics(
@@ -10111,7 +10114,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         nameText(),
       ],
     );
-    final identityHit = (!isMe && !isStealthed && userId.isNotEmpty)
+    final identityHit = (!isStealthed && userId.isNotEmpty)
         ? Semantics(
             button: true,
             label: 'View profile for ${atName(name)}',
@@ -11001,7 +11004,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       verticalPadding: large ? 11 : 8,
       effectIcons: isStealthed ? const [] : _effectIconsFor(userId),
       currentMultiplier: isStealthed ? null : currentMultiplier,
-      onProfileTap: (!isMe && !isStealthed && userId.isNotEmpty)
+      onProfileTap: (!isStealthed && userId.isNotEmpty)
           ? () => showPublicProfileSheet(
               context: context,
               authService: widget.authService,
@@ -11009,12 +11012,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               userId: userId,
               fallbackName: name,
               fallbackPhotoUrl: profilePhotoUrl,
+              initialRelationship: isMe
+                  ? PublicProfileRelationship.self
+                  : PublicProfileRelationship.unknown,
             )
           : null,
     );
 
-    // Tap a non-self, non-stealthed runner to open a friend-request sheet.
-    if (isMe || isStealthed || userId.isEmpty) return plank;
     return plank;
   }
 

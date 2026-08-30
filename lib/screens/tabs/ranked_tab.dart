@@ -1032,7 +1032,7 @@ class _RankedTabState extends State<RankedTab> {
       ),
     );
 
-    if (isMe || userId == null || userId.isEmpty) return content;
+    if (userId == null || userId.isEmpty) return content;
 
     return Material(
       type: MaterialType.transparency,
@@ -1044,6 +1044,9 @@ class _RankedTabState extends State<RankedTab> {
           userId: userId,
           fallbackName: displayName,
           fallbackPhotoUrl: profilePhotoUrl,
+          initialRelationship: isMe
+              ? PublicProfileRelationship.self
+              : PublicProfileRelationship.unknown,
         ),
         child: content,
       ),
@@ -1569,7 +1572,7 @@ class _RankedTabState extends State<RankedTab> {
     );
 
     final userId = row.userId;
-    if (row.isMe || userId == null || userId.isEmpty) return content;
+    if (userId == null || userId.isEmpty) return content;
 
     return Material(
       type: MaterialType.transparency,
@@ -1581,6 +1584,9 @@ class _RankedTabState extends State<RankedTab> {
           userId: userId,
           fallbackName: row.displayName,
           fallbackPhotoUrl: row.profilePhotoUrl,
+          initialRelationship: row.isMe
+              ? PublicProfileRelationship.self
+              : PublicProfileRelationship.unknown,
         ),
         child: content,
       ),

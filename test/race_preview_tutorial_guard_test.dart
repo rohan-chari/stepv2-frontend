@@ -183,6 +183,38 @@ void main() {
       expect(api.activeNoticeFetches, 0);
       expect(api.activeNoticeAcks, 0);
       expect(api.activeReceiptAcks, 0);
+
+      final selfMarker = find.byKey(
+        const ValueKey('course-runner-marker-Rohan'),
+      );
+      expect(selfMarker, findsOneWidget);
+      final markerGesture = tester.widget<GestureDetector>(
+        find
+            .ancestor(of: selfMarker, matching: find.byType(GestureDetector))
+            .first,
+      );
+      markerGesture.onTap?.call();
+      await tester.pump();
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('home-course-profile')))
+          .onPressed
+          ?.call();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        find.byKey(const ValueKey('public-profile-sheet')),
+        findsOneWidget,
+      );
+      expect(find.text('74000'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('public-profile-action-add')),
+        findsNothing,
+      );
+      Navigator.of(
+        tester.element(find.byKey(const ValueKey('public-profile-sheet'))),
+      ).pop();
+      await tester.pump(const Duration(milliseconds: 300));
+
       final detailsBefore = api.detailsCalls;
       final progressBefore = api.progressCalls;
 

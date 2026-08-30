@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/ranked_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -140,6 +141,25 @@ class _FakeRankedV2Api extends BackendApiService {
       ],
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async => {
+    'contract': 'public-profile-v1',
+    'user': {
+      'id': userId,
+      'displayName': 'Trail Walker',
+      'profilePhotoUrl': null,
+      'equippedAnimal': null,
+      'equippedAccessories': const <Map<String, dynamic>>[],
+    },
+    'stats': {
+      'racePodiums': {'first': 1, 'second': 2, 'third': 3},
+      'avgStepsPerDay': 8765,
+    },
+  };
 }
 
 Future<AuthService> _createAuthService() async {
@@ -165,6 +185,16 @@ Widget _build(AuthService auth, BackendApiService api) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'com.example.bara',
+      version: '2.3.9',
+      buildNumber: '239',
+      buildSignature: '',
+    );
+  });
 
   testWidgets('hero states a plain-language status and the path to move up', (
     tester,
@@ -221,6 +251,32 @@ void main() {
     expect(find.text('Show less'), findsOneWidget);
     // The drop cutline becomes visible once the whole group is shown.
     expect(find.text('Bottom 2 drop to Bronze'), findsOneWidget);
+  });
+
+  testWidgets('weekly self row opens self profile without friend actions', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    await tester.pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.inCohort)));
+    await tester.pump();
+
+    final selfRow = find.text('@Trail Walker');
+    await tester.ensureVisible(selfRow);
+    await tester.pump();
+    await tester.tap(selfRow);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(const Key('public-profile-sheet')), findsOneWidget);
+    expect(find.text('8765'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('public-profile-action-add')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('public-profile-action-remove')),
+      findsNothing,
+    );
   });
 
   testWidgets('the in-card "How Ranked works" button opens the explainer', (

@@ -404,8 +404,7 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
               if (widget.onRunnerProfileTap != null &&
                   target.runner.userId != null &&
                   target.runner.userId!.isNotEmpty &&
-                  !target.runner.isStealthed &&
-                  !target.runner.isUser) ...[
+                  !target.runner.isStealthed) ...[
                 const SizedBox(width: 4),
                 Semantics(
                   button: true,
