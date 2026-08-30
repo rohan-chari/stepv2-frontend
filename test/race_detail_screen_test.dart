@@ -309,6 +309,7 @@ class _CompactRaceRequestApi extends BackendApiService {
     this.legacyMessagesCompleter,
     this.compactProgressCompleter,
     this.systemMessages = const [],
+    this.bootstrapOmitsProgress = false,
   });
 
   final Completer<RaceBootstrapResult>? bootstrapCompleter;
@@ -321,9 +322,11 @@ class _CompactRaceRequestApi extends BackendApiService {
   final Completer<Map<String, dynamic>>? legacyMessagesCompleter;
   final Completer<RaceProgressResult>? compactProgressCompleter;
   final List<Map<String, dynamic>> systemMessages;
+  final bool bootstrapOmitsProgress;
   int bootstrapCalls = 0;
   int legacyDetailsCalls = 0;
   int legacyProgressCalls = 0;
+  int participantsProgressCalls = 0;
   int readAcks = 0;
   int legacyMessageCalls = 0;
   final List<bool> streamCalls = [];
@@ -372,7 +375,7 @@ class _CompactRaceRequestApi extends BackendApiService {
     return RaceBootstrapResult(
       supported: true,
       race: _race,
-      progress: _progress,
+      progress: bootstrapOmitsProgress ? null : _progress,
       globalPowerupInventory: const {'items': []},
     );
   }
@@ -403,6 +406,21 @@ class _CompactRaceRequestApi extends BackendApiService {
   }) async {
     final pending = compactProgressCompleter;
     if (pending != null && !pending.isCompleted) return pending.future;
+    return RaceProgressResult(
+      progress: _progress,
+      globalPowerupInventory: const {'items': []},
+      hasCompactInventory: true,
+    );
+  }
+
+  @override
+  Future<RaceProgressResult> fetchRaceProgressParticipants({
+    required String identityToken,
+    required String raceId,
+    int offset = 0,
+    int limit = 10,
+  }) async {
+    participantsProgressCalls += 1;
     return RaceProgressResult(
       progress: _progress,
       globalPowerupInventory: const {'items': []},
@@ -1141,6 +1159,42 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(api.streamCalls, [false]);
+    },
+  );
+
+  testWidgets(
+    'completed race loads progress omitted from its bootstrap response',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final api = _CompactRaceRequestApi(
+        raceStatus: 'COMPLETED',
+        bootstrapOmitsProgress: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.bootstrapCalls, 1);
+      expect(api.participantsProgressCalls, 1);
+      expect(
+        find.byKey(const Key('race-detail-completed-progress-error')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('race-detail-completed-progress-skeleton')),
+        findsNothing,
+      );
+      expect(find.text('RACE COMPLETE'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

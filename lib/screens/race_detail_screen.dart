@@ -1372,7 +1372,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         unawaited(
           _loadCompletedProgress(
             prefetched: progressPrefetch,
-            refetchOnNullPrefetch: !bootstrap.supported,
+            // Non-active bootstrap responses deliberately omit progress. A
+            // completed race has no polling loop to recover, so fall through
+            // to the standalone progress endpoint immediately instead of
+            // making the user press Try again.
+            refetchOnNullPrefetch: true,
           ),
         );
         if (!previewViewer) _ensureFeedInitialized(poll: false);
