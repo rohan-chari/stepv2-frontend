@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/powerup_copy.dart';
 import '../models/admin_metrics_dashboard.dart';
+import '../models/admin_system_health.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -18,6 +19,7 @@ import '../widgets/trail_sign.dart';
 import 'admin_accessory_tuner_screen.dart';
 import 'admin_metrics_dashboard.dart';
 import 'admin_sections.dart';
+import 'admin_system_health.dart';
 import '../services/ad_service.dart';
 import 'admin_balance_config_screen.dart';
 import 'admin_giveaway_screen.dart';
@@ -495,10 +497,10 @@ class AdminSettingsCardBody extends StatelessWidget {
 
 /// The admin hub — batch 2026-08-09 item 10.
 ///
-/// Was one flat scroll of eight unlabelled boards. It is now six named,
-/// collapsible sections in a fixed order (GROWTH, ENGAGEMENT, REVENUE, CONFIG,
-/// INBOX, DEBUG) so an operator can find a number without reading past a
-/// spinning crate.
+/// Was one flat scroll of eight unlabelled boards. It is now seven named,
+/// collapsible sections in a fixed order (GROWTH, ENGAGEMENT, REVENUE, SYSTEM
+/// HEALTH, CONFIG, INBOX, DEBUG) so an operator can find a number without
+/// reading past a spinning crate.
 ///
 /// The fetch strategy is the load-bearing part. `GET /admin/stats` with NO
 /// `sections` param is the legacy payload and the legacy query set — that one
@@ -541,6 +543,18 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _revenueLoading = false;
   bool _revenueFailed = false;
   bool _revenueRequested = false;
+
+  /// Additive operational telemetry. It is independent from both generations
+  /// of product metrics and remains completely lazy until its board opens.
+  AdminSystemHealthEnvelope? _systemHealth;
+  AdminSystemHealthFetchStatus? _systemHealthEmptyStatus;
+  // Starts true so the first expanded frame is a loader while AdminSection's
+  // post-frame onFirstExpand callback kicks off the lazy request.
+  bool _systemHealthLoading = true;
+  bool _systemHealthFailed = false;
+  bool _systemHealthStale = false;
+  bool _systemHealthOpened = false;
+  Future<void>? _systemHealthInFlight;
 
   final Map<String, _DashboardRequestState> _dashboardRequests = {};
   final Set<String> _openedDashboardSections = {};
@@ -652,6 +666,7 @@ class _AdminScreenState extends State<AdminScreen> {
         await _requestDashboardSection(section, force: true);
       }
     }
+    if (_systemHealthOpened) await _loadSystemHealth();
   }
 
   Future<void> _loadStats() async {
@@ -690,6 +705,73 @@ class _AdminScreenState extends State<AdminScreen> {
     if (_revenueStats != null || _revenueFailed) {
       _revenueRequested = false;
       await _loadRevenue();
+    }
+    if (_systemHealthOpened) await _loadSystemHealth();
+  }
+
+  void _openSystemHealth() {
+    if (_systemHealthOpened) return;
+    _systemHealthOpened = true;
+    unawaited(_loadSystemHealth());
+  }
+
+  Future<void> _loadSystemHealth() {
+    final existing = _systemHealthInFlight;
+    if (existing != null) return existing;
+    final future = _runSystemHealthLoad().whenComplete(() {
+      _systemHealthInFlight = null;
+    });
+    _systemHealthInFlight = future;
+    return future;
+  }
+
+  Future<void> _runSystemHealthLoad() async {
+    if (mounted) {
+      setState(() {
+        _systemHealthLoading = true;
+        if (_systemHealth == null) {
+          _systemHealthFailed = false;
+          _systemHealthEmptyStatus = null;
+        }
+      });
+    }
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) {
+        throw const ApiException('Missing authentication');
+      }
+      final result = await _api.fetchAdminSystemHealth(identityToken: token);
+      if (!mounted) return;
+      final health = result.health;
+      if (result.status == AdminSystemHealthFetchStatus.available &&
+          health != null) {
+        setState(() {
+          _systemHealth = health;
+          _systemHealthEmptyStatus = null;
+          _systemHealthLoading = false;
+          _systemHealthFailed = false;
+          _systemHealthStale = false;
+        });
+      } else if (_systemHealth != null) {
+        setState(() {
+          _systemHealthLoading = false;
+          _systemHealthFailed = true;
+          _systemHealthStale = true;
+        });
+      } else {
+        setState(() {
+          _systemHealthEmptyStatus = result.status;
+          _systemHealthLoading = false;
+          _systemHealthFailed = false;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _systemHealthLoading = false;
+        _systemHealthFailed = true;
+        _systemHealthStale = _systemHealth != null;
+      });
     }
   }
 
@@ -748,6 +830,7 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         actions: [
           IconButton(
+            key: const Key('admin-screen-refresh'),
             icon: Icon(Icons.refresh, size: 20, color: colors.textDark),
             onPressed: _statsLoading ? null : _loadStats,
           ),
@@ -807,6 +890,10 @@ class _AdminScreenState extends State<AdminScreen> {
                     failed: _revenueFailed && _revenueStats == null,
                   ),
                 ),
+                const SizedBox(height: 16),
+
+                // -- SYSTEM HEALTH ----------------------------------------
+                _buildSystemHealth(boardWidth),
                 const SizedBox(height: 16),
 
                 // -- CONFIG ------------------------------------------------
@@ -1064,6 +1151,7 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         actions: [
           IconButton(
+            key: const Key('admin-screen-refresh'),
             icon: Icon(Icons.refresh, size: 20, color: colors.textDark),
             onPressed: _refreshInFlight == null ? _refreshDashboard : null,
           ),
@@ -1172,6 +1260,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     dashboardDisabled ||
                     dashboardStatusUnavailable)
                   const SizedBox(height: 16),
+                _buildSystemHealth(boardWidth),
+                const SizedBox(height: 16),
                 _buildMetricsConfig(boardWidth),
                 const SizedBox(height: 16),
                 AdminSection(
@@ -1197,6 +1287,20 @@ class _AdminScreenState extends State<AdminScreen> {
     width: width,
     initiallyExpanded: true,
     child: AdminMetricsStatePanel(message: message),
+  );
+
+  Widget _buildSystemHealth(double boardWidth) => AdminSection(
+    title: 'SYSTEM HEALTH',
+    width: boardWidth,
+    onFirstExpand: _openSystemHealth,
+    child: AdminSystemHealthBody(
+      health: _systemHealth,
+      loading: _systemHealthLoading,
+      emptyStatus: _systemHealthEmptyStatus,
+      failed: _systemHealthFailed,
+      stale: _systemHealthStale,
+      onRefresh: _loadSystemHealth,
+    ),
   );
 
   Widget _dashboardBody({

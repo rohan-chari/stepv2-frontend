@@ -159,7 +159,7 @@ void main() {
         );
   });
 
-  testWidgets('pinned section renders mixed groups before invites and pills', (
+  testWidgets('pinned section renders mixed groups below the state pills', (
     tester,
   ) async {
     await _pump(
@@ -187,9 +187,9 @@ void main() {
     expect(find.byKey(const Key('pinned-group-teams')), findsOneWidget);
     expect(find.byKey(const Key('pinned-group-tournaments')), findsOneWidget);
     expect(
-      tester.getTopLeft(find.byKey(const Key('pinned-group-classic'))).dy,
-      lessThan(
-        tester.getTopLeft(find.byKey(const Key('personal-state-active'))).dy,
+      tester.getTopLeft(find.text('PINNED')).dy,
+      greaterThan(
+        tester.getBottomLeft(find.byKey(const Key('personal-state-active'))).dy,
       ),
     );
     expect(
@@ -204,6 +204,31 @@ void main() {
       find.byKey(const Key('pinned-tournament-row-tournament-active')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('pin control does not inflate the race card title row', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      data: {
+        'active': [_race('compact-card')],
+        'pending': const [],
+        'completed': const [],
+      },
+    );
+
+    expect(
+      tester
+          .getSize(find.byKey(const Key('race-card-header-compact-card')))
+          .height,
+      lessThan(80),
+    );
+    final pinCenter = tester.getCenter(
+      find.byKey(const Key('race-favorite-compact-card')),
+    );
+    final titleCenter = tester.getCenter(find.text('compact-card'));
+    expect((pinCenter.dy - titleCenter.dy).abs(), lessThan(4));
   });
 
   testWidgets('empty pinned groups and section emit no spacer content', (

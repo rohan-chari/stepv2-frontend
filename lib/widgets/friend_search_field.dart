@@ -10,8 +10,9 @@ import '../utils/at_name.dart';
 /// scroll becomes the slow path and the field earns its place.
 const int kFriendSearchThreshold = 8;
 
-/// Case-insensitive substring match on the display name and on its rendered
-/// '@handle', so typing what you can SEE on the row works. A leading '@' the
+/// Case-insensitive substring match on the discoverable real name, display
+/// name, and its rendered '@handle', so typing what you can SEE on the row
+/// works. A leading '@' the
 /// user types is not meaningful on its own, so it is stripped before matching
 /// (otherwise '@' alone would match everyone and '@ann' nothing).
 ///
@@ -24,9 +25,17 @@ List<Map<String, dynamic>> filterFriends(
   final needle = query.trim().replaceFirst(RegExp(r'^@+'), '').toLowerCase();
   if (needle.isEmpty) return friends;
   return friends.where((f) {
-    final name = (f['displayName'] as String? ?? '').toLowerCase();
-    final handle = atName(f['displayName'] as String?).toLowerCase();
-    return name.contains(needle) || handle.contains(needle);
+    final discoverableName = f['discoverableName'];
+    final displayName = f['displayName'];
+    final realName = discoverableName is String
+        ? discoverableName.toLowerCase()
+        : '';
+    final name = displayName is String ? displayName.toLowerCase() : '';
+    final handle = atName(displayName is String ? displayName : null)
+        .toLowerCase();
+    return realName.contains(needle) ||
+        name.contains(needle) ||
+        handle.contains(needle);
   }).toList();
 }
 

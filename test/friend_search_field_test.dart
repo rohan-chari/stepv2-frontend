@@ -141,6 +141,28 @@ void main() {
       expect(_rowFor('Zebra Sprint'), findsNothing);
     });
 
+    testWidgets('the discoverable first and last name is searchable', (
+      tester,
+    ) async {
+      final friends = [
+        ..._friends(),
+        {
+          'id': 'real-name',
+          'discoverableName': 'Nina Chari',
+          'displayName': 'nima_runner',
+        },
+      ];
+      await tester.pumpWidget(
+        MaterialApp(home: RaceInviteScreen(friends: friends)),
+      );
+
+      await tester.enterText(find.byType(TextField), 'Nina');
+      await tester.pumpAndSettle();
+
+      expect(_rowFor('nima_runner'), findsOneWidget);
+      expect(_rowFor('Hill Climber'), findsNothing);
+    });
+
     testWidgets('no-match state is distinct from the empty-list state', (
       tester,
     ) async {

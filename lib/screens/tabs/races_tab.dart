@@ -1031,10 +1031,11 @@ class _RacesTabState extends State<RacesTab> {
             ),
           ),
         ),
-      // Invites are pinned ABOVE the pills and omitted entirely at zero.
-      if (pinned.isNotEmpty) ..._pinnedSectionSlivers(pinned),
+      // Invites remain above the state selector; favorites belong immediately
+      // below it so the selector stays the first navigation landmark.
       if (totalInvites > 0) ..._invitesStripSlivers(invites, tournamentInvites),
       SliverToBoxAdapter(child: _buildStatePills()),
+      if (pinned.isNotEmpty) ..._pinnedSectionSlivers(pinned),
       ..._selectedStateSlivers(),
     ];
   }
@@ -1802,6 +1803,7 @@ class _RacesTabState extends State<RacesTab> {
     required bool favoriteBusy,
     required bool isTournament,
     String keyPrefix = 'race',
+    bool compact = false,
   }) {
     final rawRaceId = race['id'];
     final raceId = rawRaceId is String ? rawRaceId : '';
@@ -1812,8 +1814,8 @@ class _RacesTabState extends State<RacesTab> {
           ? 'Remove $name from favorites'
           : 'Add $name to favorites',
       child: SizedBox(
-        width: 44,
-        height: 44,
+        width: compact ? 24 : 44,
+        height: compact ? 24 : 44,
         child: InkWell(
           key: Key('$keyPrefix-favorite-$raceId'),
           customBorder: const CircleBorder(),
@@ -2112,6 +2114,7 @@ class _RacesTabState extends State<RacesTab> {
                                       favoriteBusy: favoriteBusy,
                                       isTournament: false,
                                       keyPrefix: favoriteKeyPrefix,
+                                      compact: true,
                                     ),
                                   ],
                                 ],

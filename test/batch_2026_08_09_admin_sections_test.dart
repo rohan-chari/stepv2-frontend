@@ -9,7 +9,8 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 /// Batch 2026-08-09 item 10 — the sectioned admin hub.
 ///
-/// GROWTH / ENGAGEMENT / REVENUE / CONFIG / INBOX / DEBUG, every pre-existing
+/// GROWTH / ENGAGEMENT / REVENUE / SYSTEM HEALTH / CONFIG / INBOX / DEBUG,
+/// every pre-existing
 /// card findable exactly once, and — the part that matters against a prod
 /// backend that hasn't deployed the new aggregates yet — every absent field
 /// renders "—" instead of throwing.
@@ -119,6 +120,7 @@ const _sectionOrder = [
   'GROWTH',
   'ENGAGEMENT',
   'REVENUE',
+  'SYSTEM HEALTH',
   'CONFIG',
   'INBOX',
   'DEBUG',

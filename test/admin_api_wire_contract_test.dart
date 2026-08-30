@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/models/admin_system_health.dart';
 import 'package:step_tracker/models/balance_config.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
@@ -367,6 +368,77 @@ void main() {
           'sections': 'dashboard-engagement',
           'window': '90d',
         });
+      },
+    );
+  });
+
+  group('GET /admin/system-health', () {
+    test(
+      'sends the locked 60m window and parses a supported response',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(
+            200,
+            '{"schema":"admin-system-health-v1","status":"unavailable",'
+            '"overall":"unknown","historyStatus":"unavailable",'
+            '"generatedAt":"2026-08-29T19:30:00.000Z","windowMinutes":60,'
+            '"windowCoverageMinutes":0,"expectedProcesses":4,"freshProcesses":0,'
+            '"missingProcesses":['
+            '{"role":"http","instance":"0","reason":"unavailable"},'
+            '{"role":"http","instance":"1","reason":"unavailable"},'
+            '{"role":"resolution","instance":"0","reason":"unavailable"},'
+            '{"role":"cron","instance":"0","reason":"unavailable"}],'
+            '"processes":[],"stepIngestion":null,"failureWindows":null}',
+          ),
+        ]);
+        final api = BackendApiService(httpClient: client);
+
+        final result = await api.fetchAdminSystemHealth(identityToken: 'tok');
+
+        expect(client.requests.single.uri.path, '/admin/system-health');
+        expect(client.requests.single.uri.queryParameters, {'window': '60m'});
+        expect(result.status, AdminSystemHealthFetchStatus.available);
+        expect(result.health?.overall, AdminSystemHealthOverall.unknown);
+      },
+    );
+
+    test(
+      'plain route 404 is classified separately from other errors',
+      () async {
+        final unsupported = BackendApiService(
+          httpClient: _FakeHttpClient([const _Scripted(404, 'Not Found')]),
+        );
+        expect(
+          (await unsupported.fetchAdminSystemHealth(
+            identityToken: 'tok',
+          )).status,
+          AdminSystemHealthFetchStatus.routeUnavailable,
+        );
+
+        final failed = BackendApiService(
+          httpClient: _FakeHttpClient([
+            const _Scripted(500, '{"error":"Redis exploded"}'),
+          ]),
+        );
+        await expectLater(
+          failed.fetchAdminSystemHealth(identityToken: 'tok'),
+          throwsA(isA<ApiException>()),
+        );
+      },
+    );
+
+    test(
+      'malformed success is isolated from transport and route absence',
+      () async {
+        final api = BackendApiService(
+          httpClient: _FakeHttpClient([
+            const _Scripted(200, '{"schema":"future"}'),
+          ]),
+        );
+        expect(
+          (await api.fetchAdminSystemHealth(identityToken: 'tok')).status,
+          AdminSystemHealthFetchStatus.malformed,
+        );
       },
     );
   });

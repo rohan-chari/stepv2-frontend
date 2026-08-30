@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/backend_config.dart';
 import '../constants/powerup_copy.dart';
+import '../models/admin_system_health.dart';
 import '../models/balance_config.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/interstitial_ad.dart';
@@ -2733,6 +2734,34 @@ class BackendApiService {
     final body = await _decodeJsonResponse(response);
     final stats = body['stats'];
     return stats is Map<String, dynamic> ? stats : <String, dynamic>{};
+  }
+
+  /// Additive, read-only operational telemetry for Admin Tools.
+  ///
+  /// A plain 404 means the independently deployed backend predates this
+  /// endpoint. Malformed 2xx data is kept distinct from route absence and
+  /// transport/server failures so the section can explain the right recovery.
+  Future<AdminSystemHealthFetchResult> fetchAdminSystemHealth({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/system-health?window=60m',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404 && raw.code == null) {
+      return const AdminSystemHealthFetchResult.routeUnavailable();
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      _throwRawResponseError(raw);
+    }
+    if (raw.decodeFailed || raw.json == null) {
+      return const AdminSystemHealthFetchResult.malformed();
+    }
+    return AdminSystemHealthFetchResult.available(
+      raw.json,
+      now: DateTime.now().toUtc(),
+    );
   }
 
   Future<InterstitialEligibility> fetchInterstitialEligibility({
