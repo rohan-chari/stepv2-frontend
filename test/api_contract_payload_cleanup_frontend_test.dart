@@ -541,6 +541,7 @@ void main() {
       await api.fetchTournament(identityToken: 'token', tournamentId: 't-1');
       await api.fetchHomeRaceCard(identityToken: 'token');
 
+      expect(http.uris.first.path, '/friends');
       expect(
         http.uris.map((uri) => uri.queryParameters['view']).toList(),
         const [

@@ -536,6 +536,18 @@ table for position analysis.
 | DETOUR_SIGN | 0 | 0 | 1,654 | information denial only — hides leaderboard |
 | STEALTH_MODE / CLEANSE / MIRROR / COMPRESSION_SOCKS / FANNY_PACK / LUCKY_HORSESHOE | 0 | 0 | — | conditional / meta value |
 
+**Second Wind resolution rule (verified 2026-09-01).** At use time the server
+selects the highest `totalSteps` among accepted, unfinished participants and
+computes
+`bonus = min(5,000, max(500, Math.round((leaderSteps - casterSteps) * 0.25)))`.
+The caster is rejected (and keeps the item) when leading or tied for the lead.
+The bonus is instant and is added to both `bonusSteps` and persisted
+`totalSteps`; it creates no active effect and does not stack with multipliers.
+Source of truth: `CODE src/modules/powerups/commands/usePowerup.js` constants and
+`SECOND_WIND` case. Production verification: **1,443** uses in the trailing 30
+days with numeric `gap`/`bonus` event metadata, **0** formula mismatches; observed
+range **500–5,000** (`DB race_powerup_events`, read-only aggregate).
+
 ### 3.3d Buff stacking + Wrong Turn sign rule — verified 2026-08-28
 
 Source: `CODE races/services/effectMultiplier.js` and
@@ -1854,27 +1866,53 @@ future balance-config save inherits `boundOverride`, masking genuine warnings.
 
 ---
 
-## 10. Rainstorm — measured facts (verified 2026-08-10, prod SELECT-only)
+## 10. Rainstorm — live rules and concurrency (verified 2026-08-30, prod SELECT-only)
 
 | Fact | Value | Source |
 |---|---|---|
-| Store price | **75 coins**, `active=true`, not testOnly | `DB powerup_shop_items` |
-| Duration / magnitude | 60 min, `metadata.multiplier = 0.5` (fixed, non-upgradeable) | `CODE usePowerup.js:167-168` |
-| Targeting | untargeted **AoE**: every alive enemy participant (enemy team only in team races); caster exempt | `CODE usePowerup.js:2907-2980` |
+| Store price | **200 coins**, `active=true`, `testOnly=false`, `dailyRewardEligible=true` | `DB powerup_shop_items` |
+| Duration / magnitude | 60 min, `metadata.multiplier = 0.5` (fixed, non-upgradeable) | `CODE powerups/commands/usePowerup.js` |
+| Targeting | untargeted **AoE**: every alive enemy participant (enemy team only in team races); caster exempt | `CODE powerups/commands/usePowerup.js` |
 | Counters | `UMBRELLA` = immune, not consumed — **but `umbrella` is `active=false` in the store and in no drop pool, i.e. unobtainable**; `COMPRESSION_SOCKS` = consumed, blocks. Mirror cannot reflect it (shop-powerup rule) | `CODE`, `DB` |
-| Supply | 61 copies ever, **all** `earned_at_steps IS NULL` (store purchase or daily-spin grant); never a box drop | `DB race_powerups` |
-| Usage | 60 casts by 9 casters → **588 victim-rows**, i.e. **9.8 victims per cast** | `DB race_active_effects` |
+| Admission / overlap | One active storm per caster; a different caster may cast concurrently. For each victim, scoring unions overlapping windows and applies one 0.5 factor, never 0.25 | `CODE usePowerup.js`, `races/services/effectiveStepScoring.js` |
+| Supply / usage | 115 copies ever, all with `earned_at_steps IS NULL`; 114 used casts by 27 casters. Those casts retained **2,413 victim rows**, or 21.17 rows/cast | `DB race_powerups`, `race_powerup_events`, `race_active_effects` |
+
+Concurrency is commoner at race scope than it is on a shared victim. **12 / 114
+casts (10.5%)** began while another caster had a race-level storm window open.
+A hypothetical race-wide lock would have prevented those casts and their 55
+victim rows; **47 / 55 (85.5%)** of the rows were aimed at victims who did not
+already have Rainstorm. Only **8 / 2,413 victim rows (0.33%)** landed on a
+victim who already had a different caster's active Rainstorm.
+
+Across all retained rows, only five `(race, victim)` groups have any overlap:
+239.3 victim-minutes at two-or-more storms out of 142,915.5 victim-minutes in
+the Rainstorm-window union (**0.17%**). The eight later overlapping rows carried
+480 nominal minutes: 321.8 were already covered by an earlier row and 158.2
+extended the victim's union. The later row's incremental tail was p50 17.3 min,
+range 1.5–50.9 min. Thus a “skip already-rained victims” rule would erase real
+future coverage, not merely redundant overlap. Source: `DB
+race_active_effects`, interval sweep; status/type values were enumerated before
+filtering.
+
+The following realised-step cohort is a historical **2026-08-10** snapshot (588
+victim rows), retained for value context rather than presented as the current
+row count:
+
+| Historical cohort fact | Value | Source |
+|---|---|---|
 | Steps walked inside a storm window, per victim | mean **590**, p50 192, p90 1,842, 20.4% zero | `DB step_samples × race_active_effects` |
-| Victim buffed during the storm | **72 / 588 rows (12.2%)**; **16.3%** of all storm-window steps fall inside a buff sub-window; step-weighted mean buff multiplier in those segments **M = 2.66**, time-weighted mean M = 2.16, max 4.39 | same |
+| Victim buffed during the storm | **72 / 588 rows (12.2%)**; **16.3%** of all storm-window steps fell inside a buff sub-window; step-weighted mean buff multiplier in those segments **M = 2.66**, time-weighted mean M = 2.16, max 4.39 | same |
 
-Realised damage at the **current subtractive** rule (`M − 0.5`):
+Historical realised damage under the retired subtractive rule (`M − 0.5`) was:
 `0.5 × 347,128` = **173,564 scored steps** all-time, ≈ **2,893 per cast**
-(= 38.6 swing-steps/coin at 75).
+(= 38.6 swing-steps/coin at the then-live 75-coin price).
 
-Multiplicative rule (`M × 0.5`) recomputed over the same rows:
+The **current multiplicative rule** (`M × 0.5`) recomputed over that same fixed
+cohort:
 `0.5 × (290,375 unbuffed + 151,038 buffed-M-weighted)` = **220,707**, ≈ **3,678
-per cast** — **+27.2%**, 49.0 swing-steps/coin. Unbuffed victims (M = 1) are
-bit-identical under either rule.
+per cast** — **+27.2%** versus subtractive. At today's 200-coin price that
+fixed-cohort proxy is 18.4 swing-steps/coin. Unbuffed victims (M = 1) are
+bit-identical under either scoring rule.
 
 `COIN_FLIP`'s losing side is hardcoded `multiplier = 0.5`
 (`CODE usePowerup.js:3515`), so its `lostFraction` is always exactly 0.5 —
@@ -1979,7 +2017,7 @@ nobody and pays nobody**, unless the installer separately opens a `/r/BARA-…`
 link or types the code in onboarding. Any copy promising coins for sharing a
 *race* is false against current code.
 
-### 11.6 Referral contest prize and scoring surface — verified 2026-08-25
+### 11.6 Referral contest prize and scoring surface — verified 2026-08-31
 
 The referral contest is a winner-take-all supplement to the ordinary referral
 program. It does **not** replace the ordinary 500/500 payout in §11.1. A
@@ -1989,8 +2027,9 @@ one eventual contest winner receives one additional configured coin mint.
 | Fact | Value | Source |
 |---|---:|---|
 | Live published contest / prize | 1 contest; **5,000 coins**, cash minor = 0 | `DB giveaway_contests` |
-| Live contest duration / entrants / awards so far | 42.0 days / 0 / 0 | `DB giveaway_contests × giveaway_entrants`; `DB coin_transactions reason='giveaway_winner'` |
-| Draft contests | 2; both 5,000 coins and cash minor = 0 | `DB giveaway_contests` |
+| Live contest duration / entrants / awards so far | 110.94 days / **5 eligible entrants** / 0 awards | `DB giveaway_contests × giveaway_entrants`; `DB coin_transactions reason='giveaway_winner'` |
+| Other retained contests | 4 archived; all 5,000 coins | `DB giveaway_contests` |
+| Post-entry acquisition funnel through 2026-08-31 18:02 UTC | 31 referral-link opens across 2 entrant codes; **3 attributed signups across 2 entrants** (2 `PENDING`, 1 `REWARDED`); **1 verified contest point** | `DB link_opens × users.referral_code`; `DB referrals`; `DB referral_qualification_facts` |
 | Implemented global admin range / default | integer **1–25,000 coins** / **5,000 coins** | `SPEC docs/referral-contest-experience-requirements.md:§8.4`; frontend/backend validation |
 | Winner rule | most verified referrals; then earliest time reaching the final count | `CODE src/modules/giveaways/queries/getContestStandings.js` |
 | Contest point | ordinary durable referral fact in `QUALIFIED`/`REWARDED`, or reviewed-approved `FLAGGED`, inside the entrant's post-join window | same |
@@ -2008,8 +2047,8 @@ the median balance, 5.5× p90, and 50.7% of the maximum.
 
 Trailing 30 complete days currently contain +18,103.3 source coins/day and
 −7,190.6 sink coins/day (net +10,912.7). A 5,000-coin prize amortizes to
-166.7/day over a 30-day contest (**0.92%** of gross sources) or 119.0/day over
-the live 42-day window (**0.66%**). The implemented 25,000-coin global maximum
+166.7/day over a 30-day contest (**0.92%** of gross sources) or **45.1/day** over
+the live 110.94-day window (**0.25%**). The implemented 25,000-coin global maximum
 amortizes to 833.3/day over 30 days: **4.60%** of gross sources and **7.64%**
 of current net issuance. An earlier, rejected 1,000,000-coin proposal would
 have amortized to 33,333/day (**184%** of gross sources and **305%** of net
@@ -2019,7 +2058,8 @@ Each incremental completed referral caused by the contest adds another 1,000
 coins; one extra per day is +5.5% to current gross issuance, while five extra
 per day is +27.6%.
 
-With symmetric entrants, expected contest-prize value is `5,000 / N`: 500
+With symmetric entrants, expected contest-prize value is `5,000 / N`: currently
+1,000 coins at N=5, 500
 coins at N=10, 100 at N=50, 50 at N=100, and 10 at N=500. Using the 58
 historically observed rewarded referrers as a participation frame gives 86.2
 coins/entrant, although actual skill and acquisition reach make the payout

@@ -325,6 +325,78 @@ class _SlowStepSyncApi extends _FakeBackendApiService {
   }) => sync.future;
 }
 
+class _HomeRequestDagApi extends _FakeBackendApiService {
+  final List<String> started = [];
+  final Completer<StepSyncV2Result> sync = Completer<StepSyncV2Result>();
+  final Completer<Map<String, dynamic>> raceCard =
+      Completer<Map<String, dynamic>>();
+  final Completer<Map<String, dynamic>> races =
+      Completer<Map<String, dynamic>>();
+  final Completer<HomeSuggestedRacesRefresh> suggestions =
+      Completer<HomeSuggestedRacesRefresh>();
+  final Completer<Map<String, dynamic>> friends =
+      Completer<Map<String, dynamic>>();
+  final Completer<Map<String, dynamic>> catalog =
+      Completer<Map<String, dynamic>>();
+  final Completer<Map<String, dynamic>> me = Completer<Map<String, dynamic>>();
+  final List<bool> persistedTotalFlags = [];
+
+  @override
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+    bool homePull = false,
+  }) {
+    started.add('sync-v2');
+    return sync.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) {
+    started.add('race-card');
+    persistedTotalFlags.add(usePersistedTotals);
+    return raceCard.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaces({required String identityToken}) {
+    started.add('races');
+    return races.future;
+  }
+
+  @override
+  Future<HomeSuggestedRacesRefresh> fetchHomeSuggestedRaces({
+    required String identityToken,
+  }) {
+    started.add('suggestions');
+    return suggestions.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchFriends({required String identityToken}) {
+    started.add('friends');
+    return friends.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchShopCatalog({
+    required String identityToken,
+  }) {
+    started.add('catalog');
+    return catalog.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) {
+    started.add('me');
+    return me.future;
+  }
+}
+
 class _SummaryWorkPollingApi extends _FakeBackendApiService {
   _SummaryWorkPollingApi({
     required this.statuses,
@@ -2215,6 +2287,104 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(api.racesDiscoveryCalls, 1);
   });
+
+  testWidgets(
+    'foreground Home load preserves the shipped request dependency graph',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _HomeRequestDagApi();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(api.started, contains('sync-v2'));
+      expect(
+        api.started.where(
+          const <String>{'race-card', 'races', 'suggestions'}.contains,
+        ),
+        isEmpty,
+        reason: 'Home reads must wait for step persistence to settle.',
+      );
+
+      api.sync.complete(const StepSyncV2Result(kind: StepSyncV2Kind.current));
+      await tester.pump();
+
+      expect(
+        api.started,
+        containsAll(<String>['race-card', 'races', 'suggestions']),
+        reason: 'The three initial Home reads launch together after sync.',
+      );
+      expect(api.persistedTotalFlags, [true]);
+      expect(api.started, isNot(contains('friends')));
+      expect(api.started, isNot(contains('catalog')));
+      expect(api.started, isNot(contains('me')));
+
+      api.raceCard.complete(const {
+        'contract': 'home-shell-v1',
+        'state': 'EMPTY',
+        'resolved': {'presentation': false, 'friends': false},
+      });
+      await tester.pump();
+
+      expect(
+        api.started,
+        containsAll(<String>['friends', 'catalog', 'me']),
+        reason:
+            'Malformed or unresolved race-card blocks trigger both fallbacks, '
+            'while Me starts in the same post-card phase.',
+      );
+
+      api.races.complete(const {
+        'invites': <Map<String, dynamic>>[],
+        'waiting': <Map<String, dynamic>>[],
+        'active': <Map<String, dynamic>>[],
+        'completed': <Map<String, dynamic>>[],
+      });
+      api.friends.complete(const {
+        'contract': 'friends-summary-v1',
+        'incomingFriendRequests': 0,
+        'friends': <Map<String, dynamic>>[],
+        'pending': {
+          'incoming': <Map<String, dynamic>>[],
+          'outgoing': <Map<String, dynamic>>[],
+        },
+      });
+      api.catalog.complete(const {
+        'coins': 0,
+        'equipped': <String, dynamic>{},
+        'items': <Map<String, dynamic>>[],
+      });
+      api.me.complete(const {
+        'id': 'user-1',
+        'displayName': 'Trail Walker',
+        'incomingFriendRequests': 0,
+      });
+      await tester.pump();
+
+      // Suggestions are explicitly non-gating: the required Home phase above
+      // settles while this background response is still outstanding.
+      expect(api.suggestions.isCompleted, isFalse);
+      api.suggestions.complete(
+        const HomeSuggestedRacesRefresh(
+          featuredRaces: [],
+          publicRaces: [],
+          tournaments: [],
+        ),
+      );
+      await tester.pump();
+    },
+  );
 
   testWidgets('Home Notifications pushes Inbox and never changes shell index', (
     WidgetTester tester,

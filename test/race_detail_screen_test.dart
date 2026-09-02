@@ -307,7 +307,7 @@ class _CompactRaceRequestApi extends BackendApiService {
     this.raceStatus = 'ACTIVE',
     this.streamCompleter,
     this.legacyMessagesCompleter,
-    this.compactProgressCompleter,
+    this.progressCompleter,
     this.systemMessages = const [],
     this.bootstrapOmitsProgress = false,
   });
@@ -320,7 +320,7 @@ class _CompactRaceRequestApi extends BackendApiService {
   final String raceStatus;
   final Completer<RaceMessageStreamsResult>? streamCompleter;
   final Completer<Map<String, dynamic>>? legacyMessagesCompleter;
-  final Completer<RaceProgressResult>? compactProgressCompleter;
+  final Completer<RaceProgressResult>? progressCompleter;
   final List<Map<String, dynamic>> systemMessages;
   final bool bootstrapOmitsProgress;
   int bootstrapCalls = 0;
@@ -404,8 +404,6 @@ class _CompactRaceRequestApi extends BackendApiService {
     required String identityToken,
     required String raceId,
   }) async {
-    final pending = compactProgressCompleter;
-    if (pending != null && !pending.isCompleted) return pending.future;
     return RaceProgressResult(
       progress: _progress,
       globalPowerupInventory: const {'items': []},
@@ -421,6 +419,8 @@ class _CompactRaceRequestApi extends BackendApiService {
     int limit = 10,
   }) async {
     participantsProgressCalls += 1;
+    final pending = progressCompleter;
+    if (pending != null && !pending.isCompleted) return pending.future;
     return RaceProgressResult(
       progress: _progress,
       globalPowerupInventory: const {'items': []},
@@ -1396,7 +1396,7 @@ void main() {
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final progress = Completer<RaceProgressResult>();
-      final api = _CompactRaceRequestApi(compactProgressCompleter: progress);
+      final api = _CompactRaceRequestApi(progressCompleter: progress);
 
       await tester.pumpWidget(
         MaterialApp(
