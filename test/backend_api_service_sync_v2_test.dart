@@ -182,6 +182,58 @@ void main() {
     });
   });
 
+  test(
+    'Races-tab reads use the compact core and current background routes',
+    () async {
+      final http = _FakeHttpClient([
+        _Scripted(
+          200,
+          jsonEncode({
+            'contract': 'race-list-compact-v1',
+            'active': <Object>[],
+            'pending': <Object>[],
+            'completed': <Object>[],
+          }),
+        ),
+        _Scripted(
+          200,
+          jsonEncode({
+            'contract': 'race-discovery-summary-v1',
+            'resolved': <String, bool>{},
+          }),
+        ),
+        _Scripted(
+          200,
+          jsonEncode({
+            'contract': 'friends-summary-v1',
+            'friends': <Object>[],
+            'pending': {'incoming': <Object>[], 'outgoing': <Object>[]},
+          }),
+        ),
+      ]);
+      final api = BackendApiService(httpClient: http);
+
+      await api.fetchRaces(identityToken: 'session-token');
+      await api.fetchRaceDiscoverySummary(identityToken: 'session-token');
+      await api.fetchFriends(identityToken: 'session-token');
+
+      expect(
+        http.requests.map((request) => request.method),
+        everyElement('GET'),
+      );
+      expect(http.requests[0].uri.path, '/races');
+      expect(http.requests[0].uri.queryParameters, {'view': 'compact-v1'});
+      expect(http.requests[1].uri.path, '/races/discovery-summary');
+      expect(http.requests[1].uri.query, isEmpty);
+      expect(http.requests[2].uri.path, '/friends');
+      expect(http.requests[2].uri.queryParameters, {'view': 'summary-v1'});
+      expect(
+        http.requests.map((request) => request.headers['authorization']),
+        everyElement('Bearer session-token'),
+      );
+    },
+  );
+
   group('recordStepSyncV2', () {
     String successBody(String state, {String? jobId, int? generation}) =>
         jsonEncode({

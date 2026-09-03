@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
 import 'package:step_tracker/screens/inbox_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
+import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/models/step_sync_v2_result.dart';
@@ -394,6 +396,74 @@ class _HomeRequestDagApi extends _FakeBackendApiService {
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) {
     started.add('me');
     return me.future;
+  }
+}
+
+class _RacesTabRevealApi extends _FakeBackendApiService {
+  _RacesTabRevealApi({required this.cachedFriends});
+
+  static const cachedRaces = <String, dynamic>{
+    'invites': <Map<String, dynamic>>[],
+    'waiting': <Map<String, dynamic>>[],
+    'active': <Map<String, dynamic>>[
+      {
+        'id': 'cached-race',
+        'name': 'Cached Sprint',
+        'status': 'ACTIVE',
+        'myStatus': 'ACCEPTED',
+        'participantCount': 2,
+        'placementPrivacyActive': false,
+      },
+    ],
+    'completed': <Map<String, dynamic>>[],
+  };
+
+  final List<Map<String, dynamic>> cachedFriends;
+  final List<String> started = [];
+  final Completer<Map<String, dynamic>> revealCore = Completer();
+  final Completer<RaceDiscoverySummary> discovery = Completer();
+  final Completer<Map<String, dynamic>> friends = Completer();
+  int coreCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) async => <String, dynamic>{
+    'contract': 'home-shell-v1',
+    'state': 'EMPTY',
+    'resolved': const {'presentation': false, 'friends': true},
+    'friends': <String, dynamic>{
+      'contract': 'friends-summary-v1',
+      'incomingFriendRequests': 0,
+      'friends': cachedFriends,
+      'pending': const {
+        'incoming': <Map<String, dynamic>>[],
+        'outgoing': <Map<String, dynamic>>[],
+      },
+    },
+  };
+
+  @override
+  Future<Map<String, dynamic>> fetchRaces({required String identityToken}) {
+    coreCalls++;
+    if (coreCalls == 1) return Future.value(cachedRaces);
+    started.add('core');
+    return revealCore.future;
+  }
+
+  @override
+  Future<RaceDiscoverySummary> fetchRaceDiscoverySummary({
+    required String identityToken,
+  }) {
+    started.add('discovery');
+    return discovery.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchFriends({required String identityToken}) {
+    started.add('friends');
+    return friends.future;
   }
 }
 
@@ -2287,6 +2357,125 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(api.racesDiscoveryCalls, 1);
   });
+
+  testWidgets(
+    'Races reveal retains cached races and starts discovery plus zero-friends '
+    'refresh concurrently after a failed core refresh',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _RacesTabRevealApi(cachedFriends: const []);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(api.coreCalls, 1, reason: 'Home performs the cache-seeding read.');
+      expect(api.started, isEmpty);
+
+      // The shared repository absorbs exact duplicate friends reads for one
+      // second. After that coalescing window, the shell's separate 60-second
+      // freshness rule still refreshes an empty snapshot on Races reveal.
+      sleep(const Duration(milliseconds: 1100));
+
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(api.coreCalls, 2);
+      expect(api.started, ['core']);
+      expect(find.text('Cached Sprint'), findsOneWidget);
+      final refreshing = tester.widget<RacesTab>(find.byType(RacesTab));
+      expect(refreshing.racesState?.isRefreshing, isTrue);
+      expect(refreshing.racesState?.data, _RacesTabRevealApi.cachedRaces);
+
+      api.revealCore.completeError(StateError('core unavailable'));
+      await tester.pump();
+
+      expect(api.started, ['core', 'discovery', 'friends']);
+      expect(api.discovery.isCompleted, isFalse);
+      expect(api.friends.isCompleted, isFalse);
+      expect(find.text('Cached Sprint'), findsOneWidget);
+      final failed = tester.widget<RacesTab>(find.byType(RacesTab));
+      expect(failed.racesState?.isError, isTrue);
+      expect(failed.racesState?.data, _RacesTabRevealApi.cachedRaces);
+
+      api.discovery.complete(RaceDiscoverySummary.empty);
+      api.friends.complete(const {
+        'contract': 'friends-summary-v1',
+        'incomingFriendRequests': 0,
+        'friends': <Map<String, dynamic>>[],
+        'pending': {
+          'incoming': <Map<String, dynamic>>[],
+          'outgoing': <Map<String, dynamic>>[],
+        },
+      });
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'Races reveal starts discovery only after core success and keeps a fresh '
+    'non-empty friends cache',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _RacesTabRevealApi(
+        cachedFriends: const [
+          {'id': 'friend-1', 'displayName': 'Fresh Friend', 'steps': 3210},
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(api.coreCalls, 1);
+      expect(api.started, isEmpty);
+
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(api.started, ['core']);
+      api.revealCore.complete(const {
+        'active': <Map<String, dynamic>>[],
+        'pending': <Map<String, dynamic>>[],
+        'completed': <Map<String, dynamic>>[],
+      });
+      await tester.pump();
+
+      expect(api.started, ['core', 'discovery']);
+      expect(api.discovery.isCompleted, isFalse);
+      expect(
+        api.started,
+        isNot(contains('friends')),
+        reason:
+            'A non-empty friends snapshot fetched less than 60s ago is fresh.',
+      );
+
+      api.discovery.complete(RaceDiscoverySummary.empty);
+      await tester.pump();
+    },
+  );
 
   testWidgets(
     'foreground Home load preserves the shipped request dependency graph',
