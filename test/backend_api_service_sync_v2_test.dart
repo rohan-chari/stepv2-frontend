@@ -217,6 +217,7 @@ void main() {
       await api.fetchRaceDiscoverySummary(identityToken: 'session-token');
       await api.fetchFriends(identityToken: 'session-token');
 
+      expect(http.requests, hasLength(3));
       expect(
         http.requests.map((request) => request.method),
         everyElement('GET'),
