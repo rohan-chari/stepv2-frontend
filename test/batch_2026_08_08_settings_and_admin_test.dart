@@ -363,8 +363,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('settings-social-x')), findsOneWidget);
-      expect(find.text('@bara.steps'), findsOneWidget);
-      expect(find.text('@barastepz'), findsOneWidget);
+      expect(find.text('@Bara.steps.app'), findsOneWidget);
+      expect(find.text('@BaraStepsApp'), findsOneWidget);
       expect(find.text('TikTok'), findsNothing);
     });
 

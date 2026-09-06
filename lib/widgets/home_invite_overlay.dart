@@ -169,6 +169,25 @@ class _HomeInviteOverlayState extends State<HomeInviteOverlay> {
                                 _fact(context, '${invite.buyInAmount} GOLD'),
                             ],
                           ),
+                          if (invite.recurringSeries) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              key: const Key('home-invite-recurring-copy'),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: colors.pillGreen.withValues(alpha: .15),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Text(
+                                'Accepting also auto-enrolls you in future races in this series. You can turn it off anytime.',
+                                textAlign: TextAlign.center,
+                                style: PixelText.body(
+                                  size: 11,
+                                  color: colors.textDark,
+                                ),
+                              ),
+                            ),
+                          ],
                           if (_error != null) ...[
                             const SizedBox(height: 12),
                             Text(

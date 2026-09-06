@@ -103,52 +103,58 @@ Future<void> _pumpProfileTab(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('Stats rows show per-day averages with new relabeled headings', (
+    WidgetTester tester,
+  ) async {
+    await _pumpProfileTab(tester, {
+      'thisWeek': 81666,
+      'thisMonth': 350000,
+      'thisYear': 4259090,
+      'avgPerDayWeek': 11666,
+      'avgPerDayMonth': 11290,
+      'avgPerDayYear': 11668,
+      'allTime': 300000,
+      'streak': 4,
+    });
+
+    // New relabeled headings.
+    expect(find.text('Steps/Day This Week'), findsOneWidget);
+    expect(find.text('Steps/Day This Month'), findsOneWidget);
+    expect(find.text('Steps/Day This Year'), findsOneWidget);
+
+    // Old headings are gone.
+    expect(find.text('This Week'), findsNothing);
+    expect(find.text('This Month'), findsNothing);
+    expect(find.text('This Year'), findsNothing);
+
+    // Averages render as plain integers with thousands separators,
+    // not abbreviated (e.g. not '11.7k').
+    expect(find.text('11,666'), findsOneWidget);
+    expect(find.text('11,290'), findsOneWidget);
+    expect(find.text('11,668'), findsOneWidget);
+
+    // Unchanged rows remain.
+    expect(find.text('All Time'), findsOneWidget);
+    expect(find.text('Streak'), findsOneWidget);
+    expect(find.text('4 days'), findsOneWidget);
+  });
+
   testWidgets(
-    'Stats rows show per-day averages with new relabeled headings',
-    (WidgetTester tester) async {
+    'Profile shows podium totals only from a complete additive record',
+    (tester) async {
       await _pumpProfileTab(tester, {
-        'thisWeek': 81666,
-        'thisMonth': 350000,
-        'thisYear': 4259090,
-        'avgPerDayWeek': 11666,
-        'avgPerDayMonth': 11290,
-        'avgPerDayYear': 11668,
-        'allTime': 300000,
-        'streak': 4,
+        'thisWeek': 1,
+        'thisMonth': 1,
+        'thisYear': 1,
+        'allTime': 1,
+        'streak': 1,
+        'racePodiums': {'first': 12, 'second': 5, 'third': 3},
       });
-
-      // New relabeled headings.
-      expect(find.text('Steps/Day This Week'), findsOneWidget);
-      expect(find.text('Steps/Day This Month'), findsOneWidget);
-      expect(find.text('Steps/Day This Year'), findsOneWidget);
-
-      // Old headings are gone.
-      expect(find.text('This Week'), findsNothing);
-      expect(find.text('This Month'), findsNothing);
-      expect(find.text('This Year'), findsNothing);
-
-      // Averages render as plain integers with thousands separators,
-      // not abbreviated (e.g. not '11.7k').
-      expect(find.text('11,666'), findsOneWidget);
-      expect(find.text('11,290'), findsOneWidget);
-      expect(find.text('11,668'), findsOneWidget);
-
-      // Unchanged rows remain.
-      expect(find.text('All Time'), findsOneWidget);
-      expect(find.text('Streak'), findsOneWidget);
-      expect(find.text('4 days'), findsOneWidget);
+      expect(find.byKey(const Key('profile-race-podiums')), findsOneWidget);
+      expect(find.text('RACE PODIUMS'), findsOneWidget);
+      expect(find.text('12'), findsOneWidget);
     },
   );
-
-  testWidgets('Profile shows podium totals only from a complete additive record', (tester) async {
-    await _pumpProfileTab(tester, {
-      'thisWeek': 1, 'thisMonth': 1, 'thisYear': 1, 'allTime': 1, 'streak': 1,
-      'racePodiums': {'first': 12, 'second': 5, 'third': 3},
-    });
-    expect(find.byKey(const Key('profile-race-podiums')), findsOneWidget);
-    expect(find.text('RACE PODIUMS'), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
-  });
 
   testWidgets(
     'Old backend without avg fields falls back to showing the total',
@@ -186,5 +192,40 @@ void main() {
 
     expect(find.text('1.5M'), findsOneWidget);
     expect(find.text('1503.3k'), findsNothing);
+  });
+
+  testWidgets(
+    'Profile renders valid race stats without fabricating fallbacks',
+    (tester) async {
+      await _pumpProfileTab(tester, {
+        'racesCompeted': 12,
+        'firstPlaceWins': 3,
+        'podiumFinishes': 7,
+        'winRate': 0.25,
+      });
+
+      expect(find.text('RACE STATS'), findsOneWidget);
+      expect(find.byKey(const Key('profile-race-stats')), findsOneWidget);
+      expect(find.text('12'), findsOneWidget);
+      expect(find.text('25%'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Profile race stats fail closed on a malformed field', (
+    tester,
+  ) async {
+    await _pumpProfileTab(tester, {
+      'racesCompeted': 12,
+      'firstPlaceWins': 3,
+      'podiumFinishes': null,
+      'winRate': 0.25,
+    });
+
+    final card = find.byKey(const Key('profile-race-stats'));
+    expect(
+      find.descendant(of: card, matching: find.text('—')),
+      findsNWidgets(4),
+    );
+    expect(find.descendant(of: card, matching: find.text('0')), findsNothing);
   });
 }

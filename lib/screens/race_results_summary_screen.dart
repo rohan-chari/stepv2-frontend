@@ -19,6 +19,8 @@ import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/race_podium.dart';
 import '../widgets/spinning_coin.dart';
+import '../widgets/error_toast.dart';
+import 'race_detail_screen.dart';
 
 /// Blurred-backdrop popup summarizing races that finished since the user last
 /// opened the app. Reuses the daily-reward modal pattern (transparent Material
@@ -86,6 +88,8 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
   bool _recoveryClaimedOffer = false;
   String? _boundToken;
   String? _boundUserId;
+  final Set<String> _rematchingRaceIds = <String>{};
+  final Map<String, String> _rematchIdempotencyKeys = <String, String>{};
 
   @override
   void initState() {
@@ -151,6 +155,60 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
           rewardedPresented: _rewardedPresented,
         ),
       );
+    }
+  }
+
+  Future<void> _rematch(Map<String, dynamic> source) async {
+    final api = widget.backendApiService;
+    final token = widget.authService?.authToken;
+    final sourceId = source['id'];
+    if (api == null ||
+        token == null ||
+        token.isEmpty ||
+        sourceId is! String ||
+        sourceId.isEmpty ||
+        _rematchingRaceIds.contains(sourceId)) {
+      return;
+    }
+    setState(() => _rematchingRaceIds.add(sourceId));
+    try {
+      final result = await api.rematchRace(
+        identityToken: token,
+        raceId: sourceId,
+        idempotencyKey: _rematchIdempotencyKeys.putIfAbsent(
+          sourceId,
+          BackendApiService.generateIdempotencyKey,
+        ),
+      );
+      if (!mounted) return;
+      final rawRace = result['race'];
+      final newId = rawRace is Map ? rawRace['id'] : null;
+      if (newId is! String || newId.isEmpty) {
+        throw const ApiException(
+          'The rematch was created, but could not be opened.',
+        );
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RaceDetailScreen(
+            authService: widget.authService!,
+            raceId: newId,
+            backendApiService: api,
+            showPostCreateSharePrompt: true,
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) showErrorToast(context, error.message);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          'Couldn’t create the rematch. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _rematchingRaceIds.remove(sourceId));
     }
   }
 
@@ -567,7 +625,20 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                                 const SizedBox(height: 16),
                                 for (var i = 0; i < races.length; i++) ...[
                                   if (i > 0) const SizedBox(height: 10),
-                                  _ResultCard(race: races[i]),
+                                  _ResultCard(
+                                    race: races[i],
+                                    rematching:
+                                        races[i]['id'] is String &&
+                                        _rematchingRaceIds.contains(
+                                          races[i]['id'],
+                                        ),
+                                    onRematch:
+                                        races[i]['rematchEligible'] == true &&
+                                            widget.authService != null &&
+                                            widget.backendApiService != null
+                                        ? () => _rematch(races[i])
+                                        : null,
+                                  ),
                                 ],
                                 if (_shouldShowRewardPanel) ...[
                                   const SizedBox(height: 14),
@@ -811,9 +882,15 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
 
 /// One finished race: name, the user's place, winner, and payout coins.
 class _ResultCard extends StatelessWidget {
-  const _ResultCard({required this.race});
+  const _ResultCard({
+    required this.race,
+    this.onRematch,
+    this.rematching = false,
+  });
 
   final Map<String, dynamic> race;
+  final VoidCallback? onRematch;
+  final bool rematching;
 
   /// Top-3 finishers for the podium, or null when this payload can't feed one
   /// (no `podium` array, or fewer than two actual finishers). Never throws on
@@ -823,7 +900,12 @@ class _ResultCard extends StatelessWidget {
     if (raw is! List) return null;
     final rows = raw
         .whereType<Map>()
-        .map((e) => e.cast<String, dynamic>())
+        .map(
+          (row) => <String, dynamic>{
+            for (final entry in row.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          },
+        )
         .toList();
     if (!RacePodium.canRender(RacePodium.occupantCount(rows))) return null;
     return RacePodium.finishersFromParticipants(
@@ -834,20 +916,33 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = race['name'] as String? ?? 'Race';
-    final participantCount = (race['participantCount'] as num?)?.toInt() ?? 0;
-    final myPlacement = (race['myPlacement'] as num?)?.toInt();
-    final payoutCoins = (race['myPayoutCoins'] as num?)?.toInt() ?? 0;
-    final winner = race['winner'] as Map<String, dynamic>?;
-    final winnerName = winner?['displayName'] as String?;
+    int? integer(Object? raw) =>
+        raw is num && raw.isFinite ? raw.toInt() : null;
+    final rawName = race['name'];
+    final name = rawName is String && rawName.isNotEmpty ? rawName : 'Race';
+    final participantCount = integer(race['participantCount']) ?? 0;
+    final myPlacement = integer(race['myPlacement']);
+    final payoutCoins = integer(race['myPayoutCoins']) ?? 0;
+    final winner = race['winner'];
+    final rawWinnerName = winner is Map ? winner['displayName'] : null;
+    final winnerName = rawWinnerName is String ? rawWinnerName : null;
 
     // TR-807: team-framed result. Tie = winnerTeam null on a completed team
     // race (TR-404). All reads defensive — old payloads have none of this.
     if (TeamRace.isTeamRace(race)) {
-      return _buildTeamResult(
-        context: context,
-        payoutCoins: payoutCoins,
-        raceName: name,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildTeamResult(
+            context: context,
+            payoutCoins: payoutCoins,
+            raceName: name,
+          ),
+          if (onRematch != null) ...[
+            const SizedBox(height: 9),
+            _rematchButton(),
+          ],
+        ],
       );
     }
 
@@ -979,10 +1074,23 @@ class _ResultCard extends StatelessWidget {
               ],
             ),
           ],
+          if (onRematch != null) ...[
+            const SizedBox(height: 11),
+            _rematchButton(),
+          ],
         ],
       ),
     );
   }
+
+  Widget _rematchButton() => PillButton(
+    key: Key('results-rematch-${race['id']}'),
+    label: rematching ? 'CREATING REMATCH…' : 'REMATCH',
+    icon: Icons.replay_rounded,
+    variant: PillButtonVariant.secondary,
+    fullWidth: true,
+    onPressed: rematching ? null : onRematch,
+  );
 
   /// TR-807: team-framed variant — outcome banner (VICTORY / DEFEAT / tie
   /// refund copy), winning team plaque + members, and the user's payout.
@@ -996,9 +1104,17 @@ class _ResultCard extends StatelessWidget {
     final isTie = winnerTeam == null;
     final won = !isTie && myTeam != null && myTeam == winnerTeam;
 
-    final participants =
-        (race['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-        const <Map<String, dynamic>>[];
+    final rawParticipants = race['participants'];
+    final participants = rawParticipants is List
+        ? <Map<String, dynamic>>[
+            for (final row in rawParticipants)
+              if (row is Map)
+                <String, dynamic>{
+                  for (final entry in row.entries)
+                    if (entry.key is String) entry.key as String: entry.value,
+                },
+          ]
+        : const <Map<String, dynamic>>[];
     final winnerMembers = winnerTeam == null
         ? const <Map<String, dynamic>>[]
         : TeamRace.membersOf(participants, winnerTeam);
@@ -1085,8 +1201,11 @@ class _ResultCard extends StatelessWidget {
                       if (winnerMembers.isNotEmpty)
                         winnerMembers
                             .map(
-                              (m) =>
-                                  atName(m['displayName'] as String? ?? '???'),
+                              (m) => atName(
+                                m['displayName'] is String
+                                    ? m['displayName'] as String
+                                    : '???',
+                              ),
                             )
                             .join(', '),
                     ].join(': '),

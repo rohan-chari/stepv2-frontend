@@ -15,6 +15,8 @@ class RaceChatMessage {
   final String? eventType;
   final String? powerupType;
   final String? actorUserId;
+  final String audience;
+  final String? team;
   final DateTime createdAt;
   final bool pending;
   final bool failed;
@@ -30,6 +32,8 @@ class RaceChatMessage {
     this.eventType,
     this.powerupType,
     this.actorUserId,
+    this.audience = 'ALL',
+    this.team,
     this.pending = false,
     this.failed = false,
   });
@@ -56,6 +60,10 @@ class RaceChatMessage {
           : null,
       actorUserId: raw['actorUserId'] is String
           ? raw['actorUserId'] as String
+          : null,
+      audience: raw['audience'] == 'TEAM' ? 'TEAM' : 'ALL',
+      team: raw['team'] == 'TEAM_A' || raw['team'] == 'TEAM_B'
+          ? raw['team'] as String
           : null,
       createdAt: createdRaw != null
           ? DateTime.tryParse(
@@ -86,6 +94,8 @@ class RaceChatMessage {
       eventType: eventType,
       powerupType: powerupType,
       actorUserId: actorUserId,
+      audience: audience,
+      team: team,
       createdAt: createdAt,
       pending: pending ?? this.pending,
       failed: failed ?? this.failed,
@@ -99,11 +109,13 @@ class RaceChatService extends ChangeNotifier {
     required this.authService,
     required this.raceId,
     required this.api,
+    this.audience = 'ALL',
   });
 
   final AuthService authService;
   final String raceId;
   final BackendApiService api;
+  final String audience;
 
   final List<RaceChatMessage> _messages = [];
   String? _cursor;
@@ -139,12 +151,20 @@ class RaceChatService extends ChangeNotifier {
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
-      final result = await api.fetchRaceMessages(
-        identityToken: token,
-        raceId: raceId,
-        limit: 50,
-        kind: 'USER',
-      );
+      final result = audience == 'TEAM'
+          ? await api.fetchRaceMessagesForAudience(
+              identityToken: token,
+              raceId: raceId,
+              audience: 'TEAM',
+              limit: 50,
+              kind: 'USER',
+            )
+          : await api.fetchRaceMessages(
+              identityToken: token,
+              raceId: raceId,
+              limit: 50,
+              kind: 'USER',
+            );
       if (_disposed) return;
       applyInitialStream(result);
       _hasMore = _cursor != null;
@@ -163,13 +183,22 @@ class RaceChatService extends ChangeNotifier {
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
-      final result = await api.fetchRaceMessages(
-        identityToken: token,
-        raceId: raceId,
-        cursor: _cursor,
-        limit: 50,
-        kind: 'USER',
-      );
+      final result = audience == 'TEAM'
+          ? await api.fetchRaceMessagesForAudience(
+              identityToken: token,
+              raceId: raceId,
+              audience: 'TEAM',
+              cursor: _cursor,
+              limit: 50,
+              kind: 'USER',
+            )
+          : await api.fetchRaceMessages(
+              identityToken: token,
+              raceId: raceId,
+              cursor: _cursor,
+              limit: 50,
+              kind: 'USER',
+            );
       if (_disposed) return;
       final list = result['messages'];
       if (list is List) {
@@ -193,12 +222,20 @@ class RaceChatService extends ChangeNotifier {
     try {
       final token = _token;
       if (token == null) return;
-      final result = await api.fetchRaceMessages(
-        identityToken: token,
-        raceId: raceId,
-        limit: 50,
-        kind: 'USER',
-      );
+      final result = audience == 'TEAM'
+          ? await api.fetchRaceMessagesForAudience(
+              identityToken: token,
+              raceId: raceId,
+              audience: 'TEAM',
+              limit: 50,
+              kind: 'USER',
+            )
+          : await api.fetchRaceMessages(
+              identityToken: token,
+              raceId: raceId,
+              limit: 50,
+              kind: 'USER',
+            );
       if (_disposed) return;
       applyTopStream(result);
     } catch (_) {
@@ -299,6 +336,7 @@ class RaceChatService extends ChangeNotifier {
       senderId: null,
       senderName: 'You',
       createdAt: DateTime.now(),
+      audience: audience,
       pending: true,
     );
     _messages.insert(0, optimistic);
@@ -306,13 +344,26 @@ class RaceChatService extends ChangeNotifier {
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
-      final result = await api.sendRaceMessage(
-        identityToken: token,
-        raceId: raceId,
-        body: trimmed,
-      );
+      final result = audience == 'TEAM'
+          ? await api.sendRaceMessageToAudience(
+              identityToken: token,
+              raceId: raceId,
+              body: trimmed,
+              audience: 'TEAM',
+            )
+          : await api.sendRaceMessage(
+              identityToken: token,
+              raceId: raceId,
+              body: trimmed,
+            );
       if (_disposed) return;
-      final msgJson = result['message'] as Map<String, dynamic>?;
+      final rawMessage = result['message'];
+      final msgJson = rawMessage is Map
+          ? <String, dynamic>{
+              for (final entry in rawMessage.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            }
+          : null;
       if (msgJson != null) {
         final created = RaceChatMessage.fromJson(msgJson);
         final existingServerIdx = _messages.indexWhere(

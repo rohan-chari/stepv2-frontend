@@ -961,7 +961,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
     // the reel keeps showing accessory-only RARE tiles exactly as before.
     final powerupPool = (box['powerupPool'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
-        .where((powerup) => powerup['powerupType'] != 'IMPOSTER')
+        .where(
+          (powerup) =>
+              powerup['powerupType'] != 'IMPOSTER' &&
+              powerup['powerupType'] != 'DECOY',
+        )
         .toList();
 
     final rng = Random();
@@ -1112,6 +1116,7 @@ class _DailyStripItem {
   bool get isPowerup => powerupType != null;
   bool get isCoins => coinAmount != null;
   bool get isAccessory => coinAmount == null && powerupType == null;
+  bool get isMystery => isAccessory && assetKey == null && name == '???';
 }
 
 class _DailyReelTile extends StatelessWidget {
@@ -1139,6 +1144,15 @@ class _DailyReelTile extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          if (!item.isCoins && !item.isMystery)
+            Text(
+              item.isPowerup ? 'POWERUP' : 'ACCESSORY',
+              style: PixelText.title(
+                size: 7.5,
+                color: AppColors.of(context).textMid,
+              ),
+              maxLines: 1,
+            ),
         ],
       ),
     );
@@ -1248,10 +1262,18 @@ class _LadderTile extends StatelessWidget {
               size: 36,
               color: AppColors.of(context).accent,
             )
+          else if (rewardType == 'POWERUP')
+            Icon(
+              Icons.bolt_rounded,
+              size: 36,
+              color: AppColors.of(context).accent,
+            )
           else
             const SpinningCoin(size: 32),
           Text(
-            rewardType == 'ACCESSORY' ? 'ITEM' : '+$coinAmount',
+            rewardType == 'ACCESSORY' || rewardType == 'POWERUP'
+                ? rewardType
+                : '+$coinAmount',
             style: PixelText.number(
               size: 14,
               color: AppColors.of(context).coinDark,
@@ -1376,6 +1398,17 @@ class _RewardRevealState extends State<_RewardReveal> {
                 ),
               ),
             ],
+            if (isPowerup || (type == 'ACCESSORY' && shopItem != null)) ...[
+              const SizedBox(height: 5),
+              Text(
+                isPowerup ? 'POWERUP' : 'ACCESSORY',
+                textAlign: TextAlign.center,
+                style: PixelText.title(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (isRetiredPowerup) ...[
               Icon(
@@ -1473,6 +1506,15 @@ class _RewardRevealState extends State<_RewardReveal> {
                 style: PixelText.title(
                   size: 22,
                   color: AppColors.of(context).textDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Go to your inventory to equip this item',
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
                 ),
               ),
             ] else ...[
@@ -1738,7 +1780,7 @@ class _DailyRewardHeader extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.only(right: 52),
+            padding: const EdgeInsets.only(right: 100),
             child: Align(
               alignment: Alignment.topLeft,
               child: Text(
@@ -1750,8 +1792,121 @@ class _DailyRewardHeader extends StatelessWidget {
               ),
             ),
           ),
+          Positioned(
+            top: 0,
+            right: 48,
+            child: _InfoButton(onTap: () => _showDailyPrizeInfo(context)),
+          ),
           Positioned(top: 0, right: 0, child: _CloseButton(onTap: onClose)),
         ],
+      ),
+    );
+  }
+}
+
+Future<void> _showDailyPrizeInfo(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      final colors = AppColors.of(dialogContext);
+      Widget row(IconData icon, String title, String body) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 23, color: colors.accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: PixelText.title(size: 13, color: colors.textDark),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    body,
+                    style: PixelText.body(size: 12, color: colors.textMid),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      return AlertDialog(
+        backgroundColor: colors.parchment,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: colors.coinDark, width: 2),
+        ),
+        title: Text(
+          'PRIZE TYPES',
+          style: PixelText.title(size: 18, color: colors.textDark),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              row(Icons.paid_rounded, 'COINS', 'Added to your coin balance.'),
+              row(
+                Icons.checkroom_rounded,
+                'ACCESSORY',
+                'Cosmetics are equipped from your inventory.',
+              ),
+              row(
+                Icons.bolt_rounded,
+                'POWERUP',
+                'Powerups are held in your inventory and used in races.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('GOT IT'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _InfoButton extends StatelessWidget {
+  const _InfoButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Daily reward prize types',
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.of(context).coinLight.withValues(alpha: .28),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.of(context).coinDark),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.help_outline_rounded,
+                size: 22,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

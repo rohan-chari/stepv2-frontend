@@ -35,6 +35,15 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.12',
+    title: 'KEEP THE RACE GOING',
+    bullets: <String>[
+      'Rematch finished races or make a race recurring to keep your crew together.',
+      'Team-only chat and a combined race timeline make it easier to plan and react.',
+      'See richer race stats, clearer rewards, smoother Shop purchases, and refreshed powerup art.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.3.11',
     title: 'RACES, YOUR WAY',
     bullets: <String>[

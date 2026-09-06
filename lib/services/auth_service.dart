@@ -95,6 +95,10 @@ class AuthService extends ChangeNotifier {
   // OnboardingStateService, which are the old-backend fallback.
   static const _keyRenameChipShownCount = 'auth_rename_chip_shown_count';
   static const _keyRenameChipDismissedAt = 'auth_rename_chip_dismissed_at';
+  static const _keyShopTutorialState = 'auth_shop_tutorial_state';
+  static const _keyShopTutorialCompletedAt = 'auth_shop_tutorial_completed_at';
+  static const _keyDisplayNameRequiresRename =
+      'auth_display_name_requires_rename';
   static const _keySessionToken = 'auth_session_token';
   static const _keyIsAdmin = 'auth_is_admin';
   static const _keyCoins = 'auth_coins';
@@ -147,6 +151,11 @@ class AuthService extends ChangeNotifier {
   int? _renameChipShownCount;
   String? _renameChipDismissedAt;
   bool _hasServerRenameChipState = false;
+  bool _hasShopTutorialServerState = false;
+  String? _shopTutorialCompletedAt;
+  bool _displayNameRequiresRename = false;
+  bool _recurringRacesV1 = false;
+  bool _teamChatV1 = false;
   String? _sessionToken;
   bool _isAdmin = false;
   int _coins = 0;
@@ -215,6 +224,11 @@ class AuthService extends ChangeNotifier {
   /// ledger. Treating it as zero would re-show the chip to everyone pointed at
   /// a stale backend.
   bool get hasServerRenameChipState => _hasServerRenameChipState;
+  bool get hasShopTutorialServerState => _hasShopTutorialServerState;
+  String? get shopTutorialCompletedAt => _shopTutorialCompletedAt;
+  bool get displayNameRequiresRename => _displayNameRequiresRename;
+  bool get recurringRacesV1 => _recurringRacesV1;
+  bool get teamChatV1 => _teamChatV1;
   bool get isAdmin => _isAdmin;
   int get coins => _coins;
   int get heldCoins => _heldCoins;
@@ -369,6 +383,11 @@ class AuthService extends ChangeNotifier {
       _supportsDiscoverableIdentity = false;
       _nameSetupOnboardingRequired = false;
       _nameSetupCompletedAt = null;
+      _hasShopTutorialServerState = false;
+      _shopTutorialCompletedAt = null;
+      _displayNameRequiresRename = false;
+      _recurringRacesV1 = false;
+      _teamChatV1 = false;
     }
     _backendUserId = nextUserId;
   }
@@ -414,6 +433,10 @@ class AuthService extends ChangeNotifier {
     _renameChipDismissedAt = prefs.getString(_keyRenameChipDismissedAt);
     _hasServerRenameChipState =
         _renameChipShownCount != null || _renameChipDismissedAt != null;
+    _hasShopTutorialServerState = prefs.getBool(_keyShopTutorialState) ?? false;
+    _shopTutorialCompletedAt = prefs.getString(_keyShopTutorialCompletedAt);
+    _displayNameRequiresRename =
+        prefs.getBool(_keyDisplayNameRequiresRename) ?? false;
     _sessionToken = prefs.getString(_keySessionToken);
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
     _coins = prefs.getInt(_keyCoins) ?? 0;
@@ -653,6 +676,26 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> completeShopTutorial() async {
+    final token = authToken;
+    if (token == null || token.isEmpty || !_hasShopTutorialServerState) {
+      return false;
+    }
+    try {
+      final result = await _backendApiService.completeShopTutorial(
+        identityToken: token,
+      );
+      final raw = result['completedAt'];
+      if (raw is! String || DateTime.tryParse(raw) == null) return false;
+      _shopTutorialCompletedAt = raw;
+      await _persist();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> updateProfilePhotoUrl(String? profilePhotoUrl) async {
     _profilePhotoUrl = profilePhotoUrl;
     final prefs = await SharedPreferences.getInstance();
@@ -866,6 +909,30 @@ class AuthService extends ChangeNotifier {
       final raw = backendUser['renameChipDismissedAt'];
       if (raw is String || raw == null) _renameChipDismissedAt = raw as String?;
     }
+    if (backendUser.containsKey('shopTutorialCompletedAt')) {
+      final raw = backendUser['shopTutorialCompletedAt'];
+      final validTimestamp = raw is String && DateTime.tryParse(raw) != null;
+      _hasShopTutorialServerState = raw == null || validTimestamp;
+      _shopTutorialCompletedAt = raw is String && validTimestamp ? raw : null;
+    } else if (authoritative) {
+      _hasShopTutorialServerState = false;
+      _shopTutorialCompletedAt = null;
+    }
+    if (backendUser.containsKey('displayNameRequiresRename')) {
+      _displayNameRequiresRename =
+          backendUser['displayNameRequiresRename'] == true;
+    } else if (authoritative) {
+      _displayNameRequiresRename = false;
+    }
+    if (backendUser.containsKey('capabilities')) {
+      final capabilities = backendUser['capabilities'];
+      _recurringRacesV1 =
+          capabilities is Map && capabilities['recurringRacesV1'] == true;
+      _teamChatV1 = capabilities is Map && capabilities['teamChatV1'] == true;
+    } else if (authoritative) {
+      _recurringRacesV1 = false;
+      _teamChatV1 = false;
+    }
     if (backendUser.containsKey('isAdmin')) {
       _isAdmin = backendUser['isAdmin'] as bool? ?? false;
     }
@@ -1043,6 +1110,11 @@ class AuthService extends ChangeNotifier {
     _renameChipShownCount = null;
     _renameChipDismissedAt = null;
     _hasServerRenameChipState = false;
+    _hasShopTutorialServerState = false;
+    _shopTutorialCompletedAt = null;
+    _displayNameRequiresRename = false;
+    _recurringRacesV1 = false;
+    _teamChatV1 = false;
     _sessionToken = null;
     _coins = 0;
     _heldCoins = 0;
@@ -1086,6 +1158,9 @@ class AuthService extends ChangeNotifier {
     // off the device.
     await prefs.remove(_keyRenameChipShownCount);
     await prefs.remove(_keyRenameChipDismissedAt);
+    await prefs.remove(_keyShopTutorialState);
+    await prefs.remove(_keyShopTutorialCompletedAt);
+    await prefs.remove(_keyDisplayNameRequiresRename);
     await prefs.remove(_keySessionToken);
     await prefs.remove(_keyIsAdmin);
     await prefs.remove(_keyHeldCoins);
@@ -1389,6 +1464,19 @@ class AuthService extends ChangeNotifier {
     if (_renameChipDismissedAt != null) {
       await prefs.setString(_keyRenameChipDismissedAt, _renameChipDismissedAt!);
     }
+    await prefs.setBool(_keyShopTutorialState, _hasShopTutorialServerState);
+    if (_shopTutorialCompletedAt != null) {
+      await prefs.setString(
+        _keyShopTutorialCompletedAt,
+        _shopTutorialCompletedAt!,
+      );
+    } else {
+      await prefs.remove(_keyShopTutorialCompletedAt);
+    }
+    await prefs.setBool(
+      _keyDisplayNameRequiresRename,
+      _displayNameRequiresRename,
+    );
     if (_sessionToken != null) {
       await prefs.setString(_keySessionToken, _sessionToken!);
     }

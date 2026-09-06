@@ -376,9 +376,7 @@ _GhostPepperCountdown? _ghostPepperCountdown(
   if (boostMs == null || burnoutMs == null) return null;
 
   final boostEndsAt = startsAt.add(Duration(milliseconds: boostMs));
-  final expectedExpiresAt = boostEndsAt.add(
-    Duration(milliseconds: burnoutMs),
-  );
+  final expectedExpiresAt = boostEndsAt.add(Duration(milliseconds: burnoutMs));
   if (now.isBefore(startsAt) ||
       expiresAt.toUtc() != expectedExpiresAt.toUtc() ||
       !now.isBefore(expiresAt)) {
@@ -513,6 +511,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Map<String, int> _globalPowerupInventory = const {};
   bool _isLoading = true;
   bool _isActing = false;
+  bool _rematchBusy = false;
+  String? _rematchIdempotencyKey;
+  bool _seriesBusy = false;
   bool? _acceptingInvite;
   // Set only by the missing-token early return in _loadDetails, so the
   // failed-load panel can tell "you're signed out" (no retry can fix that)
@@ -632,6 +633,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   final TextEditingController _messageInput = TextEditingController();
   final FocusNode _messageFocus = FocusNode();
   bool _sendingMessage = false;
+  String _chatAudience = 'ALL';
+  bool _switchingChatAudience = false;
   bool _sharingRace = false;
   // Anchors the iOS/iPad share popover to the share button's rect.
   final GlobalKey _shareButtonKey = GlobalKey();
@@ -1318,6 +1321,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             details['myPlacementAlertsMuted'] == true ||
             details['myChatMuted'] == true;
       });
+      if (_chatAudience == 'TEAM' && !_teamChatAvailable) {
+        setState(() {
+          _chatAudience = 'ALL';
+          _switchingChatAudience = true;
+          _messageInput.clear();
+        });
+        await _streams?.setAudience(
+          'ALL',
+          muted: details['myChatMuted'] == true,
+        );
+        if (!mounted) return;
+        _chat = _streams?.chat;
+        setState(() => _switchingChatAudience = false);
+      }
       if (previousRaceStatus == 'ACTIVE' && details['status'] != 'ACTIVE') {
         unawaited(_streams?.replacePrivateActivity());
       }
@@ -2028,6 +2045,62 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return result ?? false;
   }
 
+  Future<bool> _confirmRecurringInvite() async {
+    if (!widget.authService.recurringRacesV1 || _viewerSeries == null) {
+      return true;
+    }
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.autorenew_rounded,
+                size: 34,
+                color: AppColors.of(context).accent,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'JOIN THE SERIES?',
+                style: PixelText.title(
+                  size: 17,
+                  color: AppColors.of(context).textDark,
+                ),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                'Accepting also auto-enrolls you in future races in this series. You can turn that off from race details anytime.',
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 13,
+                  color: AppColors.of(context).textMid,
+                ),
+              ),
+              const SizedBox(height: 16),
+              PillButton(
+                label: 'JOIN & AUTO-JOIN',
+                fullWidth: true,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+              ),
+              const SizedBox(height: 8),
+              PillButton(
+                label: 'BACK',
+                variant: PillButtonVariant.secondary,
+                fullWidth: true,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return result == true;
+  }
+
   Future<void> _respondToInvite(bool accept) async {
     if (_isActing) return;
     setState(() {
@@ -2044,13 +2117,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         if (!confirmed) {
           return;
         }
+        if (!await _confirmRecurringInvite()) return;
       }
 
-      await _api.respondToRaceInvite(
-        identityToken: token,
-        raceId: widget.raceId,
-        accept: accept,
-      );
+      final subscribe =
+          accept &&
+          widget.authService.recurringRacesV1 &&
+          _viewerSeries != null;
+      if (subscribe) {
+        await _api.respondToRecurringRaceInvite(
+          identityToken: token,
+          raceId: widget.raceId,
+          accept: true,
+          subscribeToSeries: true,
+        );
+      } else {
+        await _api.respondToRaceInvite(
+          identityToken: token,
+          raceId: widget.raceId,
+          accept: accept,
+        );
+      }
       await _refreshWallet();
 
       if (!mounted) return;
@@ -3469,7 +3556,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           PowerupCopy.nameFor(powerupType),
                           style: PixelText.title(
                             size: 18,
-                            color: AppColors.of(context).textDark,
+                            color: AppColors.of(ctx).textDark,
                           ),
                         ),
                       ],
@@ -3838,6 +3925,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     required int myCoins,
     required void Function(int level, String? targetEffectId) onConfirm,
     VoidCallback? onDiscard,
+    VoidCallback? onReroll,
     int? discardPriceCoins,
   }) {
     showModalBottomSheet(
@@ -3852,34 +3940,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       ),
       builder: (ctx) {
         return SingleChildScrollView(
-          child: PocketWatchSheet(
-            powerupData: _powerupData,
-            viewerUserId: _myUserId,
-            myCoins: myCoins,
-            tierLabels:
-                tierLabels ??
-                PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH') ??
-                const ['Extend', 'Extend', 'Extend', 'Extend'],
-            costForLevel: (level) =>
-                _upgradeCostFor('POCKET_WATCH', rarity, level),
-            participants:
-                (_progress?['participants'] as List?)
-                    ?.cast<Map<String, dynamic>>() ??
-                const [],
-            onConfirm: (level, targetEffectId) {
-              Navigator.of(ctx).pop();
-              onConfirm(level, targetEffectId);
-            },
-            // B5 — parity with the generic sheet: discard is type-agnostic on
-            // the backend, so a Pocket Watch can be thrown away too. Matches the
-            // generic sheet's behavior: pop, then discard (no extra confirm).
-            onDiscard: onDiscard == null
-                ? null
-                : () {
-                    Navigator.of(ctx).pop();
-                    onDiscard();
-                  },
-            discardPriceCoins: discardPriceCoins,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PocketWatchSheet(
+                powerupData: _powerupData,
+                viewerUserId: _myUserId,
+                myCoins: myCoins,
+                tierLabels:
+                    tierLabels ??
+                    PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH') ??
+                    const ['Extend', 'Extend', 'Extend', 'Extend'],
+                costForLevel: (level) =>
+                    _upgradeCostFor('POCKET_WATCH', rarity, level),
+                participants:
+                    (_progress?['participants'] as List?)
+                        ?.cast<Map<String, dynamic>>() ??
+                    const [],
+                onConfirm: (level, targetEffectId) {
+                  Navigator.of(ctx).pop();
+                  onConfirm(level, targetEffectId);
+                },
+                // B5 — parity with the generic sheet: discard is type-agnostic on
+                // the backend, so a Pocket Watch can be thrown away too. Matches the
+                // generic sheet's behavior: pop, then discard (no extra confirm).
+                onDiscard: onDiscard == null
+                    ? null
+                    : () {
+                        Navigator.of(ctx).pop();
+                        onDiscard();
+                      },
+                discardPriceCoins: discardPriceCoins,
+              ),
+              if (onReroll != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: PillButton(
+                    key: const Key('stash-held-reroll'),
+                    label: 'REROLL · WATCH AD',
+                    variant: PillButtonVariant.rewardedAd,
+                    trailing: const Icon(Icons.play_circle_outline, size: 18),
+                    fullWidth: true,
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onReroll();
+                    },
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -3919,6 +4027,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -3943,7 +4052,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           PowerupCopy.nameFor(type),
                           style: PixelText.title(
                             size: 18,
-                            color: AppColors.of(context).textDark,
+                            color: AppColors.of(ctx).textDark,
                           ),
                         ),
                       ],
@@ -4078,6 +4187,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           targetEffectId: targetEffectId,
         ),
         onDiscard: () => _confirmAndDiscardPowerup(powerup),
+        onReroll: _canDeferredReroll(powerup)
+            ? () => _rerollHeldPowerup(powerup)
+            : null,
         // Third price surface (ui-test-planner): same _capRemaining and the
         // same min(price, cap) clamp as the DISCARD tag and the dialog, or the
         // sheet keeps promising the full price.
@@ -4090,13 +4202,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.of(context).parchment,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -4113,7 +4229,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           PowerupCopy.nameFor(type),
                           style: PixelText.title(
                             size: 18,
-                            color: AppColors.of(context).textDark,
+                            color: AppColors.of(ctx).textDark,
                           ),
                         ),
                       ],
@@ -4131,8 +4247,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   width: 44,
                   height: 3,
                   decoration: BoxDecoration(
-                    color:
-                        _rarityColors[rarity] ?? AppColors.of(context).textMid,
+                    color: _rarityColors[rarity] ?? AppColors.of(ctx).textMid,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -4141,7 +4256,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   PowerupCopy.descriptionFor(type),
                   style: PixelText.body(
                     size: 13,
-                    color: AppColors.of(context).textMid,
+                    color: AppColors.of(ctx).textMid,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -4207,6 +4322,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             _confirmAndDiscardPowerup(powerup);
                           },
                   ),
+                  if (_canDeferredReroll(powerup)) ...[
+                    const SizedBox(height: 8),
+                    PillButton(
+                      key: const Key('stash-held-reroll'),
+                      label: 'REROLL · WATCH AD',
+                      variant: PillButtonVariant.rewardedAd,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      trailing: const Icon(Icons.play_circle_outline, size: 18),
+                      onPressed: _isActing
+                          ? null
+                          : () {
+                              Navigator.of(ctx).pop();
+                              _rerollHeldPowerup(powerup);
+                            },
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -4730,6 +4866,193 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       );
     }
     return content;
+  }
+
+  Future<void> _createRematch() async {
+    if (_rematchBusy || _race?['rematchEligible'] != true) return;
+    final token = widget.authService.authToken;
+    final sourceId = _race?['id'];
+    if (token == null ||
+        token.isEmpty ||
+        sourceId is! String ||
+        sourceId.isEmpty) {
+      return;
+    }
+    setState(() => _rematchBusy = true);
+    try {
+      final result = await widget.backendApiService.rematchRace(
+        identityToken: token,
+        raceId: sourceId,
+        idempotencyKey: _rematchIdempotencyKey ??=
+            BackendApiService.generateIdempotencyKey(),
+      );
+      if (!mounted) return;
+      final race = result['race'];
+      final newRaceId = race is Map ? race['id'] : null;
+      if (newRaceId is! String || newRaceId.isEmpty) {
+        throw const ApiException(
+          'The rematch was created, but could not be opened.',
+        );
+      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => RaceDetailScreen(
+            authService: widget.authService,
+            raceId: newRaceId,
+            friends: widget.friends,
+            backendApiService: widget.backendApiService,
+            notificationService: widget.notificationService,
+            activationAnalyticsService: widget.activationAnalyticsService,
+            showPostCreateSharePrompt: true,
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) showErrorToast(context, error.message);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          'Couldn’t create the rematch. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _rematchBusy = false);
+    }
+  }
+
+  Map<String, dynamic>? get _viewerSeries {
+    if (!widget.authService.recurringRacesV1) return null;
+    final raw = _race?['series'];
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    if (id is! String ||
+        id.isEmpty ||
+        raw['enabled'] is! bool ||
+        raw['subscribed'] is! bool ||
+        raw['canManage'] is! bool) {
+      return null;
+    }
+    return <String, dynamic>{
+      for (final entry in raw.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+  }
+
+  Future<void> _disableViewerSeries(Map<String, dynamic> series) async {
+    if (_seriesBusy) return;
+    final token = widget.authService.authToken;
+    final id = series['id'];
+    if (token == null || token.isEmpty || id is! String || id.isEmpty) return;
+    final manages = series['canManage'] == true;
+    setState(() => _seriesBusy = true);
+    try {
+      if (manages) {
+        await widget.backendApiService.updateRaceSeries(
+          identityToken: token,
+          seriesId: id,
+          enabled: false,
+        );
+      } else {
+        await widget.backendApiService.updateRaceSeriesSubscription(
+          identityToken: token,
+          seriesId: id,
+          active: false,
+        );
+      }
+      if (!mounted) return;
+      final current = _race;
+      if (current != null) {
+        setState(() {
+          _race = <String, dynamic>{
+            ...current,
+            'series': <String, dynamic>{
+              ...series,
+              if (manages) 'enabled': false,
+              'subscribed': false,
+            },
+          };
+        });
+      }
+      showInfoToast(
+        context,
+        manages
+            ? 'This series will end after this race.'
+            : 'You won’t auto-join the next race.',
+      );
+    } on ApiException catch (error) {
+      if (mounted) showErrorToast(context, error.message);
+    } catch (_) {
+      if (mounted) showErrorToast(context, 'Couldn’t update the series.');
+    } finally {
+      if (mounted) setState(() => _seriesBusy = false);
+    }
+  }
+
+  Widget? _buildSeriesControl() {
+    final series = _viewerSeries;
+    if (series == null || series['subscribed'] != true) return null;
+    final manages = series['canManage'] == true;
+    final enabled = series['enabled'] != false;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: RetroCard(
+        key: const Key('race-series-control'),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(
+              Icons.autorenew_rounded,
+              color: AppColors.of(context).accent,
+              size: 26,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    manages ? 'RECURRING SERIES' : 'AUTO-JOIN NEXT RACE',
+                    style: PixelText.title(
+                      size: 12,
+                      color: AppColors.of(context).textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    enabled
+                        ? (manages
+                              ? 'A fresh race starts after this one settles.'
+                              : 'You’re subscribed for future races.')
+                        : 'Ends after this race.',
+                    style: PixelText.body(
+                      size: 10.5,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (enabled)
+              TextButton(
+                key: Key(
+                  manages
+                      ? 'race-series-end-after-this'
+                      : 'race-series-auto-join-off',
+                ),
+                onPressed: _seriesBusy
+                    ? null
+                    : () => _disableViewerSeries(series),
+                child: Text(
+                  manages ? 'END AFTER THIS RACE' : 'TURN OFF',
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(size: 9),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -5446,6 +5769,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             if (_hasPrizeDisplay) _prizeChip(),
           ],
         ),
+        if (_buildSeriesControl() case final control?) ...[
+          const SizedBox(height: 12),
+          control,
+        ],
         if (_postCreateSharePromptVisible && !widget.demoMode) ...[
           const SizedBox(height: 12),
           Padding(
@@ -6044,6 +6371,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [],
       placementPrivacyActive: progress['placementPrivacyActive'] == true,
     );
+    // Keep the full roster for totals and viewer permissions. Only the
+    // presentation excludes forfeited racers; their frozen steps still count.
+    final visibleParticipants = participants
+        .where((p) => !TeamRace.hasForfeited(p))
+        .toList(growable: false);
     final isTeamRace = TeamRace.isTeamRace(_race!);
 
     // Position runners against the expected-pace denominator (leader-capped)
@@ -6071,7 +6403,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           _buildRaceHero(
             chips: chips,
             runners: [
-              for (final p in participants)
+              for (final p in visibleParticipants)
                 GoalTrackRunner(
                   userId: p['userId'] is String ? p['userId'] as String : null,
                   name: p['stealthed'] == true
@@ -6093,6 +6425,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
             ],
           ),
+
+        if (_buildSeriesControl() case final control?) ...[
+          const SizedBox(height: 12),
+          control,
+        ],
 
         const SizedBox(height: 16),
         if (_progressState.isRefreshing)
@@ -6284,11 +6621,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                 teamATotal: totalA,
                                 teamBTotal: totalB,
                                 teamALeader: TeamCardMember.topScorerOf(
-                                  participants,
+                                  visibleParticipants,
                                   RaceTeam.teamA,
                                 ),
                                 teamBLeader: TeamCardMember.topScorerOf(
-                                  participants,
+                                  visibleParticipants,
                                   RaceTeam.teamB,
                                 ),
                               ),
@@ -6330,7 +6667,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         RaceTeam.teamB,
                       );
                       return _buildTeamTwoColumns(
-                        participants,
+                        visibleParticipants,
                         teamLaneStatesForTotals(totalA, totalB),
                       );
                     },
@@ -6814,6 +7151,83 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // (see AdService._adUnitId), which is exactly the borrowing we removed.
     // An injected controller (widget tests) bypasses the define entirely.
     return widget.boxRerollAdController != null || AdService.boxRerollSupported;
+  }
+
+  /// The server now includes these one-shot fields for held box results. Every
+  /// predicate is exact so a partially upgraded backend cannot expose a button
+  /// whose request would consume an ad grant and then fail.
+  bool _canDeferredReroll(Map<String, dynamic> powerup) {
+    if (!_boxRerollEnabled || _race?['status'] != 'ACTIVE') return false;
+    final id = powerup['id'];
+    final rarity = powerup['rarity'];
+    return id is String &&
+        id.trim().isNotEmpty &&
+        powerup['status'] == 'HELD' &&
+        rarity is String &&
+        _rarityColors.containsKey(rarity) &&
+        powerup['upgradeLevel'] is int &&
+        powerup['upgradeLevel'] == 0 &&
+        powerup.containsKey('usedAt') &&
+        powerup['usedAt'] == null &&
+        powerup.containsKey('rerolledAt') &&
+        powerup['rerolledAt'] == null;
+  }
+
+  Future<void> _rerollHeldPowerup(Map<String, dynamic> powerup) async {
+    if (_isActing || !_canDeferredReroll(powerup)) return;
+    final id = powerup['id'] as String;
+    setState(() => _isActing = true);
+    try {
+      final result = await _rerollBoxPowerup(id);
+      if (result == null || !mounted) return;
+      // Reconcile first, then stamp the local row as consumed as protection
+      // against an older intermediary cache returning the pre-reroll row.
+      await _loadProgress();
+      if (!mounted) return;
+      _optimisticallyApplyHeldReroll(id, result);
+      final type = result['type'];
+      if (type is String && type.trim().isNotEmpty) {
+        await showPowerupRevealModal(
+          context,
+          iconType: type,
+          title: 'REROLLED',
+          subtitle: 'Your box is now ${PowerupCopy.nameFor(type)}.',
+        );
+      } else {
+        showInfoToast(context, 'Reroll complete. Your stash is updated.');
+      }
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  void _optimisticallyApplyHeldReroll(
+    String powerupId,
+    Map<String, dynamic> result,
+  ) {
+    final data = _powerupData;
+    final inventory = data?['inventory'];
+    if (!mounted || data == null || inventory is! List) return;
+    setState(() {
+      data['inventory'] = [
+        for (final row in inventory)
+          if (row is Map && row['id'] == powerupId)
+            <String, dynamic>{
+              for (final entry in row.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+              if (result['type'] is String) 'type': result['type'],
+              if (result['rarity'] is String) 'rarity': result['rarity'],
+              'status': 'HELD',
+              'upgradeLevel': 0,
+              'usedAt': null,
+              // The wire response deliberately returns only `rerolled:true`;
+              // any non-null local sentinel correctly retires the one-shot UI.
+              'rerolledAt': true,
+            }
+          else
+            row,
+      ];
+    });
   }
 
   /// Batch 2026-08-10b item 1 — whether the backend is advertising the BATCH
@@ -8108,6 +8522,36 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         race['status'] != 'CANCELLED';
   }
 
+  bool get _teamChatAvailable {
+    final race = _race;
+    if (race == null || !widget.authService.teamChatV1) return false;
+    final status = race['status'];
+    if (!TeamRace.isTeamRace(race) ||
+        (status != 'ACTIVE' && status != 'COMPLETED')) {
+      return false;
+    }
+    if (race['myStatus'] != 'ACCEPTED' || !race.containsKey('myForfeitedAt')) {
+      return false;
+    }
+    if (race['myForfeitedAt'] != null) return false;
+    return _myLobbyTeam() != null;
+  }
+
+  Future<void> _setChatAudience(int index) async {
+    if (_switchingChatAudience || !_teamChatAvailable) return;
+    final next = index == 1 ? 'TEAM' : 'ALL';
+    if (next == _chatAudience) return;
+    setState(() {
+      _chatAudience = next;
+      _switchingChatAudience = true;
+      _messageInput.clear();
+    });
+    await _streams?.setAudience(next, muted: _race?['myChatMuted'] == true);
+    if (!mounted) return;
+    _chat = _streams?.chat;
+    setState(() => _switchingChatAudience = false);
+  }
+
   Future<void> _sendMessage() async {
     final chat = _chat;
     if (chat == null) return;
@@ -8272,7 +8716,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
-            'TIMELINE',
+            'ACTIVITY & CHAT',
             key: const Key('race-timeline-heading'),
             style: PixelText.title(size: 15, color: colors.textDark),
           ),
@@ -8285,6 +8729,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             child: Column(
               children: [
                 Expanded(child: body),
+                if (_teamChatAvailable)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
+                    child: IgnorePointer(
+                      ignoring: _switchingChatAudience,
+                      child: Opacity(
+                        opacity: _switchingChatAudience ? 0.6 : 1,
+                        child: ArcadeTabSelector(
+                          key: const Key('race-chat-audience-selector'),
+                          labels: const ['ALL', 'TEAM'],
+                          activeIndex: _chatAudience == 'TEAM' ? 1 : 0,
+                          onChanged: _setChatAudience,
+                        ),
+                      ),
+                    ),
+                  ),
                 _buildMessageComposer(),
               ],
             ),
@@ -8680,6 +9140,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     ?.cast<Map<String, dynamic>>()) ??
           [],
     );
+    final visibleParticipants = participants
+        .where((p) => !TeamRace.hasForfeited(p))
+        .toList(growable: false);
     final completedLeaderSteps = _leaderSteps(participants);
     final rawWinnerUserId = winner?['userId'];
     String? winnerId;
@@ -8704,9 +9167,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // so an unfunded race simply shows no coin lines.
     final podiumFinishers =
         (!isTeamRace &&
-            RacePodium.canRender(RacePodium.occupantCount(participants)))
+            RacePodium.canRender(RacePodium.occupantCount(visibleParticipants)))
         ? RacePodium.finishersFromParticipants(
-            participants,
+            visibleParticipants,
             payoutTiers: parsePayoutTiers(_race),
             viewerUserId: _myUserId,
           )
@@ -8739,7 +9202,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             if (_hasPrizeDisplay) ...[const Spacer(), _prizeChip()],
           ],
           runners: [
-            for (final p in participants)
+            for (final p in visibleParticipants)
               GoalTrackRunner(
                 userId: p['userId'] is String ? p['userId'] as String : null,
                 name: p['displayName'] as String? ?? '???',
@@ -8773,7 +9236,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 child: Column(
                   children: [
                     if (isTeamRace)
-                      _buildTeamWinnerBoard(winnerTeam, participants)
+                      _buildTeamWinnerBoard(winnerTeam, visibleParticipants)
                     // Item 4: solo races end on a podium. Team races keep the
                     // winning-team board; a race with a single finisher keeps
                     // the old winner card (one plinth reads as broken).
@@ -8808,6 +9271,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
         const SizedBox(height: 18),
 
+        if (_buildSeriesControl() case final control?) ...[
+          control,
+          const SizedBox(height: 14),
+        ],
+        if (_race?['rematchEligible'] == true && !widget.demoMode) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: PillButton(
+              key: const Key('race-detail-rematch'),
+              label: _rematchBusy ? 'CREATING REMATCH…' : 'REMATCH',
+              icon: Icons.replay_rounded,
+              variant: PillButtonVariant.secondary,
+              fullWidth: true,
+              onPressed: _rematchBusy ? null : _createRematch,
+            ),
+          ),
+          const SizedBox(height: 18),
+        ],
+
         // FINAL STANDINGS
         StaggerIn(
           key: _standingsVisibilityKey,
@@ -8820,7 +9302,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 child: isTeamRace
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _buildTeamGroupedRows(participants),
+                        children: _buildTeamGroupedRows(visibleParticipants),
                       )
                     : _standingsList(
                         participants,
@@ -10258,6 +10740,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     bool hasMore = false,
     bool isLoadingMore = false,
   }) {
+    final loadedCount = participants.length;
+    participants = participants
+        .where((p) => !TeamRace.hasForfeited(p))
+        .toList(growable: false);
     final rows = _buildLeaderboardRows(participants);
     // The local collapse exists for the UNPAGED board, where the server hands
     // back the entire field at once and 300 planks would bury the page. A
@@ -10278,7 +10764,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           // readout ("1-12 of 12") is always available; both buttons simply
           // sit disabled.
           _standingsPagerRow(
-            loadedCount: participants.length,
+            loadedCount: loadedCount,
             isLoading: isLoadingMore,
             onPrevious: !canGoBack || isLoadingMore
                 ? null
@@ -10293,9 +10779,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ? null
                 : () {
                     unawaited(
-                      _goToParticipantsPage(
-                        _participantsOffset + participants.length,
-                      ),
+                      _goToParticipantsPage(_participantsOffset + loadedCount),
                     );
                   },
           ),

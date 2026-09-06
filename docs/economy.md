@@ -379,6 +379,16 @@ re-add them.
 runtime authority because the seed update deliberately preserves admin-tuned
 price/activation fields.
 
+**Decoy removal review refresh — verified 2026-09-06 (prod, read-only).** Over
+the 30 complete database dates ending 2026-09-05, Decoy recorded **810**
+successful purchases by 90 users and removed **61,158 coins** (**2,038.6/day**).
+All negative ledger rows removed 541,983 coins over the same dates, so Decoy
+represented **11.3%** of observed sinks. There are 842 used and 31 discarded
+race Decoys all-time, with no HELD/queued race copy at the verification instant.
+Five Decoy-bound `powerup_unlock` ad grants exist; one verified grant remains
+unconsumed. Sources: `DB powerup_shop_items`, `powerup_purchase_requests`,
+`coin_transactions`, `race_powerups`, and `ad_reward_grants`.
+
 ### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-19
 
 Batch 2026-08-09 landed as config **version 4**. The live row now differs from
@@ -414,6 +424,15 @@ also has zero positive quantity. Its rarity, enum, copy, and effect code remain
 for historical/old-client compatibility. Sources: `DB balance_config`,
 `race_powerups`, `race_powerup_events`, `user_powerup_items`; `CODE
 balanceConfig.defaults.js:144-155`, `powerupOdds.js:6-9`.
+
+**Decoy planning baseline — verified 2026-09-06.** Decoy remains RARE but is
+absent from every live v4 drop tier, while the code-default `storeOnlyTypes`
+also excludes it from rolls. The 30 complete database dates ending 2026-09-05
+contain **54,555** revealed box results across 679 users, including 18,858
+results from the current RARE type set. Any Decoy roll policy must change both
+the RARE pool and the code-default store-only exclusion; a DB-pool-only edit is
+silently stripped by `enforceStoreOnlyExclusion`. Sources: `DB balance_config`,
+`race_powerups`; `CODE balanceConfig.defaults.js`, `balanceConfig.js`.
 
 ### 3.2b Previous row — v3 (`5ba76396…`, created 2026-07-28 09:46:24), superseded
 
@@ -919,7 +938,7 @@ gain of 3.4–5.1 — less than the 10 it was worth unspent. Simulated coins/box
 Horseshoe is strictly coin-negative and step-positive, which is the correct
 incentive.
 
-### 3.7 Ad-funded mystery-box reroll — `CODE powerups/commands/rerollMysteryBox.js`, verified 2026-08-25
+### 3.7 Ad-funded mystery-box reroll — `CODE powerups/commands/rerollMysteryBox.js`, verified 2026-09-06
 
 | Knob | Value | Source |
 |---|---|---|
@@ -929,17 +948,27 @@ incentive.
 | Cost | 1 verified watch = 1 reroll, consumed CAS | `CODE rerollMysteryBox.js:225-250` |
 | Eligibility | `status=HELD`, `rarity != null`, `upgradeLevel = 0`, `rerolledAt = null` | same |
 | Odds used | fresh roll at **current raw-steps position**, no Lucky Horseshoe floor | `CODE :283-297` |
-| Platform | iOS only (`ADMOB_BOX_REROLL_AD_UNIT_ID`); Android compiles the button out | `FE AdService` |
+| Transaction boundary | The grant CAS, replacement CAS, and audit event are currently separate statements. A failure or competing mutation after grant consumption can spend the watch without committing the replacement. | `CODE rerollMysteryBox.js` |
+| Platform | Client code supports dedicated iOS and Android units (`ADMOB_BOX_REROLL_AD_UNIT_ID` / `_ANDROID`), each with no fallback. A missing platform define compiles the button out. | `FE AdService` |
 
 **Rerollable population.** Spin-granted powerups carry a rarity (506 rows with
 `earned_at_steps IS NULL` and non-null rarity) and are therefore rerollable.
 **Store purchases carry a null rarity** (all `rainstorm`/`leech`/`quick_rinse`
 rows), so coins can *not* be converted into a box roll via reroll.
 
+**Current eligible stock (2026-09-06):** active races contain **1,032** HELD,
+revealed, unupgraded, never-rerolled rows across **315** users. Source: `DB
+race_powerups × races`, aggregate-only production read.
+
 **Production-snapshot volume since launch (2026-08-10 through snapshot cutoff
 2026-08-19):** 694 `box_reroll` grants / 67 users, 681 consumed. The snapshot's
 write stream ends on 2026-08-19, so this is not a current-through-2026-08-25
 counter. Source: `DB ad_reward_grants`, aggregate-only read-only query.
+
+**Current trailing-30-day volume (2026-09-06):** **4,101** `box_reroll`
+grants across **222** users; **246** of those grants remained unconsumed at the
+verification instant. Source: `DB ad_reward_grants`, aggregate-only read-only
+query.
 
 **Simultaneous-box ceiling (bounds any "reroll all" batch).**
 `DEFAULT_POWERUP_SLOTS = 3` + `MAX_QUEUED_BOXES = 1`; further crossings are
@@ -1142,7 +1171,7 @@ rounding subsidy. New-row stamping is controlled by
 races/services/payoutRounding.js`, `races/commands/completeRace.js`,
 `races/jobs/seededRaceRenewal.js`.
 
-### 4.3 Team race payouts — `CODE races/commands/completeRace.js:143-243`
+### 4.3 Legacy/null-stamp team race payouts — `CODE races/commands/completeRace.js`
 
 - Team size 1–5 (`validateRaceConfig.js:96`); **1v1 is legal**. Sides must be
   equal and ≥1 to start (`startRace.js:67-79`). No minimum field for a funded pool.
@@ -1168,7 +1197,32 @@ races/services/payoutRounding.js`, `races/commands/completeRace.js`,
 Prod team-race population 2026-08-08: 7 rows total (3 completed, 1 active,
 1 pending, 2 cancelled). **No 14-day team race has ever settled.**
 
-### 4.3a Active forfeit (current team-only behaviour, verified 2026-08-12)
+### 4.3a Fixed team winner reward v1 — verified 2026-09-06
+
+New app-funded team races carry immutable `team_payout_version=1` and
+`team_winner_reward_coins`. Every non-forfeited winning-team recipient receives
+the full stamped amount; every non-forfeited participant in an exact tie
+receives half. This is a fixed **per-recipient** award rather than a pool split,
+and there is currently no per-recipient raw-step threshold in the settlement
+planner.
+
+| Duration | Winner per recipient | Tie per recipient | Equal-skill EV per recipient-day |
+|---|---:|---:|---:|
+| 1 day | 100 | 50 | 50.0 |
+| 2–3 days | 200 | 100 | 50.0 at 2 days; 33.3 at 3 |
+| 4–7 days | 500 | 250 | 62.5 at 4 days; 35.7 at 7 |
+| 8+ days | 1,000 | 500 | 62.5 at 8 days; 35.7 at 14 |
+
+The last 30 complete database dates contained 19 non-seeded, user-created team
+races carrying the v1 stamp (10 live, 9 completed/cancelled) plus retained
+legacy null-stamp rows. The 102 accepted memberships in non-seeded team races
+completed in that window recorded 17,940 payout coins; none had zero raw steps
+in this observed sample. The absence of an observed zero-step recipient is not
+an eligibility rule: `buildTeamPayoutPlan` does not test activity. Sources:
+`CODE races/services/teamWinnerReward.js`, `teamPayoutPlan.js`,
+`races/commands/completeRace.js`; `DB races × race_participants`.
+
+### 4.3b Active forfeit (current team-only behaviour, verified 2026-08-12)
 
 `forfeitRace.js` rejects individual races. For an accepted active team member,
 it snapshots the live effective total to `race_participants.total_steps`, sets

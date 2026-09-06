@@ -64,6 +64,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   // opens the customize section still sends powerupsEnabled: true plus the
   // fixed 2,000-step interval (both create paths already send them explicitly).
   bool _powerupsEnabled = true;
+  bool _recurringSeries = false;
+  String? _recurringRequestFingerprint;
+  String? _recurringIdempotencyKey;
   String _payoutPreset = 'WINNER_TAKES_ALL';
   bool _isPublic = false;
   // Participant cap. Required selection: the user must pick a preset number or
@@ -104,6 +107,36 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   int _bracketSize = 8;
   // §3.5 — rounds are at least 2 days; 1-day matchups were removed.
   int _matchupDuration = 2;
+
+  bool get _recurringEligible =>
+      widget.authService.recurringRacesV1 &&
+      !widget.demoMode &&
+      !_isTeamRace &&
+      !_isTournament &&
+      !_noLimit &&
+      _maxParticipants != null &&
+      _maxParticipants! <= 100 &&
+      _scheduledStartAt == null &&
+      !_customSelected &&
+      _scheduledEndAt == null;
+
+  String _idempotencyKeyForRecurring(String name) {
+    final fingerprint = <Object?>[
+      name,
+      _selectedDuration,
+      _powerupsEnabled,
+      _powerupsEnabled ? kFixedPowerupStepInterval : null,
+      _payoutPreset,
+      _isPublic,
+      _maxParticipants,
+    ].join('|');
+    if (_recurringRequestFingerprint != fingerprint ||
+        _recurringIdempotencyKey == null) {
+      _recurringRequestFingerprint = fingerprint;
+      _recurringIdempotencyKey = BackendApiService.generateIdempotencyKey();
+    }
+    return _recurringIdempotencyKey!;
+  }
 
   @override
   void initState() {
@@ -426,6 +459,14 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       showErrorToast(context, windowError);
       return;
     }
+    if (_recurringSeries && !_recurringEligible) {
+      setState(() => _recurringSeries = false);
+      showErrorToast(
+        context,
+        'Recurring is no longer available with these race settings. Review the race, then try again.',
+      );
+      return;
+    }
 
     final name = _nameController.text.trim();
     if (name.isEmpty) {
@@ -531,24 +572,46 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               teamBName: teamBName,
               creatorTeam: _creatorSide.wireValue,
             )
-          : await widget.backendApiService.createRace(
-              identityToken: token,
-              name: name,
-              maxDurationDays: _selectedDuration,
-              powerupsEnabled: _powerupsEnabled,
-              powerupStepInterval: _powerupsEnabled
-                  ? kFixedPowerupStepInterval
-                  : null,
-              // Every race has a funded pool now, so the preset always counts.
-              payoutPreset: _payoutPreset,
-              isPublic: _isPublic,
-              maxParticipants: _noLimit ? null : _maxParticipants,
-              scheduledStartAt: _scheduledStartAt,
-              scheduledEndAt: _sendsCustomWindow ? _scheduledEndAt : null,
-            );
+          : await (_recurringSeries && _recurringEligible
+                ? widget.backendApiService.createRecurringRace(
+                    identityToken: token,
+                    name: name,
+                    maxDurationDays: _selectedDuration,
+                    powerupsEnabled: _powerupsEnabled,
+                    powerupStepInterval: _powerupsEnabled
+                        ? kFixedPowerupStepInterval
+                        : null,
+                    payoutPreset: _payoutPreset,
+                    isPublic: _isPublic,
+                    maxParticipants: _maxParticipants,
+                    idempotencyKey: _idempotencyKeyForRecurring(name),
+                  )
+                : widget.backendApiService.createRace(
+                    identityToken: token,
+                    name: name,
+                    maxDurationDays: _selectedDuration,
+                    powerupsEnabled: _powerupsEnabled,
+                    powerupStepInterval: _powerupsEnabled
+                        ? kFixedPowerupStepInterval
+                        : null,
+                    // Every race has a funded pool now, so the preset always counts.
+                    payoutPreset: _payoutPreset,
+                    isPublic: _isPublic,
+                    maxParticipants: _noLimit ? null : _maxParticipants,
+                    scheduledStartAt: _scheduledStartAt,
+                    scheduledEndAt: _sendsCustomWindow ? _scheduledEndAt : null,
+                  ));
 
-      final createdRace = result['race'] as Map<String, dynamic>?;
-      final createdRaceId = createdRace?['id'] as String?;
+      final rawCreatedRace = result['race'];
+      final createdRace = rawCreatedRace is Map
+          ? <String, dynamic>{
+              for (final entry in rawCreatedRace.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            }
+          : null;
+      final createdRaceId = createdRace?['id'] is String
+          ? createdRace!['id'] as String
+          : null;
       if (widget.presetInviteeIds.isNotEmpty && createdRaceId != null) {
         try {
           await widget.backendApiService.inviteToRace(
@@ -571,7 +634,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       );
 
       if (mounted) {
-        Navigator.of(context).pop(result['race'] as Map<String, dynamic>?);
+        Navigator.of(context).pop(createdRace);
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -1621,6 +1684,51 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             ),
                           ),
                         if (_customizeExpanded) const SizedBox(height: 24),
+
+                        if (_customizeExpanded && _recurringEligible) ...[
+                          RetroCard(
+                            key: const Key('recurring-race-card'),
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'RECURRING',
+                                        style: PixelText.title(
+                                          size: 13,
+                                          color: AppColors.of(context).textMid,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Text(
+                                        'Automatically make the next race with everyone who stays subscribed.',
+                                        style: PixelText.body(
+                                          size: 11,
+                                          color: AppColors.of(context).textMid,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Switch.adaptive(
+                                  key: const Key('recurring-race-toggle'),
+                                  value: _recurringSeries,
+                                  activeTrackColor: AppColors.of(
+                                    context,
+                                  ).pillGreenDark,
+                                  onChanged: (value) =>
+                                      setState(() => _recurringSeries = value),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
 
                         // Payout mode — how the app-funded prize pool is
                         // carved up. Every race has a pool now, so this is no

@@ -10,7 +10,6 @@ import 'package:step_tracker/tutorial/tutorial_preview_data.dart';
 import 'package:step_tracker/tutorial/tutorial_real_screens.dart';
 import 'package:step_tracker/tutorial/tutorial_screen.dart'
     show TutorialMockPage;
-import 'package:step_tracker/widgets/race_ui.dart' show RacerAvatar;
 
 Future<void> _noop() async {}
 
@@ -143,7 +142,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'active tournament uses the race-card surface, identity, inventory, and chevron',
+    'active tournament uses the race-card surface without an avatar indent',
     (tester) async {
       await _pump(tester, tournaments: [_activeTournament()]);
 
@@ -153,7 +152,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('tournament-identity-avatar-tournament-active')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byKey(const Key('tournament-card-inventory-tournament-active')),
@@ -167,12 +166,6 @@ void main() {
       expect(find.text('2ND PLACE'), findsOneWidget);
       expect(find.text('ALIVE'), findsOneWidget);
       expect(find.text('300'), findsOneWidget);
-
-      final avatar = tester.widget<RacerAvatar>(
-        find.byKey(const Key('tournament-identity-avatar-tournament-active')),
-      );
-      expect(avatar.animal, 'corgi_puppy');
-      expect(avatar.accessories.single['assetKey'], 'trail_hat');
     },
   );
 
@@ -231,21 +224,19 @@ void main() {
       ],
     );
 
-    final missingAvatar = tester.widget<RacerAvatar>(
+    expect(
       find.byKey(const Key('tournament-identity-avatar-tournament-active')),
+      findsNothing,
     );
-    expect(missingAvatar.animal, isNull);
-    expect(missingAvatar.accessories, isEmpty);
     expect(tester.takeException(), isNull);
 
     await _selectState(tester, 'pending');
-    final malformedAvatar = tester.widget<RacerAvatar>(
+    expect(
       find.byKey(
         const Key('tournament-identity-avatar-tournament-malformed-identity'),
       ),
+      findsNothing,
     );
-    expect(malformedAvatar.animal, isNull);
-    expect(malformedAvatar.accessories, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -283,14 +274,18 @@ void main() {
     final surface = tester.getRect(
       find.byKey(const Key('tournament-card-surface-tournament-active')),
     );
-    final avatar = tester.getRect(
-      find.byKey(const Key('tournament-identity-avatar-tournament-active')),
+    final inventory = tester.getRect(
+      find.byKey(const Key('tournament-card-inventory-tournament-active')),
     );
     final arrow = tester.getRect(
       find.byKey(const Key('tournament-card-arrow-tournament-active')),
     );
-    expect(surface.contains(avatar.topLeft), isTrue);
-    expect(surface.contains(avatar.bottomRight), isTrue);
+    expect(
+      find.byKey(const Key('tournament-identity-avatar-tournament-active')),
+      findsNothing,
+    );
+    expect(surface.contains(inventory.topLeft), isTrue);
+    expect(surface.contains(inventory.bottomRight), isTrue);
     expect(surface.contains(arrow.topLeft), isTrue);
     expect(surface.contains(arrow.bottomRight), isTrue);
   });

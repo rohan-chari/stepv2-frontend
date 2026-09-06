@@ -166,7 +166,14 @@ void main() {
     expect(find.textContaining('ENDS IN'), findsOneWidget);
     expect(find.text('VIEW'), findsOneWidget);
     expect(find.textContaining('US\$'), findsNothing);
-    expect(find.byKey(const Key('home-service-banner')), findsNothing);
+    expect(find.byKey(const Key('home-service-banner')), findsOneWidget);
+    expect(find.text('Legacy manual contest promotion'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('home-service-banner'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('home-giveaway-banner'))).dy,
+      ),
+    );
     final semantics = tester.getSemantics(
       find.byKey(const Key('home-giveaway-banner-tap')),
     );
@@ -315,14 +322,15 @@ void main() {
     expect(find.byKey(const Key('home-service-banner')), findsOneWidget);
   });
 
-  testWidgets('valid automatic banner wins over a legacy manual banner', (
+  testWidgets('valid automatic and manual banners coexist once in order', (
     tester,
   ) async {
     final auth = await _auth();
     await tester.pumpWidget(_home(auth, banner: _validBanner()));
     await tester.pump();
     expect(find.byKey(const Key('home-giveaway-banner')), findsOneWidget);
-    expect(find.text('Legacy manual contest promotion'), findsNothing);
+    expect(find.byKey(const Key('home-service-banner')), findsOneWidget);
+    expect(find.text('Legacy manual contest promotion'), findsOneWidget);
   });
 
   testWidgets('tapping automatic banner opens the matching giveaway', (
@@ -386,6 +394,7 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('home-giveaway-banner')), findsNothing);
+    expect(find.byKey(const Key('home-service-banner')), findsNothing);
   });
 
   testWidgets('motion stays stopped when mounted paused and resumes safely', (

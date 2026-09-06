@@ -22,6 +22,10 @@ class _ProfileApi extends BackendApiService {
       'stats': {
         'racePodiums': {'first': 2, 'second': 1, 'third': 3},
         'avgStepsPerDay': 4567,
+        'racesCompeted': 12,
+        'firstPlaceWins': 3,
+        'podiumFinishes': 7,
+        'winRate': 0.25,
       },
     };
   }
@@ -103,6 +107,9 @@ void main() {
     expect(find.byKey(const ValueKey('public-profile-sheet')), findsOneWidget);
     expect(find.text('@Trail Runner'), findsOneWidget);
     expect(find.text('4567'), findsOneWidget);
+    expect(find.text('RACE STATS'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('25%'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('public-profile-action-add')),
       findsOneWidget,
@@ -135,7 +142,10 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.byKey(const ValueKey('public-profile-action-add')));
+    final action = find.byKey(const ValueKey('public-profile-action-add'));
+    await tester.drag(find.byType(ListView).last, const Offset(0, -240));
+    await tester.pump();
+    await tester.tap(action);
     await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));

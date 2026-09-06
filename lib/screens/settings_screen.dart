@@ -14,6 +14,7 @@ import '../services/onboarding_state_service.dart';
 import '../styles.dart';
 import '../theme_controller.dart';
 import '../tutorial/tutorial_screen.dart';
+import 'tabs/shop_tab.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
@@ -439,6 +440,23 @@ class _SettingsContentState extends State<_SettingsContent> {
                 },
               ),
               _SettingsActionTile(
+                key: const Key('settings-view-shop-tutorial'),
+                label: 'VIEW SHOP TUTORIAL',
+                icon: Icons.storefront_rounded,
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ShopTab(
+                        authService: widget.authService,
+                        backendApiService: widget.backendApiService,
+                        forceTutorialReplay: true,
+                      ),
+                      fullscreenDialog: true,
+                    ),
+                  );
+                },
+              ),
+              _SettingsActionTile(
                 key: const Key('settings-support'),
                 label: 'SUPPORT',
                 icon: Icons.support_agent_rounded,
@@ -477,16 +495,16 @@ class _SettingsContentState extends State<_SettingsContent> {
                 rowKey: const Key('settings-social-instagram'),
                 asset: 'assets/images/social_instagram.png',
                 platform: 'Instagram',
-                handle: '@bara.steps',
+                handle: '@Bara.steps.app',
                 onTap: () =>
-                    _openAbsoluteUrl('https://instagram.com/bara.steps'),
+                    _openAbsoluteUrl('https://instagram.com/Bara.steps.app'),
               ),
               _SocialRow(
                 rowKey: const Key('settings-social-x'),
                 asset: 'assets/images/social_x.png',
                 platform: 'X',
-                handle: '@barastepz',
-                onTap: () => _openAbsoluteUrl('https://x.com/barastepz'),
+                handle: '@BaraStepsApp',
+                onTap: () => _openAbsoluteUrl('https://x.com/BaraStepsApp'),
               ),
             ],
           ),

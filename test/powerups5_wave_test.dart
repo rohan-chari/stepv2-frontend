@@ -101,19 +101,19 @@ Future<AuthService> _auth() async {
 }
 
 Map<String, dynamic> _catalogWithWave5() => {
-      'coins': 5000,
-      'items': [
-        for (final entry in _wave5.entries)
-          {
-            'sku': 'POWERUP_${entry.key}',
-            'name': entry.value,
-            'description': PowerupCopy.descriptionFor(entry.key),
-            'priceCoins': _wave5Prices[entry.key],
-            'powerupType': entry.key,
-            'ownedQuantity': 0,
-          },
-      ],
-    };
+  'coins': 5000,
+  'items': [
+    for (final entry in _wave5.entries)
+      {
+        'sku': 'POWERUP_${entry.key}',
+        'name': entry.value,
+        'description': PowerupCopy.descriptionFor(entry.key),
+        'priceCoins': _wave5Prices[entry.key],
+        'powerupType': entry.key,
+        'ownedQuantity': 0,
+      },
+  ],
+};
 
 Future<void> _pumpShop(
   WidgetTester tester,
@@ -121,7 +121,9 @@ Future<void> _pumpShop(
   BackendApiService api,
 ) async {
   await tester.pumpWidget(
-    MaterialApp(home: ShopTab(authService: auth, backendApiService: api)),
+    MaterialApp(
+      home: ShopTab(authService: auth, backendApiService: api),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
@@ -133,8 +135,9 @@ void main() {
   setUp(() => PowerupCopy.resetForTest());
 
   group('shop render', () {
-    testWidgets('all 11 wave-5 powerups render with real names (no raw enums)',
-        (tester) async {
+    testWidgets('saleable wave-5 powerups render without retired Decoy', (
+      tester,
+    ) async {
       final auth = await _auth();
       await _pumpShop(
         tester,
@@ -143,10 +146,12 @@ void main() {
       );
 
       for (final entry in _wave5.entries) {
+        if (entry.key == 'DECOY') continue;
         expect(find.text(entry.value), findsWidgets, reason: entry.value);
         // The failure mode this batch guards: a raw enum string in the UI.
         expect(find.text(entry.key), findsNothing, reason: entry.key);
       }
+      expect(find.text('Decoy'), findsNothing);
     });
   });
 
@@ -247,16 +252,20 @@ void main() {
     ];
 
     test('keeps only rivals strictly ahead of me', () {
-      final ahead =
-          TeamRace.targetsAheadOf(targets: targets, myTotalSteps: 9000);
+      final ahead = TeamRace.targetsAheadOf(
+        targets: targets,
+        myTotalSteps: 9000,
+      );
       final ids = ahead.map((t) => t['userId']).toList();
       // b (12000) is ahead; c is tied (not ahead); a and d are behind.
       expect(ids, ['b']);
     });
 
     test('empty when nobody is ahead', () {
-      final ahead =
-          TeamRace.targetsAheadOf(targets: targets, myTotalSteps: 99999);
+      final ahead = TeamRace.targetsAheadOf(
+        targets: targets,
+        myTotalSteps: 99999,
+      );
       expect(ahead, isEmpty);
     });
   });

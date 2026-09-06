@@ -23,7 +23,6 @@ import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../utils/team_race.dart';
 import '../../widgets/powerup_icon.dart';
-import '../../widgets/race_ui.dart' show RacerAvatar;
 import '../../widgets/spinning_coin.dart';
 import '../../widgets/spinning_crate.dart';
 import '../../widgets/team_scoreline.dart';
@@ -1519,9 +1518,6 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final id = Tournament.id(t) ?? '';
     final name = Tournament.name(t);
-    final identityName = Tournament.myIdentityDisplayName(t);
-    final identityAnimal = Tournament.myIdentityAnimal(t);
-    final identityAccessories = Tournament.myIdentityAccessories(t);
     final match = Tournament.myCurrentMatch(t);
     final liveRaceId = Tournament.liveMatchRaceId(t);
     final isLive = liveRaceId != null || match != null;
@@ -1624,20 +1620,6 @@ class _RacesTabState extends State<RacesTab> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Semantics(
-                    label: identityName == null
-                        ? 'Your racer'
-                        : 'Your racer, $identityName',
-                    child: RacerAvatar(
-                      key: Key('tournament-identity-avatar-$id'),
-                      rank: 1,
-                      accessories: identityAccessories,
-                      animal: identityAnimal,
-                      size: 48,
-                      showMedalRing: false,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

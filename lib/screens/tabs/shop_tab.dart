@@ -16,17 +16,20 @@ import '../../widgets/arcade_fx.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/coin_glyph.dart';
 import '../../widgets/error_toast.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
 import '../../widgets/race_ui.dart';
 import '../../constants/powerup_copy.dart';
+import '../../tutorial/spotlight_overlay.dart';
 import '../get_coins_screen.dart';
 
 // Powerup types retired from Store and Inventory. Old-backend residue is
 // filtered defensively; historical race Activity remains readable elsewhere.
-const _hiddenShopPowerupTypes = {'IMPOSTER'};
+const _hiddenPowerupInventoryTypes = {'IMPOSTER'};
+const _notForSalePowerupTypes = {'IMPOSTER', 'DECOY'};
 
 /// The watch-ads-to-unlock rules (spec §7 / contract §4.3).
 ///
@@ -176,6 +179,8 @@ class ShopTab extends StatefulWidget {
     this.adControllerBuilder,
     this.getCoinsAdController,
     this.now,
+    this.forceTutorialReplay = false,
+    this.isTutorialPreview = false,
   });
 
   final AuthService authService;
@@ -188,6 +193,8 @@ class ShopTab extends StatefulWidget {
   final ExtraSpinAdController Function()? adControllerBuilder;
   final ExtraSpinAdController? getCoinsAdController;
   final DateTime Function()? now;
+  final bool forceTutorialReplay;
+  final bool isTutorialPreview;
 
   @override
   State<ShopTab> createState() => _ShopTabState();
@@ -211,6 +218,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   bool _loading = true;
   bool _saving = false;
+  Map<String, dynamic>? _purchaseOverlayItem;
+  OverlayEntry? _purchaseOverlayEntry;
+  int? _tutorialStep;
+  Rect? _tutorialTarget;
+  bool _tutorialDecisionScheduled = false;
+  bool _tutorialCatalogReady = false;
+  bool _tutorialTransitioning = false;
   _ShopSection _section = _ShopSection.store;
   _ShopCategory _category = _ShopCategory.powerups;
 
@@ -248,6 +262,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleShopAuthChanged);
     _loadCatalog();
+    _maybeScheduleTutorial();
   }
 
   @override
@@ -262,6 +277,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     _activeShopAdControllers.clear();
     WidgetsBinding.instance.removeObserver(this);
     widget.authService.removeListener(_handleShopAuthChanged);
+    _removePurchaseOverlayEntry();
     _disposeShopAdTarget();
     super.dispose();
   }
@@ -280,7 +296,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final nextToken = widget.authService.authToken;
     final identityChanged =
         nextUserId != _shopSessionUserId || nextToken != _shopSessionToken;
-    if (!identityChanged) return;
+    if (!identityChanged) {
+      _maybeScheduleTutorial();
+      return;
+    }
 
     _shopSessionUserId = nextUserId;
     _shopSessionToken = nextToken;
@@ -298,6 +317,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (context != null && context.userId != widget.authService.userId) {
       _disposeShopAdTarget();
     }
+    _removePurchaseOverlayEntry();
     if (!mounted) return;
     setState(() {
       _catalog = null;
@@ -307,10 +327,215 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       _powerupsAvailable = false;
       _powerupsAvailabilityResolved = false;
       _selectedCosmeticItem = null;
+      _purchaseOverlayItem = null;
+      _tutorialStep = null;
+      _tutorialTarget = null;
+      _tutorialDecisionScheduled = false;
+      _tutorialCatalogReady = false;
+      _tutorialTransitioning = false;
       _loading = true;
       _saving = false;
     });
     unawaited(_loadCatalog());
+    _maybeScheduleTutorial();
+  }
+
+  void _maybeScheduleTutorial() {
+    if (_tutorialDecisionScheduled ||
+        !_tutorialCatalogReady ||
+        widget.isTutorialPreview) {
+      return;
+    }
+    final shouldShow =
+        widget.forceTutorialReplay ||
+        (widget.authService.hasShopTutorialServerState &&
+            widget.authService.shopTutorialCompletedAt == null);
+    if (!shouldShow) return;
+    _tutorialDecisionScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_launchTutorialWhenReady());
+    });
+  }
+
+  void _removePurchaseOverlayEntry() {
+    final entry = _purchaseOverlayEntry;
+    _purchaseOverlayEntry = null;
+    if (entry == null) return;
+    entry.remove();
+    entry.dispose();
+  }
+
+  void _showPurchaseOverlay(Map<String, dynamic> item) {
+    if (!mounted) return;
+    _removePurchaseOverlayEntry();
+    setState(() => _purchaseOverlayItem = item);
+    final entry = OverlayEntry(
+      builder: (overlayContext) => Stack(
+        children: [
+          const Positioned.fill(
+            child: ModalBarrier(dismissible: false, color: Color(0xA6000000)),
+          ),
+          Positioned.fill(child: _buildPurchaseOverlay(item, overlayContext)),
+        ],
+      ),
+    );
+    _purchaseOverlayEntry = entry;
+    Overlay.of(context, rootOverlay: true).insert(entry);
+  }
+
+  void _clearPurchaseOverlay() {
+    _removePurchaseOverlayEntry();
+    if (mounted && _purchaseOverlayItem != null) {
+      setState(() => _purchaseOverlayItem = null);
+      _maybeScheduleTutorial();
+    }
+  }
+
+  static const _tutorialTargets = <Key>[
+    Key('shop-segment-control'),
+    Key('shop-category-pills'),
+    Key('shop-character-preview'),
+    Key('shop-product-grid'),
+  ];
+
+  static const _tutorialTitles = <String>[
+    'STORE OR INVENTORY',
+    'PICK A CATEGORY',
+    'TRY IT ON',
+    'CHOOSE YOUR ITEM',
+  ];
+
+  static const _tutorialBodies = <String>[
+    'Browse new gear in Store, then manage everything you own in Inventory.',
+    'Jump between powerups, characters, and accessories.',
+    'The dressing room previews your Bara before you buy or equip.',
+    'Tap any card for details, then buy or unlock when you’re ready.',
+  ];
+
+  Element? _elementWithKey(Key key) {
+    Element? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (element.widget.key == key) {
+        found = element;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    (context as Element).visitChildElements(visit);
+    return found;
+  }
+
+  bool get _shouldShowTutorial =>
+      widget.forceTutorialReplay ||
+      (widget.authService.hasShopTutorialServerState &&
+          widget.authService.shopTutorialCompletedAt == null);
+
+  Rect? _mountedTutorialTargetRect(Key key) {
+    final target = _elementWithKey(key);
+    if (target == null || !target.mounted) return null;
+    final renderObject = target.renderObject;
+    if (renderObject is! RenderBox ||
+        !renderObject.attached ||
+        !renderObject.hasSize ||
+        renderObject.size.isEmpty) {
+      return null;
+    }
+    final origin = renderObject.localToGlobal(Offset.zero);
+    final rect = origin & renderObject.size;
+    return rect.left.isFinite &&
+            rect.top.isFinite &&
+            rect.right.isFinite &&
+            rect.bottom.isFinite
+        ? rect
+        : null;
+  }
+
+  bool get _allTutorialTargetsMounted =>
+      _tutorialTargets.every((key) => _mountedTutorialTargetRect(key) != null);
+
+  Future<Rect?> _measureTutorialTarget(int step) async {
+    if (!mounted || step < 0 || step >= _tutorialTargets.length) return null;
+    final key = _tutorialTargets[step];
+    final target = _elementWithKey(key);
+    if (target == null || !target.mounted) return null;
+    await Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      alignment: .35,
+    );
+    if (!mounted) return null;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return null;
+    return _mountedTutorialTargetRect(key);
+  }
+
+  Future<void> _launchTutorialWhenReady() async {
+    if (!mounted ||
+        !_tutorialCatalogReady ||
+        !_shouldShowTutorial ||
+        _purchaseOverlayItem != null ||
+        !_allTutorialTargetsMounted) {
+      _tutorialDecisionScheduled = false;
+      return;
+    }
+    final rect = await _measureTutorialTarget(0);
+    if (!mounted ||
+        rect == null ||
+        !_tutorialCatalogReady ||
+        !_shouldShowTutorial ||
+        _purchaseOverlayItem != null) {
+      _tutorialDecisionScheduled = false;
+      return;
+    }
+    setState(() {
+      _tutorialStep = 0;
+      _tutorialTarget = rect;
+    });
+  }
+
+  Future<void> _showTutorialStep(int step) async {
+    if (_tutorialTransitioning || _tutorialStep == null) return;
+    _tutorialTransitioning = true;
+    final rect = await _measureTutorialTarget(step);
+    if (!mounted) return;
+    _tutorialTransitioning = false;
+    if (rect == null || _tutorialStep == null) return;
+    setState(() {
+      _tutorialStep = step;
+      _tutorialTarget = rect;
+    });
+  }
+
+  void _advanceTutorial() {
+    final step = _tutorialStep;
+    if (step == null) return;
+    if (step == _tutorialTargets.length - 1) {
+      _finishTutorial();
+      return;
+    }
+    unawaited(_showTutorialStep(step + 1));
+  }
+
+  void _backTutorial() {
+    final step = _tutorialStep;
+    if (step == null || step == 0) return;
+    unawaited(_showTutorialStep(step - 1));
+  }
+
+  void _finishTutorial() {
+    if (_tutorialStep == null) return;
+    setState(() {
+      _tutorialStep = null;
+      _tutorialTarget = null;
+      _tutorialTransitioning = false;
+    });
+    if (!widget.forceTutorialReplay &&
+        widget.authService.hasShopTutorialServerState) {
+      unawaited(widget.authService.completeShopTutorial());
+    }
   }
 
   bool _sessionIsCurrent({
@@ -424,8 +649,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         _catalogState = Loadable.success(catalog);
         _selectedCosmeticItem = _revalidatedSelection(catalog);
         _loading = false;
+        _tutorialCatalogReady = true;
         _recomputeAdUnlock();
       });
+      _maybeScheduleTutorial();
       widget.onShopChanged?.call(catalog);
       final acceptedCoins = powerups?['coins'] ?? coins;
       if (acceptedCoins is num &&
@@ -561,14 +788,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         final type = raw['powerupType'];
         final quantity = raw['quantity'];
         if (type is String && quantity is num && quantity.toInt() > 0) {
-          if (!_hiddenShopPowerupTypes.contains(type)) {
+          if (!_hiddenPowerupInventoryTypes.contains(type)) {
             inventory[type] = quantity.toInt();
           }
         }
       }
     }
     _powerupStoreItems = storeItems
-        .where((item) => !_hiddenShopPowerupTypes.contains(item['powerupType']))
+        .where((item) => !_notForSalePowerupTypes.contains(item['powerupType']))
         .toList();
     _powerupInventory = inventory;
     _powerupsAvailable = true;
@@ -790,6 +1017,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (token == null || token.isEmpty || itemId == null) return;
 
     setState(() => _saving = true);
+    _showPurchaseOverlay(item);
     try {
       final result = await _backendApiService.purchaseShopItem(
         identityToken: token,
@@ -834,6 +1062,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         epoch: acceptedEpoch,
       )) {
         if (!mounted) return;
+        _clearPurchaseOverlay();
         showInfoToast(context, '${item['name'] ?? 'Accessory'} unlocked.');
       }
     } on ApiException catch (error) {
@@ -843,6 +1072,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(context, error.message);
       }
     } catch (_) {
@@ -852,6 +1082,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(
           context,
           'Could not buy this accessory. Please try again.',
@@ -863,7 +1094,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         setState(() => _saving = false);
+        _maybeScheduleTutorial();
       }
     }
   }
@@ -889,6 +1122,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (token == null || token.isEmpty || sku == null) return;
 
     setState(() => _saving = true);
+    _showPurchaseOverlay(item);
     try {
       final result = await _backendApiService.purchasePowerupItem(
         identityToken: token,
@@ -932,6 +1166,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
         epoch: acceptedEpoch,
       )) {
+        _clearPurchaseOverlay();
         showInfoToast(context, '${item['name'] ?? 'Powerup'} purchased.');
       }
     } on ApiException catch (error) {
@@ -941,6 +1176,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(context, error.message);
       }
     } catch (_) {
@@ -950,6 +1186,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(
           context,
           'Could not buy this powerup. Please try again.',
@@ -961,7 +1198,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         setState(() => _saving = false);
+        _maybeScheduleTutorial();
       }
     }
   }
@@ -1191,33 +1430,107 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final showBackButton = Navigator.canPop(context);
     final tabBarHeight = showBackButton ? bottomInset : 77.5 + bottomInset;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: ColoredBox(
-              color: AppColors.of(context).roofLight,
-              child: CustomPaint(
-                painter: ArcadeCheckerPainter(drawBottomStripe: false),
+    return PopScope(
+      canPop: _purchaseOverlayItem == null,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: ColoredBox(
+                color: AppColors.of(context).roofLight,
+                child: CustomPaint(
+                  painter: ArcadeCheckerPainter(drawBottomStripe: false),
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-            child: AppRefreshIndicator(
-              onRefresh: _loadCatalog,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _buildHeader(showBackButton: showBackButton),
+            Padding(
+              padding: EdgeInsets.only(
+                top: topInset + 14,
+                bottom: tabBarHeight,
+              ),
+              child: AppRefreshIndicator(
+                onRefresh: _loadCatalog,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _buildHeader(showBackButton: showBackButton),
+                    ),
+                    SliverToBoxAdapter(child: _buildBody()),
+                  ],
+                ),
+              ),
+            ),
+            if (_purchaseOverlayItem == null)
+              if (_tutorialStep case final step?)
+                Positioned.fill(
+                  child: SpotlightOverlay(
+                    targetRect: _tutorialTarget,
+                    title: _tutorialTitles[step],
+                    body: _tutorialBodies[step],
+                    stepIndex: step,
+                    stepCount: _tutorialTargets.length,
+                    onNext: _advanceTutorial,
+                    onBack: step == 0 ? null : _backTutorial,
+                    onSkip: _finishTutorial,
                   ),
-                  SliverToBoxAdapter(child: _buildBody()),
-                ],
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPurchaseOverlay(
+    Map<String, dynamic> item,
+    BuildContext overlayContext,
+  ) {
+    final colors = AppColors.of(overlayContext);
+    final rawName = item['name'];
+    final name = rawName is String && rawName.trim().isNotEmpty
+        ? rawName.trim()
+        : 'Item';
+    final type = item['powerupType'];
+    final art = type is String && type.isNotEmpty
+        ? _powerupArt(type, fallbackSize: 70)
+        : _cosmeticArt(item, iconSize: 70);
+    return SafeArea(
+      child: Center(
+        child: Semantics(
+          liveRegion: true,
+          label: 'Purchasing $name',
+          child: ExcludeSemantics(
+            child: GameContainer(
+              key: const Key('shop-purchase-overlay'),
+              padding: const EdgeInsets.fromLTRB(26, 22, 26, 22),
+              frameColor: colors.coinDark,
+              surfaceColor: colors.parchment,
+              glowColor: colors.coinMid,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 210, maxWidth: 300),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(width: 92, height: 92, child: Center(child: art)),
+                    const SizedBox(height: 14),
+                    Text(
+                      'PURCHASING',
+                      style: PixelText.title(size: 17, color: colors.textDark),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      name,
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(size: 14, color: colors.textMid),
+                    ),
+                    const SizedBox(height: 16),
+                    PillButtonSpinner(color: colors.accent),
+                  ],
+                ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2763,6 +3076,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       }
       if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
 
+      _showPurchaseOverlay(item);
       final result = await _backendApiService.unlockPowerupWithAds(
         identityToken: token,
         sku: sku,
@@ -2801,6 +3115,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
         epoch: acceptedEpoch,
       )) {
+        _clearPurchaseOverlay();
         showInfoToast(context, '$name unlocked!');
       }
     } on ApiException catch (error) {
@@ -2810,6 +3125,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(context, error.message);
       }
     } catch (_) {
@@ -2819,6 +3135,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(
           context,
           'Couldn’t unlock this powerup. Please try again.',
@@ -2830,7 +3147,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         setState(() => _saving = false);
+        _maybeScheduleTutorial();
       }
     }
   }
@@ -2882,6 +3201,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       }
       if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
 
+      _showPurchaseOverlay(item);
       final result = await _backendApiService.unlockShopItemWithAds(
         identityToken: token,
         sku: sku,
@@ -2921,6 +3241,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         epoch: acceptedEpoch,
       )) {
         if (!mounted) return;
+        _clearPurchaseOverlay();
         showInfoToast(context, '$name unlocked!');
       }
     } on ApiException catch (error) {
@@ -2935,9 +3256,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       // A 404 means this backend has no cosmetic ad-unlock at all. Say so once
       // and send the user down the coin route rather than looping on ads.
       if (error.statusCode == 404) {
+        _clearPurchaseOverlay();
         _openGetCoins();
         return;
       }
+      _clearPurchaseOverlay();
       showErrorToast(context, error.message);
     } catch (_) {
       if (!mounted) return;
@@ -2946,6 +3269,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         showErrorToast(context, 'Couldn’t unlock this item. Please try again.');
       }
     } finally {
@@ -2954,7 +3278,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         userId: userId,
         token: token,
       )) {
+        _clearPurchaseOverlay();
         setState(() => _saving = false);
+        _maybeScheduleTutorial();
       }
     }
   }

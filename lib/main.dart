@@ -177,7 +177,7 @@ class StepTrackerApp extends StatelessWidget {
               home: AdConsentBootstrap(
                 coordinator: adConsentCoordinator,
                 child: _VersionGate(
-                  child: _SessionGate(
+                  child: SessionGate(
                     authService: authService,
                     notificationService: notificationService,
                   ),
@@ -317,27 +317,41 @@ class _VersionGateState extends State<_VersionGate>
   }
 }
 
-class _SessionGate extends StatefulWidget {
-  const _SessionGate({
+class SessionGate extends StatefulWidget {
+  const SessionGate({
+    super.key,
     required this.authService,
     required this.notificationService,
+    this.authenticatedChild,
   });
 
   final AuthService authService;
   final NotificationService notificationService;
+  final Widget? authenticatedChild;
 
   @override
-  State<_SessionGate> createState() => _SessionGateState();
+  State<SessionGate> createState() => _SessionGateState();
 }
 
-class _SessionGateState extends State<_SessionGate> {
+class _SessionGateState extends State<SessionGate> {
   bool _loading = true;
   bool _hasSession = false;
 
   @override
   void initState() {
     super.initState();
+    widget.authService.addListener(_handleAuthChanged);
     _checkSession();
+  }
+
+  void _handleAuthChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.authService.removeListener(_handleAuthChanged);
+    super.dispose();
   }
 
   Future<void> _checkSession() async {
@@ -354,9 +368,19 @@ class _SessionGateState extends State<_SessionGate> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (_hasSession && widget.authService.displayNameRequiresRename) {
+      return DisplayNameScreen(
+        key: const Key('forced-display-name-rename-gate'),
+        authService: widget.authService,
+        notificationService: widget.notificationService,
+        forcedRename: true,
+      );
+    }
+
     if (_hasSession &&
         (widget.authService.displayName != null ||
             widget.authService.onboardingV2Enabled)) {
+      if (widget.authenticatedChild case final child?) return child;
       return MainShell(
         authService: widget.authService,
         notificationService: widget.notificationService,

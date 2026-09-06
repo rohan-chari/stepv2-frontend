@@ -279,7 +279,10 @@ void main() {
             expect(find.text('Come back tomorrow.'), findsOneWidget);
             expect(find.text('COME BACK TOMORROW'), findsOneWidget);
             expect(find.text('% ODDS'), findsNothing);
-            expect(find.text('?'), findsNothing);
+            expect(
+              find.bySemanticsLabel('Daily reward prize types'),
+              findsOneWidget,
+            );
             final body = tester
                 .widgetList<RichText>(find.byType(RichText))
                 .firstWhere(
@@ -394,6 +397,7 @@ void main() {
     expect(find.text('CLAIMED!'), findsOneWidget);
     expect(find.text('RARE'), findsOneWidget);
     expect(find.text('Signal Jammer'), findsOneWidget);
+    expect(find.text('POWERUP'), findsOneWidget);
     expect(find.text('Added to your powerups'), findsOneWidget);
   });
 
@@ -456,9 +460,27 @@ void main() {
     );
     await _pumpScreen(tester, api, auth);
 
-    expect(find.text('?'), findsNothing);
+    expect(find.bySemanticsLabel('Daily reward prize types'), findsOneWidget);
     expect(find.text('% ODDS'), findsNothing);
     expect(find.text('new accessory or powerup'), findsNothing);
+  });
+
+  testWidgets('help explains the three prize types without showing odds', (
+    WidgetTester tester,
+  ) async {
+    final auth = await _authService();
+    await _pumpScreen(tester, _BoxModeApi(claimedToday: true), auth);
+
+    await tester.tap(find.bySemanticsLabel('Daily reward prize types'));
+    await tester.pump();
+
+    expect(find.text('PRIZE TYPES'), findsOneWidget);
+    expect(find.text('COINS'), findsOneWidget);
+    expect(find.text('ACCESSORY'), findsOneWidget);
+    expect(find.text('POWERUP'), findsOneWidget);
+    expect(find.textContaining('equipped from your inventory'), findsOneWidget);
+    expect(find.textContaining('used in races'), findsOneWidget);
+    expect(find.text('% ODDS'), findsNothing);
   });
 
   testWidgets('already-claimed box mode shows come-back state, no claim', (

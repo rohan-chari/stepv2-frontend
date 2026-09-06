@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -493,6 +494,17 @@ void main() {
     ]);
     expect(find.byKey(const Key('contest-trail-scene')), findsOneWidget);
     expect(find.text('SHARE YOUR INVITE'), findsOneWidget);
+    expect(find.text('Drop it in the group chat'), findsOneWidget);
+    expect(find.text('Get the family involved'), findsOneWidget);
+    expect(
+      find.text('Show your coworkers you’re better than them'),
+      findsOneWidget,
+    );
+    expect(find.text('POST IT ON INSTAGRAM'), findsNothing);
+    final ideas = tester.getSemantics(
+      find.byKey(const Key('contest-dashboard-share-ideas')),
+    );
+    expect(ideas.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
     expect(find.textContaining('3 VERIFIED'), findsOneWidget);
     expect(find.textContaining('#8'), findsOneWidget);
   });
@@ -572,8 +584,13 @@ void main() {
           .height,
       lessThanOrEqualTo(185),
     );
-    expect(find.text('DROP IT IN THE GROUP CHAT'), findsOneWidget);
-    expect(find.text('POST IT ON INSTAGRAM'), findsOneWidget);
+    expect(find.text('Drop it in the group chat'), findsOneWidget);
+    expect(find.text('Get the family involved'), findsOneWidget);
+    expect(
+      find.text('Show your coworkers you’re better than them'),
+      findsOneWidget,
+    );
+    expect(find.text('POST IT ON INSTAGRAM'), findsNothing);
     expect(
       find.textContaining('ONE SHARE COULD WIN YOU 12,345 COINS'),
       findsOneWidget,
@@ -783,8 +800,13 @@ void main() {
       textScale: 1.7,
     );
     expect(tester.takeException(), isNull);
-    expect(find.text('DROP IT IN THE GROUP CHAT'), findsOneWidget);
-    expect(find.text('POST IT ON INSTAGRAM'), findsOneWidget);
+    expect(find.text('Drop it in the group chat'), findsOneWidget);
+    expect(find.text('Get the family involved'), findsOneWidget);
+    expect(
+      find.text('Show your coworkers you’re better than them'),
+      findsOneWidget,
+    );
+    expect(find.text('POST IT ON INSTAGRAM'), findsNothing);
     expect(
       find.byKey(const Key('contest-dashboard-share-ideas')),
       findsOneWidget,

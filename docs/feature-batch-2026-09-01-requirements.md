@@ -1,810 +1,1097 @@
 # Race retention, inventory, identity, tutorial, and UI fixes — requirements
 
-**Status:** reviewed; awaiting explicit owner approval  
-**Planning date:** 2026-09-01  
+**Status:** implemented and production-ready as of 2026-09-06; owner-approved; architect/economy/UI/code reviews complete
 **Implementation:** explicitly not authorized
 
 ## 1. Summary and user stories
 
-This batch fixes six misleading or unsafe surfaces and adds four retention or
-education improvements:
-
-1. Stealthed racers must be anonymous everywhere in an active race, including
-   the course, standings, avatars, accessories, steps, rank, profile actions,
-   and any completed-race fallback that remains privacy-sensitive.
-2. A completed custom race can be rematched: one new custom race is created
-   from the old race's approved settings and everyone else from the old roster
-   receives a normal invite.
-3. Personal tournament cards use the same information hierarchy as ordinary
-   race cards and do not show the viewer's capybara/avatar at the leading edge.
-4. Settings links to `@BaraStepsApp` on X/Twitter and `@Bara.steps.app` on
-   Instagram.
-5. A revealed mystery-box powerup can still use its existing one-time,
-   rewarded-ad reroll after the reveal modal closes, from its stash action
-   sheet. The reveal-time action remains unchanged.
-6. Daily-reward item reveals identify `POWERUP` versus `ACCESSORY` and explain
-   the correct inventory destination/action.
-7. The first real visit to Shop launches a shop-specific spotlight tutorial.
-8. New or changed usernames/display names containing profanity are rejected by
-   the backend and explained consistently by every current client entry point.
-9. Referral-contest calls to action and rule headings use theme-semantic,
-   readable foreground colors in both light and night themes.
-10. Contest sharing ideas render as non-interactive icon bullets, not controls,
-    with the owner-supplied copy.
-
-**User stories.** As a racer, I cannot identify someone protected by Stealth;
-I can keep a good custom-race cohort together after settlement; I can reroll an
-eligible box result even if I dismissed its reveal; and I understand where a
-daily item went. As a new shopper, I understand the Shop on first visit. As a
-community member, I do not encounter newly accepted profane public names. As a
-contest entrant, I can read the rules and distinguish suggestions from buttons.
+This batch contains twenty-two changes: prevent visible clues from identifying an
+active Stealth racer; let any accepted participant create unlimited sequential
+custom-race rematches with the former roster invited; remove the viewer avatar
+from personal tournament cards; update community handles; expose the existing
+one-time ad reroll from eligible held powerups; label daily item rewards; teach
+Shop on every account's first real visit with Settings replay; reject profane
+display names and force existing offenders to rename; repair referral-contest
+contrast; render sharing ideas as non-interactive bullets; add blocking Shop
+purchase progress; add opt-in recurring custom races; restore the Home service
+banner; restore Daily Reward prize help; add own/friend race statistics; suppress
+same-team opponent nudges; reject stacked Rally Flags; unify solo activity/chat;
+enforce admin-only giveaway creation; add private team chat; move Decoy from Shop
+to mystery-box rolls; and replace Hitchhike's icon.
 
 ## 2. Scope and non-goals
 
 ### In scope
 
-- iOS and Android Flutter behavior and mirrored tutorial/demo surfaces.
-- Backend additions needed for atomic rematch creation and authoritative name
-  validation.
-- Integration/widget tests written before business logic.
-- Accessibility semantics, narrow-screen layout, and both app themes.
-- Safe fallback when a new response field or error code is absent.
+- iOS and Android Flutter behavior, real reused demo/tutorial surfaces, additive
+  backend contracts/migrations, durable events/cache invalidation, accessibility,
+  and tests written before logic.
+- Defensive behavior across older/newer app and backend versions.
 
 ### Non-goals
 
-- No change to Stealth duration, odds, targeting rules, or effect economy.
-- No change to custom-race scoring, prizes, buy-ins, team logic, or tournaments.
-- No change to the existing reveal-time reroll, reroll odds, ad grant price,
-  reroll-all behavior, or discard rewards.
-- No redesign of the entire Shop, daily reel, contest, or tournament bracket.
-- No release flag, rollout percentage, kill switch, or temporary runtime
-  toggle. All behavior is permanent and version-compatible.
-- No staging/prod operation, deployment, build upload, or implementation in
-  this planning phase.
+- Preserve the shipped 2026-08-28b Stealth contract: active unfinished
+  opponents hide name, steps, and track position, but authenticated API IDs are
+  not anonymized and finished/expired racers unmask.
+- No changes to odds, duration, reroll value/odds, prices, payout math, scoring,
+  buy-ins, brackets, or the reveal-time reroll.
+- No rematch confirmation editor and no copied lifecycle, progress, inventory,
+  messages, settlement, or notification history.
+- No broad redesign, release flag, staging/prod operation, deployment, or code
+  implementation during this planning phase.
 
-## 3. Current-state findings
+## 3. Current-state findings (2026-09-06)
 
-### 3.1 Stealth leak
-
-The active course already masks a stealthed runner's name, position, animal,
-and accessories (`lib/screens/race_detail_screen.dart:6073-6093`), while
-`LeaderboardPlank` masks name, photo, multiplier, and steps
-(`lib/widgets/leaderboard_plank.dart:88-115,273-280`). The supplied screenshot
-still exposes the identity associated with Stealth, so implementation must
-trace the actual standings call site and every alternate renderer, not merely
-patch the shared plank. The completed hero currently reads raw `displayName`,
-photo, accessories, and animal without a Stealth branch
-(`lib/screens/race_detail_screen.dart:8741-8755`), a confirmed privacy gap if
-the server continues to mark the row stealthed at completion.
-
-### 3.2 Rematch surfaces and race creation
-
-The finish popup is `RaceResultsSummaryScreen`; its rewarded-ad CTA is built
-near `lib/screens/race_results_summary_screen.dart:756-773`. The completed race
-detail ends after final standings and activity/chat
-(`lib/screens/race_detail_screen.dart:8811-8841`) and has no retention CTA.
-Existing creation and invitation contracts are separate backend commands
-(`src/modules/races/commands/createRace.js` and `inviteToRace.js`), so chaining
-two client calls would permit partial completion and duplicate races. Rematch
-therefore needs one transactional, idempotent server command.
-
-### 3.3 Tournament card
-
-The tournament row intentionally builds the viewer's `myIdentity` and renders
-a leading `RacerAvatar` (`lib/screens/tabs/races_tab.dart:1520-1525,
-1627-1639`). This is the capybara visible in the supplied card. Removal is a
-frontend-only layout change; partial/older tournament payload handling remains.
-
-### 3.4 Community links
-
-The current Instagram row uses `@bara.steps` and `instagram.com/bara.steps`;
-the X row uses `@barastepz` and `x.com/barastepz`
-(`lib/screens/settings_screen.dart:467-490`). Both visible handle and URL must
-change together.
-
-### 3.5 Deferred reroll
-
-The backend already stores `rerolledAt` on the exact per-race `RacePowerup`
-row (`prisma/schema.prisma:2167-2170`) and `rerollMysteryBox` already requires
-an active race, owned HELD/unused box-origin row, rarity, upgrade level zero,
-and `rerolledAt == null` before atomically consuming one verified ad grant
-(`src/modules/powerups/commands/rerollMysteryBox.js:126-257`). The Flutter
-screen already owns the rewarded-ad/retry flow
-(`lib/screens/race_detail_screen.dart:6834-7153`) but wires it only to the box
-reveal (`:7186-7188`). The ordinary stash sheet currently offers USE/DISCARD
-near `:4091-4202`. No migration or new endpoint is expected for this item.
-
-### 3.6 Daily item reveal
-
-The daily reward reads `rewardType` defensively and distinguishes valid
-powerups and accessories (`lib/screens/daily_reward_screen.dart:1314-1327`). A
-powerup currently says only “Added to your powerups” (`:1427-1443`), while an
-accessory has no type/destination guidance (`:1469-1477`). Missing/malformed
-item payloads already fall back safely to the coin presentation and must keep
-doing so.
-
-### 3.7 Tutorial foundation
-
-The existing app tutorial uses real-screen previews and `SpotlightOverlay`
-under `lib/tutorial/`; Shop has stable keys including
-`shop-segment-control`, `shop-category-pills`, `shop-dressing-room-stage`, and
-`shop-product-grid` (`lib/screens/tabs/shop_tab.dart:1336-1913`). The shop
-tutorial must run on the real Shop tab, not a fake fork, persist completion per
-account where the current auth contract supports that, and never run in a
-demo/tutorial preview or for an already-completed user.
-
-### 3.8 Name validation
-
-Flutter locally validates length, whitespace, and allowed characters
-(`lib/screens/display_name_screen.dart:145-176`), but authoritative writes and
-availability checks are backend routes. Backend validation is shared through
-`src/shared/lib/displayNameValidator` and used by
-`src/modules/users/routes.js`; all `PUT /auth/me/display-name`, discoverable
-identity, availability-check, and generated/suggested-name paths must share the
-same profanity decision. Client-only blocking would remain bypassable by old
-app versions.
-
-### 3.9 Contest contrast and suggestion styling
-
-The dashboard's OFFICIAL RULES control uses theme tokens but the supplied
-night screenshot shows its foreground collapsing into its panel
-(`lib/widgets/referral_contest_joined_dashboard.dart:100-116`). The rules title
-uses `textLight` directly on the green page (`lib/screens/giveaway_rules_screen.dart:
-270-293`), while section headings use `grassDark` on a night panel (`:321-348`),
-causing the supplied failures. Share ideas are two bordered mini-cards in a row
-(`lib/widgets/referral_contest_joined_dashboard.dart:839-897`), which visually
-read as tappable despite having no actions.
+- Backend Stealth projection already returns `stealthed:true`, `???`, and hides
+  presentation/steps/placement for active unfinished opponents. Flutter already
+  suppresses the standings effect tray at
+  `lib/screens/race_detail_screen.dart:10977-11009`, with coverage in
+  `test/race_detail_team_effect_rail_test.dart`. The screenshot is therefore a
+  regression/alternate-renderer audit, not a new anonymity model.
+- There is no rematch endpoint. Since the previous review, the race-resolution
+  worker has become a specialized scoring/projection queue: race-keyed rows,
+  dirty-reason envelopes, generation fencing, append-only large-race intake,
+  bounded planning inputs, and one shared process-wide work budget. Rematch
+  invitation fan-out must not be inserted into that queue. A rematch instead
+  creates the new PENDING race, creator membership, ordinary INVITED rows, and
+  durable `RACE_INVITE_SENT_V1` outbox events atomically in its own command.
+- Race-list reads now combine a membership cache with a versioned completed-race
+  summary cache, while race detail/progress share a request-owned bootstrap read
+  context and bounded participant summary. Viewer-specific rematch eligibility
+  must be overlaid after shared cached fragments and must not expand bootstrap
+  reads into a full scoring roster.
+- Personal tournament cards build a leading `RacerAvatar` in
+  `lib/screens/tabs/races_tab.dart:1627-1639`; tutorial previews reuse `RacesTab`.
+  Old handles are in `lib/screens/settings_screen.dart:467-490`.
+- `RacePowerup.rerolledAt` exists. `AdService` now supports dedicated iOS and
+  Android box-reroll defines. The current reroll command consumes the grant and
+  later conditionally updates the powerup in separate DB statements, so a race
+  can consume a watch without a replacement under concurrency.
+- Daily Reward distinguishes defensive `rewardType` payloads but lacks the
+  requested labels/copy. The general five-step tutorial points out Shop from
+  Home but does not teach the real Shop; Shop already has stable keys for all
+  four requested targets.
+- Display-name profanity filtering exists in route validation via `bad-words`,
+  but `setDisplayName` does not validate its input and the matcher does not cover
+  common separator/leetspeak evasions. Full/compact auth serialization is now
+  centralized in `serializeAuthenticatedUser`, `serializeAuthShellUser`, and
+  `authMeCache`.
+- Contest contrast failures originate in
+  `referral_contest_joined_dashboard.dart` and `giveaway_rules_screen.dart`.
+- Concurrent, uncommitted race-detail work now removes forfeited racers from
+  visible active/completed rosters while retaining their frozen steps in team
+  totals. Stealth work must preserve that behavior and must not reintroduce a
+  forfeited row merely to mask it as `???`.
 
 ## 4. Detailed requirements
 
-### R1. Stealth anonymity
+### R1. Active-Stealth presentation regression
 
-- The backend, not Flutter, owns the privacy boundary. While Stealth is active,
-  every progress/details/list/winner/podium participant projection uses one
-  masked shape: `stealthed:true`, null/non-correlatable identity, no real
-  `userId`, name, photo, animal/accessories/presentation, source/target IDs,
-  exact steps, exact placement, or stable-ID ordering. Do not provide two
-  alternate rosters that can be joined to recover identity.
-- The mask lasts only while the effect is currently active. After its normal
-  expiry, ordinary identity may return. At race completion, the server evaluates
-  expiry once and serializes consistently; any row still marked stealthed stays
-  fully masked in completed rosters/winner/podium payloads.
-- Treat either defensive boolean spelling, `stealthed == true` or
-  `isStealthed == true`, as hidden at every rendering boundary.
-- While hidden, render name and steps as `???`, rank as `?`, the established
-  anonymous avatar, no profile photo, animal, accessories, multiplier/effects,
-  friend/profile tap, winner identity, or identity-bearing semantics.
-- Do not infer identity from stable row order, course position, winner payload,
-  active-effect ownership, or a second details/progress roster.
-- Prefer server-masked payloads. Client masking remains defense in depth for
-  mixed backend versions.
-- Preserve visible participants' server placements and existing partial-null
-  ordering behavior.
+- Preserve 2026-08-28b exactly. Only literal server `stealthed:true` hides a row;
+  the viewer's own row and finished racers stay visible.
+- Every active race-detail renderer must hide effect icons/ownership, photo,
+  animal, accessories, multiplier, profile/friend action, steps, track position,
+  and hidden numeric placement for a hidden opponent. Audit individual/team
+  standings, team effect rails, course, leader chrome, and real demo/tutorial
+  fixtures.
+- Apply Stealth masking after excluding `forfeitedAt != null` participants from
+  visible rosters. Preserve their frozen-step contribution to authoritative team
+  totals and preserve the current page cursor/count behavior; a forfeited racer
+  is absent, not a visible anonymous Stealth row.
+- Do not add completed-race masking, remove IDs, or alter masked ordering and
+  viewer-relative display-placement rules.
 
 ### R2. Custom-race rematch
 
-- Eligible source: completed, non-seeded, non-tournament custom race in which
-  the caller was an accepted participant. Any former accepted participant may
-  initiate; the caller becomes creator of the new race.
-- Add one authenticated endpoint: `POST /races/:raceId/rematch`.
-- Request:
-
-```json
-{
-  "idempotencyKey": "client-generated-uuid"
-}
-```
-
-- Success `201` for first creation and `200` for idempotent replay:
+- Source must be COMPLETED, non-seeded, non-tournament custom race; caller must
+  have been ACCEPTED. Any former accepted participant may initiate and becomes
+  creator/ACCEPTED in the new race.
+- Add `POST /races/:raceId/rematch`. Require UUID `Idempotency-Key`; accept
+  `body.idempotencyKey` for parity with current idempotent shop commands, with
+  the header winning. First creation returns 201; an exact replay returns 200.
+  Reuse on another source/request digest is `409 IDEMPOTENCY_KEY_REUSED`.
+- Response:
 
 ```json
 {
   "race": { "id": "new-race-id", "status": "PENDING" },
   "sourceRaceId": "completed-race-id",
-  "plannedInviteeUserIds": ["former-participant-id"],
-  "inviteState": "QUEUED",
-  "skipped": [
-    { "userId": "id", "reason": "ACCOUNT_UNAVAILABLE" }
-  ]
+  "invitedUserIds": ["former-accepted-user-id"],
+  "skipped": [{ "userId": "id", "reason": "ACCOUNT_UNAVAILABLE|CLIENT_UPDATE_REQUIRED" }]
 }
 ```
 
-- Errors use stable codes: `SOURCE_NOT_FOUND` (404), `NOT_PARTICIPANT` (403),
-  `SOURCE_NOT_COMPLETED` (409),
-  `SOURCE_NOT_REMATCHABLE` (409), and malformed/missing idempotency key (400).
-- In the request transaction, snapshot/copy the source's complete gameplay
-  configuration (name, race type/mode, target or duration/window,
-  powerup-enabled configuration and interval, privacy/discovery, team size and
-  team configuration, participant capacity, buy-in selection, and every other
-  persisted **player-facing creator-controlled** gameplay setting), create
-  the new race with caller as creator/ACCEPTED, record the immutable roster and
-  response snapshot in the idempotency receipt, and enqueue a durable Postgres
-  `REMATCH_INVITES` command. The request path must **not** bulk-write
-  `race_participants`: C0 remains the sole bulk writer.
-- A race-keyed, fenced worker with a lease token performs the cohort fan-out in
-  ascending user-ID lock order, creates ordinary INVITED rows, and appends
-  `RACE_INVITE_SENT_V1` outbox events in the same worker transaction; delivery
-  is post-commit. The endpoint may return/navigation may proceed with
-  `inviteState: QUEUED`. Receipt/status reads eventually report `COMPLETED` plus
-  immutable invited/skipped results. A retry or concurrent tap returns the same
-  race and receipt, never a second race.
-- “Identical” refers to gameplay configuration, not lifecycle identity. Never
-  copy source ID, status/timestamps (including the completed race's past
-  scheduled-start instant), steps, effects, powerups, boxes, messages,
-  payouts already earned, join requests, tournament IDs, seed IDs, share token,
-  settlement fields, favorites, or notification history.
-- Rematch must call or refactor through the canonical **current** create-race
-  validation/economy path. Never copy server-derived economy state such as
-  funded-prize/pool amounts, prize calculation version/unit/cap, payout curve or
-  rounding metadata/version, team-pool multiplier/version/reward, pot/buy-in
-  hold statuses, or funded-exposure stamps. Recompute all current server-owned
-  values and enforce the initiator's current active-race limit and fresh buy-in
-  hold. Existing invite acceptance remains authoritative for each invitee's
-  affordability/hold, active-race limit, capacity/team validity, and funded
-  exposure.
-- “Unlimited” is sequential, not simultaneous multiplication: under a
-  source-level transactional/advisory lock, permit at most one PENDING or ACTIVE
-  rematch descendant of a completed source across all initiators. If one exists,
-  return that existing descendant or `409 REMATCH_ALREADY_LIVE`; after it
-  completes or is cancelled, any former participant may create another.
-- Automatic cohort invitations do not bypass account safety. Skip deleted,
-  banned, blocked, or otherwise unavailable accounts; authorize the otherwise
-  non-friend fanout only for accepted members of the source cohort; create
-  ordinary expiring INVITED rows; and coalesce/rate-limit repeat notifications.
-  Fresh idempotency keys must not become an invite/push flooding mechanism.
-- Push/inbox invites use the existing race invitation event and deep link so
-  frozen clients can accept normally. No new required parameter is added to an
-  old endpoint.
-- Result popup: for each eligible custom race, show `REMATCH` with a circular
-  redo icon immediately above the rewarded-ad button. While creating, disable
-  duplicate taps; on success dismiss/navigate to the new pending race; on error
-  keep the popup and show actionable copy.
-- Completed detail: place the same CTA after the completion/payout summary and
-  before final standings, using the same coordinator and error copy.
-- Multiple completed races in one result popup must bind the action to one
-  specific source race; the UI must not ambiguously rematch the whole batch.
-- Add additive `capabilities.rematchCustomRace: true` to the authenticated
-  capability envelope and viewer-specific `rematchEligible: true|false` on
-  completed result/detail projections. The CTA requires both true; a missing,
-  null, or malformed value fails closed. Viewer-specific eligibility must not
-  enter shared Redis race fragments. This contract is not client-feature-token
-  gated, so old clients ignore it and no header branch can drift.
+- Stable errors: `SOURCE_NOT_FOUND` (404), `NOT_PARTICIPANT` (403),
+  `SOURCE_NOT_COMPLETED`/`SOURCE_NOT_REMATCHABLE`/`REMATCH_ALREADY_LIVE` (409),
+  `REMATCH_COHORT_TOO_LARGE` (409), and invalid/missing key (400).
+  Every error uses `{"error":"human-readable message","code":"STABLE_CODE"}`;
+  an exact idempotent replay returns the same canonical success data.
+- The synchronous cohort ceiling is 100 accepted source racers, matching the
+  current largest finite custom-race cap. A `maxParticipants:null` source stays
+  eligible only while its accepted roster is at most 100; above that, return
+  `REMATCH_COHORT_TOO_LARGE` and create nothing. This bounds response size,
+  participant/event writes, and transaction duration without limiting how many
+  sequential rematches a supported cohort may complete.
+- Perform bounded preflight reads for source configuration, caller membership,
+  at most 101 accepted-roster IDs, account availability, and team-client
+  capability. Then
+  execute one PostgreSQL transaction that insert-first reserves the idempotency
+  receipt, locks the canonical lineage and creator exposure in existing lock
+  order, revalidates the source/current policy, creates the PENDING race,
+  establishes its generation-zero `SUCCEEDED`/inert `RaceResolutionJobV2` C0
+  fence before any participant write, creates the creator ACCEPTED membership,
+  bulk-creates ordinary 72-hour INVITED rows, adds
+  one `RACE_INVITE_SENT_V1` outbox event per created invite, and records the
+  immutable response on the receipt. Any failure rolls back the race, invites,
+  events, holds, and receipt together.
+- Do not enqueue runnable rematch work in `RaceResolutionJobV2`, bump its
+  generation, add a rematch dirty reason, add a new worker family, or wait for
+  notification delivery. The required inert C0 row exists only to preserve the
+  race membership/lifecycle single-writer fence; the queue owns
+  scoring/projection work;
+  notification delivery continues from the existing post-commit domain-event
+  projector. A retry after a lost response replays the committed receipt and
+  never creates another race or event.
+- Recover concurrent idempotency conflicts outside the aborted transaction:
+  after the competing transaction commits, reload `(requesterId,
+  idempotencyKey)`, compare canonical digest and source, return the stored
+  canonical success response for an exact match, and otherwise return
+  `IDEMPOTENCY_KEY_REUSED`. Store canonical response data and compare semantic
+  equality; do not depend on JSON key order or literal wire bytes.
+- Former cohort membership is the narrow exception to today's friends-only
+  precheck. It does not bypass unavailable-account checks,
+  capacity/team/client-capability rules, or normal acceptance/affordability.
+  Skip individual unavailable or team-incompatible accounts with the stable
+  reasons shown above; do not fail the whole rematch because one former racer
+  can no longer be invited.
+- Refactor the canonical create/invite policy and persistence helpers just
+  enough to accept a caller-supplied transaction. Do not call one HTTP route
+  from another, nest independent transactions, or duplicate economy math.
+- Copy/revalidate creator input: name, target/duration, requested buy-in,
+  payout preset, powerup settings, public/capacity/time/team settings and team
+  names. Reset IDs, creator/status/absolute schedule timestamps, winner/share/seed/
+  tournament fields, progress, outcomes, inventory/effects, messages,
+  favorites, join requests, payouts, settlement, and notifications.
+- Derive a fresh duration/window under current rules, use requester's current
+  timezone, preserve initiator's former team when valid, and let invitees choose
+  or accept teams through ordinary rules.
+- Recompute current funded-prize/pool, payout/version/rounding, exit, creation/
+  start, and team multiplier/payout stamps. Fresh creator holds and ordinary
+  invite-acceptance holds apply; historical policy never wins.
+- Unlimited means sequential across the canonical lineage root. A partial
+  unique DB index permits at most one PENDING/ACTIVE rematch descendant per
+  root, preventing forks; completion/cancellation permits the next descendant.
+- Add viewer-specific `rematchEligible` only. It is true exactly when source/
+  caller rules pass and no live lineage descendant exists. Attach it with one
+  bounded batch after the shared membership/completed-summary cache fragments;
+  for detail/bootstrap, derive it from the already loaded core race plus a
+  narrow caller/lineage lookup. Never place it inside viewer-neutral completed
+  summary cache payloads or trigger a full participant/scoring preload. Only
+  literal true shows UI.
+- Do not add product-level rematch throttles: the owner explicitly chose
+  unlimited sequential rematches, and the one-live-lineage constraint plus
+  idempotency prevents duplicate creation. Instead, prevent cancellation-loop
+  push spam durably: for the same recipient plus canonical lineage, repeated
+  create/cancel cycles before any descendant completes are one notification
+  episode, and the latest race replaces the prior navigation target. A
+  completed descendant ends that episode, so the next legitimate sequential
+  rematch may notify again. This is delivery coalescing, not a creation limit.
+- PostgreSQL owns that episode as one row per recipient + canonical lineage +
+  episode generation. Rematch creation transactionally updates `latestRaceId`
+  and monotonically increments `revision`; its outbox payload carries episode
+  ID/revision and uses a deterministic episode delivery identity. The projector
+  ignores stale revisions, updates the existing inbox item's navigation target
+  to the latest race, and sends at most one provider push after that episode has
+  been provider-accepted. A provider-accepted push cannot be recalled; later
+  cancellations update the in-app target but do not send another push. The
+  canonical race-completion transaction closes the current episode so the next
+  descendant creates the next generation. Extend the existing producer matrix,
+  projector, completion seam, and Redis-unset path; do not use Redis as episode
+  authority.
+- Creator and accepting invitees always pass current `activeCompetitionLimit`
+  and current economy stamps. Tag rematch lineage/source in telemetry and repair
+  the monitor's hardcoded cap-5 comparison to the live configured cap before
+  relying on rematch cohort monitoring.
+- After commit, invalidate race-list membership for creator plus every invited
+  user through the current invalidation seam. Do not invalidate the immutable
+  source completed-summary artifact merely because a descendant was created.
+  Redis failure never rolls back PostgreSQL truth; bounded cache TTL remains the
+  fallback across HTTP processes.
+- Result popup: REMATCH with circular redo icon directly above the existing ad
+  CTA and bound per race in a batch. Completed detail: after completion/payout
+  summary, before standings. Disable duplicate taps; navigate on success; keep
+  context and show actionable error on failure.
 
-### R3. Tournament card parity
+### R3–R4. Tournament card and community links
 
-- Remove the leading viewer identity/avatar and its semantics from personal
-  tournament cards.
-- Reflow name, round/status, countdown, inventory, placement, prize, pin, and
-  chevron into the same leading/content/trailing rhythm as ordinary cards.
-- Keep the entire card tap target, tournament detail destination, state labels,
-  inventory, theme behavior, and missing-field fallbacks.
-- Apply the same real widget in tutorial previews; do not hand-fork a preview.
+- Remove only the personal tournament card's leading viewer avatar/semantics;
+  reflow remaining content without changing tap, state, inventory, placement,
+  prize, pin, chevron, or fallbacks. Public tournament cards are unaffected.
+- Instagram text `@Bara.steps.app`, URL
+  `https://instagram.com/Bara.steps.app`; X text `@BaraStepsApp`, URL
+  `https://x.com/BaraStepsApp`. Preserve launch/error behavior.
 
-### R4. Community handles
+### R5. Deferred stash reroll
 
-- Instagram visible text: `@Bara.steps.app`; confirmed URL:
-  `https://instagram.com/Bara.steps.app`.
-- X/Twitter visible text: `@BaraStepsApp`; URL:
-  `https://x.com/BaraStepsApp`.
-- Keep icons, layout, external-launch behavior, and failure handling.
+- Add REROLL beneath USE and DISCARD only for active-race rows with nonempty ID,
+  HELD/unused state, box rarity, upgrade level zero, null `rerolledAt`, literal
+  backend capability, and a configured platform-specific reroll ad unit.
+  Missing/malformed data fails closed.
+- Reuse existing rewarded-ad context, SSV, bounded retry, lifecycle/account
+  binding, endpoint, and result presentation. Refresh progress on success so
+  USE/DISCARD targets the replacement. Reveal-time single/batch reroll is
+  unchanged.
+- In canonical lifecycle/C0 lock order, use one DB transaction to re-read and
+  lock race, participant, powerup, and grant; CAS owner/race, HELD, unused,
+  rarity-present, level-zero, and null-rerolled state; consume the grant; write
+  replacement/config stamp; and insert `POWERUP_REROLLED` through a transaction-
+  aware model. Any eligibility, CAS, or audit failure rolls back all writes.
+- Keep current-position/config-snapshot behavior and test intentional P1→P6
+  delayed-reroll timing; `rerolledAt` remains the one-shot authority.
 
-### R5. Stash reroll
+### R6. Daily reward labels
 
-- Preserve the current reveal-time reroll without visual or behavioral change.
-- In the generic held-powerup sheet, add a rewarded-ad `REROLL` action below
-  USE and DISCARD only when the backend-provided row is safely known eligible:
-  stable nonempty ID, `status == HELD`, box-origin rarity present,
-  `upgradeLevel == 0`, and `rerolledAt == null`; the screen advertises reroll
-  capability; the race is active; and the platform has the dedicated ad unit.
-- Unknown/missing fields fail closed and hide the new action. An older backend
-  or Android configuration with no unit sees today's sheet.
-- Reuse the existing `_rerollBoxPowerup` ad, SSV verification, bounded retry,
-  lifecycle, account-binding, and error flow. Do not mint or locally assume a
-  reroll.
-- On success, close or update the sheet, refresh progress, show the replacement
-  result clearly, and ensure USE/DISCARD target the replacement server row.
-- Server remains authoritative for races that end, concurrent use/discard,
-  upgraded items, and already-rerolled items. These failures must not create a
-  second roll; eligibility checks occur before an ad is shown where locally
-  knowable.
-- Preserve the current position-sensitive reroll behavior: delaying until a
-  later position may change expected result, exactly as the existing endpoint
-  does. Do not snapshot the original opening context.
-- Consume the verified ad grant and compare-and-set the exact powerup row's
-  type/rarity/config version/`rerolledAt` in one DB transaction. Concurrent
-  race end, use, discard, or reroll must either complete one reroll atomically
-  or leave the grant unconsumed; it must never charge the watch and lose the
-  reroll.
-
-### R6. Daily reward item labels
-
-- A valid powerup reveal displays a visible `POWERUP` type label only. It adds
-  no inventory/equip/use instruction.
-- A valid accessory reveal displays `ACCESSORY` and the exact owner-approved
-  instruction about opening Shop inventory to equip it (§10).
-- Coins and coin fallbacks do not show item labels or equip copy.
-- Type labels and accessory destination copy must remain readable in light/night themes,
-  support text scaling, and use defensive payload checks.
+- Valid powerup: `POWERUP`, with no equip instruction. Valid accessory:
+  `ACCESSORY` plus exact copy `Go to your inventory to equip this item`.
+- Coins and malformed/fallback rewards show neither. Support themes/text scale.
 
 ### R7. First-visit Shop tutorial
 
-- Trigger after the first real Shop tab is fully laid out for every
-  authenticated account that lacks the `shop_v1` completion record, once per
-  account; do not trigger merely because a preview/test has built Shop.
-- Four beats:
-  1. `STORE / INVENTORY` segment — where to buy versus manage owned items.
-  2. Category pills — characters/accessories/powerups.
-  3. Dressing-room stage — preview/equip presentation.
-  4. Product grid/card — select an item to see details and price/ad action.
-- Use the established spotlight visual language and a moving cutout measured
-  after the target is on screen. Scroll/reveal the target before measuring.
-- Provide NEXT/BACK where the current tutorial supports it and an explicit
-  close/skip that records completion; reopening Shop does not replay it.
-- Add a dedicated `VIEW SHOP TUTORIAL` action in Settings. Replay deliberately
-  ignores the completion record for that navigation only and does not clear or
-  duplicate the stored completion.
-- Persist through nullable `User.shopTutorialCompletedAt` and the idempotent
-  `/shop/tutorial/complete` command. Local cache may suppress flicker but cannot
-  be the only account-level truth.
-- Missing completion data means not completed: existing accounts as well as new
-  accounts receive the tutorial on their next real Shop visit.
+- Every authenticated account receives `shop_v1` once on first real Shop visit
+  after layout. Never trigger from a preview/test build, general onboarding/
+  tutorial, or beneath another overlay.
+- If Shop mounts before an authoritative auth payload has been applied, defer
+  the automatic decision without consuming the first visit. Reevaluate while
+  the same-account Shop remains mounted when AuthService later supplies
+  explicit null/timestamp support state; the existing same-identity listener
+  shortcut must not suppress this transition.
+- Four real-Shop beats: STORE/INVENTORY; category pills; dressing-room stage;
+  product grid/card. Scroll before measuring off-screen targets. Use established
+  spotlight visuals and accessible NEXT/BACK/close; close/skip completes it.
+- Settings adds `VIEW SHOP TUTORIAL`; replay ignores completion for that one
+  navigation and does not clear/duplicate state.
+- Add nullable `User.shopTutorialCompletedAt` and idempotent empty-body
+  `POST /shop/tutorial/complete`, returning
+  `{"tutorialKey":"shop_v1","completedAt":"ISO-8601"}` and stamping only once.
+- Thread the field through full and compact auth serializers,
+  `AUTH_SHELL_FIELDS`, provisioning/session responses, local AuthService state,
+  sign-out/account switching, and the documented auth-me invalidation seam.
+- Do not introduce another auth-cache version solely for this nullable field.
+  Backend-first deployment occurs long before a carrying app reaches users, the
+  existing auth cache is bounded to 10 seconds, and completion invalidates it.
+- Persist `hasShopTutorialServerState` separately from the nullable timestamp so
+  cold start preserves absent-vs-null; clear both on sign-out/account switch.
+  Key absent means old backend/unsupported: do not auto-launch. Explicit null
+  means supported/incomplete; timestamp means complete. No row backfill.
+- Implement rematch and tutorial endpoints as thin module routes using
+  `asyncHandler`, injected commands/models, and standard `AppError` subclasses;
+  do not put business logic in routes or add new legacy `src/routes/` code.
 
-### R8. Profanity-safe usernames
+### R8. Profanity-safe display names
 
-- Add one shared backend validator used by availability checks and every public
-  display-name write path. Normalize Unicode (NFKC), case, common separators,
-  and obvious leetspeak/spacing attempts before matching, while retaining the
-  existing allowed-character and length rules.
-- Reject profane input with `400` and stable additive code
-  `DISPLAY_NAME_PROFANE`; return no matched term or internal filter details.
-- Availability endpoint returns unavailable with a reason/code new clients can
-  map; old clients already treat unavailable/400 as failure.
-- Generated/suggested fallback names must pass the same validator.
-- Flutter pre-check may improve feedback, but server enforcement is mandatory.
-- Friendly copy: “Choose a name without profanity.” Generic fallback remains
-  for older backends/unknown codes.
-- On authenticated-user serialization, evaluate the stored display name with
-  the same validator and add `displayNameRequiresRename: true` when it is
-  profane. Do not silently rewrite or null the stored value.
-- A new client that receives that additive flag presents a blocking rename gate
-  before normal app content. It cannot be skipped or dismissed; successful
-  authoritative rename clears the condition. Old clients ignore the new flag,
-  while all future write attempts remain protected server-side.
-- Initial dictionary scope is English profanity plus normalized case, Unicode,
-  separators, and common leetspeak variants. Structure the validator so reviewed
-  language dictionaries can be added later without changing endpoint contracts.
-  No fuzzy substring rule may reject arbitrary innocent names.
-- Exact endpoint behavior:
-  - display/discoverable-name writes: `400 {"error":"Choose a name without profanity.","code":"DISPLAY_NAME_PROFANE"}`;
-  - `/auth/check-display-name`: preserve HTTP 200 and the existing availability
-    shape, returning `{"available":false,"reason":"Choose a name without profanity.","code":"DISPLAY_NAME_PROFANE"}`.
-- Put the rule in the injected domain command/shared validator, not only Express
-  routes, so no caller can bypass it. Successful rename and every auth cache
-  path recompute the flag.
-- While an account is flagged, public serializers emit the safe placeholder
-  `Name unavailable` instead of the offensive stored name. The owner's
-  authenticated payload may retain the raw value only for editing and adds the
-  defensive boolean. Cover Apple, Google, review account, `/auth/session`
-  compact/legacy, `/auth/me`, and successful rename shapes. Place the Flutter
-  gate at the authenticated root so deep links cannot bypass it. Frozen clients
-  cannot be forced into new UI, but they still see the safe public placeholder
-  and cannot submit another profane write.
+- Extend the existing backend validator and validate within `setDisplayName`
+  before uniqueness/update. Preserve charset/length rules; compare a
+  NFKC/case-folded form with separators removed and conservative common
+  leetspeak mapped. Use reviewed English token/boundary rules plus explicit
+  allowlist/clean-near-match tests; never broad fuzzy substring matching.
+- Generated/suggested display names use the same validator. Discoverable
+  first/last names retain their separate policy unless combined into a proposed
+  public display-name suggestion.
+- Writes return `400 {"error":"Choose a name without profanity.","code":"DISPLAY_NAME_PROFANE"}`.
+  Availability preserves HTTP 200 and returns the same message/code with
+  `available:false`. Never expose matched terms/filter internals.
+- Define a separate profanity-only predicate for stored-name remediation;
+  `validateDisplayName` also rejects legacy formatting and must not force those
+  accounts to rename. Compute `displayNameRequiresRename:true` from only that
+  predicate in full/compact auth serializers. Add the field to allowlists and
+  mutation responses, invalidate through the existing auth seam after rename,
+  and recompute from the stored display name. The bounded auth cache does not
+  require a new key version for this computed additive field.
+- Route every public-user presentation and cold/warm presentation-cache value
+  through a safe helper that substitutes
+  `Name unavailable` for profane stored names. Audit race/progress/
+  lists, chat, friends/search, leaderboards, referrals/contest, tournaments,
+  notifications, persisted giveaway snapshots, race-share names, queued actor
+  names, and cached race-list creator/winner fragments; version or invalidate
+  affected caches. Owner auth
+  payload may retain raw value for editing beside the boolean.
+- Capable Flutter places an inescapable rename gate above the authenticated
+  root before deep links/shell tabs. Successful server rename removes it.
+  Missing/malformed flag is false. Frozen clients ignore the flag but receive
+  safe public placeholders and cannot submit new profane names.
+- Cover Apple, Google, review-account, provisioning, legacy `/auth/me`, compact
+  `/auth/me`, session, and display-name mutation responses. Clear tutorial and
+  forced-rename local state on sign-out/account switch.
 
-### R9. Theme-readable contest UI
+### R9–R10. Contest readability and sharing ideas
 
-- Replace colors selected for semantic hue alone with theme-aware foreground
-  tokens appropriate to the actual surface. OFFICIAL RULES and every section
-  heading must be plainly legible in light and night themes.
-- Target WCAG AA contrast: at least 4.5:1 for these small text sizes. Add a
-  deterministic contrast test/helper assertion for the exact foreground /
-  background token pairs used.
-- Preserve the established palette and pixel typography; do not add hardcoded
-  one-theme colors or create a parallel contest-only theme.
-- Include enabled, pressed, and disabled rules-control states, text scaling,
-  and the pre-join and joined contest routes.
+- Use existing surface-aware theme tokens for joined-page OFFICIAL RULES,
+  rules title, all section headings, and enabled/pressed/disabled states across
+  pre-join/joined entry paths. Exact foreground/background pairs meet WCAG AA
+  4.5:1 in both themes and have deterministic tests. No parallel theme or
+  one-theme hardcoding.
+- Replace suggestion mini-cards with a vertical non-interactive icon-bullet
+  list: `Drop it in the group chat`; `Get the family involved`;
+  `Show your coworkers you’re better than them`. Remove `Post it on Instagram`.
+  Keep heading, encouragement, and actual SHARE YOUR INVITE button. No Ink,
+  borders/bubbles, button semantics, or row tap targets; wrap at large text.
 
-### R10. Non-button share ideas
+### R11. Blocking Shop purchase progress
 
-- Replace the two mini-cards with a vertical, non-interactive icon-bullet list:
-  - Drop it in the group chat
-  - Get the family involved
-  - Show your coworkers you’re better than them
-- Remove “Post it on Instagram” from this suggestion list. Keep the actual
-  `SHARE YOUR INVITE` button as the only share control in the card.
-- No Material/Ink response, button semantics, borders, filled bubbles, or
-  per-row tap targets. The list is one descriptive semantics group.
-- Keep the “MAKE SOME NOISE” heading and prize encouragement line, with wrapping
-  that works on narrow screens and large text.
+- While a coin purchase request is unresolved, place one non-dismissible modal
+  barrier above the real Shop for accessory, character, and powerup purchases.
+  Reuse the visual language of `_PowerupProcessingOverlay`: item/powerup art,
+  `PURCHASING`, item name, and `PillButtonSpinner`; announce `Purchasing <name>`
+  as an accessibility live region.
+- Start only after confirmation and before the HTTP call. Keep it visible through
+  authoritative response patch/refresh and balance update, then remove it before
+  success/error feedback. Prevent duplicate taps and back dismissal. Ad-unlock
+  watching keeps its existing ad UI; show this overlay only for its final unlock
+  API call. Clear safely on disposal/account switch/error.
+
+### R12. Recurring custom races
+
+- Add a `RECURRING` toggle to custom race creation, default off. It is unavailable
+  for team, seeded, tournament, quick-create, rematch-created, legacy buy-in,
+  `NO LIMIT`, scheduled-start, or custom-window races. Recurring races are
+  individual, app-funded, zero-buy-in only. Creating with it starts a durable
+  series whose first race uses submitted duration/manual-start settings and a
+  finite cap of at most 100.
+- Auth responses add permanent literal capabilities
+  `capabilities.recurringRacesV1:true` and `capabilities.teamChatV1:true`.
+  Flutter advertises `recurring_races_v1` and `team_chat_v1` in both duplicated
+  `X-Client-Features` header branches and renders each UI only when the matching
+  server capability is literal true. A new app against an old backend therefore
+  cannot silently create a one-off race or send a private message as public.
+- A capable client accepting an invite to a recurring race sends optional
+  `subscribeToSeries:true` only after confirmation copy explains future automatic
+  enrollment. Missing/false (every frozen client) joins the current occurrence
+  only. True without `recurring_races_v1` returns 400 `UPDATE_REQUIRED` and writes
+  nothing. A capable acceptance atomically activates the series subscription.
+- An account may have at most one active recurring-series subscription across
+  creator/member roles, enforced by a locked user-scoped guard and partial unique
+  index. Acceptance/creation otherwise returns 409
+  `RECURRING_SUBSCRIPTION_LIMIT`. Recurring enrollment never debits or holds user
+  coins.
+- After each race reaches durable settlement completion, the dedicated
+  race-resolution process claims a PostgreSQL `RaceSeriesRenewalJob` and creates
+  exactly one next PENDING race with fresh current
+  economy/config stamps and automatically enrolls all active subscribers as
+  ACCEPTED, subject to current account availability, active
+  competition limit, and capacity. No invitation acceptance is
+  needed for later occurrences.
+- Recurring funded payout eligibility additionally requires at least the
+  occurrence's immutable `recurringPayoutMinRawSteps` stamp (2,000 for this
+  release), interpreted under its immutable `recurringPayoutPolicyVersion`.
+  Below-threshold members remain valid
+  participants but receive zero; the funded pool/payout plan uses only qualified
+  recipients. This occurrence-stamped rule does not alter non-recurring races.
+- `Race.settlementCompletedAt` is stamped only in the final transaction after
+  payouts/refunds/reconciliation are durable; that same transaction insert-first
+  enqueues the renewal job. Jobs use `QUEUED|RUNNING|SUCCEEDED|FAILED_RETRYABLE|
+  FAILED_TERMINAL`, lease token/generation, attempts, retryAt and last error. The
+  existing resolution-process scheduler claims this bounded job family through
+  its shared work budget after core settlement work; crashes/expired leases leave
+  retryable work, never a half-created successor.
+- A subscriber skipped for a transient admission reason stays subscribed and is
+  reconsidered on the next occurrence; no debt or deferred hold is created.
+- Race detail shows `AUTO-JOIN NEXT RACE` for accepted non-creators. Turning it
+  off ends future participation only and never removes the user from the current
+  race. Turning it back on is not offered directly: the creator may invite that
+  user to the current/next occurrence, and accepting reactivates subscription.
+- Admission order is creator first, then active subscribers by `subscribedAt,
+  userId`, capped by the series' finite capacity. In one target transaction the
+  worker locks the series/predecessor/job, establishes target C0, locks sorted
+  users/exposure, creates memberships/events, advances the series pointer,
+  and terminalizes the job. If the creator fails current admission, no successor
+  is created and the series ends with `CREATOR_INELIGIBLE`; other ineligible
+  subscribers are skipped for that occurrence but stay subscribed.
+- Descendants copy duration and gameplay settings but reset absolute timestamps;
+  each is PENDING/manual-start in the creator's current stored timezone. Recurring
+  creation rejects scheduled/custom-window inputs with
+  `RECURRING_SCHEDULE_UNSUPPORTED` rather than inventing cadence.
+- The creator sees `RECURRING SERIES` with `END AFTER THIS RACE`; disabling it
+  prevents creation after the current race but does not cancel the current race.
+  A series with no active creator subscription also ends after the current race.
+  Every stop/terminal path (creator stop, creator ineligible, or current policy no
+  longer permitting app-funded zero-buy-in recurrence) atomically closes all
+  active series subscriptions so the user-scoped one-active-series fence is
+  released for every member.
+- New endpoints:
+  - `PUT /race-series/:seriesId/subscription` body `{"active":false}` → 200
+    `{"seriesId":"id","active":false,"effectiveAfterRaceId":"id"}`.
+    Only an accepted subscriber may deactivate; `active:true` is rejected with
+  `409 REINVITE_REQUIRED`. Malformed bodies return 400 `INVALID_REQUEST`, an
+  unknown/deleted series returns 404 `RACE_SERIES_NOT_FOUND`, and a caller who
+  is not that series' accepted subscriber returns 403 `SERIES_ACCESS_DENIED`.
+  - `PUT /race-series/:seriesId` body `{"enabled":false}` → 200
+    `{"seriesId":"id","enabled":false,"effectiveAfterRaceId":"id"}`.
+    Creator only; replays are idempotent. Malformed bodies return 400
+    `INVALID_REQUEST`, an unknown/deleted series returns 404
+    `RACE_SERIES_NOT_FOUND`, and non-creators receive 403
+    `SERIES_ACCESS_DENIED`.
+- Add `recurringSeries` to create request as optional boolean, default false for
+  frozen clients. When true, a valid UUID `Idempotency-Key` is required; one-off
+  legacy creates remain key-optional. Exact replay returns the same race/series;
+  conflicting reuse returns 409 `IDEMPOTENCY_KEY_REUSED`. Add defensive response:
+  `{"series":{"id":"id","enabled":true,"subscribed":true,"canManage":true}}`
+  for successful creator creation. Later viewer-specific reads set `subscribed`
+  from that viewer's active subscription and `canManage:true` only for the
+  creator; missing/malformed means non-recurring and hides UI. Invalid create
+  bodies return 400 `INVALID_REQUEST`; capability absence returns 400
+  `UPDATE_REQUIRED`; missing referenced resources return their existing 404;
+  the named eligibility/idempotency conflicts above remain stable 409 codes.
+- Renewal is idempotent and race-keyed: a unique predecessor link prevents two
+  descendants. Establish target C0 before memberships, lock affected funded
+  exposure in canonical order, append ordinary membership events, invalidate
+  race-list/auth caches after commit, and leave retryable durable work queued.
+- Enabled recurring occurrences are not manually rematchable: R2
+  `rematchEligible` is false and the endpoint returns 409
+  `SOURCE_RECURRING`. A stopped/terminal series occurrence becomes rematchable
+  only after no successor exists.
+- Overlay viewer-specific `series.subscribed/canManage` after viewer-neutral
+  race-list and completed-summary fragments; detail uses narrow viewer/series
+  reads. Invalidate affected users' race membership plus viewer overlay state on
+  accept, unsubscribe, series stop, renewal, creator terminal failure, and account
+  deletion; never place viewer state in shared cached payloads.
+
+### R13. Home service-banner regression
+
+- A valid enabled manual `homeServiceBanner` must render on Home after an admin
+  saves it. An active automatic giveaway banner must not suppress it; render the
+  service banner first and the giveaway banner second, each once. Tutorial
+  previews still suppress the service banner.
+- Fix the authoritative cache invalidation/read path after
+  `PATCH /admin/settings/home-service-banner`: both update branches invalidate
+  the existing versioned shared app-settings cache after commit. Home banner
+  assembly bypasses the 30-second process-local map and reads that shared cache,
+  with direct PostgreSQL fallback for Redis unset/error. Do not add a parallel
+  banner cache or rely on pub/sub convergence across the two HTTP workers.
+  Preserve the existing additive response fields, contest-linked capability
+  validation, and malformed-data fail-closed behavior.
+
+### R14. Daily Reward prize help and labels
+
+- Restore the existing `?` affordance in the Daily Reward header using the
+  retained `_InfoButton`/brand treatment. It opens a readable modal describing
+  `COINS`, `ACCESSORY`, and `POWERUP`, including that accessories are equipped
+  from inventory and powerups are used in races. It does not expose odds unless
+  the existing exact-odds affordance is independently supported.
+- Reel tiles and final rewards use explicit `ACCESSORY`/`POWERUP` labels, not the
+  ambiguous `ITEM`; coin tiles keep their amount. Preserve R6's accessory-only
+  inventory instruction and malformed reward fallback.
+
+### R15. Own and friend race statistics
+
+- Add a `RACE STATS` card to the real Profile tab and public friend profile sheet:
+  races competed in, first-place wins, podium finishes (placements 1–3), and
+  win rate. Count distinct COMPLETED, non-seeded race memberships with status
+  ACCEPTED and `rawSteps > 0`; zero-activity automatic/recurring memberships do
+  not pad stats. Forfeited races count as competed only when rawSteps > 0, but
+  never as wins/podiums. Wins/podiums additionally require at least two accepted
+  competitors and a non-forfeited participant. Team races count placement from
+  the participant's persisted semantics.
+- Extend existing `GET /steps/stats?view=profile-v1` and
+  `GET /friends/:userId/profile` only; preserve `racePodiums`,
+  `avgStepsPerDay`, and all legacy meanings. Add to each existing `stats` object:
+  `racesCompeted`, `firstPlaceWins`, `podiumFinishes`, and `winRate`.
+  `winRate` is a 0.0–1.0 ratio `firstPlaceWins/racesCompeted`, rounded to four
+  decimal places; a true zero-race aggregate returns integer zero counts and
+  `winRate:0.0`. Missing/null/malformed new fields render unavailable, not zero.
+- Public stats follow the existing display-name/review-account discoverability
+  policy; the route is not viewer-aware and this feature does not invent block
+  authorization. Use the existing indexed PostgreSQL profile aggregate with one
+  additional grouped participant query and no new Redis cache/flag initially.
+  Do not hydrate races per row. A future cache is out of scope.
+- Stats are informational only and never unlock rewards, coins, achievements, or
+  admission, preventing recurring-series stat farming from gaining value.
+
+### R16. Enemy-only multiplier nudge notifications
+
+- For team races, the notification resembling `<name> has a 4x step multiplier,
+  slow them down!` may target only accepted, non-forfeited participants on the
+  opposite team from the boosted participant. Same-team recipients are excluded
+  before durable event audience creation. Solo-race behavior is unchanged.
+- Missing/malformed team data fails closed for the nudge; never send it broadly.
+  Persist actor and recipient team facts in the durable event audience for
+  auditability. Test audience facts and projected/provider deliveries, including
+  retries.
+
+### R17. Rally Flag stacking error
+
+- If any live `RALLY_FLAG` effect already benefits the caster's team, a new Rally
+  Flag use fails atomically with 409
+  `{"error":"Your team already has an active Rally Flag.","code":"RALLY_FLAG_ACTIVE"}`.
+  Do not consume the held powerup, extend any expiry, add events, or notify.
+- Check under C0 inside the use transaction so concurrent casts yield one success
+  and one stable error. Update the stacking guide from `EXTENDS` to `BLOCKED`.
+  Live means the same race/team with `status=ACTIVE` and
+  `startsAt <= now < expiresAt`; the losing attempt writes and consumes nothing.
+
+### R18. Unified activity and chat in regular races
+
+- Use the existing team-race combined `ACTIVITY & CHAT` presentation for regular
+  individual races in PENDING, ACTIVE, and COMPLETED states. One chronological
+  feed interleaves system activity and user messages with the existing composer,
+  paging, retry, delete-own-message, moderation, unread, and cache behavior.
+- Do not create a forked solo widget or change backend stream semantics. Demo and
+  tutorial race detail reuse the production surface with fake services.
+  COMPLETED races show combined history with no enabled composer, matching the
+  backend's closed-chat rule.
+
+### R19. Admin-only giveaway creation
+
+- Backend authoritatively applies the existing shared `buildRequireAdmin`
+  middleware, backed by `isAdminUser` and configured admin identities, to every
+  giveaway draft-creation entry point before validation or writes. A
+  non-admin receives 403 `{"error":"Admin access required","code":"ADMIN_REQUIRED"}`;
+  unauthenticated remains 401. No contest/audit/banner row may be written.
+- Other giveaway read/join/share endpoints remain available according to their
+  existing policy. Frontend visibility is not a security boundary.
+
+### R20. Team-only chat
+
+- In team races, add an `ALL` / `TEAM` segmented choice beside the composer and
+  feed filter. Default `ALL`; remember selection per race for the mounted screen.
+  Regular races show no selector.
+- Extend `POST /races/:raceId/messages` with optional `audience:"ALL"|"TEAM"`,
+  default `ALL` for frozen clients. `TEAM` requires literal server capability,
+  `team_chat_v1`, an ACTIVE team race, and an accepted, non-forfeited team
+  participant. A TEAM request without the literal server/client capability
+  contract returns 400 `UPDATE_REQUIRED`; a capable request that fails race,
+  lifecycle, membership, forfeit, or team eligibility returns 403
+  `TEAM_CHAT_UNAVAILABLE`.
+  Store the sender's team snapshot on the message. PENDING team chat remains ALL
+  only, avoiding history exposure while teams may still change.
+- `GET /races/:raceId/messages` and the compact streams endpoint accept optional
+  query `audience=ALL|TEAM`; omitted returns ALL only for frozen clients. TEAM
+  requires current accepted membership on that team. Responses add `audience`
+  and nullable `team`; compact `requested/resolved/streams/chatWatermark/errors`
+  are computed for exactly the requested channel and never merge private IDs
+  into the ALL watermark.
+- Extend message reads additively with `audience` and `team`; TEAM messages are
+  returned only to accepted members of that snapshotted team. There is no admin
+  or moderation private-read exception. They never enter the opposing team's
+  response, cache fragment, notification audience, watermark, or unread count.
+  ACTIVE teams are locked; historical team snapshots never rewrite.
+- Acquire race C0 inside TEAM send before re-reading race/membership/team and
+  writing the message/audience. Make `switchRaceTeam` acquire the same C0 before
+  its PENDING mutation. Race creators may delete ALL messages under existing
+  policy but may delete a TEAM message only if they are its sender; no admin
+  private-read exception is introduced.
+- Use versioned cache/watermark identities `USER:ALL`, `USER:TEAM_A`, and
+  `USER:TEAM_B` with the existing message-cache TTL and environment prefix.
+  PostgreSQL is authoritative on every Redis unset/error. Send/delete invalidate
+  only the affected channel plus shared moderation metadata; membership removal,
+  forfeit, account deletion, and team switch invalidate both team access
+  contexts. Rate limiting counts all USER messages across ALL+TEAM.
+
+### R21. Decoy becomes a rolled powerup
+
+- Remove Decoy from coin/ad Shop catalogs and purchasing eligibility for new
+  clients while leaving old purchase endpoints compatible: an old-client Decoy
+  purchase with a new idempotency key returns 409 `POWERUP_NOT_FOR_SALE` before
+  receipt, coin, or ad-grant mutation and never charges coins. A replay of a
+  previously successful purchase remains a successful replay. Apply this to both
+  coin and ad-unlock endpoints; grandfather the one currently verified,
+  unconsumed Decoy ad grant so it can complete once without accepting new grants.
+- Add Decoy to the RARE mystery-box pool with `typeWeight:0.5` and
+  `trailingDownweight:0.5`, respecting existing solo eligibility and config
+  snapshot rules. Expected six-slot solo probabilities are approximately
+  1.7308%, 1.6452%, 1.8387%, 1.0800%, 1.1829%, and 1.4516% (mean 1.4882%).
+  Existing held/stash Decoys remain usable; mechanics and 24-hour duration do
+  not change. Daily Reward explicitly excludes Decoy.
+- Backend-first rollout performs an idempotent active balance-config transition:
+  remove Decoy from persisted/default `storeOnlyTypes`, add it to the RARE pool
+  with the pinned weights, preserve every historical race/config snapshot, mark
+  its Shop catalog row inactive/not-for-sale, and invalidate existing catalog and
+  balance-config caches after commit. Do not rely on changing code defaults while
+  a persisted config still excludes it.
+
+### R22. Hitchhike icon replacement
+
+- Replace both `assets/images/powerups/hitchhike.png` and
+  `hitchhike_thumb.png` with one newly generated, clearly readable right-facing
+  pixel-art hitchhiking symbol that matches the established bold-outline powerup
+  set. Preserve asset keys and dimensions/usage so no API or old-client contract
+  changes.
+- Follow the `accessory-art` imagegen/chroma-key pipeline, critique on white,
+  verify transparent corners/fringe, and inspect at full icon, thumbnail, stash,
+  target picker, activity/chat, and active-effect sizes. No hand-drawn SVG or
+  CustomPainter artwork.
 
 ## 5. Data model and migrations
 
-### Rematch
+- Add `RaceRematchReceipt`: id, requester/source/newRaceId, UUID key, request
+  digest, immutable response JSON, and created/completed timestamps. Define
+  requester `onDelete:Cascade` and source/new-race `onDelete:Restrict`, unique
+  requester+key and newRaceId, and index source. It has no
+  worker state, lease, generation, retry schedule, or cancellation workflow:
+  receipt, race, participants, outbox events, and response commit together.
+- Add nullable indexed `Race.rematchSourceRaceId` and `rematchRootRaceId` self
+  references; root is source.root ?? source.id. Add raw partial unique index on
+  root where status is PENDING/ACTIVE; completed/cancelled descendants coexist.
+  Both lineage self-relations use `onDelete:Restrict`; cleanup deletes
+  descendants/receipts before an ancestor and never silently severs a lineage.
+- Add `RaceRematchNotificationEpisode`: recipient/root/generation identity,
+  latestRaceId, monotonic revision, provider-accepted timestamp, closedAt, and
+  created/updated timestamps. Uniqueness is recipient+root+generation; define
+  `recipient onDelete:Cascade`, `rootRace onDelete:Restrict`, and
+  `latestRace onDelete:SetNull`, so deleting one descendant cannot erase lineage
+  spam protection. Add a partial unique index on recipient+root where
+  `closedAt IS NULL` to enforce one open episode. Race completion closes current
+  open episodes transactionally; projector updates are revision-CAS writes.
+- Add nullable `User.shopTutorialCompletedAt`; no backfill. Serializers emit
+  explicit null after migration.
+- Add `RaceSeries` (creator, enabled, canonical settings snapshot, current race,
+  generation, timestamps), nullable `Race.seriesId` + `seriesGeneration` +
+  `seriesPredecessorRaceId` + `settlementCompletedAt`, and
+  immutable nullable `recurringPayoutMinRawSteps` and
+  `recurringPayoutPolicyVersion` occurrence stamps, and
+  `RaceSeriesSubscription` (series/user, active, subscribed/unsubscribed
+  timestamps). Unique series+generation, predecessor, and series+user constraints
+  make renewal/subscription idempotent. A raw partial unique index on `userId`
+  where `active=true` enforces the account-wide one-active-series invariant.
+- Add `RaceSeriesCreateReceipt` keyed by creator+UUID with request digest and
+  immutable race/series result. Add `RaceSeriesRenewalJob` keyed by predecessor
+  with state, attempt, lease token/generation/expiry, retry/error and terminal
+  timestamps. All are additive with explicit FK cleanup and bounded indexes.
+- Add `RaceMessageAudience` (`ALL|TEAM`) plus nullable snapshotted
+  `RaceMessage.team`; existing rows backfill/default to ALL. Index
+  race+audience+team+createdAt for bounded channel reads.
+- Race statistics require no counter columns: derive from authoritative completed
+  participant rows with a covering user/status/placement/race index. This release
+  reads PostgreSQL directly and adds no stats cache or invalidation path.
+- No name/reroll migration. Rename status uses profanity-only policy and
+  `rerolledAt` exists. Version auth/presentation/race-fragment caches as needed.
 
-Add an idempotency ledger rather than a flag:
+## 6. Tests-first plan
 
-- `RaceRematchRequest`: `id`, `requesterUserId`, `sourceRaceId`,
-  `idempotencyKey`, `newRaceId`, `createdAt`; store/query descendant lifecycle
-  so the source-level one-live-descendant rule is enforceable under lock.
-- Unique `(requesterUserId, idempotencyKey)`. Do **not** make source race unique:
-  unlimited sequential rematches are allowed. Each operation uses a fresh key;
-  retries with the same key return the same new race. Add an index supporting
-  live-descendant lookup, but not a permanent source uniqueness constraint.
-- Foreign keys cascade/restrict consistently with race deletion policy. The
-  ledger is server-only and never leaks via broad serialization.
+### Backend integration tests (confirmed local/test Postgres only)
 
-#### Race field mapping (required implementation contract)
-
-| Treatment | `Race` scalar columns |
-|---|---|
-| **COPY as creator input, then revalidate** | `name`, `targetSteps`, `maxDurationDays`, `buyInAmount` (as requested input only), `payoutPreset`, `powerupsEnabled`, `powerupStepInterval`, `isPublic`, `maxParticipants`, `timeBased`, `isTeamRace`, `teamSize`, `teamAName`, `teamBName` |
-| **RESET / generate fresh** | `id`, `creatorId` (set to initiator), `seedId`, `status=PENDING`, `potCoins=0`, `startedAt`, `endsAt`, `scheduledStartAt`, `scheduledEndAt`, `timezone`, `completedAt`, `winnerUserId`, `shareToken`, `winnerTeam`, `tournamentId`, `tournamentRound`, `tournamentMatchIndex`, `tournamentPowerupsActivatedAt`, `seededBucketId`, `createdAt`, `updatedAt` |
-| **RECOMPUTE through current canonical creation policy** | `fundedPrize`, `prizePoolCoins`, `prizeCoinUnit`, `prizePoolMaxCoins`, `prizeCalculationVersion`, `payoutRoundingVersion`, `payoutRoundingMetadata`, `exitActionsEnabled`, `payoutCurve`, `creationSource=REMATCH`, `startPolicy`, `teamPoolMultBps`, `teamPayoutVersion`, `teamWinnerRewardCoins` |
-
-Relations and all participant/effect/settlement artifacts are fresh, never
-copied. If historical `buyInAmount` is no longer legal or current policy turns
-that configuration into a free/funded race, **current policy wins** or the
-endpoint rejects with the canonical validation code; it must not reproduce an
-obsolete paid economy. A paid rematch holds the initiator's fresh coins through
-the existing coin seam with deterministic `refId = rematch:<receiptId>:creator`.
-
-### Shop tutorial
-
-Add nullable `User.shopTutorialCompletedAt`. Exact field semantics: missing key
-= backend unsupported and the new client does **not** auto-launch; explicit
-`null` = supported and incomplete; ISO timestamp = complete. Add it to every
-auth/provision/session shape and `AUTH_SHELL_FIELDS`.
-
-### Username filter
-
-No schema is required. Existing-name remediation uses the additive blocking
-rename flag in R8; no destructive bulk rewrite is required.
-
-### Stash reroll and other UI fixes
-
-No migration. `RacePowerup.rerolledAt` is already nullable and authoritative.
-
-## 6. API contracts
-
-### New
-
-- `POST /races/:raceId/rematch`: exact contract in R2.
-- `POST /shop/tutorial/complete` in the existing Shop module, with empty body,
-  idempotent `200` returning
-  `{ "tutorialKey": "shop_v1", "completedAt": "ISO-8601" }`.
-
-### Changed additively
-
-- Auth/user payload may add nullable `shopTutorialCompletedAt`, or a nested
-  tutorial-completion map, plus boolean `displayNameRequiresRename`. New Flutter
-  reads them defensively; frozen clients ignore them.
-- Existing display-name endpoints may add `code: DISPLAY_NAME_PROFANE` on a
-  rejection. Success shapes and old validation codes remain unchanged.
-- Existing race progress should expose enough defensive row fields to decide
-  reroll visibility (`id`, `status`, `rarity`, `upgradeLevel`, `rerolledAt`).
-  If any is presently omitted, add it only; never repurpose existing fields.
-
-### Rematch idempotency and durable work details
-
-- `idempotencyKey` is a canonical UUID string, maximum 36 characters. Reserve
-  insert-first under the source/live-descendant lock.
-- Same requester/key/same source replays immutable receipt data with `200`;
-  same requester/key/different source returns `409 IDEMPOTENCY_KEY_REUSED`.
-- `newRaceId` is unique, `sourceRaceId` is indexed, and the receipt persists the
-  immutable source-roster/planned-invite snapshot plus final invited/skipped
-  result. A failure before race/command commit leaves no receipt; worker failure
-  retains retryable durable work and never creates a second race.
-- Explicit FK policy: requester/source/new-race deletion is restricted while
-  live work exists; completed historical receipts may be retained with IDs as
-  scalar audit data according to existing account/race deletion policy.
-- Team rematches preserve source team assignment for each accepted cohort member
-  when still valid. Invalid/full/incompatible invitees are skipped with stable
-  reasons. Invitations expire after the existing 72-hour interval.
-
-## 7. Tests-first plan
-
-### Backend integration tests (confirmed test DB only)
-
-1. Rematch via real HTTP creates one pending custom race, caller accepted, all
-   other eligible former accepted participants captured as planned invites,
-   approved settings copied, forbidden runtime/settlement state absent, and a
-   durable worker command committed. Run the fenced worker and assert normal
-   invite rows/outbox events appear post-commit.
-2. Same idempotency key and concurrent duplicate requests return the same race;
-   transactional failure creates neither partial race nor partial invite set.
-   Cover insert-conflict loser, same-key/different-source reuse, failure after
-   reservation, unique `newRaceId`, immutable replay snapshot, and first `201`
-   versus replay `200`.
-3. Reject active/pending, seeded, tournament, unauthorized, and deleted sources
-   without mutation. Prove every former accepted participant can initiate and
-   becomes creator. Prove a fresh key while a descendant is PENDING/ACTIVE
-   returns that descendant or `REMATCH_ALREADY_LIVE`, then a fresh key after it
-   completes/cancels creates the next sequential rematch.
-4. Rematch uses current canonical validation/economy: server-derived payout and
-   exposure stamps are recalculated, initiator buy-in is freshly held, invitees
-   pay only on normal acceptance, active/capacity/team/affordability rules remain,
-   and historical V1/V2 economy stamps cannot be cloned.
-5. Cohort fanout skips blocked/deleted/banned/unavailable users, retains normal
-   invite expiry, and rate-limits/coalesces repeated push delivery.
-6. Frozen-client regression: existing create/invite/list response shapes remain
-   accepted; new invites can be accepted with the old endpoint.
-7. Real HTTP display-name write, discoverable-name write, and availability
-   check reject direct, case-varied, separated, and leetspeak profanity while
-   allowing an explicit clean near-match corpus. Suggested names remain clean.
-   `/auth/me` marks a seeded existing profane name as requiring rename, a clean
-   name is unmarked, and successful rename clears the condition.
-8. If tutorial persistence changes backend, completion is idempotent and auth
-   payload omission/null is safe for old accounts and old client headers.
-9. Existing reroll integration tests remain unchanged and pass; add a request
-   made long after reveal proving the held row can still reroll once and a
-   second request returns `ALREADY_REROLLED`. Add concurrent use/discard/reroll
-   and race-end tests proving grant consumption and row mutation are atomic.
+1. Real HTTP rematch proves copied/reset/recomputed fields, accepted creator,
+   cohort invites, durable events, transaction rollback, idempotent/concurrent
+   replay, any-participant auth, one-live descendant, unlimited sequential use,
+   eligibility errors, cohort safety, team capability, current holds/economy,
+   expiry, lineage-fork prevention, cache invalidation, no completed-summary
+   invalidation, an inert generation-zero C0 row but no runnable job/reason,
+   100-racer boundary and 101-racer rejection, concurrent receipt conflict
+   recovery, cancellation-loop notification coalescing/reset-after-completion,
+   out-of-order projector retry rejection, already-provider-accepted behavior,
+   Redis-unset operation, and frozen-client invite acceptance. Extend the
+   structural C0/writer inventory guard to include the rematch command.
+2. Real display-name endpoints reject direct/case/separator/leetspeak cases and
+   allow reviewed near-matches. Prove domain-command enforcement, clean
+   suggestions, profanity-only remediation versus legacy formatting, compact/
+   full flags, cold/warm caches/snapshots, placeholders, and rename clearing.
+3. Shop completion is idempotent and proves missing/null/timestamp semantics
+   across full/compact/provisioning/auth cache paths.
+4. Reroll after reveal works once; concurrency with use/discard/race end proves
+   grant, row/config update, and audit event commit together or none.
+5. Existing 2026-08-28b Stealth tests remain unchanged and pass, including IDs
+   and finished-racer unmasking. Current forfeit tests also pass: forfeited rows
+   remain absent while their frozen steps continue contributing to team totals.
+6. Recurring-race HTTP/lifecycle tests cover create off/on, invite acceptance
+   subscription, exactly-once renewal under concurrent/retried completion,
+   opt-out/current-race preservation, creator series stop, reinvite/reactivation,
+   team/paid/unlimited/scheduled rejection with zero writes, concurrent
+   one-subscription enforcement and release on every terminal path, unavailable/
+   limit/capability skips, 1,999-vs-2,000 raw-step payout eligibility, no hold or
+   debit, policy drift away from app-funded zero-buy-in producing no successor
+   and a terminal outcome, fresh economy stamps, C0 ordering, cache invalidation,
+   and old-client defaults.
+7. Home integration tests save the service banner through the admin endpoint and
+   immediately read it through both cache modes/HTTP processes, with and without
+   an active giveaway; both valid banners appear in the response.
+8. Public/self profile HTTP tests prove exact aggregate definitions, privacy,
+   index-bounded direct-PostgreSQL query behavior, and missing-field compatibility.
+9. Notification integration tests prove team multiplier nudges exclude allies;
+   Rally Flag concurrency proves one success/one 409 and zero losing-side writes.
+10. Giveaway creation tests use real auth for unauthenticated/non-admin/admin and
+    assert zero unauthorized database/audit/banner mutations.
+11. Team-chat integration tests prove write/read/push/cache/watermark/unread
+    isolation, snapshotted team history, shared rate limiting, denial of private
+    TEAM reads to admins/nonmembers, and frozen-client ALL defaults.
+12. Decoy roll/purchase tests prove exact 0.5 type weight/0.5 trailing
+    downweight and position probabilities, canonical snapshot parity, Daily
+    Reward exclusion, new-key no-sale/no-charge, successful receipt replay, the
+    single grandfathered verified grant, and continued use of existing inventory.
 
 ### Frontend widget/integration tests
 
-1. Pump the real race detail with a stealthed row through every active/completed
-   renderer and assert no name, photo, animal, accessory, profile action,
-   numeric steps, numeric hidden rank, or identity semantics appears.
-   Backend real-HTTP coverage must additionally prove progress, details, race
-   lists, winner/podium, alternate rosters, and ordering cannot be correlated to
-   recover a masked identity.
-2. Pump result popup and completed detail with eligible/ineligible/partial race
-   data; assert rematch placement, per-race binding, loading/error behavior, and
-   navigation on success. Assert rewarded-ad CTA remains.
-3. Pump real personal tournament cards across ACTIVE/PENDING/COMPLETED and
-   missing identity payloads; assert no leading avatar and matching alignment.
-4. Settings shows exact handles and launches exact URLs.
-5. Pump the real stash sheet for eligible, already-rerolled, upgraded,
-   inventory-origin, missing-field, disabled-capability, unsupported-platform,
-   and race-ended states; assert REROLL visibility and that the existing
-   controller performs one refresh/result handoff.
-6. Daily powerup/accessory/coin/fallback/malformed results show the exact
-   appropriate labels and guidance.
-7. First real Shop visit for new and existing incomplete accounts shows all
-   spotlight beats, persists completion, does not auto-replay, replays from the
-   dedicated Settings action without clearing state, scrolls to targets, and
-   does not trigger in demo/tutorial previews.
-8. Every Flutter name entry point maps `DISPLAY_NAME_PROFANE`; the blocking
-   rename gate is inescapable until a successful write; and an older backend
-   without the new flag/error remains safe.
-9. Contest dashboard/rules in light and night themes assert AA token contrast,
-   readable styles, large-text layout, non-button share-list semantics, exact
-   three bullets, and one actual share CTA.
-10. Existing protected tests are not weakened, skipped, or deleted.
+1. Real individual/team detail plus demo/tutorial fixture: hidden opponent has
+   no effect/identity clue; own and finished rows remain visible.
+2. Result popup/completed detail: eligible/ineligible/partial/loading/error/
+   multi-result rematch placement, binding, lock, navigation, fail-close.
+3. Personal tournament cards in all states and tutorial `RacesTab`: no avatar/
+   indent; public cards unchanged. Settings exact handles/URLs.
+4. Held sheet eligibility matrix and both configured/omitted platform ad units;
+   reveal-time reroll unchanged. Daily reward item/coin/malformed matrix.
+5. Shop absent/null/timestamp states, completion/no replay, Settings replay,
+   scrolling/overlay collision, account switch/sign-out, preview suppression,
+   and delayed same-account auth payload delivery while Shop stays mounted.
+6. Root/deep-link rename gate for true/false/missing/malformed flags and server
+   results. Contest themes/states/text scale/contrast/bullets/semantics.
+7. Never weaken, skip, or delete protected tests.
+8. Shop tests hold each accessory/character/powerup API future and verify one
+   blocking branded overlay, dismissal prevention, success/error/disposal/account
+   switch cleanup, and ad-unlock final-call placement.
+9. Creation/detail tests cover recurring toggle states and participant/creator
+   controls; Home tests render service+giveaway in order; Daily Reward tests
+   restore `?`, modal copy, and explicit tile/reveal labels.
+10. Profile/public-profile tests cover loading/data/unavailable stats at narrow
+    width and large text. Race detail tests prove solo combined feed parity and
+    team ALL/TEAM filtering/composer state without leaking messages.
+11. Hitchhike asset tests retain keys and transparent readable rendering at all
+    production sizes; manually inspect both platforms per the UI plan.
 
-## 8. Backward compatibility and rollout
+## 7. Backward compatibility and rollout
 
-- Deploy backend first, then build/verify both iOS and Android. No frontend may
-  require the new rematch/tutorial fields or error codes before production
-  serves them.
-- Frozen clients ignore the new rematch endpoint and additive fields. They
-  receive ordinary invites created by a new client and continue accepting via
-  the existing endpoint.
-- A new client against an older backend hides rematch and the stash reroll
-  action when capability/eligibility data is absent, uses generic name errors,
-  and does not crash on absent tutorial completion. A missing tutorial field
-  means unsupported/no auto-launch, preventing an unpersistable replay loop.
-- The server continues to accept clean display-name writes from old clients but
-  rejects profane ones authoritatively.
-- Existing installed users with no `shop_v1` completion receive the tutorial on
-  their next Shop visit. The durable completion stamp prevents auto-replay; no
-  release flag is introduced.
-- No new content asset is required by this plan. If implementation adds an
-  unbundled asset, apply the repo's `testOnly:true` rollout rule.
-- Postgres is the sole source of truth for rematch receipts, durable invite work,
-  tutorial completion, coins/ad grants, name validation state, and Stealth.
-  Redis is cache only. Invalidate requester/invitee race-list membership after
-  worker commits and `v1:user:{id}:authme` through the existing user-update seam
-  after tutorial completion or rename; test Redis enabled and `REDIS_URL` unset.
-- Rollout order: (1) additive migrations compatible with old backend workers,
-  (2) backend code rolling across exactly two production workers, (3) verify old
-  client response contracts, mixed-worker behavior, and Redis-unset fallback,
-  then (4) build and verify both iOS and Android. No staging start is authorized.
+- Additive migration/backend first, then verify/build iOS and Android. Hide new
+  UI when capability/eligibility/support is absent. Frozen clients ignore new
+  fields/endpoints and accept ordinary invites; backend protects name writes
+  and public presentation for all clients.
+- Keep shared race cache fragments viewer-neutral; overlay rematch eligibility
+  afterward. Keep the new completed-summary cache immutable for descendant
+  creation, use documented membership invalidation, and test Redis on and unset.
+- Preserve exactly two production HTTP workers plus the current dedicated
+  resolution and cron roles; no process-topology or database-pool capacity
+  change is authorized. Any production deploy/write requires explicit,
+  in-the-moment confirmation.
+- Preserve the resolution process's current shared work budget and queue reason
+  registry; rematch adds neither a resolution reason nor a worker concurrency
+  setting.
+- Do not start/reload staging without explicit in-the-moment authorization; shut
+  it down after authorized use. Hitchhike is the only new art asset.
+- New Hitchhike art ships in both app binaries under an existing asset key, so no
+  catalog activation or production data write is needed. All backend migrations
+  and additive contracts deploy before the app; recurring/team-chat UI fails
+  closed against an older backend. Frozen apps treat recurring races/messages as
+  ordinary races/ALL chat and cannot bypass backend giveaway/Rally/Decoy rules.
 
-## 9. Acceptance criteria / definition of done
+## 8. Acceptance criteria / definition of done
 
-- All ten owner requests meet R1–R10 on iOS and Android.
-- `flutter analyze` is clean and relevant Flutter tests pass.
-- Backend unit/integration commands follow backend AGENTS.md; integration tests
-  run only after confirming a dedicated local/test Postgres URL, never prod.
-- Version-skew behavior in §8 is tested and recorded.
-- Architect, game-economy, UI-placement, and post-implementation code review
-  requirements are satisfied at their required phases.
-- The manual UI checklist is delivered to the owner before implementation is
-  called done.
+- R1–R22 pass on both platforms with version-skew coverage; tests were written
+  first; Flutter analyze and relevant frontend/backend suites are green on a
+  confirmed test DB; configured and omitted ad units are covered.
+- Required architect, game-economy, UI-placement, and later code reviews occur.
+- No implementation starts until explicit owner approval.
 
-## 10. Owner decisions (locked 2026-09-01)
+## 9. Owner decisions (locked)
 
-1. Any former accepted participant may initiate a rematch, and the same source
-   can be rematched an unlimited number of times.
-2. Rematch immediately creates the gameplay-identical fresh race and invites
-   the whole former accepted roster; it does not detour through Create Race.
-3. The inventory/equip instruction appears only for accessories. Powerups get
-   a type label but no equip instruction.
-4. Every incomplete account receives the Shop tutorial, and Settings has a
-   replay action.
-5. Existing profane names force a blocking rename on next app open. Initial
-   matching scope is English plus the normalization/evasion rules in R8.
-6. Instagram is confirmed as `instagram.com/Bara.steps.app`.
+1. Any former accepted participant may initiate; sequential rematches unlimited.
+2. Rematch immediately creates the equivalent race and invites former roster.
+3. Equip instruction is accessory-only.
+4. Shop tutorial covers every incomplete account and has Settings replay.
+5. Existing profane names force rename next capable-app open.
+6. Instagram destination is `instagram.com/Bara.steps.app`.
+7. Recurring invitation acceptance opts the participant into future occurrences;
+   participant opt-out affects only future races, and creator stop ends renewal
+   after the current race.
+8. Manual service and automatic giveaway banners may coexist, service first.
+9. Race stats exclude seeded races and expose competed/wins/podiums/win rate.
+10. Team chat defaults to ALL and TEAM messages remain private to the sender's
+    snapshotted team.
+11. Rally Flags reject stacking; Decoy leaves Shop and joins mystery-box rolls.
 
-## 11. Revision log
+## 10. Revision log
 
-- **Phase 1 draft (2026-09-01):** mapped all ten requests to the current Flutter
-  and backend paths. Identified the completed-race Stealth renderer, atomic
-  rematch/idempotency need, existing durable reroll guard, backend-only name
-  authority, tournament avatar producer, and contest token/surface mismatch.
-- **Gap pass 1 (2026-09-01):** added multi-race popup binding, concurrent rematch
-  protection, forbidden copied fields, invite-event compatibility, server-side
-  tutorial persistence, Android ad-unit fail-closed behavior, completed-race
-  Stealth coverage, semantic identity leakage, and correct powerup-versus-
-  accessory destination copy.
-- **Gap pass 2 (2026-09-01):** added real-HTTP name-path parity, Unicode/leetspeak
-  normalization with clean near-match tests, AA contrast checks, non-button
-  semantics, mixed-version fallback behavior, no-release-flag constraint,
-  both-platform requirement, and explicit unresolved owner decisions. No
-  implementation or production action was taken.
-- **Phase 3 interview fold-in (2026-09-01):** locked any-participant and
-  unlimited rematches, immediate gameplay-identical creation with automatic
-  invites, accessory-only equip guidance, all-account Shop education with
-  Settings replay, blocking remediation for existing profane names, and the
-  confirmed Instagram destination. Clarified fresh lifecycle timestamps,
-  per-operation idempotency, initial English normalization scope, and the
-  additive authenticated-user rename flag.
-- **Post-interview gap pass 1 (2026-09-01):** reconciled unlimited rematches with
-  duplicate-tap safety by removing source uniqueness while retaining
-  requester/key uniqueness; added tests proving two intentional rematches and
-  one idempotent retry.
-- **Post-interview gap pass 2 (2026-09-01):** made “identical” an enumerated
-  gameplay snapshot rather than an impossible copy of past lifecycle fields;
-  added non-destructive existing-name detection, old-client behavior, and
-  replay-without-state-reset semantics. Zero product questions remain.
-- **Economy review (2026-09-01):** verdict `SOUND WITH CHANGES`. Required the
-  canonical current race-creation economy path, recalculated server-owned
-  payout/funding stamps, fresh buy-in/acceptance checks, one live rematch
-  descendant per source with unlimited sequential rematches, safe/rate-limited
-  cohort invites, and atomic ad-grant plus powerup-row reroll mutation. Explicitly
-  retained the existing current-position reroll strategy; no odds changed.
-- **Architect review (2026-09-01):** verdict `REVISE`. Added the Race
-  COPY/RESET/RECOMPUTE table and canonical current economy path; moved roster
-  fan-out to a durable C0 worker command; completed receipt/idempotency and
-  invite semantics; added explicit rematch capability/eligibility; selected the
-  exact Shop tutorial field/endpoint and missing-field behavior; specified
-  endpoint-specific profanity responses and safe public placeholder; moved the
-  Stealth boundary server-side; enumerated Postgres/cache invalidation and
-  migration-first rollout; and resolved powerup-label copy. All required
-  changes were folded in.
-- **Post-review gap pass 1 (2026-09-01):** verified the durable C0 worker owns
-  all rematch participant fan-out, the request/receipt response distinguishes
-  queued from completed invites, viewer-specific eligibility stays out of
-  shared cache fragments, and sequential-unlimited rematches cannot multiply
-  one source concurrently. Added no new product decisions.
-- **Post-review gap pass 2 (2026-09-01):** reconciled missing-versus-null Shop
-  completion for older backends, force-rename behavior for frozen clients,
-  server-side Stealth expiry/completion semantics, current-policy buy-in
-  handling, exact daily copy, cache invalidation, and migration-first rolling
-  deployment. A stale/open-language scan and Markdown diff check were clean.
-- **UI-placement review (2026-09-01):** inserted the planner's checklist and
-  risks verbatim in §12, including real/demo/tutorial mirrors, result batching,
-  Shop target measurement, contest-height growth, themes, platforms, narrow
-  devices, and large text.
+- **Original workflow (2026-09-01):** two gap passes, owner interview, and
+  architect/economy/UI reviews completed.
+- **Current-code exploration (2026-09-03):** corrected Stealth to the shipped
+  contract; remapped rematch to current C0/durable domain-event seams; added
+  projection/cache rules; recognized Android
+  reroll support and the atomicity repair; routed tutorial/name fields through
+  current auth serializers/caches.
+- **Fresh-eyes pass 1 (2026-09-03):** reconciled missing-vs-null Shop support,
+  overlay/account switching, source/new-race/idempotency locks, cohort invite
+  exceptions, and removed contradictory completed Stealth masking.
+- **Fresh-eyes pass 2 (2026-09-03):** added frozen-client public-name safety,
+  separated discoverable/display-name policy, moved viewer eligibility outside
+  shared cache, covered both-platform ad configurations, and aligned operations
+  with current HTTP/resolution/cron topology. Zero product questions remain.
+- **Refreshed architect review (2026-09-03):** verdict `REVISE`. Moved invite
+  fan-out to durable existing C0 work; defined pending/terminal receipt states,
+  lineage-wide partial uniqueness and scheduling/team semantics; removed an
+  ambiguous auth capability; required bounded eligibility queries, thin module
+  routes, cache contract versioning/cold-start state, profanity-only remediation,
+  snapshot sanitization, and atomic reroll audit writes. All REQUIRED findings
+  are incorporated.
+- **Refreshed economy review (2026-09-03):** verdict `SOUND WITH CHANGES`.
+  Required lineage-wide fork prevention, durable creation/invite admission,
+  current active-limit/economy enforcement and monitoring, canonical C0 reroll
+  lock/CAS/audit atomicity, and explicit delayed-position coverage. All five
+  requirements are incorporated; `docs/economy.md` was refreshed by the reviewer.
+- **Post-review gap pass 1 (2026-09-03):** reconciled the async C0 worker with
+  the owner's immediate-create intent: HTTP commits and returns the new race at
+  202 while durable fan-out proceeds, with immutable planned versus terminal
+  invite results. Rechecked retry, rollback, queue ownership, and navigation.
+- **Post-review gap pass 2 (2026-09-03):** checked lineage uniqueness against
+  sequential reuse, ensured rate admission occurs before creation, separated
+  stored-name profanity remediation from full write validation, required warm
+  snapshot/cache sanitation, and verified all manual-plan risks are reflected.
+  Zero unresolved product questions remain.
+- **Architect compliance recheck (2026-09-03):** defined retryable versus
+  terminal worker failures, canonical cancellation/refund and immutable replay,
+  plus post-commit membership-cache invalidation whose Redis failure cannot
+  roll back PostgreSQL. No architect-required issue remains after this fold-in.
+- **Economy compliance recheck (2026-09-03):** verdict upgraded to `SOUND`; no
+  required economy issue remains.
+- **Current-code exploration (2026-09-06):** reconciled the spec with the
+  specialized generation-fenced resolution queue, append-only large-race
+  intake, bounded race-bootstrap summaries, the new versioned completed-race
+  summary cache, and concurrent forfeited-participant presentation work.
+- **Fresh-eyes pass 1 (2026-09-06):** removed the now-inappropriate use of
+  `RaceResolutionJobV2` for invitation fan-out and replaced the receipt state
+  machine/worker workflow with one idempotent PostgreSQL transaction plus the
+  existing domain-event outbox. Removed invented rematch rate limits that
+  conflicted with the owner's unlimited-sequential decision.
+- **Fresh-eyes pass 2 (2026-09-06):** separated membership invalidation from
+  immutable completed-summary caching, prevented rematch eligibility from
+  expanding bounded bootstrap reads, preserved forfeited-row hiding and frozen
+  team totals, removed an unnecessary auth-cache version bump, and tightened
+  exact replay/error/skip contracts. Zero product questions remain.
+- **Refreshed economy review (2026-09-06):** verdict `SOUND WITH CHANGES`.
+  Confirmed current hold/admission/payout stamps and deferred-reroll atomicity;
+  replaced an unsupported assumption about global request limiting with durable
+  recipient+lineage notification-episode coalescing across cancellation loops.
+- **Refreshed architect review (2026-09-06):** verdict `REVISE`. Required the
+  target race's inert generation-zero C0 row, a hard synchronous cohort bound,
+  a concrete durable notification-episode/projector contract, outer recovery
+  from concurrent receipt uniqueness conflicts, and delayed same-account auth
+  reevaluation for an already-mounted Shop. All REQUIRED findings were folded
+  into the API, data, frontend, and tests-first plans for compliance recheck.
+- **Refreshed UI-placement review (2026-09-06):** confirmed all prior mirrors
+  and insertion points remain current; added forfeited-row checks across active,
+  completed, team, individual, and paged detail without changing the remaining
+  checklist.
+- **Architect compliance recheck (2026-09-06):** verdict `APPROVE`; no REQUIRED
+  findings remain. Exact referential actions and the one-open-episode partial
+  uniqueness invariant were pinned after the recheck suggestions.
+- **Economy compliance recheck (2026-09-06):** verdict upgraded to `SOUND`; the
+  durable notification episode closes cancellation/recreation spam without
+  limiting legitimate sequential rematches, and no required economy issue
+  remains.
+- **Additional-request exploration (2026-09-06):** mapped Shop purchase calls to
+  the existing powerup-processing overlay treatment; found service/giveaway
+  coexistence and cache seams; located retained but unwired Daily Reward info
+  widgets; mapped profile, durable message streams/caches, Rally/Decoy/Hitchhike
+  mechanics, notification audiences, and giveaway administration paths.
+- **Additional fresh-eyes pass 1 (2026-09-06):** made recurring acceptance an
+  explicit durable subscription, separated participant opt-out from creator
+  series shutdown, defined current-race preservation/reinvite behavior, added
+  exactly-once lifecycle/C0/economy rules, and specified old-client behavior.
+- **Additional fresh-eyes pass 2 (2026-09-06):** bounded stats and chat reads,
+  snapshotted team-message privacy, shared channel rate limiting, immediate
+  cross-worker service-banner visibility, Rally concurrency rollback, Decoy
+  purchase compatibility, purchase-overlay lifecycle cleanup, and Hitchhike
+  asset verification. Owner pre-approved recommendations; zero open product
+  questions remain before specialist review.
+- **Expanded architect review and compliance recheck (2026-09-06):** corrected
+  creator/viewer series response semantics and stable errors; pinned immutable
+  recurring payout stamps and the account-wide active-subscription index;
+  removed the stats-cache contradiction and every admin TEAM-read exception.
+  Final verdict `APPROVE`; no REQUIRED or suggested issue remains.
+- **Expanded economy compliance recheck (2026-09-06):** final verdict `SOUND`;
+  exact recurring anti-farm bounds, Decoy balance behavior, replay, and
+  grandfather handling have no remaining required changes.
+- **Expanded UI-placement review (2026-09-06):** extended the manual plan across
+  all R1–R22 real, tutorial/demo, theme, platform, text-scale, privacy, catalog,
+  overlay, and icon surfaces; implementation risks are recorded below.
+- **Implementation and post-fix review (2026-09-06):** backend-first contract
+  lock, backend/frontend implementation, protected test updates, concurrency and
+  privacy hardening, and release-gate cleanup completed. Final code-review verdict
+  `APPROVE`; backend unit 3,353/3,353, affected backend integration suites green,
+  frontend 2,937/2,937, `flutter analyze` clean, and both platform builds succeed.
 
-## 12. Manual UI-placement test plan
+## 11. Manual UI-placement test plan
 
-**Manual UI-Placement Test Plan — September 2026 feature batch**
+**Manual UI-Placement Test Plan — 2026-09-06 feature batch refresh**
 
-*Elements under test:* Stealthed racers replace every identity-bearing course, standings, and completed-result element with anonymous placeholders in the same row/slot.
+*Elements under test:* Stealthed opponents lose all identity-revealing effect badges on active race-detail surfaces.
 
-*Elements under test:* `REMATCH` with a circular redo icon is added above the rewarded-ad control in the result popup and between the completion/payout summary and final standings on completed custom-race detail.
+*Elements under test:* Forfeited participants are removed from active and completed race-detail presentation without leaving stale rows, gaps, or effect badges.
 
-*Elements under test:* The viewer capybara/avatar is removed from personal tournament cards and the remaining card content reflows into the ordinary-card leading/content/trailing rhythm.
+*Elements under test:* REMATCH is added to each eligible finished-race result and to completed race detail between the result/payout area and final standings.
 
-*Elements under test:* Updated Instagram and X handles remain in the Settings COMMUNITY section; `VIEW SHOP TUTORIAL` is added to HELP & LEGAL near `VIEW TUTORIAL`.
+*Elements under test:* The leading racer avatar and its reserved space are removed only from personal tournament cards.
 
-*Elements under test:* Eligible held powerup sheets add `REROLL` below USE and DISCARD; ineligible sheets retain the current two-action layout.
+*Elements under test:* Existing Instagram and X rows remain in COMMUNITY with updated handles.
 
-*Elements under test:* Daily reward item reveals add a `POWERUP` or `ACCESSORY` label; only an accessory adds the inventory/equip instruction beneath its reveal content.
+*Elements under test:* REROLL is added below USE and DISCARD in an eligible held-powerup action sheet.
 
-*Elements under test:* A four-beat spotlight moves across the real Shop’s STORE/INVENTORY segment, category pills, dressing-room stage, and product grid/card.
+*Elements under test:* Daily powerup/accessory reveals gain type labels; only accessories gain the inventory instruction.
 
-*Elements under test:* A blocking rename screen is inserted before normal app content for an account with a profane stored name.
+*Elements under test:* A four-beat spotlight tutorial is added over the real Shop, plus VIEW SHOP TUTORIAL in Settings.
 
-*Elements under test:* Contest sharing mini-cards are removed and replaced in the same “MAKE SOME NOISE” area by a three-item vertical icon-bullet list; `SHARE YOUR INVITE` remains the sole button.
+*Elements under test:* A mandatory rename gate is added above every authenticated destination for affected accounts.
 
-*Elements under test:* OFFICIAL RULES remains at the bottom of the joined contest page and rule section headings remain above their respective body copy without collisions in either theme.
+*Elements under test:* Referral contest rule links/headings remain in place and readable without moving or disappearing in either theme.
+
+*Elements under test:* Two button-like share-idea cards are replaced by three stacked, non-interactive icon bullets above SHARE YOUR INVITE.
 
 *Checklist*
 
-1. **Weekly/custom race detail — real active screen**
-   - **Get there:** On iOS, open an active race containing one stealthed opponent; repeat on Android in the other app theme.
-   - **Verify:** The hidden racer still occupies the expected course and standings row, but `???`, `?`, and the anonymous avatar occupy the name/rank/identity positions; no photo, animal, accessory, multiplier/effect badge, or profile affordance appears in or beside that row. Confirm the real identity is not duplicated elsewhere on the course, standings, active-effects area, or winner/leader chrome. Use one narrow device or large text setting and confirm placeholders remain inside their row.
+1. **Active individual race detail — real screen**
+   - **Get there:** On iOS and Android, open an active individual race containing one opponent with active Stealth and visible effects on other racers.
+   - **Verify:** The hidden opponent remains in standings as `???`, with no effect badge, avatar/accessory clue, or duplicate clue elsewhere in the row; ordinary racers retain their effect badges in the existing position. Check both themes, then repeat at large text scale and narrow-phone width.
 
-2. **Race detail — demo race tutorial and tab-tutorial preview**
-   - **Get there:** Sign in with an account that can replay onboarding → run the demo race; then Settings → VIEW TUTORIAL → advance to the Races and race-detail preview beats.
-   - **Verify:** Where the fixtures contain a stealthed racer, the same anonymous placeholders occupy the production positions and the identity is absent from every duplicate row. The course, standings, effect tray, inventory, and tutorial spotlight anchors stay aligned; no identity appears in the demo coach chrome. If no hidden racer appears, record that as a fixture failure, not a pass.
+2. **Active team race detail — real screen**
+   - **Get there:** Open an active team race containing a stealthed opponent, active team/participant effects, and a forfeited participant whose frozen steps still contribute to the team total.
+   - **Verify:** No effect icon or rail identifies the hidden opponent. The forfeited participant is absent from the course, team leader cards, two-column team roster, grouped standings, and effect rails, with no blank row or avatar-sized gap left behind. Visible teammates and opponents retain their existing elements and ordering, and each team summary remains in its existing position.
 
-3. **Completed custom race — result popup**
-   - **Get there:** Finish one eligible custom race and open its placement/results popup; also use a result batch containing more than one completed race if available.
-   - **Verify:** `REMATCH` appears for the specific eligible race immediately above the existing rewarded-ad button, with its circular redo icon inside the same CTA. The ad button remains in its old position below it; REMATCH is not duplicated elsewhere in the popup. In a multi-race popup, each visible action is clearly attached to one race rather than floating as a batch-wide action. Confirm an ineligible seeded/tournament result has no empty REMATCH gap. Repeat with large text and ensure the controls remain ordered and reachable without overlap.
+3. **Forfeited rows — individual, completed, and paged detail**
+   - **Get there:** Open an active individual race, completed individual race, and completed team race whose payload includes a forfeited participant. Where available, use a paged standings response whose current page contains that participant.
+   - **Verify:** The forfeited participant appears nowhere in the course, podium/winner presentation, team winner board, or standings, and leaves no blank plank, separator, effect badge, or unexplained vertical gap. Remaining racers close up in display order. On paged standings, the pager remains once below the visible rows and does not overlap or jump into the removed row’s space.
 
-4. **Completed custom race — real detail screen**
-   - **Get there:** Races → completed eligible custom race.
-   - **Verify:** `REMATCH` appears after the completion/payout summary and before final standings. It is absent from the old end-of-screen position and not repeated near activity/chat. Any stealthed finisher/winner retains anonymous content in the hero and final standings positions, with no raw avatar/accessory/name duplicated. Open a completed seeded or tournament race and confirm no REMATCH or reserved blank space appears.
+4. **Race-detail tutorial mirrors**
+   - **Get there:** Fresh account → onboarding demo race; then Settings → VIEW TUTORIAL → reach the race-detail powerups beat.
+   - **Verify:** The demo and tab-tutorial previews still render the production race-detail layout. The tab tutorial’s seeded stealthed row has no identifying effect badge. The powerups spotlight still rings the inventory area, and neither preview gains an extra badge or an empty badge-sized gap.
 
-5. **Personal tournament card — real Races tab**
-   - **Get there:** Races → TOURNAMENTS with a personal tournament in each available state (pending, live, completed).
-   - **Verify:** No capybara/viewer avatar or “your racer” leading slot remains. Tournament name and round/status begin on the same leading alignment as neighboring ordinary/team race-card content; inventory stays beneath the content and placement/prize/pin/chevron remain in the trailing area. Confirm there is no leftover indent or duplicate identity image. Repeat on a narrow device or large text setting.
+5. **Finished-race popup — one result**
+   - **Get there:** Launch with one unseen, eligible completed custom race and a 50-coin rewarded-ad offer.
+   - **Verify:** REMATCH appears in the result action area above the ad CTA; it is below the race placement/payout content and appears only once. START YOUR NEXT RACE/CONTINUE and NICE remain below the result/ad area in their prior order.
 
-6. **Personal tournament card — tab tutorial preview**
-   - **Get there:** Settings → VIEW TUTORIAL → Races preview containing a tournament.
-   - **Verify:** The reused tournament card also has no leading viewer avatar and matches the real Races-tab alignment. The ordinary race stays ahead of tournaments as expected, and the existing card/box spotlight still rings its intended ordinary race rather than shifting onto the reflowed tournament card. If the preview fixture has no tournament, record the missing checkpoint as a fixture failure.
+6. **Finished-race popup — multiple results**
+   - **Get there:** Launch with two or more unseen completed races, mixing eligible custom races with an ineligible seeded or tournament race.
+   - **Verify:** Each REMATCH control is visually attached to its own eligible race rather than presented as one ambiguous batch action; ineligible cards have neither a button nor a blank reserved gap. The shared ad panel remains after the result-card list, and no rematch control is duplicated there. Scroll the full popup at large text scale.
 
-7. **Settings — HELP & LEGAL and COMMUNITY**
-   - **Get there:** Profile → Settings on iOS and Android.
-   - **Verify:** `VIEW SHOP TUTORIAL` appears once in HELP & LEGAL adjacent to the existing `VIEW TUTORIAL`, without displacing or duplicating Support/legal rows. COMMUNITY still sits between HELP & LEGAL and ABOUT US/ACCOUNT; Instagram shows `@Bara.steps.app` and X shows `@BaraStepsApp` in their existing rows, with no old handles elsewhere. At large text, both handles and replay rows remain contained and tappable without overlapping adjacent sections.
+7. **Completed race detail**
+   - **Get there:** Races → COMPLETED → open an eligible custom individual race, then an eligible team race; also open one ineligible completed race.
+   - **Verify:** REMATCH appears after the winner/podium and payout summary and immediately before FINAL STANDINGS. It does not appear in the hero, activity/chat, or old share-action position. A forfeited participant is absent from the hero, winner/podium or team-winner presentation, and final standings without leaving a stale gap above or below REMATCH. The ineligible race has no button or unexplained gap. Repeat on narrow iOS and Android screens.
 
-8. **Held-powerup action sheet — real race detail**
-   - **Get there:** Open an active race with one eligible, box-origin, unused powerup in YOUR STASH; tap it. Then inspect a normal/ineligible held powerup.
-   - **Verify:** The eligible sheet orders USE, DISCARD, then REROLL, with REROLL directly beneath DISCARD in the same action area. The old reveal-time reroll remains only on its reveal surface and is not duplicated above USE. The ineligible sheet contains only the existing actions and leaves no blank third-row space. After a successful deferred reroll, the replacement reveal/result occupies the normal result position and reopening the sheet does not show a second REROLL. Repeat where the Android ad unit is unavailable and confirm the sheet keeps the old two-action layout.
+8. **Personal tournament cards**
+   - **Get there:** Races → view pending, active/live, eliminated, and champion personal tournament cards.
+   - **Verify:** No capybara/racer avatar appears at the leading edge and no 48px avatar indentation remains; tournament name, bracket/status chip, countdown, inventory rail, favorite control, placement/prize, and chevron reflow into the available width. Confirm the public/featured tournament cards elsewhere retain their existing composition.
 
-9. **Held-powerup action sheet — demo race and tutorial race-detail preview**
-   - **Get there:** Run the demo race tutorial to its inventory interaction; then Settings → VIEW TUTORIAL → race-detail powerups beat.
-   - **Verify:** The production inventory slot and its sheet remain positioned correctly inside both reused race-detail surfaces. If fixture data qualifies for deferred reroll, REROLL appears third; if the tutorial intentionally suppresses it, there is no blank space or misplaced spotlight. The powerups spotlight still rings the inventory/effect area, not the new sheet action.
+9. **Tournament card — tab tutorial preview**
+   - **Get there:** Settings → VIEW TUTORIAL → reach the Races preview and scroll to TOURNAMENTS if needed.
+   - **Verify:** The reused `RacesTab` tournament card also has no leading avatar or stale gap; the race-card and mystery-box spotlights still target their intended race elements, not the reflowed tournament card.
 
-10. **Daily reward item reveal**
-    - **Get there:** Open Daily Reward with a powerup result, then an accessory result, then a coin result; test one result with large text.
-    - **Verify:** `POWERUP` occupies the type-label position for a powerup with no equip instruction below it. `ACCESSORY` occupies the same label position for an accessory, and “Go to your inventory to equip this item” appears beneath the accessory reveal content. The coin result has neither label nor instruction and leaves no empty item-only gap. Labels and guidance remain within the reveal card/sheet and above any footer ad.
+10. **Settings community and tutorial rows**
+   - **Get there:** Profile → Settings on both platforms.
+   - **Verify:** COMMUNITY remains between HELP & LEGAL and ABOUT US; Instagram and X remain two separate rows in the same order with their updated handles. VIEW SHOP TUTORIAL appears alongside the existing VIEW TUTORIAL help action, not inside COMMUNITY or ACCOUNT. Check narrow width and large text for wrapping without row overlap or duplication.
 
-11. **Shop — automatic first-visit tutorial on the real tab**
-    - **Get there:** Use an existing authenticated account with no `shop_v1` completion → tap Shop for the first real visit.
-    - **Verify:** Beat 1 rings STORE/INVENTORY; beat 2 rings category pills; beat 3 rings the dressing-room stage; beat 4 scrolls as needed and rings a product grid/card. Each cutout follows its target’s current on-screen location, NEXT/BACK/close remain reachable, and no target is highlighted twice or left highlighted in its old position. Complete/close it, leave Shop, return, and confirm no overlay is duplicated or auto-replayed.
+11. **Held-powerup action sheet — eligible**
+    - **Get there:** Open an active race with an eligible, base-level, box-origin held powerup; tap its inventory slot on builds with the platform’s reroll ad unit configured.
+    - **Verify:** The sheet orders actions USE, DISCARD, then REROLL, with consistent full-width alignment and spacing. REROLL is not placed in YOUR STASH, the inventory rail, or the reveal screen. Repeat for a non-upgradeable powerup and an upgradeable powerup whose USE area contains tier choices.
 
-12. **Shop — Settings replay, narrow layout, and themes**
-    - **Get there:** Profile → Settings → VIEW SHOP TUTORIAL; repeat once in each theme, using large text or the narrowest supported device for one run.
-    - **Verify:** Replay opens the real Shop tab and presents the same four targets in the same order. When a target requires scrolling, its cutout is measured after scrolling and remains centered on the visible widget; overlay controls do not cover the highlighted control or fall under the bottom tab bar/safe area. Closing replay returns cleanly with no orphaned dim layer.
+12. **Held-powerup action sheet — absent states and mirrors**
+    - **Get there:** Repeat with an already-rerolled/ineligible item and with the reroll ad unit omitted on both iOS and Android; also inspect the onboarding demo race and tab-tutorial race-detail preview.
+    - **Verify:** REROLL is absent without leaving a blank action-sized gap; USE/DISCARD retain their former placement. Demo/tutorial fixtures do not expose a live REROLL control, and the powerups spotlight remains aligned. Existing reveal-time single- and multi-box reroll controls remain in their original locations.
 
-13. **Blocking rename gate**
-    - **Get there:** Launch the app while authenticated as an existing account marked as requiring a rename.
-    - **Verify:** The rename screen appears above normal shell content before Home/Races can be seen or tapped, with no dismiss, back, tab-bar, or underlying-content escape visible. Validation feedback stays attached to the name field/action area. After a successful rename, the gate is removed and the normal initial screen occupies its usual position; the same rename UI reached from Settings and contest/home name prompts remains normally embedded rather than double-stacked.
+13. **Daily reward reveal**
+    - **Get there:** Open Daily Reward with controlled outcomes for a valid powerup, valid accessory, coins, and fallback/malformed reward.
+    - **Verify:** POWERUP appears with the powerup name/art and no equip instruction. ACCESSORY appears with the accessory name/art and `Go to your inventory to equip this item` directly beneath it. Coin/fallback states contain neither label nor instruction. Existing extra-spin and dismissal actions remain below the reward content. Repeat in both themes, narrow width, and large text.
 
-14. **Referral contest — joined dashboard**
-    - **Get there:** Home/referral entry → open a joined contest in light theme, then night theme; use large text for one pass.
-    - **Verify:** Under “MAKE SOME NOISE,” a vertical icon-bullet list shows exactly three rows in this order: group chat, family, coworkers. The former two bordered/fill mini-cards and “Post it on Instagram” are absent, with no empty two-column footprint. `SHARE YOUR INVITE` remains the only button below the list, and the prize encouragement remains between list and button without overlap. OFFICIAL RULES remains a single full-width control at the bottom after Recent Referrals and does not collide with the preceding card.
+14. **Automatic Shop tutorial**
+    - **Get there:** Use an authenticated account with Shop tutorial supported but incomplete; tap Shop for the first real visit after launch.
+    - **Verify:** The tutorial overlays the real Shop only after its layout is visible. In order, the spotlight rings STORE/INVENTORY, category pills, dressing-room stage, and product grid/card. Each target is scrolled fully onscreen before the ring is measured; NEXT/BACK/close chrome stays inside safe areas and does not cover the highlighted control at narrow width or large text.
 
-15. **Referral contest — official rules page**
-    - **Get there:** From the joined dashboard, tap OFFICIAL RULES; repeat through any pre-join rules entry point, once per theme and once with large text.
-    - **Verify:** The contest/prize summary remains at the top, followed by the OFFICIAL RULES title and one vertically ordered section per rule. Every section heading stays immediately above its own body text and beside its intended icon; no heading shifts behind an icon, divider, or neighboring section, and no duplicate title appears. Scroll through the full page to confirm the long content remains reachable.
+15. **Shop tutorial suppression and replay**
+    - **Get there:** Run the general onboarding/tab tutorial, then visit Shop with a completed account; finally use Settings → VIEW SHOP TUTORIAL.
+    - **Verify:** The Shop walkthrough does not launch inside either preview/tutorial or automatically for the completed account. Settings replay navigates to the real Shop and shows exactly one overlay above it. Closing or completing replay returns to a usable Shop with no duplicate overlay. Check both themes and both platforms.
 
-16. **Platform and adaptive-layout sweep**
-    - **Get there:** Run the changed real surfaces once on iOS and once on Android, splitting light/night themes between them; repeat the densest result popup, tournament card, Settings, daily reveal, Shop overlay, and contest list at the largest practical text scale.
-    - **Verify:** Added controls and labels remain inside safe areas, scroll views, cards, sheets, and overlays; bottom banners/tab bars do not cover them. Every added element is present only in its new specified position and absent from its former or unintended positions.
+16. **Mandatory rename gate**
+    - **Get there:** Sign in with an account marked for rename and launch normally; repeat from a race/referral deep link and when an unseen-results popup would otherwise open.
+    - **Verify:** The rename gate is the topmost authenticated surface before shell tabs, deep-linked content, results modals, tutorials, or Shop overlays. No underlying action is exposed around its edges or duplicated behind it. After a successful rename, the intended destination appears normally and the gate is gone. A clean account has no reserved gate space.
 
-*Surfaces confirmed unaffected:* Public/featured tournament cards in `public_races_screen.dart` use `TournamentGameCard`, not the personal tournament row with `tournament-identity-avatar-*`; they should retain their current leading treatment.
+17. **Referral contest dashboard**
+    - **Get there:** Referral contest → joined dashboard in each app theme; test open and sharing-closed states.
+    - **Verify:** OFFICIAL RULES remains at the bottom of the dashboard content and is not clipped, hidden behind bottom chrome, or moved into the share list. The three sharing ideas appear as a vertical icon-bullet list in this order: group chat, family, coworkers. The old two bubble/card shapes and Instagram suggestion are absent. SHARE YOUR INVITE remains the only button immediately below the ideas area.
 
-*Surfaces confirmed unaffected:* Tournament detail/bracket screens do not render the personal Races-tab viewer-avatar row and require no avatar-removal checkpoint.
+18. **Official rules page**
+    - **Get there:** Open rules from both pre-join contest overview and joined dashboard, in both themes.
+    - **Verify:** The OFFICIAL RULES title and every section heading remain directly above their matching body section; none disappear, overlap icons/body copy, or move into the previous section. Scroll through the complete page at large text scale and narrow width.
 
-*Surfaces confirmed unaffected:* Create Race and Race Invite demo-prologue screens are not used by immediate rematch, because rematch deliberately bypasses copied-settings confirmation.
+19. **Referral surfaces at large text and wider layout**
+    - **Get there:** Repeat the joined dashboard and rules page at the largest supported text scale, then on a wide device/tablet.
+   - **Verify:** All three idea bullets wrap vertically without becoming bubble-like tap targets; the encouragement and SHARE YOUR INVITE remain below them. Rules headings stay attached to their content and all bottom actions remain reachable.
 
-*Surfaces confirmed unaffected:* `case_opening_screen.dart` and `multi_case_opening_screen.dart` host mystery-box reveals, but the new deferred REROLL belongs to the held-powerup sheet; their existing reveal-time action must remain visually unchanged.
+20. **Blocking Shop purchase overlay**
+    - **Get there:** Confirm delayed coin purchases for an accessory, character, and powerup, then delay the final API call after an eligible ad unlock.
+    - **Verify:** One non-dismissible modal barrier covers the full Shop above sheets, cards, navigation, and tabs, showing the correct art, PURCHASING, item name, and spinner. It appears only during the authoritative purchase/unlock call, never stacks with the tutorial, and clears before success/error feedback and on disposal/account switch.
 
-*Surfaces confirmed unaffected:* Home, Friends, Boards, and Profile tab tutorial previews do not render personal tournament rows, race-result REMATCH, daily item reveals, contest rules, or held-powerup sheets.
+21. **Recurring toggle — creation and exclusions**
+    - **Get there:** Open normal custom CLASSIC creation, then team, bracket, seeded, quick-create, rematch-created, scheduled/custom-window, NO LIMIT, and demo creation variants.
+    - **Verify:** RECURRING is one default-off customization toggle only on eligible individual, app-funded, zero-buy-in, finite custom creation. Excluded variants leave no blank card and existing spotlight anchors/order remain intact.
 
-*Surfaces confirmed unaffected:* Giveaway admin screens are separate from the entrant joined dashboard/rules widgets and do not receive the share-list or rule-heading placement changes.
+22. **Recurring participant and creator controls**
+    - **Get there:** Open pending, active, and completed recurring occurrences as a non-creator subscriber and as creator; compare non-recurring and tutorial/demo detail.
+    - **Verify:** A non-creator sees AUTO-JOIN NEXT RACE once and opt-out changes only future participation. The creator instead sees RECURRING SERIES with END AFTER THIS RACE. Controls remain outside current-race leave/cancel, payout, standings, and feed sections; non-recurring and preview screens have no section or gap.
 
-*Surfaces confirmed unaffected:* The tutorial’s hand-copied bottom tab bar is not reordered or renamed by this batch.
+23. **Dual Home banners**
+    - **Get there:** Render Home with service-only, giveaway-only, both, neither, and malformed configurations, then open the Home tutorial preview.
+    - **Verify:** Valid banners coexist exactly once in service-then-giveaway order, retain distinct taps, and collapse without placeholders when absent. Tutorial preview suppresses both without shifting home.steps or home.shop spotlight targets.
 
-*Risks found while planning:* `RacesTab` is reused by `tutorial_real_screens.dart`, but the preview must contain a tournament fixture or avatar removal cannot be visually verified there; its existing spotlight intentionally anchors to the first ordinary race card.
+24. **Daily Reward header and prize help**
+    - **Get there:** Open Daily Reward before and after claiming, tap the restored header `?`, and exercise powerup, accessory, coin, malformed, and reel `???` outcomes.
+    - **Verify:** The header remains aligned and the help modal explains COINS, ACCESSORY, and POWERUP vertically within safe areas. Reel/final rewards use explicit type labels; accessory alone shows the inventory instruction; coin and `???` states are not mislabeled.
 
-*Risks found while planning:* `RaceDetailScreen` is reused by both `demo_race_host.dart` and `tutorial_real_screens.dart`, while demo coach chrome is hand-forked. Stealth, deferred reroll, and completed REMATCH states need explicit fixture coverage or these elements can be silently absent.
+25. **Own Profile race statistics**
+    - **Get there:** Open Profile with valid, unavailable/malformed, loading, and error stats, then the Profile tutorial preview.
+    - **Verify:** One RACE STATS card shows the four values without replacing STEP CALENDAR, STATS, or RACE PODIUMS. Missing data does not fabricate zeroes, and the preview uses a fixture or compact unavailable state without a live request.
 
-*Risks found while planning:* The result popup is launched separately by `main_shell.dart`; demo `_WinCard`/coach chrome is not the production `RaceResultsSummaryScreen`. Adding REMATCH to one does not automatically place it in the other, and the spec should keep demo results intentionally unaffected unless a rematchable demo source is provided.
+26. **Friend/public Profile race statistics**
+    - **Get there:** Open the shared public-profile sheet from Friends, search/request, leaderboard, race standings, and tournament/ranked standings.
+    - **Verify:** One RACE STATS card appears after existing identity/stat content and before relationship actions. The sheet remains scrollable/dismissible and missing data renders the intended unavailable state rather than a gap.
 
-*Risks found while planning:* Race-detail effect/inventory presentation has a hand-forked copy in `races_tab.dart`. The new REROLL is sheet-only, but implementation must avoid accidentally adding a third inline action or spacing change to the tab copy.
+27. **Unified individual activity/chat**
+    - **Get there:** Open pending, active, and completed regular individual races with mixed events/messages, plus onboarding demo and tab-tutorial detail.
+    - **Verify:** One chronological combined timeline replaces separate ACTIVITY/CHAT tabs. Older loading and the composer retain their existing edges; completed history is read-only. Demo/preview use fake data and never restore the old tabs or call live services.
 
-*Risks found while planning:* Shop’s four existing target keys are on real widgets, but the current general tutorial key map does not expose Shop beats. The overlay must measure targets after tab layout/scroll and must be suppressed in tutorial previews, or it may auto-launch over the app tutorial.
+28. **Team ALL/TEAM selector and privacy placement**
+    - **Get there:** Open pending, active, and completed team races as Team A and Team B accepted members; compare individual, spectator/nonparticipant, forfeited, and admin views.
+    - **Verify:** One fixed ALL/TEAM selector controls both feed and composer audience, defaults ALL, and never overlaps feed/composer/unread/load-more. Individual races have no gap; unauthorized viewers have no usable TEAM composer; TEAM messages appear only to the matching accepted team.
 
-*Risks found while planning:* Completed-race Stealth currently has a raw identity hero path, so testing standings alone will miss the most visible leak.
+29. **Decoy removed from Shop**
+    - **Get there:** Inspect all Shop powerup catalog/detail/filter and coin/ad-unlock views.
+    - **Verify:** No Decoy tile, sheet, action, or blank grid cell remains; other items reflow. Existing held Decoys remain visible and usable in inventory/stash.
 
-*Risks found while planning:* A batched results popup can represent multiple races; one floating REMATCH control would be visually ambiguous unless it is nested in the selected/source race result.
+30. **Decoy roll/reward surfaces**
+    - **Get there:** Produce Decoy through single-box, multi-box, and demo box flows; inspect Daily Reward.
+    - **Verify:** Decoy appears as an ordinary mystery-box result with its real icon/name and no Shop affordance, remains distinct from filler `???`, and stays excluded from Daily Reward. Existing attack/effect/history layouts remain unchanged.
 
-*Risks found while planning:* Settings must gain a replay route without altering the hand-copied tutorial tab bar or launching a second tutorial overlay beneath/above the Shop tutorial.
+31. **Hitchhike art — full and thumbnail**
+    - **Get there:** Inspect full reveal/detail and compact mystery-box thumbnail presentations.
+    - **Verify:** The same right-facing symbol is recognizable, centered, transparent at corners, unclipped, and free of the old artwork at both sizes.
 
-*Risks found while planning:* The contest suggestion rows currently share a horizontal two-card footprint. Replacing them with three vertical bullets materially increases height and may push the real share button or OFFICIAL RULES below existing viewport assumptions at large text.
+32. **Hitchhike art — inventory, targeting, effects, and timeline**
+    - **Get there:** Hold/use Hitchhike, open its target picker, activate it, and inspect stash, solo/team effect trays, participant status, combined feeds, and completed history including demo fixtures.
+    - **Verify:** Full/thumb assets remain readable without changing row, tray, target, or message geometry and never fall back to a missing image.
+
+33. **Cross-platform, theme, and accessibility sweep**
+    - **Get there:** Exercise every changed real screen on iOS and Android, in both themes, narrow width, and largest supported text scale.
+    - **Verify:** All new controls, cards, labels, banners, overlays, selectors, and icons remain reachable, ordered, within safe areas, and non-overlapping; spotlight targets are fully onscreen before measurement.
+
+*Surfaces confirmed unaffected:* Public/featured tournament cards use separate builders; their avatars and layout should remain unchanged.
+
+*Surfaces confirmed unaffected:* `RacesTab` reimplements compact inventory/effect rails, but deferred REROLL belongs only to the race-detail held-item sheet, so race-list cards should not gain an action.
+
+*Surfaces confirmed unaffected:* Box-opening screens retain the existing reveal-time reroll and are not hosts for the new deferred action.
+
+*Surfaces confirmed unaffected:* The daily onboarding intro is separate from `DailyRewardScreen`; it should not gain reward-type labels.
+
+*Surfaces confirmed unaffected:* Referral contest overview does not render joined-dashboard sharing ideas; only its route into the shared rules page is relevant.
+
+*Surfaces confirmed unaffected:* Demo race and tab tutorial use active race data, so completed-detail and finished-results REMATCH controls should not appear there.
+
+*Surfaces confirmed unaffected:* Current demo-race and tab-tutorial fixtures do not set `forfeitedAt`; they remain useful Stealth/powerup mirrors but do not exercise forfeited-row removal.
+
+*Risks found while planning:* The results popup currently has one batch-wide ad panel after all `_ResultCard`s, while REMATCH must be bound to an individual race. “Above the ad CTA” is ambiguous for multiple results; the implementation needs per-card visual ownership without making one rematch look applicable to the whole batch.
+
+*Risks found while planning:* Completed detail currently moves directly from winner/podium to FINAL STANDINGS. The new button needs an explicit insertion point between those sections and must not accidentally land inside the standings visibility key.
+
+*Risks found while planning:* Shop targets currently have local constant `Key`s, not externally supplied `GlobalKey` anchors like the existing tutorial previews. The Shop-owned overlay must obtain measurable contexts and scroll before measuring, especially for the product grid.
+
+*Risks found while planning:* The general tutorial already spotlights the Home Shop entry. The dedicated walkthrough must be suppressed in preview/demo navigation and must not stack with the existing spotlight overlay.
+
+*Risks found while planning:* The tab-tutorial fixture now includes a stealthed participant, making it a useful regression surface; removing or simplifying that fixture would hide the original identity-leak class.
+
+*Risks found while planning:* `demoMode` currently removes DISCARD from the held-powerup sheet. The new REROLL must also stay absent in demo/tutorial fixtures so a fake tutorial cannot expose a real ad/mutation action.
+
+*Risks found while planning:* A root-level forced-rename gate can collide with results, deep links, onboarding, and Shop tutorial overlays unless it wins presentation order before those routes are opened.
+
+*Risks found while planning:* The current forfeited-row change filters several race-detail renderers independently. Active course, team cards, team columns, completed hero, podium/winner board, grouped standings, and the shared standings list must remain visually consistent; a missed renderer could expose a forfeited racer or leave a stale gap. Paged standings intentionally preserve the server-loaded count for navigation even when a row is hidden, so pages containing forfeited racers may show fewer visible planks and deserve a device check.
+
+*Expanded-plan risks:* Shop now has three mutually exclusive top layers (tutorial, confirmation sheet, purchase overlay); accessory/character sheets and powerup purchase paths must mount the barrier at the same navigator level. Recurring participant opt-out and creator shutdown must never render together or imply mutation of a completed occurrence. Home currently suppresses service when giveaway exists and must remove both suppression points. Profile tutorial fixtures need explicit race-stat handling. The combined-feed selector must be singular and must bind both read and send audience. Removing Decoy must filter only Shop eligibility, not shared render/behavior registries. Hitchhike's separately sized full/thumb assets must depict the same symbol without naive blurry scaling.

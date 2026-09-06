@@ -342,7 +342,9 @@ class RaceTimelineCard extends StatelessWidget {
               key: const Key('timeline-ends-row'),
               label: 'ENDS',
               icon: Icons.flag_rounded,
-              value: end == null ? 'Pick an end' : formatRaceTimelineInstant(end),
+              value: end == null
+                  ? 'Pick an end'
+                  : formatRaceTimelineInstant(end),
               muted: end == null,
               onTap: onPickEnd,
             ),
@@ -464,10 +466,8 @@ class RaceTimelineCard extends StatelessWidget {
     );
   }
 
-  Widget _hairline(BuildContext context) => Container(
-    height: 2,
-    color: AppColors.of(context).parchmentBorder,
-  );
+  Widget _hairline(BuildContext context) =>
+      Container(height: 2, color: AppColors.of(context).parchmentBorder);
 
   Widget _pickerRow(
     BuildContext context, {
@@ -511,9 +511,7 @@ class RaceTimelineCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(
                         size: 12,
-                        color: muted
-                            ? palette.textMid
-                            : palette.textDark,
+                        color: muted ? palette.textMid : palette.textDark,
                       ),
                     ),
                   ),

@@ -525,17 +525,12 @@ class _PublicProfilePanelState extends State<PublicProfilePanel> {
           ),
         ),
         const SizedBox(height: 14),
-        if (_profileState == _LoadState.loading) _loading() else _profileBody(),
-        const SizedBox(height: 18),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: KeyedSubtree(
-            key: ValueKey(
-              '${_relationship.relationship.name}-${_busy ? 'busy' : 'ready'}',
-            ),
-            child: _relationshipActions(),
-          ),
-        ),
+        if (_profileState == _LoadState.loading) ...[
+          _loading(),
+          const SizedBox(height: 18),
+          _relationshipActionsAnimated(),
+        ] else
+          _profileBody(),
       ],
     );
     return Material(
@@ -548,6 +543,16 @@ class _PublicProfilePanelState extends State<PublicProfilePanel> {
     key: const ValueKey('public-profile-loading'),
     padding: const EdgeInsets.all(24),
     child: const Center(child: CircularProgressIndicator()),
+  );
+
+  Widget _relationshipActionsAnimated() => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 180),
+    child: KeyedSubtree(
+      key: ValueKey(
+        '${_relationship.relationship.name}-${_busy ? 'busy' : 'ready'}',
+      ),
+      child: _relationshipActions(),
+    ),
   );
 
   Widget _profileBody() {
@@ -597,7 +602,77 @@ class _PublicProfilePanelState extends State<PublicProfilePanel> {
         ),
         const SizedBox(height: 8),
         _statPlate(podium, average),
+        const SizedBox(height: 12),
+        _raceStatsPlate(stats),
+        const SizedBox(height: 18),
+        _relationshipActionsAnimated(),
       ],
+    );
+  }
+
+  Widget _raceStatsPlate(Map<String, dynamic> stats) {
+    final colors = AppColors.of(context);
+    int? count(String key) {
+      final raw = stats[key];
+      if (raw is! num || !raw.isFinite) return null;
+      final value = raw.toInt();
+      return value < 0 || value != raw ? null : value;
+    }
+
+    final competed = count('racesCompeted');
+    final wins = count('firstPlaceWins');
+    final podiums = count('podiumFinishes');
+    final rawRate = stats['winRate'];
+    final rate =
+        rawRate is num && rawRate.isFinite && rawRate >= 0 && rawRate <= 1
+        ? '${(rawRate * 100).round()}%'
+        : '—';
+
+    Widget value(String label, Object? value) => Expanded(
+      child: Column(
+        children: [
+          Text(
+            value == null ? '—' : '$value',
+            style: PixelText.number(size: 17, color: colors.textDark),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: PixelText.title(size: 8.5, color: colors.textMid),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      key: const ValueKey('public-profile-race-stats'),
+      padding: const EdgeInsets.fromLTRB(10, 11, 10, 12),
+      decoration: BoxDecoration(
+        color: colors.parchmentLight,
+        border: Border.all(color: colors.parchmentBorder),
+        boxShadow: [
+          BoxShadow(color: colors.woodShadow, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            'RACE STATS',
+            style: PixelText.title(size: 12, color: colors.textMid),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              value('RACES', competed),
+              value('1ST WINS', wins),
+              value('PODIUMS', podiums),
+              value('WIN RATE', rate),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

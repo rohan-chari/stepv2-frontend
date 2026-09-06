@@ -209,9 +209,7 @@ class HomeTab extends StatelessWidget {
         ? null
         : NextRaceState.tryParse(raceCard?['nextRace']);
     final giveawayBanner = _buildGiveawayBanner(context);
-    final serviceBanner = giveawayBanner == null
-        ? _buildServiceBanner(context)
-        : null;
+    final serviceBanner = _buildServiceBanner(context);
 
     return Stack(
       children: [
@@ -351,9 +349,7 @@ class HomeTab extends StatelessWidget {
                                 ),
                                 child: banner,
                               ),
-                            if (giveawayBanner case final banner?)
-                              Padding(padding: EdgeInsets.zero, child: banner)
-                            else if (serviceBanner case final banner?)
+                            if (serviceBanner case final banner?)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
                                   16,
@@ -363,6 +359,8 @@ class HomeTab extends StatelessWidget {
                                 ),
                                 child: banner,
                               ),
+                            if (giveawayBanner case final banner?)
+                              Padding(padding: EdgeInsets.zero, child: banner),
                             if (nextRace?.visible == true)
                               _NextRaceSection(
                                 state: nextRace!,

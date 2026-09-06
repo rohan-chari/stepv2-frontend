@@ -14,11 +14,43 @@
       },
       "oauth_client": [
         {
+          "client_id": "784756906133-2pr2d67dtp2bsf25b18u49qkfei8dmok.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rohanchari.steptracker",
+            "certificate_hash": "72716700239ad4b646893fdc7df9715d99029433"
+          }
+        },
+        {
+          "client_id": "784756906133-782mpicuji3u0lhoscanj2rld2gf5f52.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rohanchari.steptracker",
+            "certificate_hash": "9f0b4b872e07b6e0b1dfa9175aab560da4dd61e5"
+          }
+        },
+        {
+          "client_id": "784756906133-b054c62htb984kefnm3ubu1huv1ena5u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rohanchari.steptracker",
+            "certificate_hash": "da570c42367211d2156b2e863fa06231a0b3086a"
+          }
+        },
+        {
           "client_id": "784756906133-opo012tqggo35quiumee7n61fbo1ptui.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.rohanchari.steptracker",
             "certificate_hash": "b4b49835fa7fa56d3f596863262b5cb8daf9784e"
+          }
+        },
+        {
+          "client_id": "784756906133-qsq4c7p9td10qquv5m0530ikh92v5j2j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rohanchari.steptracker",
+            "certificate_hash": "4c32c3578d67c078b397a95459a218dffcf5da8d"
           }
         },
         {
@@ -37,6 +69,13 @@
             {
               "client_id": "784756906133-8b5umuhi93u40lg0pf11rf1grksj44cg.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.rohanchari.steptracker"
+              }
             }
           ]
         }
@@ -74,6 +113,13 @@
             {
               "client_id": "784756906133-8b5umuhi93u40lg0pf11rf1grksj44cg.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.rohanchari.steptracker"
+              }
             }
           ]
         }

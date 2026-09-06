@@ -4,17 +4,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/team_scoreboard_cards.dart';
 
 // TR-601: mid-race forfeit is offered only inside an ACTIVE team race, and the
 // confirmation dialog must state the team consequences explicitly: your steps
 // freeze and STAY with the team, no refund, no rejoin.
 
 class _ActiveTeamForfeitApi extends BackendApiService {
-  _ActiveTeamForfeitApi({this.isTeamRace = true, this.myForfeitedAt});
+  _ActiveTeamForfeitApi({
+    this.isTeamRace = true,
+    this.myForfeitedAt,
+    this.rivalForfeitedAt,
+    this.status = 'ACTIVE',
+  });
 
   final bool isTeamRace;
-  static const String status = 'ACTIVE';
+  final String status;
   final String? myForfeitedAt;
+  final String? rivalForfeitedAt;
   bool forfeitCalled = false;
 
   @override
@@ -52,6 +59,7 @@ class _ActiveTeamForfeitApi extends BackendApiService {
         {
           'userId': 'u2',
           'displayName': 'Hill Climber',
+          if (rivalForfeitedAt != null) 'forfeitedAt': rivalForfeitedAt,
           'status': 'ACCEPTED',
           if (isTeamRace) 'team': 'TEAM_B',
         },
@@ -78,6 +86,7 @@ class _ActiveTeamForfeitApi extends BackendApiService {
         {
           'userId': 'u2',
           'displayName': 'Hill Climber',
+          if (rivalForfeitedAt != null) 'forfeitedAt': rivalForfeitedAt,
           if (isTeamRace) 'team': 'TEAM_B',
           'totalSteps': 5900,
           'finishedAt': null,
@@ -157,6 +166,56 @@ void main() {
   Future<void> pumpDialog(WidgetTester tester) async {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  for (final isTeamRace in [false, true]) {
+    testWidgets(
+      'forfeited rival is hidden from ${isTeamRace ? "team" : "solo"} race detail',
+      (tester) async {
+        await _pump(
+          tester,
+          _ActiveTeamForfeitApi(
+            isTeamRace: isTeamRace,
+            rivalForfeitedAt: '2026-09-04T07:47:52.557Z',
+          ),
+        );
+        expect(find.textContaining('Hill Climber'), findsNothing);
+        expect(find.text('FORFEITED'), findsNothing);
+        expect(find.textContaining('Trail Walker'), findsWidgets);
+        if (isTeamRace) {
+          final scoreboard = tester.widget<TeamScoreboardCards>(
+            find.byType(TeamScoreboardCards),
+          );
+          expect(scoreboard.teamATotal, 6200);
+          expect(scoreboard.teamBTotal, 5900);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+    testWidgets(
+      'forfeited rival is hidden from completed ${isTeamRace ? "team" : "solo"} detail',
+      (tester) async {
+        await _pump(
+          tester,
+          _ActiveTeamForfeitApi(
+            isTeamRace: isTeamRace,
+            status: 'COMPLETED',
+            rivalForfeitedAt: '2026-09-04T07:47:52.557Z',
+          ),
+        );
+        expect(find.textContaining('Hill Climber'), findsNothing);
+        expect(find.textContaining('Trail Walker'), findsWidgets);
+        expect(tester.takeException(), isNull);
+      },
+    );
+    testWidgets(
+      'older ${isTeamRace ? "team" : "solo"} payload keeps rival visible',
+      (tester) async {
+        await _pump(tester, _ActiveTeamForfeitApi(isTeamRace: isTeamRace));
+        expect(find.textContaining('Hill Climber'), findsWidgets);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('TR-601: ACTIVE legacy team race offers forfeit', (tester) async {

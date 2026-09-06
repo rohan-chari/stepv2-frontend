@@ -7,6 +7,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 class _FakeBackendApiService extends BackendApiService {
   Map<String, dynamic>? lastCreateRaceCall;
+  Map<String, dynamic>? lastRecurringRaceCall;
 
   @override
   Future<Map<String, dynamic>> createRace({
@@ -43,6 +44,37 @@ class _FakeBackendApiService extends BackendApiService {
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     return const {'coins': 320, 'heldCoins': 100};
+  }
+
+  @override
+  Future<Map<String, dynamic>> createRecurringRace({
+    required String identityToken,
+    required String name,
+    int maxDurationDays = 7,
+    bool powerupsEnabled = false,
+    int? powerupStepInterval,
+    int buyInAmount = 0,
+    String payoutPreset = 'WINNER_TAKES_ALL',
+    bool isPublic = false,
+    int? maxParticipants = 10,
+    DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
+    required String idempotencyKey,
+  }) async {
+    lastRecurringRaceCall = {
+      'name': name,
+      'maxParticipants': maxParticipants,
+      'idempotencyKey': idempotencyKey,
+    };
+    return const {
+      'race': {'id': 'recurring-race'},
+      'series': {
+        'id': 'series-1',
+        'enabled': true,
+        'subscribed': true,
+        'canManage': true,
+      },
+    };
   }
 }
 
@@ -141,5 +173,61 @@ void main() {
     );
     // Entry is free — the preset only decides how the app's pool is split.
     expect(backendApiService.lastCreateRaceCall!['buyInAmount'], 0);
+  });
+
+  testWidgets('capable finite custom creation sends a recurring race', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 2200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final authService = await _createAuthService();
+    await authService.syncFromBackendUser(const {
+      'id': 'user-1',
+      'capabilities': {'recurringRacesV1': true},
+    });
+    final api = _FakeBackendApiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CreateRaceScreen(
+          authService: authService,
+          backendApiService: api,
+          initialCustomizeExpanded: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('recurring-race-card')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('race-name-field')),
+      'Weekly Crew',
+    );
+    await tester.tap(find.byKey(const Key('recurring-race-toggle')));
+    await tester.tap(find.text('CREATE RACE'));
+    await tester.pump();
+
+    expect(api.lastCreateRaceCall, isNull);
+    expect(api.lastRecurringRaceCall?['name'], 'Weekly Crew');
+    expect(api.lastRecurringRaceCall?['maxParticipants'], 10);
+    expect(
+      api.lastRecurringRaceCall?['idempotencyKey'],
+      isA<String>().having((value) => value.isNotEmpty, 'nonempty', isTrue),
+    );
+  });
+
+  testWidgets('missing capability hides recurring controls', (tester) async {
+    final authService = await _createAuthService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CreateRaceScreen(
+          authService: authService,
+          backendApiService: _FakeBackendApiService(),
+          initialCustomizeExpanded: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('recurring-race-card')), findsNothing);
   });
 }

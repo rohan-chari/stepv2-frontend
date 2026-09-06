@@ -563,6 +563,228 @@ class _TimelineRaceApi extends _ActivePaidRaceBackendApiService {
   };
 }
 
+class _TeamTimelineRaceApi extends _TimelineRaceApi {
+  _TeamTimelineRaceApi({this.status = 'ACTIVE'});
+
+  final String status;
+  String? lastTimelineAudience;
+  String? lastSendAudience;
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async {
+    final race = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+      participantsLimit: participantsLimit,
+    );
+    return {
+      ...race,
+      'status': status,
+      'isTeamRace': true,
+      'teamSize': 1,
+      'teamAName': 'Swift Capys',
+      'teamBName': 'Turbo Beavers',
+      'myTeam': 'TEAM_A',
+      'myForfeitedAt': null,
+      'participants': const [
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Rival',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_B',
+        },
+      ],
+      if (status == 'COMPLETED')
+        'winner': const {'userId': 'user-1', 'displayName': 'Trail Walker'},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final progress = await super.fetchRaceProgress(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    if (status != 'COMPLETED') return progress;
+    return {
+      ...progress,
+      'status': 'COMPLETED',
+      'participants': [
+        for (final raw in progress['participants'] as List)
+          if (raw is Map<String, dynamic>)
+            {...raw, 'finishedAt': '2026-08-25T16:00:00.000Z'},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceTimelineForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int limit = 30,
+  }) async {
+    lastTimelineAudience = audience;
+    return const {
+      'timelineVersion': 1,
+      'messages': [
+        {
+          'kind': 'USER',
+          'id': 'team-chat',
+          'createdAt': '2026-08-25T15:06:05.000Z',
+          'body': 'Only Swift Capys',
+          'senderId': 'user-1',
+          'senderName': 'Trail Walker',
+          'audience': 'TEAM',
+          'team': 'TEAM_A',
+        },
+      ],
+      'nextCursor': null,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendRaceMessageToAudience({
+    required String identityToken,
+    required String raceId,
+    required String body,
+    required String audience,
+  }) async {
+    lastSendAudience = audience;
+    return {
+      'message': {
+        'kind': 'USER',
+        'id': 'sent-team-chat',
+        'createdAt': '2026-08-25T15:07:05.000Z',
+        'body': body,
+        'senderId': 'user-1',
+        'senderName': 'Trail Walker',
+        'audience': audience,
+        'team': 'TEAM_A',
+      },
+    };
+  }
+}
+
+class _RetentionRaceApi extends _ActivePaidRaceBackendApiService {
+  _RetentionRaceApi({
+    this.status = 'ACTIVE',
+    this.series,
+    this.rematchCompleter,
+  });
+
+  final String status;
+  final Map<String, dynamic>? series;
+  final Completer<Map<String, dynamic>>? rematchCompleter;
+  int rematchCalls = 0;
+  int subscriptionCalls = 0;
+  int seriesUpdateCalls = 0;
+  String? rematchKey;
+  String? lastFetchedRaceId;
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async {
+    lastFetchedRaceId = raceId;
+    final race = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+      participantsLimit: participantsLimit,
+    );
+    if (raceId == 'new-rematch') {
+      return {...race, 'id': raceId, 'status': 'PENDING'};
+    }
+    return {
+      ...race,
+      'status': status,
+      if (status == 'COMPLETED') 'rematchEligible': true,
+      if (status == 'COMPLETED')
+        'winner': const {'userId': 'user-1', 'displayName': 'Trail Walker'},
+      if (series != null) 'series': series,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final progress = await super.fetchRaceProgress(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    if (status != 'COMPLETED' || raceId == 'new-rematch') return progress;
+    return {
+      ...progress,
+      'status': 'COMPLETED',
+      'participants': [
+        for (final raw in progress['participants'] as List)
+          if (raw is Map<String, dynamic>)
+            {...raw, 'finishedAt': '2026-08-25T16:00:00.000Z'},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> rematchRace({
+    required String identityToken,
+    required String raceId,
+    required String idempotencyKey,
+  }) {
+    rematchCalls += 1;
+    rematchKey = idempotencyKey;
+    return rematchCompleter?.future ??
+        Future.value(const {
+          'race': {'id': 'new-rematch', 'status': 'PENDING'},
+        });
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateRaceSeriesSubscription({
+    required String identityToken,
+    required String seriesId,
+    required bool active,
+  }) async {
+    subscriptionCalls += 1;
+    return {
+      'seriesId': seriesId,
+      'active': active,
+      'effectiveAfterRaceId': 'retention-race',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateRaceSeries({
+    required String identityToken,
+    required String seriesId,
+    required bool enabled,
+  }) async {
+    seriesUpdateCalls += 1;
+    return {
+      'seriesId': seriesId,
+      'enabled': enabled,
+      'effectiveAfterRaceId': 'retention-race',
+    };
+  }
+}
+
 Iterable<TextSpan> _raceDetailLeafSpans(InlineSpan span) sync* {
   if (span is! TextSpan) return;
   if (span.text != null) yield span;
@@ -703,6 +925,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('race-timeline-heading')), findsOneWidget);
+    expect(find.text('ACTIVITY & CHAT'), findsOneWidget);
     expect(find.text('Catch me if you can'), findsOneWidget);
     expect(find.text('Rival took the lead'), findsOneWidget);
     expect(find.text('ACTIVITY'), findsNothing);
@@ -712,6 +935,223 @@ void main() {
       greaterThan(tester.getCenter(find.text('Rival took the lead')).dy),
       reason: 'the newest timeline entry belongs nearest the composer',
     );
+  });
+
+  testWidgets('team timeline selector binds both feed and composer audience', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _createAuthService();
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'capabilities': {'teamChatV1': true},
+    });
+    final api = _TeamTimelineRaceApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: auth,
+          raceId: 'team-chat-race',
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('race-chat-audience-selector')),
+      findsOneWidget,
+    );
+    expect(find.text('Catch me if you can'), findsOneWidget);
+    await tester.tap(find.text('TEAM'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.lastTimelineAudience, 'TEAM');
+    expect(find.text('Only Swift Capys'), findsOneWidget);
+    expect(find.text('Catch me if you can'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'Push together');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pump();
+    expect(api.lastSendAudience, 'TEAM');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('completed team timeline keeps private history read-only', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _createAuthService();
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'capabilities': {'teamChatV1': true},
+    });
+    final api = _TeamTimelineRaceApi(status: 'COMPLETED');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: auth,
+          raceId: 'completed-team-chat-race',
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('race-chat-audience-selector')),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('TEAM'));
+    await tester.pump();
+    await tester.pump();
+    expect(api.lastTimelineAudience, 'TEAM');
+    expect(find.text('Only Swift Capys'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets(
+    'completed detail rematch locks duplicate taps and opens result',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(600, 3000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final pending = Completer<Map<String, dynamic>>();
+      final api = _RetentionRaceApi(
+        status: 'COMPLETED',
+        rematchCompleter: pending,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: await _createAuthService(),
+            raceId: 'retention-race',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final button = find.byKey(const Key('race-detail-rematch'));
+      expect(button, findsOneWidget);
+      expect(
+        tester.getTopLeft(button).dy,
+        lessThan(tester.getTopLeft(find.text('FINAL STANDINGS')).dy),
+      );
+      await tester.tap(button);
+      await tester.tap(button);
+      await tester.pump();
+      expect(api.rematchCalls, 1);
+      expect(api.rematchKey, isNotEmpty);
+
+      pending.complete(const {
+        'race': {'id': 'new-rematch', 'status': 'PENDING'},
+      });
+      await tester.pump();
+      await tester.pump();
+      expect(api.lastFetchedRaceId, 'new-rematch');
+    },
+  );
+
+  testWidgets('recurring detail routes participant and creator stop controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _createAuthService();
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'capabilities': {'recurringRacesV1': true},
+    });
+
+    final participantApi = _RetentionRaceApi(
+      series: const {
+        'id': 'series-participant',
+        'enabled': true,
+        'subscribed': true,
+        'canManage': false,
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          key: const ValueKey('participant-series-detail'),
+          authService: auth,
+          raceId: 'participant-race',
+          backendApiService: participantApi,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('AUTO-JOIN NEXT RACE'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('race-series-auto-join-off')));
+    await tester.pump();
+    expect(participantApi.subscriptionCalls, 1);
+    expect(participantApi.seriesUpdateCalls, 0);
+
+    final creatorApi = _RetentionRaceApi(
+      series: const {
+        'id': 'series-creator',
+        'enabled': true,
+        'subscribed': true,
+        'canManage': true,
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          key: const ValueKey('creator-series-detail'),
+          authService: auth,
+          raceId: 'creator-race',
+          backendApiService: creatorApi,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('RECURRING SERIES'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('race-series-end-after-this')));
+    await tester.pump();
+    expect(creatorApi.seriesUpdateCalls, 1);
+    expect(creatorApi.subscriptionCalls, 0);
+  });
+
+  testWidgets('malformed recurring detail state fails closed', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _createAuthService();
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'capabilities': {'recurringRacesV1': true},
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: auth,
+          raceId: 'malformed-series-race',
+          backendApiService: _RetentionRaceApi(
+            series: const {
+              'id': 'series-bad',
+              'enabled': 'true',
+              'subscribed': true,
+              'canManage': false,
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('race-series-control')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Activity applies semantic color to every named powerup', (

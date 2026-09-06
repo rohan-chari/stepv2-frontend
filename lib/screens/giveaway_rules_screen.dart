@@ -344,7 +344,7 @@ class _RuleSection extends StatelessWidget {
             children: [
               Text(
                 section.heading,
-                style: PixelText.title(size: 15, color: colors.grassDark),
+                style: PixelText.title(size: 15, color: colors.textDark),
               ),
               const SizedBox(height: 5),
               if (section.sponsor case final sponsor?) ...[

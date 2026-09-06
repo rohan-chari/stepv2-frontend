@@ -100,7 +100,7 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
             TextButton.icon(
               key: const Key('contest-dashboard-official-rules'),
               style: TextButton.styleFrom(
-                foregroundColor: AppColors.of(context).textAccent,
+                foregroundColor: AppColors.of(context).textDark,
                 backgroundColor: AppColors.of(context).parchmentLight,
                 minimumSize: const Size.fromHeight(44),
                 shape: RoundedRectangleBorder(
@@ -849,15 +849,10 @@ class _ShareIdeas extends StatelessWidget {
       key: const Key('contest-dashboard-share-ideas'),
       container: true,
       label:
-          'Make some noise. Drop your invite in the group chat or post it on Instagram. One share could win you $prize coins.',
+          'Make some noise. Drop it in the group chat. Get the family involved. Show your coworkers you’re better than them. One share could win you $prize coins.',
       child: ExcludeSemantics(
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
-          decoration: BoxDecoration(
-            color: colors.grassDark.withValues(alpha: .08),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: colors.feedGold.withValues(alpha: .42)),
-          ),
           child: Column(
             children: [
               Text(
@@ -865,22 +860,19 @@ class _ShareIdeas extends StatelessWidget {
                 style: PixelText.title(size: 11, color: colors.textAccent),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ShareIdea(
-                      icon: Icons.forum_rounded,
-                      label: 'DROP IT IN THE GROUP CHAT',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _ShareIdea(
-                      icon: Icons.camera_alt_rounded,
-                      label: 'POST IT ON INSTAGRAM',
-                    ),
-                  ),
-                ],
+              const _ShareIdea(
+                icon: Icons.forum_rounded,
+                label: 'Drop it in the group chat',
+              ),
+              const SizedBox(height: 7),
+              const _ShareIdea(
+                icon: Icons.family_restroom_rounded,
+                label: 'Get the family involved',
+              ),
+              const SizedBox(height: 7),
+              const _ShareIdea(
+                icon: Icons.work_rounded,
+                label: 'Show your coworkers you’re better than them',
               ),
               const SizedBox(height: 9),
               Text(
@@ -906,26 +898,21 @@ class _ShareIdea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Container(
-      constraints: const BoxConstraints(minHeight: 38),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.parchmentLight,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: colors.textAccent),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 3,
-              style: PixelText.title(size: 8.5, color: colors.textAccent),
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 17, color: colors.textAccent),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: PixelText.title(size: 9.5, color: colors.textDark),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

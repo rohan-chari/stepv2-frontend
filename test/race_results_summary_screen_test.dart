@@ -1,11 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_results_summary_screen.dart';
+import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/backend_api_service.dart';
+
+class _RematchApi extends BackendApiService {
+  _RematchApi({this.failFirst = false});
+
+  final bool failFirst;
+  int calls = 0;
+  String? sourceRaceId;
+  final List<String> keys = <String>[];
+
+  @override
+  Future<Map<String, dynamic>> rematchRace({
+    required String identityToken,
+    required String raceId,
+    required String idempotencyKey,
+  }) async {
+    calls++;
+    sourceRaceId = raceId;
+    keys.add(idempotencyKey);
+    if (failFirst && calls == 1) {
+      throw const ApiException('Connection interrupted.');
+    }
+    return const {
+      'race': {'id': 'new-race', 'status': 'PENDING'},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async => {
+    'id': raceId,
+    'name': 'Rematch',
+    'status': 'PENDING',
+    'myStatus': 'ACCEPTED',
+    'participants': const <Map<String, dynamic>>[],
+  };
+}
+
+Future<AuthService> _auth() async {
+  SharedPreferences.setMockInitialValues(const {
+    'auth_session_token': 'session-token',
+    'auth_backend_user_id': 'user-1',
+  });
+  final auth = AuthService();
+  await auth.restoreSession();
+  return auth;
+}
 
 Widget _wrap(List<Map<String, dynamic>> races) {
-  return MaterialApp(
-    home: RaceResultsSummaryScreen(races: races),
-  );
+  return MaterialApp(home: RaceResultsSummaryScreen(races: races));
 }
 
 void main() {
@@ -87,5 +137,74 @@ void main() {
     expect(find.text('Race'), findsOneWidget);
     expect(find.text('DID NOT FINISH'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('only literal eligibility binds rematch to its result card', (
+    tester,
+  ) async {
+    final auth = await _auth();
+    final api = _RematchApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceResultsSummaryScreen(
+          authService: auth,
+          backendApiService: api,
+          races: const [
+            {
+              'id': 'eligible',
+              'name': 'Eligible Race',
+              'rematchEligible': true,
+            },
+            {
+              'id': 'string-true',
+              'name': 'Old Race',
+              'rematchEligible': 'true',
+            },
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('results-rematch-eligible')), findsOneWidget);
+    expect(find.byKey(const Key('results-rematch-string-true')), findsNothing);
+    await tester.tap(find.byKey(const Key('results-rematch-eligible')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.calls, 1);
+    expect(api.sourceRaceId, 'eligible');
+    expect(find.text('Rematch'), findsWidgets);
+  });
+
+  testWidgets('rematch retry reuses the source-bound idempotency key', (
+    tester,
+  ) async {
+    final auth = await _auth();
+    final api = _RematchApi(failFirst: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceResultsSummaryScreen(
+          authService: auth,
+          backendApiService: api,
+          races: const [
+            {'id': 'retry-race', 'name': 'Retry Race', 'rematchEligible': true},
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final button = find.byKey(const Key('results-rematch-retry-race'));
+    await tester.tap(button);
+    await tester.pump();
+    expect(api.calls, 1);
+    await tester.tap(button);
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.calls, 2);
+    expect(api.keys, hasLength(2));
+    expect(api.keys[1], api.keys[0]);
   });
 }

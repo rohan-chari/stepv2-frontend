@@ -111,6 +111,7 @@ class _RerollStubApi extends BackendApiService {
   /// Whether the progress payload advertises the feature; set by the pump
   /// helper before the screen loads.
   bool boxReroll = true;
+  List<Map<String, dynamic>>? inventory;
 
   int rerollCalls = 0;
   final List<String> localDates = [];
@@ -154,9 +155,11 @@ class _RerollStubApi extends BackendApiService {
     ],
     'powerupData': {
       'enabled': true,
-      'inventory': const [
-        {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-      ],
+      'inventory':
+          inventory ??
+          const [
+            {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
+          ],
       'powerupSlots': 3,
       'queuedBoxCount': 0,
       'activeEffects': const [],
@@ -627,6 +630,98 @@ void main() {
 
       expect(_rerollButton, findsNothing);
       await _teardownRace(tester);
+    });
+  });
+
+  group('deferred held-powerup reroll', () {
+    testWidgets('eligible held box result offers reroll beneath discard', (
+      tester,
+    ) async {
+      final api = _RerollStubApi()
+        ..inventory = const [
+          {
+            'id': 'held-1',
+            'type': 'PROTEIN_SHAKE',
+            'rarity': 'COMMON',
+            'status': 'HELD',
+            'upgradeLevel': 0,
+            'usedAt': null,
+            'rerolledAt': null,
+          },
+        ];
+      await _pumpRaceDetail(
+        tester,
+        api: api,
+        ad: _FakeAdController(),
+        boxReroll: true,
+      );
+
+      final held = find.byWidgetPredicate(
+        (widget) => widget is ItemSlot && widget.state == ItemSlotState.held,
+      );
+      await tester.ensureVisible(held);
+      await tester.tap(held);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byKey(const Key('stash-held-reroll')), findsOneWidget);
+      final discardY = tester.getCenter(find.text('DISCARD')).dy;
+      final rerollY = tester
+          .getCenter(find.byKey(const Key('stash-held-reroll')))
+          .dy;
+      expect(rerollY, greaterThan(discardY));
+
+      await tester.drag(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        const Offset(0, -500),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.byKey(const Key('stash-held-reroll')));
+      await tester.pump();
+      expect(api.rerollCalls, 1);
+      await _teardownRace(tester);
+    });
+
+    testWidgets('missing and consumed one-shot fields fail closed', (
+      tester,
+    ) async {
+      for (final row in <Map<String, dynamic>>[
+        {
+          'id': 'missing-fields',
+          'type': 'PROTEIN_SHAKE',
+          'rarity': 'COMMON',
+          'status': 'HELD',
+        },
+        {
+          'id': 'already-rerolled',
+          'type': 'PROTEIN_SHAKE',
+          'rarity': 'COMMON',
+          'status': 'HELD',
+          'upgradeLevel': 0,
+          'usedAt': null,
+          'rerolledAt': '2026-09-06T12:00:00.000Z',
+        },
+      ]) {
+        final api = _RerollStubApi()..inventory = [row];
+        await _pumpRaceDetail(
+          tester,
+          api: api,
+          ad: _FakeAdController(),
+          boxReroll: true,
+        );
+        final held = find.byWidgetPredicate(
+          (widget) => widget is ItemSlot && widget.state == ItemSlotState.held,
+        );
+        await tester.ensureVisible(held);
+        await tester.tap(held);
+        await tester.pump();
+        expect(find.byKey(const Key('stash-held-reroll')), findsNothing);
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pump(const Duration(milliseconds: 300));
+        await _teardownRace(tester);
+      }
     });
   });
 

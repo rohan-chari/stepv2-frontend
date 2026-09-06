@@ -389,6 +389,8 @@ class BackendApiService {
       'api_payload_compact_v1',
       'referral_contest_v1',
       'referral_contest_global_v1',
+      'recurring_races_v1',
+      'team_chat_v1',
       // This capability stamps the iOS-only, immutable metrics collection
       // cohort. Android shares this Dart file but must never advertise it.
       if (isIos) 'admin_metrics_v2',
@@ -398,8 +400,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1,recurring_races_v1,team_chat_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1,recurring_races_v1,team_chat_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -3210,6 +3212,65 @@ class BackendApiService {
     // older backend sees nothing new. The server overwrites maxDurationDays
     // with its own derivation when this is accepted (spec §5.3).
     DateTime? scheduledEndAt,
+  }) => _createRaceRequest(
+    identityToken: identityToken,
+    name: name,
+    maxDurationDays: maxDurationDays,
+    powerupsEnabled: powerupsEnabled,
+    powerupStepInterval: powerupStepInterval,
+    buyInAmount: buyInAmount,
+    payoutPreset: payoutPreset,
+    isPublic: isPublic,
+    maxParticipants: maxParticipants,
+    scheduledStartAt: scheduledStartAt,
+    scheduledEndAt: scheduledEndAt,
+  );
+
+  /// Creates the capability-gated recurring variant without widening the
+  /// long-standing [createRace] override surface used by demos and tests.
+  Future<Map<String, dynamic>> createRecurringRace({
+    required String identityToken,
+    required String name,
+    required String idempotencyKey,
+    int maxDurationDays = 7,
+    bool powerupsEnabled = false,
+    int? powerupStepInterval,
+    int buyInAmount = 0,
+    String payoutPreset = 'WINNER_TAKES_ALL',
+    bool isPublic = false,
+    int? maxParticipants = 10,
+    DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
+  }) => _createRaceRequest(
+    identityToken: identityToken,
+    name: name,
+    maxDurationDays: maxDurationDays,
+    powerupsEnabled: powerupsEnabled,
+    powerupStepInterval: powerupStepInterval,
+    buyInAmount: buyInAmount,
+    payoutPreset: payoutPreset,
+    isPublic: isPublic,
+    maxParticipants: maxParticipants,
+    scheduledStartAt: scheduledStartAt,
+    scheduledEndAt: scheduledEndAt,
+    recurringSeries: true,
+    idempotencyKey: idempotencyKey,
+  );
+
+  Future<Map<String, dynamic>> _createRaceRequest({
+    required String identityToken,
+    required String name,
+    required int maxDurationDays,
+    required bool powerupsEnabled,
+    required int? powerupStepInterval,
+    required int buyInAmount,
+    required String payoutPreset,
+    required bool isPublic,
+    required int? maxParticipants,
+    required DateTime? scheduledStartAt,
+    required DateTime? scheduledEndAt,
+    bool recurringSeries = false,
+    String? idempotencyKey,
   }) async {
     final body = <String, dynamic>{
       'name': name,
@@ -3229,14 +3290,62 @@ class BackendApiService {
     if (scheduledEndAt != null) {
       body['scheduledEndAt'] = scheduledEndAt.toUtc().toIso8601String();
     }
+    if (recurringSeries) body['recurringSeries'] = true;
 
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races',
       body: body,
       identityToken: identityToken,
+      headers: {
+        if (idempotencyKey != null && idempotencyKey.isNotEmpty)
+          'Idempotency-Key': idempotencyKey,
+      },
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> rematchRace({
+    required String identityToken,
+    required String raceId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/${Uri.encodeComponent(raceId)}/rematch',
+      body: <String, dynamic>{'idempotencyKey': idempotencyKey},
+      identityToken: identityToken,
+      headers: <String, String>{'Idempotency-Key': idempotencyKey},
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateRaceSeriesSubscription({
+    required String identityToken,
+    required String seriesId,
+    required bool active,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/race-series/${Uri.encodeComponent(seriesId)}/subscription',
+      body: <String, dynamic>{'active': active},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateRaceSeries({
+    required String identityToken,
+    required String seriesId,
+    required bool enabled,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/race-series/${Uri.encodeComponent(seriesId)}',
+      body: <String, dynamic>{'enabled': enabled},
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 
@@ -3558,11 +3667,36 @@ class BackendApiService {
     required String identityToken,
     required String raceId,
     required bool accept,
+  }) => _respondToRaceInviteRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    accept: accept,
+  );
+
+  /// Capability-gated recurring acceptance. Keeping it separate preserves
+  /// source compatibility for demo/fake service overrides.
+  Future<Map<String, dynamic>> respondToRecurringRaceInvite({
+    required String identityToken,
+    required String raceId,
+    required bool accept,
+    required bool subscribeToSeries,
+  }) => _respondToRaceInviteRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    accept: accept,
+    subscribeToSeries: subscribeToSeries,
+  );
+
+  Future<Map<String, dynamic>> _respondToRaceInviteRequest({
+    required String identityToken,
+    required String raceId,
+    required bool accept,
+    bool? subscribeToSeries,
   }) async {
     final response = await _sendJsonRequest(
       method: 'PUT',
       path: '/races/$raceId/respond',
-      body: {'accept': accept},
+      body: {'accept': accept, 'subscribeToSeries': ?subscribeToSeries},
       identityToken: identityToken,
     );
 
@@ -5280,11 +5414,43 @@ class BackendApiService {
     String? cursor,
     int? limit,
     String? kind, // 'USER' | 'SYSTEM'; omitted => merged feed (legacy).
+  }) => _fetchRaceMessagesRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    cursor: cursor,
+    limit: limit,
+    kind: kind,
+  );
+
+  Future<Map<String, dynamic>> fetchRaceMessagesForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) => _fetchRaceMessagesRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    cursor: cursor,
+    limit: limit,
+    kind: kind,
+    audience: audience,
+  );
+
+  Future<Map<String, dynamic>> _fetchRaceMessagesRequest({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int? limit,
+    String? kind,
+    String? audience,
   }) async {
     final params = <String, String>{};
     if (cursor != null) params['cursor'] = cursor;
     if (limit != null) params['limit'] = '$limit';
     if (kind != null) params['kind'] = kind;
+    if (audience == 'ALL' || audience == 'TEAM') params['audience'] = audience!;
     final query = params.isEmpty
         ? ''
         : '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
@@ -5303,12 +5469,40 @@ class BackendApiService {
     required String raceId,
     String? cursor,
     int limit = 30,
+  }) => _fetchRaceTimelineRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    cursor: cursor,
+    limit: limit,
+  );
+
+  Future<Map<String, dynamic>> fetchRaceTimelineForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int limit = 30,
+  }) => _fetchRaceTimelineRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    cursor: cursor,
+    limit: limit,
+    audience: audience,
+  );
+
+  Future<Map<String, dynamic>> _fetchRaceTimelineRequest({
+    required String identityToken,
+    required String raceId,
+    required int limit,
+    String? cursor,
+    String? audience,
   }) async {
     if (runtimeType != BackendApiService) return const <String, dynamic>{};
     final params = <String, String>{
       'view': 'timeline-v1',
       'limit': '${limit.clamp(1, 50)}',
       if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (audience == 'ALL' || audience == 'TEAM') 'audience': audience!,
     };
     final query = params.entries
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
@@ -5335,6 +5529,33 @@ class BackendApiService {
     required String raceId,
     required bool includeUser,
     int limit = 50,
+  }) => _fetchRaceMessageStreamsRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    includeUser: includeUser,
+    limit: limit,
+  );
+
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreamsForAudience({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    required String audience,
+    int limit = 50,
+  }) => _fetchRaceMessageStreamsRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    includeUser: includeUser,
+    limit: limit,
+    audience: audience,
+  );
+
+  Future<RaceMessageStreamsResult> _fetchRaceMessageStreamsRequest({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    required int limit,
+    String? audience,
   }) async {
     if (runtimeType != BackendApiService) {
       return RaceMessageStreamsResult.unsupported;
@@ -5349,6 +5570,7 @@ class BackendApiService {
       raceId,
       includeUser,
       limit,
+      if (audience == 'ALL' || audience == 'TEAM') audience,
     ]);
     if (_raceMessageConditionalIdentity != requestIdentity) {
       resetRaceMessageConditionalState();
@@ -5362,6 +5584,7 @@ class BackendApiService {
         'limit': '$limit',
         'includeUser': includeUser ? 'true' : 'false',
         'view': 'conditional-v1',
+        if (audience == 'ALL' || audience == 'TEAM') 'audience': audience!,
       },
     );
     final response = await _sendGetRequest(
@@ -5465,11 +5688,37 @@ class BackendApiService {
     required String identityToken,
     required String raceId,
     required String body,
+  }) => _sendRaceMessageRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    body: body,
+  );
+
+  Future<Map<String, dynamic>> sendRaceMessageToAudience({
+    required String identityToken,
+    required String raceId,
+    required String body,
+    required String audience,
+  }) => _sendRaceMessageRequest(
+    identityToken: identityToken,
+    raceId: raceId,
+    body: body,
+    audience: audience,
+  );
+
+  Future<Map<String, dynamic>> _sendRaceMessageRequest({
+    required String identityToken,
+    required String raceId,
+    required String body,
+    String? audience,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/messages',
-      body: {'body': body},
+      body: {
+        'body': body,
+        if (audience == 'ALL' || audience == 'TEAM') 'audience': audience,
+      },
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
@@ -5778,6 +6027,18 @@ class BackendApiService {
       identityToken: identityToken,
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> completeShopTutorial({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/shop/tutorial/complete',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 

@@ -373,16 +373,16 @@ flutter build appbundle --release --flavor staging \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --build-number=<versionCode>
 
-# Prod (ads enabled — pass the Android ad unit defines + the app id, below)
+# Prod (Android production ad units are not provisioned yet, so ads stay off)
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
-  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
-  --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
-  --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
-  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
-  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
   --build-number=<versionCode>
 ```
+
+Do not add any `_ANDROID` ad-unit define until that unit has been created under
+the Android Bara app in AdMob and its ID has been copied from AdMob. Never
+reuse an iOS ad-unit ID. After Android units are provisioned, append the
+applicable defines from the list below; omission safely disables that surface.
 
 Android production currently omits
 `ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID_ANDROID` and

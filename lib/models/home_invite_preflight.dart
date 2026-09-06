@@ -16,6 +16,7 @@ class HomeInvite {
     this.requiresTeamRaceSupport = false,
     this.buyInAmount = 0,
     this.creatorName,
+    this.recurringSeries = false,
   });
 
   final HomeInviteKind kind;
@@ -30,6 +31,7 @@ class HomeInvite {
   final bool requiresTeamRaceSupport;
   final int buyInAmount;
   final String? creatorName;
+  final bool recurringSeries;
 
   bool get isTournament => kind == HomeInviteKind.tournament;
 
@@ -80,8 +82,18 @@ class HomeInvite {
       creatorName: creatorName == null || creatorName.isEmpty
           ? null
           : creatorName,
+      recurringSeries:
+          map['recurringSeries'] == true || _hasValidSeriesShape(map['series']),
     );
   }
+
+  static bool _hasValidSeriesShape(Object? raw) =>
+      raw is Map &&
+      raw['id'] is String &&
+      (raw['id'] as String).isNotEmpty &&
+      raw['enabled'] is bool &&
+      raw['subscribed'] is bool &&
+      raw['canManage'] is bool;
 }
 
 class HomeInvitePreflight {

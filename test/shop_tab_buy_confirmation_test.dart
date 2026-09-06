@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +26,7 @@ class _FakeShopApi extends BackendApiService {
     this.powerupPurchaseCoins = 700,
     this.mutationAdUnlock,
     this.cosmeticPurchaseResult,
+    this.powerupPurchaseCompleter,
   });
 
   final Map<String, dynamic> catalog;
@@ -34,6 +37,7 @@ class _FakeShopApi extends BackendApiService {
   final int powerupPurchaseCoins;
   final Map<String, dynamic>? mutationAdUnlock;
   final Map<String, dynamic>? cosmeticPurchaseResult;
+  final Completer<Map<String, dynamic>>? powerupPurchaseCompleter;
 
   int cosmeticPurchases = 0;
   int powerupPurchases = 0;
@@ -94,6 +98,8 @@ class _FakeShopApi extends BackendApiService {
     required String idempotencyKey,
   }) async {
     powerupPurchases++;
+    final pending = powerupPurchaseCompleter;
+    if (pending != null) return pending.future;
     return {
       if (idempotentPowerupPurchase) 'idempotent': true,
       'coins': powerupPurchaseCoins,
@@ -202,6 +208,50 @@ Future<void> _selectCategory(WidgetTester tester, String label) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('unresolved powerup purchase blocks the whole Shop', (
+    tester,
+  ) async {
+    final pending = Completer<Map<String, dynamic>>();
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+      powerupPurchaseCompleter: pending,
+    );
+    await _pumpShop(tester, auth, api);
+    await tester.tap(find.text('300'));
+    await tester.pump(const Duration(milliseconds: 300));
+    final buy = find.text('BUY · 300');
+    final button = find.ancestor(of: buy, matching: find.byType(PillButton));
+    tester.widget<PillButton>(button).onPressed?.call();
+    await tester.pump();
+
+    expect(find.byKey(const Key('shop-purchase-overlay')), findsOneWidget);
+    expect(find.text('PURCHASING'), findsOneWidget);
+    expect(find.text('Signal Jammer'), findsWidgets);
+    expect(
+      tester
+          .widgetList<ModalBarrier>(find.byType(ModalBarrier))
+          .any((barrier) => !barrier.dismissible),
+      isTrue,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byKey(const Key('shop-purchase-overlay')), findsOneWidget);
+
+    pending.complete(const {
+      'coins': 700,
+      'inventory': {'powerupType': 'SIGNAL_JAMMER', 'quantity': 1},
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('shop-purchase-overlay')), findsNothing);
+    expect(auth.coins, 700);
+  });
+
   testWidgets(
     'tapping the price strip on a store powerup opens the detail sheet '
     'and does NOT purchase',

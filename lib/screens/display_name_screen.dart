@@ -18,17 +18,21 @@ class DisplayNameScreen extends StatefulWidget {
     super.key,
     required this.authService,
     this.notificationService,
+    this.backendApiService,
+    this.forcedRename = false,
   });
 
   final AuthService authService;
   final NotificationService? notificationService;
+  final BackendApiService? backendApiService;
+  final bool forcedRename;
 
   @override
   State<DisplayNameScreen> createState() => _DisplayNameScreenState();
 }
 
 class _DisplayNameScreenState extends State<DisplayNameScreen> {
-  final BackendApiService _backendApiService = BackendApiService();
+  late final BackendApiService _backendApiService;
   late final TextEditingController _controller;
   bool _isSaving = false;
   Timer? _debounce;
@@ -43,6 +47,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
   @override
   void initState() {
     super.initState();
+    _backendApiService = widget.backendApiService ?? BackendApiService();
     _controller = TextEditingController(
       text: widget.authService.displayName ?? '',
     );
@@ -123,12 +128,17 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
         if (!mounted || _controller.text.trim() != text) return;
 
         final available = result['available'] == true;
+        final unavailableMessage = result['code'] == 'DISPLAY_NAME_PROFANE'
+            ? 'Choose a name without profanity.'
+            : result['error'] is String
+            ? result['error'] as String
+            : result['reason'] is String
+            ? result['reason'] as String
+            : 'That name is taken';
         setState(() {
           _isAvailable = available;
           _isChecking = false;
-          _availabilityMessage = available
-              ? null
-              : (result['reason'] as String? ?? 'That name is taken');
+          _availabilityMessage = available ? null : unavailableMessage;
         });
       } catch (_) {
         if (!mounted) return;
@@ -187,16 +197,19 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
         throw Exception('not signed in');
       }
 
-      await _backendApiService.setDisplayName(
+      final updatedUser = await _backendApiService.setDisplayName(
         identityToken: identityToken,
         displayName: displayName,
       );
-
-      await widget.authService.updateDisplayName(displayName);
+      await widget.authService.syncFromBackendUser(updatedUser);
 
       if (!mounted) return;
 
-      if (Navigator.of(context).canPop()) {
+      if (widget.forcedRename) {
+        // The authenticated root gate listens to AuthService and swaps this
+        // screen for MainShell only after the server clears the flag.
+        return;
+      } else if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       } else {
         // First run: this screen is the root route (StartScreen pushReplaced
@@ -213,6 +226,13 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
           ),
         );
       }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      final message = e.code == 'DISPLAY_NAME_PROFANE'
+          ? 'Choose a name without profanity.'
+          : e.message;
+      showErrorToast(context, message);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);

@@ -14,7 +14,10 @@ import 'package:step_tracker/widgets/powerup_icon.dart';
 // while polarity, tooltip clamping, Stealth, and gesture isolation remain.
 
 class _RailApi extends BackendApiService {
-  _RailApi({Object? activeEffects}) : _activeEffects = activeEffects;
+  _RailApi({Object? activeEffects, this.allyForfeited = false})
+    : _activeEffects = activeEffects;
+
+  final bool allyForfeited;
 
   final Object? _activeEffects;
 
@@ -149,7 +152,7 @@ class _RailApi extends BackendApiService {
         'totalSteps': 4800,
         // < 0.5 → the frost chip, which renders ICON-ONLY and taller.
         'currentMultiplier': 0.2,
-        'forfeitedAt': '2026-08-01T12:00:00.000Z',
+        if (allyForfeited) 'forfeitedAt': '2026-08-01T12:00:00.000Z',
         'finishedAt': null,
       },
       {
@@ -210,6 +213,7 @@ Future<void> _pump(
   double textScale = 1,
   Object? activeEffects,
   bool dark = false,
+  bool allyForfeited = false,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -228,7 +232,10 @@ Future<void> _pump(
       home: RaceDetailScreen(
         authService: auth,
         raceId: 'race-rail',
-        backendApiService: _RailApi(activeEffects: activeEffects),
+        backendApiService: _RailApi(
+          activeEffects: activeEffects,
+          allyForfeited: allyForfeited,
+        ),
       ),
     ),
   );
@@ -632,50 +639,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('self profile and forfeited interaction survive compaction', (
-    tester,
-  ) async {
-    await _pump(tester);
+  testWidgets(
+    'self profile remains accessible while forfeited member is hidden',
+    (tester) async {
+      await _pump(tester, allyForfeited: true);
 
-    final selfCell = find.byKey(const ValueKey('team-cell-user-1'));
-    final selfDecoration =
-        tester.widget<Container>(selfCell).decoration as BoxDecoration;
-    expect(selfDecoration.border!.top.width, 2);
+      final selfCell = find.byKey(const ValueKey('team-cell-user-1'));
+      final selfDecoration =
+          tester.widget<Container>(selfCell).decoration as BoxDecoration;
+      expect(selfDecoration.border!.top.width, 2);
 
-    await tester.tap(
-      find.descendant(
-        of: selfCell,
-        matching: find.byKey(const ValueKey('team-name-user-1')),
-      ),
-    );
-    await tester.pump();
-    expect(find.byType(BottomSheet), findsOneWidget);
-    await tester.tapAt(const Offset(5, 5));
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(
+        find.descendant(
+          of: selfCell,
+          matching: find.byKey(const ValueKey('team-name-user-1')),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump(const Duration(milliseconds: 300));
 
-    final forfeitedCell = find.byKey(const ValueKey('team-cell-ally-2'));
-    await tester.ensureVisible(forfeitedCell);
-    await tester.pump();
-    final forfeitedOpacity = find.ancestor(
-      of: forfeitedCell,
-      matching: find.byWidgetPredicate(
-        (widget) => widget is Opacity && widget.opacity == 0.5,
-      ),
-    );
-    expect(forfeitedOpacity, findsOneWidget);
-    expect(tester.widget<Opacity>(forfeitedOpacity).opacity, 0.5);
+      final forfeitedCell = find.byKey(const ValueKey('team-cell-ally-2'));
+      expect(forfeitedCell, findsNothing);
+      expect(find.byKey(const ValueKey('team-name-ally-2')), findsNothing);
+      // A remaining teammate's profile still opens.
+      final remainingCell = find.byKey(const ValueKey('team-cell-ally-1'));
+      await tester.ensureVisible(remainingCell);
+      await tester.pump();
 
-    await tester.tap(
-      find.descendant(
-        of: forfeitedCell,
-        matching: find.byKey(const ValueKey('team-name-ally-2')),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byType(BottomSheet), findsOneWidget);
-    await tester.tapAt(const Offset(5, 5));
-    await tester.pump(const Duration(milliseconds: 300));
-  });
+      await tester.tap(
+        find.descendant(
+          of: remainingCell,
+          matching: find.byKey(const ValueKey('team-name-ally-1')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.byType(BottomSheet), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump(const Duration(milliseconds: 300));
+    },
+  );
 
   for (final width in const [320.0, 375.0, 390.0, 430.0]) {
     for (final scale in const [1.0, 1.3]) {

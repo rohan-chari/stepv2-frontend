@@ -2878,11 +2878,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           accept: accept,
         );
       } else {
-        await _backendApiService.respondToRaceInvite(
-          identityToken: token,
-          raceId: invite.id,
-          accept: accept,
-        );
+        final subscribe =
+            accept &&
+            invite.recurringSeries &&
+            widget.authService.recurringRacesV1;
+        if (subscribe) {
+          await _backendApiService.respondToRecurringRaceInvite(
+            identityToken: token,
+            raceId: invite.id,
+            accept: true,
+            subscribeToSeries: true,
+          );
+        } else {
+          await _backendApiService.respondToRaceInvite(
+            identityToken: token,
+            raceId: invite.id,
+            accept: accept,
+          );
+        }
       }
     } on ApiException catch (error) {
       // These mean a concurrent answer/withdrawal won. Route pop triggers the

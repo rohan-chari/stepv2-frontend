@@ -613,6 +613,18 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   }
 
   @override
+  Future<Map<String, dynamic>> fetchRaceMessagesForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) async => audience == 'ALL'
+      ? tutorialPreviewRaceMessages(kind)
+      : const {'messages': <Map<String, dynamic>>[], 'nextCursor': null};
+
+  @override
   Future<Map<String, dynamic>> fetchRaceTimeline({
     required String identityToken,
     required String raceId,
@@ -627,6 +639,29 @@ class TutorialPreviewBackendApiService extends BackendApiService {
       if (user is List) ...user.whereType<Map>().map(Map<String, dynamic>.from),
     ]..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
     return {'messages': messages, 'nextCursor': null, 'timelineVersion': 1};
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceTimelineForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int limit = 30,
+  }) async {
+    if (audience != 'ALL') {
+      return const {
+        'messages': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'timelineVersion': 1,
+      };
+    }
+    return fetchRaceTimeline(
+      identityToken: identityToken,
+      raceId: raceId,
+      cursor: cursor,
+      limit: limit,
+    );
   }
 
   @override
@@ -656,6 +691,45 @@ class TutorialPreviewBackendApiService extends BackendApiService {
       chatWatermark: {'recentIds': recentIds},
     );
   }
+
+  @override
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreamsForAudience({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    required String audience,
+    int limit = 50,
+  }) async {
+    if (audience != 'ALL') {
+      return RaceMessageStreamsResult(
+        supported: true,
+        systemStream: const {
+          'messages': <Map<String, dynamic>>[],
+          'nextCursor': null,
+        },
+        userStream: includeUser
+            ? const {'messages': <Map<String, dynamic>>[], 'nextCursor': null}
+            : null,
+        systemResolved: true,
+        userResolved: includeUser,
+        chatWatermark: const {'recentIds': <String>[]},
+      );
+    }
+    return fetchRaceMessageStreams(
+      identityToken: identityToken,
+      raceId: raceId,
+      includeUser: includeUser,
+      limit: limit,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendRaceMessageToAudience({
+    required String identityToken,
+    required String raceId,
+    required String body,
+    required String audience,
+  }) async => const {};
 
   @override
   void resetRaceMessageConditionalState({String? raceId}) {}

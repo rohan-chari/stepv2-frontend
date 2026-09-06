@@ -66,6 +66,7 @@ class _ProfileTabState extends State<ProfileTab> {
   late final BackendApiService _api;
   final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
   Map<String, int>? _racePodiums;
+  Map<String, num>? _raceStats;
 
   void _onRacePodiumsChanged(Map<String, int>? podiums) {
     final current = _racePodiums;
@@ -78,6 +79,11 @@ class _ProfileTabState extends State<ProfileTab> {
             current['third'] == podiums['third'];
     if (!mounted || unchanged) return;
     setState(() => _racePodiums = podiums);
+  }
+
+  void _onRaceStatsChanged(Map<String, num>? stats) {
+    if (!mounted) return;
+    setState(() => _raceStats = stats);
   }
 
   void _handleAuthServiceChanged() {
@@ -484,6 +490,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         authService: widget.authService,
                         backendApiService: _api,
                         onRacePodiumsChanged: _onRacePodiumsChanged,
+                        onRaceStatsChanged: _onRaceStatsChanged,
                       ),
                     ),
                   ),
@@ -530,6 +537,18 @@ class _ProfileTabState extends State<ProfileTab> {
                 ],
               ),
             ),
+          StaggerIn(
+            index: 3,
+            child: Column(
+              children: [
+                _buildSectionHeader('RACE STATS'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: _ProfileRaceStatsCard(stats: _raceStats),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -625,16 +644,70 @@ class _PodiumRecord extends StatelessWidget {
   }
 }
 
+class _ProfileRaceStatsCard extends StatelessWidget {
+  const _ProfileRaceStatsCard({required this.stats});
+
+  final Map<String, num>? stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final rate = stats?['winRate'];
+    Widget cell(String label, String value) => Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: PixelText.number(size: 19, color: colors.textDark),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: PixelText.title(size: 9, color: colors.textMid),
+          ),
+        ],
+      ),
+    );
+    return Container(
+      key: const Key('profile-race-stats'),
+      decoration: BoxDecoration(
+        color: colors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colors.roofDark.withValues(alpha: .55),
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66000000), offset: Offset(0, 4)),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 13),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          cell('RACES', stats?['racesCompeted']?.toInt().toString() ?? '—'),
+          cell('1ST WINS', stats?['firstPlaceWins']?.toInt().toString() ?? '—'),
+          cell('PODIUMS', stats?['podiumFinishes']?.toInt().toString() ?? '—'),
+          cell('WIN RATE', rate == null ? '—' : '${(rate * 100).round()}%'),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatsSection extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final ValueChanged<Map<String, int>?>? onRacePodiumsChanged;
+  final ValueChanged<Map<String, num>?>? onRaceStatsChanged;
 
   const _StatsSection({
     super.key,
     required this.authService,
     required this.backendApiService,
     this.onRacePodiumsChanged,
+    this.onRaceStatsChanged,
   });
 
   @override
@@ -701,6 +774,7 @@ class _StatsSectionState extends State<_StatsSection> {
           _isLoading = false;
         });
         widget.onRacePodiumsChanged?.call(podiums);
+        widget.onRaceStatsChanged?.call(_parseRaceStats(stats));
       }
     } catch (_) {
       if (mounted) {
@@ -726,6 +800,35 @@ class _StatsSectionState extends State<_StatsSection> {
     final third = read('third');
     if (first == null || second == null || third == null) return null;
     return {'first': first, 'second': second, 'third': third};
+  }
+
+  Map<String, num>? _parseRaceStats(Map<String, dynamic> raw) {
+    int? count(String key) {
+      final value = raw[key];
+      if (value is! num || !value.isFinite) return null;
+      final parsed = value.toInt();
+      return parsed < 0 || parsed != value ? null : parsed;
+    }
+
+    final races = count('racesCompeted');
+    final wins = count('firstPlaceWins');
+    final podiums = count('podiumFinishes');
+    final rate = raw['winRate'];
+    if (races == null ||
+        wins == null ||
+        podiums == null ||
+        rate is! num ||
+        !rate.isFinite ||
+        rate < 0 ||
+        rate > 1) {
+      return null;
+    }
+    return <String, num>{
+      'racesCompeted': races,
+      'firstPlaceWins': wins,
+      'podiumFinishes': podiums,
+      'winRate': rate,
+    };
   }
 
   String _formatPlain(int steps) {

@@ -172,6 +172,66 @@ void main() {
     },
   );
 
+  test('new auth capabilities and rename flag fail closed', () {
+    final auth = AuthService();
+    for (final payload in <Map<String, dynamic>>[
+      const {'id': 'user-1'},
+      const {
+        'id': 'user-1',
+        'displayNameRequiresRename': 'true',
+        'capabilities': {'recurringRacesV1': 'true', 'teamChatV1': 1},
+      },
+      const {
+        'id': 'user-1',
+        'displayNameRequiresRename': null,
+        'capabilities': null,
+      },
+    ]) {
+      auth.applyBackendUser(payload, authoritative: true);
+      expect(auth.displayNameRequiresRename, isFalse);
+      expect(auth.recurringRacesV1, isFalse);
+      expect(auth.teamChatV1, isFalse);
+    }
+
+    auth.applyBackendUser(const {
+      'id': 'user-1',
+      'displayNameRequiresRename': true,
+      'capabilities': {'recurringRacesV1': true, 'teamChatV1': true},
+    }, authoritative: true);
+    expect(auth.displayNameRequiresRename, isTrue);
+    expect(auth.recurringRacesV1, isTrue);
+    expect(auth.teamChatV1, isTrue);
+  });
+
+  test('shop tutorial preserves absent, null, timestamp distinctions', () {
+    final auth = AuthService();
+
+    auth.applyBackendUser(const {'id': 'user-1'}, authoritative: true);
+    expect(auth.hasShopTutorialServerState, isFalse);
+    expect(auth.shopTutorialCompletedAt, isNull);
+
+    auth.applyBackendUser(const {
+      'id': 'user-1',
+      'shopTutorialCompletedAt': null,
+    }, authoritative: true);
+    expect(auth.hasShopTutorialServerState, isTrue);
+    expect(auth.shopTutorialCompletedAt, isNull);
+
+    auth.applyBackendUser(const {
+      'id': 'user-1',
+      'shopTutorialCompletedAt': '2026-09-06T12:00:00.000Z',
+    }, authoritative: true);
+    expect(auth.hasShopTutorialServerState, isTrue);
+    expect(auth.shopTutorialCompletedAt, isNotNull);
+
+    auth.applyBackendUser(const {
+      'id': 'user-1',
+      'shopTutorialCompletedAt': 'not-a-time',
+    }, authoritative: true);
+    expect(auth.hasShopTutorialServerState, isFalse);
+    expect(auth.shopTutorialCompletedAt, isNull);
+  });
+
   test(
     'restoreSession returns false when a session token is missing',
     () async {

@@ -51,6 +51,7 @@ class RaceStreamCoordinator extends ChangeNotifier {
   String? _timelineCursor;
   bool _timelineLoading = false;
   Object? _timelineError;
+  String _audience = 'ALL';
 
   bool get chatHasUnread => _chatHasUnread || (_chat?.hasUnread ?? false);
   bool get legacyMode => _legacy;
@@ -60,6 +61,7 @@ class RaceStreamCoordinator extends ChangeNotifier {
   bool get timelineLoading => _timelineLoading;
   Object? get timelineError => _timelineError;
   bool get timelineHasMore => _timelineCursor != null;
+  String get audience => _audience;
 
   String? get _token => authService.authToken;
 
@@ -151,10 +153,13 @@ class RaceStreamCoordinator extends ChangeNotifier {
     final token = _token;
     if (token == null || token.isEmpty) return false;
     try {
-      final payload = await api.fetchRaceTimeline(
-        identityToken: token,
-        raceId: raceId,
-      );
+      final payload = _audience == 'TEAM'
+          ? await api.fetchRaceTimelineForAudience(
+              identityToken: token,
+              raceId: raceId,
+              audience: 'TEAM',
+            )
+          : await api.fetchRaceTimeline(identityToken: token, raceId: raceId);
       if (_disposed || !_eligible) return false;
       if (payload['timelineVersion'] != 1) return false;
       _timelineMode = true;
@@ -211,10 +216,13 @@ class RaceStreamCoordinator extends ChangeNotifier {
     _timelineLoading = true;
     notifyListeners();
     try {
-      final payload = await api.fetchRaceTimeline(
-        identityToken: token,
-        raceId: raceId,
-      );
+      final payload = _audience == 'TEAM'
+          ? await api.fetchRaceTimelineForAudience(
+              identityToken: token,
+              raceId: raceId,
+              audience: 'TEAM',
+            )
+          : await api.fetchRaceTimeline(identityToken: token, raceId: raceId);
       if (_disposed || !_eligible) return;
       if (payload['timelineVersion'] != 1) return;
       final older = List<RaceChatMessage>.from(_timelineMessages);
@@ -243,11 +251,18 @@ class RaceStreamCoordinator extends ChangeNotifier {
     _timelineLoading = true;
     notifyListeners();
     try {
-      final payload = await api.fetchRaceTimeline(
-        identityToken: token,
-        raceId: raceId,
-        cursor: cursor,
-      );
+      final payload = _audience == 'TEAM'
+          ? await api.fetchRaceTimelineForAudience(
+              identityToken: token,
+              raceId: raceId,
+              audience: 'TEAM',
+              cursor: cursor,
+            )
+          : await api.fetchRaceTimeline(
+              identityToken: token,
+              raceId: raceId,
+              cursor: cursor,
+            );
       if (_disposed || !_eligible || payload['timelineVersion'] != 1) return;
       _applyTimelinePage(payload, replace: false);
     } catch (error) {
@@ -291,11 +306,18 @@ class RaceStreamCoordinator extends ChangeNotifier {
     required int generation,
   }) async {
     try {
-      final result = await api.fetchRaceMessageStreams(
-        identityToken: token,
-        raceId: raceId,
-        includeUser: includeUser,
-      );
+      final result = _audience == 'TEAM'
+          ? await api.fetchRaceMessageStreamsForAudience(
+              identityToken: token,
+              raceId: raceId,
+              includeUser: includeUser,
+              audience: 'TEAM',
+            )
+          : await api.fetchRaceMessageStreams(
+              identityToken: token,
+              raceId: raceId,
+              includeUser: includeUser,
+            );
       if (_disposed || !_eligible || generation != _visibilityGeneration) {
         return;
       }
@@ -410,6 +432,7 @@ class RaceStreamCoordinator extends ChangeNotifier {
       authService: authService,
       raceId: raceId,
       api: api,
+      audience: _audience,
     );
     chat.setMutedFromServer(muted);
     chat.addListener(_relay);
@@ -505,6 +528,33 @@ class RaceStreamCoordinator extends ChangeNotifier {
       _chat?.markChatViewed();
     }
     notifyListeners();
+  }
+
+  /// Switches the one mounted feed/composer between its public and team-private
+  /// channel. Channel snapshots never merge in memory.
+  Future<void> setAudience(String value, {bool muted = false}) async {
+    final next = value == 'TEAM' ? 'TEAM' : 'ALL';
+    if (_disposed || next == _audience) return;
+    _audience = next;
+    api.resetRaceMessageConditionalState(raceId: raceId);
+    _chat?.removeListener(_relay);
+    _chat?.dispose();
+    _chat = null;
+    _timelineMessages.clear();
+    _timelineCursor = null;
+    _timelineError = null;
+    _timelineLoading = false;
+    final chat = _ensureChat(muted);
+    notifyListeners();
+    if (_timelineMode) {
+      await _refreshTimeline();
+    } else if (_legacy) {
+      await chat.loadInitial();
+    } else {
+      _chatRequested = true;
+      await refreshNow();
+    }
+    if (_chatVisible) chat.markChatViewed();
   }
 
   @override

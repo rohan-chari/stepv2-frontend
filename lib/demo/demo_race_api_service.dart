@@ -447,6 +447,33 @@ class DemoRaceApiService extends BackendApiService {
     return {'race': engine.raceDetails(_now, wallNow: DateTime.now())};
   }
 
+  @override
+  Future<Map<String, dynamic>> createRecurringRace({
+    required String identityToken,
+    required String name,
+    required String idempotencyKey,
+    int maxDurationDays = 7,
+    bool powerupsEnabled = false,
+    int? powerupStepInterval,
+    int buyInAmount = 0,
+    String payoutPreset = 'WINNER_TAKES_ALL',
+    bool isPublic = false,
+    int? maxParticipants = 10,
+    DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
+  }) async {
+    engine.markRaceCreated(durationDays: maxDurationDays);
+    return {
+      'race': engine.raceDetails(_now, wallNow: DateTime.now()),
+      'series': const {
+        'id': 'demo-series',
+        'enabled': true,
+        'subscribed': true,
+        'canManage': true,
+      },
+    };
+  }
+
   /// Teams are hidden in the demo's create screen, but the call site exists —
   /// and an unoverridden one is a real team race on a real account.
   @override
@@ -540,6 +567,14 @@ class DemoRaceApiService extends BackendApiService {
   }) async => const {};
 
   @override
+  Future<Map<String, dynamic>> respondToRecurringRaceInvite({
+    required String identityToken,
+    required String raceId,
+    required bool accept,
+    required bool subscribeToSeries,
+  }) async => const {};
+
+  @override
   Future<Map<String, dynamic>> acceptTeamRaceInvite({
     required String identityToken,
     required String raceId,
@@ -586,6 +621,18 @@ class DemoRaceApiService extends BackendApiService {
   }) async => engine.messages(kind);
 
   @override
+  Future<Map<String, dynamic>> fetchRaceMessagesForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) async => audience == 'ALL'
+      ? engine.messages(kind)
+      : const {'messages': <Map<String, dynamic>>[], 'nextCursor': null};
+
+  @override
   Future<Map<String, dynamic>> fetchRaceTimeline({
     required String identityToken,
     required String raceId,
@@ -600,6 +647,29 @@ class DemoRaceApiService extends BackendApiService {
       if (user is List) ...user.whereType<Map>().map(Map<String, dynamic>.from),
     ]..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
     return {'messages': messages, 'nextCursor': null, 'timelineVersion': 1};
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceTimelineForAudience({
+    required String identityToken,
+    required String raceId,
+    required String audience,
+    String? cursor,
+    int limit = 30,
+  }) async {
+    if (audience != 'ALL') {
+      return const {
+        'messages': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'timelineVersion': 1,
+      };
+    }
+    return fetchRaceTimeline(
+      identityToken: identityToken,
+      raceId: raceId,
+      cursor: cursor,
+      limit: limit,
+    );
   }
 
   @override
@@ -631,6 +701,37 @@ class DemoRaceApiService extends BackendApiService {
   }
 
   @override
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreamsForAudience({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    required String audience,
+    int limit = 50,
+  }) async {
+    if (audience != 'ALL') {
+      return RaceMessageStreamsResult(
+        supported: true,
+        systemStream: const {
+          'messages': <Map<String, dynamic>>[],
+          'nextCursor': null,
+        },
+        userStream: includeUser
+            ? const {'messages': <Map<String, dynamic>>[], 'nextCursor': null}
+            : null,
+        systemResolved: true,
+        userResolved: includeUser,
+        chatWatermark: const {'recentIds': <String>[]},
+      );
+    }
+    return fetchRaceMessageStreams(
+      identityToken: identityToken,
+      raceId: raceId,
+      includeUser: includeUser,
+      limit: limit,
+    );
+  }
+
+  @override
   void resetRaceMessageConditionalState({String? raceId}) {}
 
   @override
@@ -644,6 +745,14 @@ class DemoRaceApiService extends BackendApiService {
     required String identityToken,
     required String raceId,
     required String body,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> sendRaceMessageToAudience({
+    required String identityToken,
+    required String raceId,
+    required String body,
+    required String audience,
   }) async => const {};
 
   @override

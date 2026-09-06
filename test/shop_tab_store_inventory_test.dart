@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +8,7 @@ import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/services/remote_asset_cache.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/tutorial/spotlight_overlay.dart';
 import 'package:step_tracker/widgets/accessory_thumbnail.dart';
 
 // Store/Inventory overhaul for the shop tab.
@@ -31,6 +34,7 @@ class _FakeShopApi extends BackendApiService {
   final Map<String, dynamic> powerupCatalog;
   final Map<String, dynamic> inventory;
   final bool powerupEndpointsAvailable;
+  int tutorialCompletionCalls = 0;
 
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
@@ -71,9 +75,48 @@ class _FakeShopApi extends BackendApiService {
       'inventory': {'powerupType': 'IMPOSTER', 'quantity': 1},
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> completeShopTutorial({
+    required String identityToken,
+  }) async {
+    tutorialCompletionCalls += 1;
+    return const {
+      'tutorialKey': 'shop_v1',
+      'completedAt': '2026-09-06T12:00:00.000Z',
+    };
+  }
 }
 
-Future<AuthService> _createAuthService() async {
+class _HeldShopApi extends _FakeShopApi {
+  _HeldShopApi()
+    : super(
+        catalog: const <String, dynamic>{},
+        powerupCatalog: const <String, dynamic>{},
+        inventory: const <String, dynamic>{},
+      );
+
+  final catalogCompleter = Completer<Map<String, dynamic>>();
+  final powerupCatalogCompleter = Completer<Map<String, dynamic>>();
+  final inventoryCompleter = Completer<Map<String, dynamic>>();
+
+  @override
+  Future<Map<String, dynamic>> fetchShopCatalog({
+    required String identityToken,
+  }) => catalogCompleter.future;
+
+  @override
+  Future<Map<String, dynamic>> fetchPowerupShopCatalog({
+    required String identityToken,
+  }) => powerupCatalogCompleter.future;
+
+  @override
+  Future<Map<String, dynamic>> fetchPowerupInventory({
+    required String identityToken,
+  }) => inventoryCompleter.future;
+}
+
+Future<AuthService> _createAuthService([BackendApiService? api]) async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
     'auth_user_identifier': 'apple-user-123',
@@ -83,7 +126,7 @@ Future<AuthService> _createAuthService() async {
     'auth_coins': 1000,
     'auth_held_coins': 0,
   });
-  final authService = AuthService();
+  final authService = AuthService(backendApiService: api);
   await authService.restoreSession();
   return authService;
 }
@@ -159,6 +202,7 @@ Future<void> _pumpShop(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
+  await tester.pump();
 }
 
 Future<void> _selectSegment(WidgetTester tester, String label) async {
@@ -167,6 +211,7 @@ Future<void> _selectSegment(WidgetTester tester, String label) async {
     await tester.tap(seg.last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
   }
 }
 
@@ -182,6 +227,194 @@ Future<void> _selectCategory(WidgetTester tester, String label) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('explicit incomplete state launches once and skip completes it', (
+    tester,
+  ) async {
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
+    final auth = await _createAuthService(api);
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'shopTutorialCompletedAt': null,
+    }, authoritative: true);
+
+    await _pumpShop(tester, auth, api);
+    expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
+    expect(find.text('STORE OR INVENTORY'), findsOneWidget);
+
+    await tester.tap(find.text('SKIP'));
+    await tester.pump();
+    await tester.pump();
+    expect(api.tutorialCompletionCalls, 1);
+    expect(auth.shopTutorialCompletedAt, isNotNull);
+    expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpShop(tester, auth, api);
+    expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+  });
+
+  testWidgets(
+    'first-visit tutorial waits for successful bootstrap and measured targets',
+    (tester) async {
+      final api = _HeldShopApi();
+      final auth = await _createAuthService(api);
+      await auth.syncFromBackendUser(const {
+        'id': 'user-1',
+        'shopTutorialCompletedAt': null,
+      }, authoritative: true);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopTab(authService: auth, backendApiService: api),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+
+      api.catalogCompleter.complete(_catalog());
+      await tester.pump();
+      expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+
+      api.powerupCatalogCompleter.complete(_powerupCatalog());
+      await tester.pump();
+      expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+
+      api.inventoryCompleter.complete(_inventory());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+
+      for (final key in const [
+        Key('shop-segment-control'),
+        Key('shop-category-pills'),
+        Key('shop-character-preview'),
+        Key('shop-product-grid'),
+      ]) {
+        expect(find.byKey(key), findsOneWidget);
+      }
+      expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
+      expect(
+        tester
+            .widget<SpotlightOverlay>(find.byType(SpotlightOverlay))
+            .targetRect,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets('absent and malformed tutorial fields never auto-launch', (
+    tester,
+  ) async {
+    for (final payload in <Map<String, dynamic>>[
+      const {'id': 'user-1'},
+      const {'id': 'user-1', 'shopTutorialCompletedAt': 42},
+    ]) {
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+      );
+      final auth = await _createAuthService(api);
+      await auth.syncFromBackendUser(payload, authoritative: true);
+      await _pumpShop(tester, auth, api);
+      expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('settings replay ignores completion without writing it again', (
+    tester,
+  ) async {
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
+    final auth = await _createAuthService(api);
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'shopTutorialCompletedAt': '2026-09-06T12:00:00.000Z',
+    }, authoritative: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopTab(
+          authService: auth,
+          backendApiService: api,
+          forceTutorialReplay: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
+    await tester.tap(find.text('SKIP'));
+    await tester.pump();
+    expect(api.tutorialCompletionCalls, 0);
+  });
+
+  testWidgets(
+    'delayed same-account auth state starts the first-visit tutorial',
+    (tester) async {
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+      );
+      final auth = await _createAuthService(api);
+      await _pumpShop(tester, auth, api);
+      expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+
+      await auth.syncFromBackendUser(const {
+        'id': 'user-1',
+        'shopTutorialCompletedAt': null,
+      }, authoritative: true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+
+      expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
+    },
+  );
+
+  testWidgets('tutorial preview never consumes a first real Shop visit', (
+    tester,
+  ) async {
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
+    final auth = await _createAuthService(api);
+    await auth.syncFromBackendUser(const {
+      'id': 'user-1',
+      'shopTutorialCompletedAt': null,
+    }, authoritative: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopTab(
+          authService: auth,
+          backendApiService: api,
+          isTutorialPreview: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
+    expect(api.tutorialCompletionCalls, 0);
+    expect(auth.shopTutorialCompletedAt, isNull);
+  });
+
   testWidgets('shop tabs stay legible in dark mode', (tester) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(

@@ -6,7 +6,6 @@ import 'package:step_tracker/models/loadable.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/widgets/powerup_icon.dart';
-import 'package:step_tracker/widgets/race_ui.dart' show RacerAvatar;
 import 'package:step_tracker/widgets/spinning_crate.dart';
 import 'package:step_tracker/widgets/team_scoreline.dart';
 
@@ -470,14 +469,13 @@ void main() {
         ),
         findsWidgets,
       );
-      final avatar = tester.widget<RacerAvatar>(
+      expect(
         _inside(
           live,
           find.byKey(const Key('tournament-identity-avatar-tournament-live')),
-        ).first,
+        ),
+        findsNothing,
       );
-      expect(avatar.animal, 'corgi_puppy');
-      expect(avatar.accessories.single['assetKey'], 'trail_hat');
 
       const hiddenMatch = Key('tournament-card-surface-tournament-live-hidden');
       expect(_inside(hiddenMatch, find.text('??? PLACE')), findsOneWidget);
