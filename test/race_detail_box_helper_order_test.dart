@@ -10,6 +10,9 @@ import 'package:step_tracker/widgets/item_slot.dart';
 /// slots Row, not below it.
 class _HelperApi extends BackendApiService {
   _HelperApi({
+    this.remaining = 1000,
+    this.interval = 5000,
+    this.isTeamRace = false,
     this.inventory = const [
       {'id': 'held-1', 'type': 'PROTEIN_SHAKE', 'status': 'HELD'},
       {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
@@ -18,6 +21,10 @@ class _HelperApi extends BackendApiService {
   });
 
   final Object? inventory;
+  Object? remaining;
+  Object? interval;
+  final bool isTeamRace;
+  int progressFetches = 0;
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -28,14 +35,26 @@ class _HelperApi extends BackendApiService {
     'id': raceId,
     'name': 'Helper Alley',
     'status': 'ACTIVE',
+    'isTeamRace': isTeamRace,
+    if (isTeamRace) ...{'teamSize': 1, 'myTeam': 'TEAM_A'},
     'maxDurationDays': 7,
     'buyInAmount': 0,
     'myStatus': 'ACCEPTED',
     'powerupsEnabled': true,
     'endsAt': '2027-12-10T12:00:00.000Z',
     'participants': [
-      {'userId': 'me', 'displayName': 'Bara', 'status': 'ACCEPTED'},
-      {'userId': 'u1', 'displayName': 'Otter42', 'status': 'ACCEPTED'},
+      {
+        'userId': 'me',
+        'displayName': 'Bara',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_A',
+      },
+      {
+        'userId': 'u1',
+        'displayName': 'Otter42',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_B',
+      },
     ],
   };
 
@@ -43,22 +62,41 @@ class _HelperApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceProgress({
     required String identityToken,
     required String raceId,
-  }) async => {
-    'status': 'ACTIVE',
-    'participants': [
-      {'userId': 'me', 'displayName': 'Bara', 'totalSteps': 5000},
-      {'userId': 'u1', 'displayName': 'Otter42', 'totalSteps': 4000},
-    ],
-    'powerupData': {
-      'enabled': true,
-      'inventory': inventory,
-      'powerupSlots': 3,
-      'queuedBoxCount': 0,
-      'activeEffects': const [],
-      'powerupStepInterval': 5000,
-      'stepsUntilNextPowerup': 1000,
-    },
-  };
+  }) async {
+    progressFetches++;
+    return {
+      'status': 'ACTIVE',
+      'isTeamRace': isTeamRace,
+      if (isTeamRace)
+        'teams': {
+          'teamA': {'name': 'Acorns', 'totalSteps': 5000, 'memberCount': 1},
+          'teamB': {'name': 'Berries', 'totalSteps': 4000, 'memberCount': 1},
+        },
+      'participants': [
+        {
+          'userId': 'me',
+          'displayName': 'Bara',
+          'totalSteps': 5000,
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'u1',
+          'displayName': 'Otter42',
+          'totalSteps': 4000,
+          'team': 'TEAM_B',
+        },
+      ],
+      'powerupData': {
+        'enabled': true,
+        'inventory': inventory,
+        'powerupSlots': 3,
+        'queuedBoxCount': 0,
+        'activeEffects': const [],
+        'powerupStepInterval': interval,
+        'stepsUntilNextPowerup': remaining,
+      },
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> fetchRaceFeed({
@@ -108,6 +146,81 @@ Future<void> _pump(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final team in [false, true]) {
+    testWidgets(
+      '${team ? 'team' : 'solo'} first load shows pending box copy above usable slots',
+      (tester) async {
+        await _pump(tester, _HelperApi(remaining: 0, isTeamRace: team));
+        final pending = find.text('Granting your next box...');
+        expect(pending, findsOneWidget);
+        expect(find.textContaining('You earn a powerup every'), findsNothing);
+        final slots = find.byType(ItemSlot);
+        expect(
+          tester.getTopLeft(pending).dy,
+          lessThan(tester.getTopLeft(slots.first).dy),
+        );
+        final boxes = tester
+            .widgetList<ItemSlot>(slots)
+            .where((slot) => slot.state == ItemSlotState.mysteryBox);
+        expect(boxes.length, 2);
+        expect(boxes.every((box) => box.onTap != null), isTrue);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '${team ? 'team' : 'solo'} polling replaces a countdown with pending and recovers without reopening',
+      (tester) async {
+        final api = _HelperApi(isTeamRace: team);
+        await _pump(tester, api);
+        expect(
+          find.text('You earn a powerup every 5,000 steps. 1,000 to go.'),
+          findsOneWidget,
+        );
+        for (final remaining in <Object?>[0, null, 2500]) {
+          api.remaining = remaining;
+          final before = api.progressFetches;
+          await tester.pump(const Duration(seconds: 31));
+          await tester.pump();
+          await tester.pump();
+          expect(
+            api.progressFetches,
+            greaterThan(before),
+            reason: 'the normal progress poll must update the same open screen',
+          );
+          if (remaining == 2500) {
+            expect(find.text('Granting your next box...'), findsNothing);
+            expect(
+              find.text('You earn a powerup every 5,000 steps. 2,500 to go.'),
+              findsOneWidget,
+            );
+          } else {
+            expect(find.text('Granting your next box...'), findsOneWidget);
+            expect(
+              find.textContaining('You earn a powerup every'),
+              findsNothing,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'missing or invalid countdowns do not imply a pending box on first load',
+    (tester) async {
+      for (final remaining in <Object?>[null, 'invalid', -1]) {
+        await _pump(tester, _HelperApi(remaining: remaining));
+        expect(find.text('Granting your next box...'), findsNothing);
+        expect(find.textContaining('You earn a powerup every'), findsNothing);
+        expect(tester.takeException(), isNull);
+      }
+      await _pump(tester, _HelperApi(remaining: 0, interval: null));
+      expect(find.text('Granting your next box...'), findsNothing);
+    },
+  );
 
   testWidgets('next-powerup helper renders above the box/item slots Row', (
     tester,

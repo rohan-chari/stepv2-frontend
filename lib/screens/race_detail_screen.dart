@@ -462,7 +462,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
-  int? _lastValidStepsUntilNextPowerup;
+  int? _lastKnownStepsUntilNextPowerup;
 
   /// Raw `powerupData.dropOdds` (spec §5.3), passed to the box-opening reel
   /// untouched — parsing/validation lives in [OddsBreakdown] so a malformed
@@ -1808,12 +1808,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           final remaining = _readNullableInt(
             nextPowerupData?['stepsUntilNextPowerup'],
           );
-          if (remaining != null && remaining > 0) {
-            _lastValidStepsUntilNextPowerup = remaining;
+          // Zero means the threshold was reached while the worker is still
+          // granting the box. Keep that state instead of restoring an older
+          // positive countdown; only absent/invalid values need the fallback.
+          if (remaining != null && remaining >= 0) {
+            _lastKnownStepsUntilNextPowerup = remaining;
           } else if (nextPowerupData != null &&
-              _lastValidStepsUntilNextPowerup != null) {
+              _lastKnownStepsUntilNextPowerup != null) {
             nextPowerupData['stepsUntilNextPowerup'] =
-                _lastValidStepsUntilNextPowerup;
+                _lastKnownStepsUntilNextPowerup;
           }
           _powerupData = nextPowerupData;
           final rawEvent = resolvedProgress['globalEvent'];
@@ -6974,17 +6977,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
     final stepsUntilNextPowerup =
         _readNullableInt(_powerupData?['stepsUntilNextPowerup']) ??
-        _lastValidStepsUntilNextPowerup;
+        _lastKnownStepsUntilNextPowerup;
 
     if (powerupStepInterval == null ||
         powerupStepInterval <= 0 ||
         stepsUntilNextPowerup == null ||
-        stepsUntilNextPowerup <= 0) {
+        stepsUntilNextPowerup < 0) {
       return null;
     }
 
     return Text(
-      'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps. ${_formatSteps(stepsUntilNextPowerup)} to go.',
+      stepsUntilNextPowerup == 0
+          ? 'Granting your next box...'
+          : 'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps. ${_formatSteps(stepsUntilNextPowerup)} to go.',
       softWrap: true,
       style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
     );
