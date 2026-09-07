@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import '../models/loadable.dart';
 import '../models/race_payouts.dart';
 import '../models/next_race.dart';
 import '../models/race_prize_pool.dart';
+import '../models/race_progress_projection.dart';
 import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -28,6 +30,7 @@ import '../utils/effect_polarity.dart';
 import '../utils/funded_exposure_error_copy.dart';
 import '../utils/powerup_error_copy.dart';
 import '../utils/race_display.dart';
+import '../utils/race_effect_expiry_refresh.dart';
 import '../utils/race_participant_display.dart';
 import '../utils/share_helper.dart';
 import '../utils/team_race.dart';
@@ -140,6 +143,9 @@ class RaceDetailScreen extends StatefulWidget {
   final bool showPostCreateSharePrompt;
   final bool fallbackOnUnavailable;
 
+  /// Non-authoritative display/refresh clock, injectable for lifecycle tests.
+  final DateTime Function()? now;
+
   RaceDetailScreen({
     super.key,
     required this.authService,
@@ -161,6 +167,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.boxRerollAdController,
     this.showPostCreateSharePrompt = false,
     this.fallbackOnUnavailable = false,
+    this.now,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -601,6 +608,65 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _countdownActive = false;
   // Monotonic id of the newest fetchRaceProgress request — see _loadProgress.
   int _progressFetchSeq = 0;
+  Future<void>? _progressRequest;
+  RaceProjectionMetadata? _progressProjection;
+  int _progressProjectionOffset = 0;
+  late final RaceEffectExpiryRefresh _effectExpiryRefresh;
+  DateTime _now() => widget.now?.call() ?? DateTime.now();
+
+  void _updateEffectExpiryRefresh() {
+    final raw = _powerupData?['activeEffects'];
+    final participants = _progress?['participants'];
+    final visibleUsers = <String>{
+      _myUserId,
+      if (participants is List)
+        for (final row in participants)
+          if (row is Map && row['userId'] is String) row['userId'] as String,
+    };
+    _effectExpiryRefresh.update(
+      raw is List
+          ? raw.where((effect) => effect is Map &&
+              (effect['onSelf'] == true || visibleUsers.contains(effect['targetUserId'])))
+          : const [],
+      enabled: mounted &&
+          !widget.demoMode &&
+          _routeVisible &&
+          _appResumed &&
+          !_returnRefreshRunning &&
+          !_notAParticipant &&
+          !_isPreviewViewer &&
+          widget.authService.authToken == _interstitialVisitToken &&
+          widget.authService.userId == _interstitialVisitUserId &&
+          widget.authService.authToken?.isNotEmpty == true &&
+          _race?['status'] == 'ACTIVE' &&
+          _progress?['status'] == 'ACTIVE',
+    );
+  }
+
+  bool _isOlderProgress(RaceProjectionMetadata? incoming, int offset) {
+    final current = _progressProjection;
+    final generation = incoming?.generation;
+    final committed = current?.generation;
+    if (generation != null && committed != null) {
+      if (generation < committed) return true;
+      if (generation > committed) return false;
+    }
+    // Source/as-of comparisons apply to the same page, since other pages may
+    // have been published independently within the same race generation.
+    if (offset != _progressProjectionOffset) return false;
+    if (generation == committed && generation != null) {
+      if (current?.source == 'authoritative' &&
+          incoming?.source == 'stale-fallback') {
+        return true;
+      }
+      final oldTime = DateTime.tryParse(current?.asOf ?? '');
+      final newTime = DateTime.tryParse(incoming?.asOf ?? '');
+      if (oldTime != null && newTime != null && newTime.isBefore(oldTime)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// Rank of the first racer on the page currently displayed, zero-based.
   ///
@@ -736,6 +802,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   void _pauseCoveredTimers() {
+    _effectExpiryRefresh.pause();
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     _streams?.pause();
@@ -753,7 +820,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _returnRefreshRunning = true;
     try {
       do {
-        if (_pollingActive) await _loadProgress();
+        if (_pollingActive) await _loadProgress(reuseInFlight: true);
         if (!_routeVisible || !_appResumed) return;
         if (_returnRefreshImpactRequested) {
           _returnRefreshImpactRequested = false;
@@ -774,6 +841,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       } while (_returnRefreshImpactRequested);
     } finally {
       _returnRefreshRunning = false;
+      if (mounted) _updateEffectExpiryRefresh();
     }
   }
 
@@ -906,7 +974,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleRewardedAdAuthChanged);
-    _countdownNow = DateTime.now();
+    _effectExpiryRefresh = RaceEffectExpiryRefresh(
+      refresh: () => _loadProgress(reuseInFlight: true),
+      now: _now,
+      trace: (fields) => developer.Timeline.instantSync(
+        'race_effect_expiry_client',
+        arguments: {
+          ...fields,
+          'raceId': widget.raceId,
+          if (_progressProjection?.generation case final int generation)
+            'projectionGeneration': generation,
+        },
+      ),
+    );
+    _countdownNow = _now();
     _messageFocus.addListener(_onComposerFocusChanged);
     _loadDetails();
     // §5.6/G3: the demo must never claim the starter reward (a second, real
@@ -1094,6 +1175,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
     switch (racePollLifecycleAction(state, wasPolling: _pollingActive)) {
       case RacePollLifecycleAction.pause:
+        _effectExpiryRefresh.pause();
         // Off-screen: stop the network poll AND the 1s countdown ticker. The
         // ticker only drives UI (setState of _countdownNow), so ticking it
         // while backgrounded is wasted work; both are restarted on resume via
@@ -1157,6 +1239,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         widget.demoCancelBoxOpen?.call(boxId);
       }
     }
+    _effectExpiryRefresh.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.authService.removeListener(_handleRewardedAdAuthChanged);
     appRouteObserver.unsubscribe(this);
@@ -1624,6 +1707,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// down. Called from the details load and from the 30s progress poll, so a
   /// mid-session prune stops the loop instead of erroring every 30s forever.
   void _enterNotAParticipant() {
+    _effectExpiryRefresh.pause();
     widget.interstitialVisit?.revoke();
     _pollingActive = false;
     _countdownActive = false;
@@ -1643,6 +1727,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     Future<Map<String, dynamic>?>? prefetched,
     bool refetchOnNullPrefetch = true,
     bool append = false,
+    bool reuseInFlight = false,
+    int? participantsOffset,
+  }) {
+    final pending = _progressRequest;
+    if (reuseInFlight && pending != null) return pending;
+    late final Future<void> request;
+    request = _fetchProgress(
+      prefetched: prefetched,
+      refetchOnNullPrefetch: refetchOnNullPrefetch,
+      append: append,
+      participantsOffset: participantsOffset,
+    ).whenComplete(() {
+      if (identical(_progressRequest, request)) _progressRequest = null;
+    });
+    _progressRequest = request;
+    return request;
+  }
+
+  Future<void> _fetchProgress({
+    Future<Map<String, dynamic>?>? prefetched,
+    bool refetchOnNullPrefetch = true,
+    bool append = false,
+    int? participantsOffset,
   }) async {
     // Ordering guard: concurrent fetches (30s poll vs the refresh fired right
     // after opening a box) can resolve out of order, and a stale snapshot
@@ -1663,8 +1770,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
     }
 
+    final token = widget.authService.authToken;
     try {
-      final token = widget.authService.authToken;
       if (token == null || token.isEmpty) {
         if (mounted) {
           setState(() {
@@ -1689,7 +1796,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       RaceProgressResult? compactResult;
       // One page in flight, always: a refresh or poll re-reads the page the
       // viewer is on rather than snapping them back to the top.
-      final requestedOffset = append ? _participantsOffset : 0;
+      final requestedOffset = participantsOffset ?? _participantsOffset;
       final requestedLimit = _kParticipantsPageSize;
       final progress =
           prefetchedProgress ??
@@ -1700,11 +1807,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             limit: requestedLimit,
           )).progress;
 
+      if (!mounted || fetchSeq != _progressFetchSeq ||
+          token != widget.authService.authToken) {
+        return;
+      }
+      final projection = compactResult?.projectionMetadata ??
+          RaceProjectionMetadata.tryParse(progress);
+      if (_isOlderProgress(projection, requestedOffset)) {
+        setState(() {
+          if (previous != null) _progressState = Loadable.success(previous);
+          _participantsLoadingMore = false;
+        });
+        return;
+      }
+
       if (compactResult?.hasCompactInventory == true) {
         _applyGlobalPowerupInventory(compactResult?.globalPowerupInventory);
       }
 
-      if (!mounted) return;
+      if (!mounted || fetchSeq != _progressFetchSeq ||
+          token != widget.authService.authToken) {
+        return;
+      }
       final participants =
           (progress['participants'] as List?)
               ?.whereType<Map>()
@@ -1788,10 +1912,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (fetchSeq == _progressFetchSeq) {
         setState(() {
           _progress = resolvedProgress;
+          _progressProjection = projection ?? _progressProjection;
           _participantsTotal = totalFromServer;
           if (pagination != null) {
             _participantsOffset = offsetFromServer ?? requestedOffset;
           }
+          _progressProjectionOffset = _participantsOffset;
           _participantsHasMore =
               pagination?['hasMore'] == true ||
               (totalFromServer != null &&
@@ -1829,6 +1955,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           _progressState = Loadable.success(resolvedProgress);
         });
         _disposeRerollIfUnavailable();
+        _updateEffectExpiryRefresh();
       }
 
       if (_powerupData?['enabled'] == true) {
@@ -1864,6 +1991,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
 
       if (progress['status'] == 'COMPLETED') {
+        _effectExpiryRefresh.pause();
         // Polling stops for good — clear the flags so a later app resume does
         // not restart the poll/countdown on a now-finished race.
         _pollingActive = false;
@@ -1879,7 +2007,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         }
       }
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || fetchSeq != _progressFetchSeq ||
+          token != widget.authService.authToken) {
+        return;
+      }
       if (e.statusCode == 403) {
         _enterNotAParticipant();
         return;
@@ -1898,7 +2029,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         showErrorToast(context, 'Couldn’t refresh race progress.');
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || fetchSeq != _progressFetchSeq ||
+          token != widget.authService.authToken) {
+        return;
+      }
       if (fetchSeq == _progressFetchSeq) {
         setState(() {
           _progressState = Loadable.error(e.toString(), data: previous);
@@ -1913,7 +2047,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         showErrorToast(context, 'Couldn’t refresh race progress.');
       }
     } finally {
-      if (mounted && append) {
+      if (mounted && append && fetchSeq == _progressFetchSeq) {
         setState(() {
           _participantsLoadingMore = false;
         });
@@ -1952,7 +2086,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         if (widget.demoMode) {
           _loadDetails();
         } else {
-          _loadProgress();
+          _loadProgress(reuseInFlight: true);
         }
       },
     );
@@ -1964,7 +2098,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (!_routeVisible || !_appResumed) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(() => _countdownNow = DateTime.now());
+      setState(() => _countdownNow = _now());
+      _effectExpiryRefresh.checkClock();
     });
   }
 
@@ -3072,6 +3207,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           };
         });
         _disposeRerollIfUnavailable();
+        _updateEffectExpiryRefresh();
       }
       return rawParticipants;
     } catch (_) {
@@ -7258,6 +7394,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   RewardedAdContext? _rerollBoundContext;
 
   void _handleRewardedAdAuthChanged() {
+    _updateEffectExpiryRefresh();
     if (widget.authService.userId != _interstitialVisitUserId ||
         widget.authService.authToken != _interstitialVisitToken) {
       widget.interstitialVisit?.revoke();
@@ -10736,8 +10873,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ? _participantsOffset
         : offset;
     if (clamped == _participantsOffset) return;
-    _participantsOffset = clamped;
-    await _loadProgress(append: true);
+    // The rendered offset belongs to the last accepted projection. Keep it
+    // unchanged during loading, errors, or rejection of an older generation.
+    await _loadProgress(append: true, participantsOffset: clamped);
   }
 
   Widget _standingsList(
