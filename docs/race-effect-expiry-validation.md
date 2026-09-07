@@ -18,6 +18,15 @@ Both repositories use branch `fix/race-effect-expiry`. Backend implementation re
 
 The broad backend suite is not green. Several baseline problems were corrected with preserved assertions; other existing failures remain, including a query-plan assertion rejecting a valid newer index, conflicting timezone expectations, and older standings/scoring/contract expectations. Isolated C3 standings still reports failures (`/tmp/expiry-c3-isolated.log`). No baseline failures or existing skip are waived by this document. The query-plan assertion remains unchanged pending the user's response to the protected-test question.
 
+## Production-path verification follow-up
+
+Backend revision `7cf0ef1` updates the load harness to select the production HTTP branch and explicitly runs the resolution worker role. The pool is bootstrapped against the local test database before selecting production mode, retaining SQL instrumentation; this does not claim production hardware equivalence. The earlier load measurements above did not explicitly select this HTTP branch and are superseded by this run.
+
+- Production-path isolated load: **3/3 passed**, zero skips (`/tmp/expiry-production-path-load.log`). 48 effects across 12 races with 2,000 future deadlines: dispatch **39.2 ms**, publication **p95/p99 459 ms**, all HTTP confirmations **667 ms**. The deliberately locked 100-effect race completed in **6.661 s**, including the five-second cooldown. Percentiles summarize only 12 race observations.
+- Complete expiry/load/storage group rerun with this harness: **41/41 passed**, zero skips (`/tmp/expiry-production-path-final-group.log`).
+- C3 fixtures now ingest samples through real HTTP and use distinct race windows for the cross-race toast scenario. All original assertions remain. C3 is **22 passed / 3 failed** (`/tmp/expiry-c3-intake-window.log`): cold artifact creation, stale snapshot serving, and worker snapshot publication remain unresolved.
+- Independent reviewer cleared these test changes with no findings. Broad backend sign-off remains blocked; no deployment occurred.
+
 ## Baseline
 
 - Frontend starting revision: `eefbceb5c430b1d6fee126860dfa46ae2c49ba3f`.
