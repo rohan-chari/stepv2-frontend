@@ -10,6 +10,7 @@ import 'package:step_tracker/models/interstitial_ad.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
+import 'package:step_tracker/screens/get_coins_screen.dart';
 import 'package:step_tracker/screens/inbox_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
@@ -712,6 +713,30 @@ class _RewardedResultsApi extends _FakeBackendApiService {
   }
 }
 
+class _RewardedCoinsApi extends _FakeBackendApiService {
+  String? claimedToken;
+  @override
+  Future<Map<String, dynamic>> fetchGetCoinsStatus({
+    required String identityToken,
+    required String localDate,
+  }) async => {
+    'adCoinReward': {
+      'available': true,
+      'remainingToday': 5,
+      'coinRewardMin': 25,
+      'coinRewardMax': 50,
+    },
+  };
+  @override
+  Future<Map<String, dynamic>> claimAdCoinReward({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    claimedToken = identityToken;
+    return {'coins': 123, 'coinAmount': 25, 'remainingToday': 4};
+  }
+}
+
 class _FakeGetCoinsAdController implements ExtraSpinAdController {
   bool ready = false;
   int loadCalls = 0;
@@ -1264,6 +1289,40 @@ void main() {
       expect(ads.loadCalls, 1);
       expect(ads.loadedUserId, 'user-1');
       expect(ads.loadedCustomData, startsWith('coins:'));
+    },
+  );
+
+  testWidgets(
+    'open Get Coins survives shell token refresh and claims on new token',
+    (tester) async {
+      final auth = await _authService();
+      final api = _RewardedCoinsApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: auth,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            getCoinsAdControllerBuilder: () => _FakeGetCoinsAdController(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(GetCoinsScreen), findsOneWidget);
+      await auth.updateSessionToken('refreshed-token');
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('WATCH AD · RANDOM COINS'));
+      await tester.pump();
+      expect(api.claimedToken, 'refreshed-token');
+      expect(find.textContaining('4 of 5'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
+import '../services/rewarded_coins_controller.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -32,6 +33,7 @@ class GetCoinsScreen extends StatefulWidget {
   // watch-ad section entirely.
   final ExtraSpinAdController? adController;
   final DateTime Function()? now;
+  final RewardedCoinsController? rewardedCoinsController;
 
   const GetCoinsScreen({
     super.key,
@@ -39,6 +41,7 @@ class GetCoinsScreen extends StatefulWidget {
     this.backendApiService,
     this.adController,
     this.now,
+    this.rewardedCoinsController,
   });
 
   @override
@@ -52,136 +55,69 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   ];
 
   late final BackendApiService _api;
-  late final ExtraSpinAdController _adController;
-  bool _ownsAdController = false;
-
-  Map<String, dynamic>? _status;
-  // Configured referral rewards, off the wire (batch 2026-07-27 §4.3). Null
-  // whenever the backend is older than the fields or the lookup failed — the
-  // invite row then states no figure rather than a guess.
+  late final RewardedCoinsController _rewards;
+  late final bool _ownsRewards;
   int? _referrerCoins;
   int? _refereeCoins;
-  bool _adReady = false;
-  bool _adLoading = false;
-  bool _adFlowBusy = false;
-  RewardedAdContext? _activeAdContext;
-
-  String _todayLocalDate() {
-    final now = widget.now?.call() ?? DateTime.now();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${now.year}-${two(now.month)}-${two(now.day)}';
-  }
+  String? _referralToken;
+  Map<String, dynamic>? get _status => _rewards.status;
+  ExtraSpinAdController get _adController => _rewards.ads;
+  bool get _adReady => _rewards.ready;
+  bool get _adLoading => _rewards.loading;
+  bool get _adFlowBusy => _rewards.busy;
 
   @override
   void initState() {
     super.initState();
     _api = widget.backendApiService ?? BackendApiService();
-    final provided = widget.adController;
-    _ownsAdController = provided == null;
-    _adController = provided ?? AdService();
-    WidgetsBinding.instance.addObserver(this);
-    widget.authService.addListener(_handleAuthChanged);
-    _activeAdContext = _currentAdContext;
-    _observeReadiness();
-    _load();
+    _ownsRewards = widget.rewardedCoinsController == null;
+    _rewards =
+        widget.rewardedCoinsController ??
+        RewardedCoinsController(
+          auth: widget.authService,
+          api: _api,
+          ads: widget.adController ?? AdService(),
+          ownsAds: widget.adController == null,
+          now: widget.now,
+        );
+    _rewards.addListener(_changed);
+    unawaited(_load());
+  }
+
+  void _changed() {
+    if (!mounted) return;
+    final rewards = _status?['referralRewards'];
+    final referrer = rewards is Map
+        ? RewardedCoinsController.integer(rewards['referrerCoins'])
+        : null;
+    final referee = rewards is Map
+        ? RewardedCoinsController.integer(rewards['refereeCoins'])
+        : null;
+    final token = widget.authService.authToken;
+    if (_referralToken != token) {
+      _referrerCoins = null;
+      _refereeCoins = null;
+    }
+    if (referrer != null && referee != null) {
+      _referrerCoins = referrer;
+      _refereeCoins = referee;
+    } else if (_status != null && token != null && _referralToken != token) {
+      unawaited(_loadReferralRewards(token));
+    }
+    if (_status != null) _referralToken = token;
+    setState(() {});
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    widget.authService.removeListener(_handleAuthChanged);
-    if (_ownsAdController) _adController.dispose();
+    _rewards.removeListener(_changed);
+    if (_ownsRewards) _rewards.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _syncContextAndReload();
-  }
-
-  RewardedAdContext? get _currentAdContext {
-    final userId = widget.authService.userId;
-    if (userId == null || userId.isEmpty) return null;
-    return RewardedAdContext.getCoins(
-      userId: userId,
-      localDate: _todayLocalDate(),
-    );
-  }
-
-  void _handleAuthChanged() => _syncContextAndReload();
-
-  void _syncContextAndReload() {
-    if (!mounted) return;
-    final next = _currentAdContext;
-    final previous = _activeAdContext;
-    if (previous == next) {
-      _observeReadiness();
-      return;
-    }
-    if (previous != null) _adController.disposeContext(previous);
-    setState(() {
-      _activeAdContext = next;
-      _status = null;
-      _adReady = false;
-      _adLoading = false;
-    });
-    _observeReadiness();
-    _load();
-  }
-
-  void _observeReadiness() {
-    final context = _activeAdContext;
-    if (!mounted || context == null) return;
-    final ready = _adController.isReadyFor(context);
-    if (_adReady != ready) setState(() => _adReady = ready);
-  }
-
   Future<void> _load() async {
-    final token = widget.authService.authToken;
-    final context = _activeAdContext;
-    if (token == null || token.isEmpty || context?.localDate == null) return;
-    try {
-      final res = await _api.fetchGetCoinsStatus(
-        identityToken: token,
-        localDate: context!.localDate!,
-      );
-      if (!mounted || _activeAdContext != context) return;
-      final referralRewards = res['referralRewards'];
-      final referrer = referralRewards is Map
-          ? referralRewards['referrerCoins']
-          : null;
-      final referee = referralRewards is Map
-          ? referralRewards['refereeCoins']
-          : null;
-      if (referrer is num && referee is num) {
-        setState(() {
-          _status = res;
-          _referrerCoins = referrer.toInt();
-          _refereeCoins = referee.toInt();
-        });
-      } else {
-        setState(() => _status = res);
-        // Frozen/legacy backend: only the two referral numbers need the
-        // dashboard fallback; claimed/ad status is already usable.
-        unawaited(_loadReferralRewards(token));
-      }
-      if (!_offerLive) {
-        _adController.disposeContext(context);
-        if (mounted) setState(() => _adReady = false);
-      } else {
-        await _maybePrepareAd();
-      }
-    } catch (_) {
-      // Status is progressive enhancement here: without it the hub still
-      // shows the referral and daily-spin entries.
-      if (mounted && context != null && _activeAdContext == context) {
-        _adController.disposeContext(context);
-        setState(() {
-          _status = const {};
-          _adReady = false;
-        });
-      }
-    }
+    await _rewards.refresh();
+    _changed();
   }
 
   /// Best-effort lookup of the configured referral rewards so the invite row
@@ -191,10 +127,10 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   Future<void> _loadReferralRewards(String token) async {
     try {
       final res = await _api.fetchReferralStatus(identityToken: token);
-      if (!mounted) return;
+      if (!mounted || widget.authService.authToken != token) return;
       setState(() {
-        _referrerCoins = (res['referrerCoins'] as num?)?.toInt();
-        _refereeCoins = (res['refereeCoins'] as num?)?.toInt();
+        _referrerCoins = RewardedCoinsController.integer(res['referrerCoins']);
+        _refereeCoins = RewardedCoinsController.integer(res['refereeCoins']);
       });
     } catch (_) {
       // Number-free copy is the correct outcome here, not an error state.
@@ -207,10 +143,9 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
     return block is Map<String, dynamic> ? block : null;
   }
 
-  int get _remainingToday =>
-      (_adCoinReward?['remainingToday'] as num?)?.toInt() ?? 0;
+  int get _remainingToday => _rewards.remaining;
   int get _coinAmount {
-    final value = (_adCoinReward?['coinAmount'] as num?)?.toInt();
+    final value = RewardedCoinsController.integer(_adCoinReward?['coinAmount']);
     return value != null && value >= 25 && value <= 50 ? value : 25;
   }
 
@@ -229,143 +164,27 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   /// without an App Store cycle; the fallback matches the backend default for a
   /// backend too old to send it.
   int get _dailyCap {
-    final value = (_adCoinReward?['dailyCap'] as num?)?.toInt();
+    final value = RewardedCoinsController.integer(_adCoinReward?['dailyCap']);
     return value != null && value > 0 ? value : 5;
   }
 
   bool get _pendingGrant => _adCoinReward?['pendingGrant'] == true;
-  bool get _offerLive =>
-      _adCoinReward != null &&
-      _adCoinReward?['available'] == true &&
-      _remainingToday > 0;
+  Future<void> _maybePrepareAd() => _rewards.prepare();
 
-  // Preload the rewarded ad whenever the offer is live and no ad is armed.
-  // Called on load, after every watch (earned or not), and from the TRY AGAIN
-  // button — the button must never dead-end on a loading state (that's what
-  // stranded the first build of this screen). Skipped when a
-  // verified-but-unredeemed watch already exists (claim needs no new ad).
-  Future<void> _maybePrepareAd() async {
-    if (!_offerLive || !_adController.isSupported || _pendingGrant) return;
-    if (_adLoading) return;
-    final context = _activeAdContext;
-    if (context == null) return;
-    if (!_adController.isReadyFor(context)) {
-      setState(() => _adLoading = true);
-      try {
-        await _adController.warm(context);
-      } finally {
-        if (mounted) setState(() => _adLoading = false);
-      }
-    }
-    if (mounted && _activeAdContext == context) {
-      setState(() => _adReady = _adController.isReadyFor(context));
-    }
-  }
-
-  // (Optionally) run the rewarded ad, then claim. The server only honors the
-  // claim if AdMob's SSV callback minted a grant — the client never asserts
-  // "I watched an ad".
   Future<void> _startWatchAd() async {
-    if (_adFlowBusy) return;
-    if (_currentAdContext != _activeAdContext) {
-      _syncContextAndReload();
-      return;
-    }
     final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
-    final pending = _pendingGrant;
-    final adContext = _activeAdContext;
-
-    setState(() => _adFlowBusy = true);
     try {
-      if (!pending) {
-        if (adContext == null || !_adController.isReadyFor(adContext)) return;
-        setState(() => _adReady = false);
-        final earned = await _adController.showAndAwaitRewardFor(adContext);
-        if (!_flowStillCurrent(token, adContext)) return;
-        if (!earned) {
-          // Closed early: nothing to claim; re-arm so the offer stays live.
-          await _maybePrepareAd();
-          return;
-        }
+      final amount = await _rewards.claim();
+      if (!mounted || widget.authService.authToken != token || amount == null) {
+        return;
       }
-      final claimDate = adContext?.localDate;
-      if (claimDate == null) return;
-      final res = await _claimWithRetry(token, claimDate, adContext);
-      if (!_flowStillCurrent(token, adContext)) return;
-      final coins = res['coins'];
-      if (coins is num) widget.authService.updateCoins(coins.toInt());
-      setState(() {
-        // Fold the claim result back into the status so the section's counter
-        // and button state stay honest without a refetch.
-        final remaining =
-            (res['remainingToday'] as num?)?.toInt() ?? (_remainingToday - 1);
-        _status = {
-          ...?_status,
-          'adCoinReward': {
-            ...?_adCoinReward,
-            'available': remaining > 0,
-            'pendingGrant': false,
-            'remainingToday': remaining,
-          },
-        };
-      });
-      if (_remainingToday <= 0 && adContext != null) {
-        _adController.disposeContext(adContext);
-      }
-      final rawEarnedAmount = res['coinAmount'];
-      final earnedAmount = rawEarnedAmount is num
-          ? rawEarnedAmount.toInt()
-          : _coinAmount;
-      if (!mounted) return;
-      showInfoToast(context, '+$earnedAmount coins earned!');
-      await _maybePrepareAd();
+      showInfoToast(context, '+$amount coins earned!');
     } catch (_) {
-      if (!mounted) return;
-      showErrorToast(context, 'Reward failed. Try again later.');
-      // The grant (if any) is still unconsumed server-side. Refetch: the
-      // status flips to pendingGrant (claim without another ad) and the ad
-      // re-arms — the button must recover, not strand on LOADING.
-      await _load();
-    } finally {
-      if (mounted) setState(() => _adFlowBusy = false);
-    }
-  }
-
-  // AdMob's server-side verification can land a few seconds after the ad
-  // closes on-device; the backend answers 409 ("no verified ad reward") until
-  // it does. Retry briefly before giving up.
-  Future<Map<String, dynamic>> _claimWithRetry(
-    String token,
-    String localDate,
-    RewardedAdContext? context,
-  ) async {
-    const maxAttempts = 5;
-    for (var attempt = 0; ; attempt++) {
-      try {
-        if (!_flowStillCurrent(token, context)) {
-          throw StateError('Rewarded-ad context changed');
-        }
-        return await _api.claimAdCoinReward(
-          identityToken: token,
-          localDate: localDate,
-        );
-      } on ApiException catch (e) {
-        final ssvLag =
-            e.statusCode == 409 &&
-            e.message.toLowerCase().contains('no verified ad reward');
-        if (!ssvLag || attempt >= maxAttempts - 1) rethrow;
-        await Future<void>.delayed(const Duration(seconds: 2));
+      if (mounted && widget.authService.authToken == token) {
+        showErrorToast(context, 'Reward failed. Try again later.');
       }
     }
   }
-
-  bool _flowStillCurrent(String token, RewardedAdContext? context) =>
-      mounted &&
-      context != null &&
-      widget.authService.authToken == token &&
-      _activeAdContext == context &&
-      _currentAdContext == context;
 
   void _openReferral() {
     Navigator.of(context).push(
@@ -559,7 +378,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   }
 
   Widget _buildWatchAdCard() {
-    final exhausted = _remainingToday <= 0;
+    final exhausted = _remainingToday <= 0 && !_pendingGrant;
 
     final String label;
     final VoidCallback? onPressed;

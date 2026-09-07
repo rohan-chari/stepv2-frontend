@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../config/animals.dart';
 import '../../models/loadable.dart';
 import '../../services/ad_service.dart';
+import '../../services/rewarded_coins_controller.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/remote_asset_cache.dart';
@@ -178,6 +179,7 @@ class ShopTab extends StatefulWidget {
     this.onShopChanged,
     this.adControllerBuilder,
     this.getCoinsAdController,
+    this.rewardedCoinsController,
     this.now,
     this.forceTutorialReplay = false,
     this.isTutorialPreview = false,
@@ -192,6 +194,7 @@ class ShopTab extends StatefulWidget {
   /// powerup-unlock ad unit (falling back to the extra-spin/test unit).
   final ExtraSpinAdController Function()? adControllerBuilder;
   final ExtraSpinAdController? getCoinsAdController;
+  final RewardedCoinsController? rewardedCoinsController;
   final DateTime Function()? now;
   final bool forceTutorialReplay;
   final bool isTutorialPreview;
@@ -1591,6 +1594,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                           authService: widget.authService,
                           backendApiService: _backendApiService,
                           adController: widget.getCoinsAdController,
+                          rewardedCoinsController:
+                              widget.rewardedCoinsController,
                         ),
                       ),
                     ),
@@ -2912,6 +2917,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           authService: widget.authService,
           backendApiService: _backendApiService,
           adController: widget.getCoinsAdController,
+          rewardedCoinsController: widget.rewardedCoinsController,
         ),
       ),
     );

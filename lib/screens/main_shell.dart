@@ -26,6 +26,7 @@ import '../services/async_ttl_cache.dart';
 import '../services/activation_analytics_service.dart';
 import '../services/admin_metrics_telemetry_service.dart';
 import '../services/ad_service.dart';
+import '../services/rewarded_coins_controller.dart';
 import '../services/onboarding_state_service.dart';
 import '../utils/onboarding_gate.dart';
 import '../utils/funded_exposure_error_copy.dart';
@@ -144,6 +145,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _notificationReadyUserId;
   String? _notificationReadyToken;
   ExtraSpinAdController? _getCoinsAdController;
+  RewardedCoinsController? _rewardedCoinsController;
   int _getCoinsAuthGeneration = 0;
   String? _getCoinsWarmKey;
   Future<void>? _getCoinsWarmFuture;
@@ -882,12 +884,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _getCoinsAdController ??=
           widget.getCoinsAdControllerBuilder?.call() ?? AdService();
 
+  RewardedCoinsController get _sessionRewardedCoinsController =>
+      _rewardedCoinsController ??= RewardedCoinsController(
+        auth: widget.authService,
+        api: _backendApiService,
+        ads: _sessionGetCoinsAdController,
+      );
+
   void _invalidateGetCoinsSession() {
     _getCoinsAuthGeneration++;
     _getCoinsWarmKey = null;
     _getCoinsWarmFuture = null;
     _getCoinsAdController?.dispose();
     _getCoinsAdController = null;
+    if (_rewardedCoinsController != null) {
+      _rewardedCoinsController?.replaceAds(_sessionGetCoinsAdController);
+    }
   }
 
   String _getCoinsLocalDate() {
@@ -1029,6 +1041,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _globalSummaryExpiryTimer?.cancel();
     _pageController.dispose();
     _bannerHeight.dispose();
+    _rewardedCoinsController?.dispose();
     _getCoinsAdController?.dispose();
     if (widget.interstitialCoordinator == null) {
       _interstitialCoordinator?.dispose();
@@ -4718,6 +4731,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           backendApiService: _backendApiService,
           onShopChanged: _onShopCatalogChanged,
           getCoinsAdController: _sessionGetCoinsAdController,
+          rewardedCoinsController: _sessionRewardedCoinsController,
         ),
       ),
     );
@@ -4925,6 +4939,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           displayName: _displayName,
                           authService: widget.authService,
                           getCoinsAdController: _sessionGetCoinsAdController,
+                          rewardedCoinsController:
+                              _sessionRewardedCoinsController,
                           onRefresh: _refreshHomeTab,
                           onEnableHealth: _enableHealthData,
                           onEnableNotifications: _enableNotifications,

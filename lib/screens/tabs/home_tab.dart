@@ -15,6 +15,8 @@ import '../../utils/race_participant_display.dart';
 import '../../utils/team_race.dart';
 import '../../services/auth_service.dart';
 import '../../services/ad_service.dart';
+import '../../services/rewarded_coins_controller.dart';
+import '../../widgets/home_rewarded_coins.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/onboarding_state_service.dart';
 import '../../widgets/arcade_fx.dart';
@@ -58,6 +60,7 @@ class HomeTab extends StatelessWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final ExtraSpinAdController? getCoinsAdController;
+  final RewardedCoinsController? rewardedCoinsController;
   final ExtraSpinAdController? dailyRewardAdController;
   final Future<void> Function() onRefresh;
   final VoidCallback onEnableHealth;
@@ -139,6 +142,7 @@ class HomeTab extends StatelessWidget {
     required this.authService,
     required this.backendApiService,
     this.getCoinsAdController,
+    this.rewardedCoinsController,
     this.dailyRewardAdController,
     required this.onRefresh,
     required this.onEnableHealth,
@@ -190,6 +194,17 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isTutorialPreview) return _buildHome(context, null);
+    return HomeRewardedCoinsHost(
+      auth: authService,
+      api: backendApiService,
+      ads: getCoinsAdController,
+      controller: rewardedCoinsController,
+      builder: _buildHome,
+    );
+  }
+
+  Widget _buildHome(BuildContext context, RewardedCoinsController? rewards) {
     // HomeTab is only built once onboarding is complete, so it always renders
     // the real home below — but [healthAuthorized] is no longer decorative.
     // Under v3 a user can reach this screen with steps disconnected (the
@@ -245,12 +260,17 @@ class HomeTab extends StatelessWidget {
           // inset internally to keep its HUD clear of the status bar.
           padding: EdgeInsets.only(bottom: bottomPadding),
           child: AppRefreshIndicator(
-            onRefresh: onRefresh,
+            onRefresh: () {
+              if (rewards != null && rewards.supported) {
+                unawaited(rewards.refresh());
+              }
+              return onRefresh();
+            },
             edgeOffset: topInset,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverToBoxAdapter(child: _buildHeroSection(context)),
+                SliverToBoxAdapter(child: _buildHeroSection(context, rewards)),
                 SliverToBoxAdapter(
                   child: ColoredBox(
                     color: AppColors.of(context).isDark
@@ -410,6 +430,8 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (rewards != null)
+                              HomeRewardedCoins(controller: rewards),
                             _buildRaceSection(context),
                             _buildFeedbackSection(context),
                           ],
@@ -1235,7 +1257,10 @@ class HomeTab extends StatelessWidget {
   /// clouds, and the course scene's grass-and-dirt ground, with the
   /// dressed-up capybara walking on the grass and today's steps floating as
   /// a game HUD.
-  Widget _buildHeroSection(BuildContext context) {
+  Widget _buildHeroSection(
+    BuildContext context,
+    RewardedCoinsController? rewards,
+  ) {
     final viewportHeight = MediaQuery.of(context).size.height;
     final compact = viewportHeight < 760;
     // The scene runs edge-to-edge behind the status bar; the inset is added
@@ -1387,15 +1412,18 @@ class HomeTab extends StatelessWidget {
                               coinSize: 16,
                               // "+" = earn more coins -> the Get Coins hub
                               // (watch an ad, invite friends, daily box).
-                              onAddTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => GetCoinsScreen(
-                                    authService: authService,
-                                    backendApiService: backendApiService,
-                                    adController: getCoinsAdController,
-                                  ),
-                                ),
-                              ),
+                              onAddTap: () => Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) => GetCoinsScreen(
+                                        authService: authService,
+                                        backendApiService: backendApiService,
+                                        adController: getCoinsAdController,
+                                        rewardedCoinsController: rewards,
+                                      ),
+                                    ),
+                                  )
+                                  .then((_) => rewards?.refresh()),
                             ),
                           ),
                         ),
