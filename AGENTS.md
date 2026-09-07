@@ -33,6 +33,8 @@ paths in committed files.
 
 ## Production and staging operations
 
+- For managed database CPU investigations, read the DigitalOcean metrics access notes in `CLAUDE.local.md`; direct database metrics access is already configured.
+
 - Production runs with **exactly two PM2 workers** on the production host unless
   the user explicitly authorizes a different capacity change.
 - Staging is **shut down by default**. Start or reload the staging service only
