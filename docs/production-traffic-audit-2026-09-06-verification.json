@@ -1,0 +1,25 @@
+{
+  "verified_at": "2026-09-07T00:39:09.083629+00:00",
+  "passed": true,
+  "reconciled_unparsed_access": 1,
+  "reconciliation_note": "One malformed single-field request received nginx 400 with no upstream connection; it is outside application endpoint counts/timings.",
+  "errors": [],
+  "coverage": {
+    "event_surge_v1/http/0": 60,
+    "event_surge_v1/http/1": 60,
+    "database_pool_telemetry_v1/http/0": 60,
+    "database_pool_telemetry_v1/http/1": 60,
+    "database_pool_telemetry_v1/cron/0": 60,
+    "database_pool_telemetry_v1/resolution/0": 60
+  },
+  "main_terminal": true,
+  "queue_terminal": true,
+  "resolution_terminal": true,
+  "queue_first_sample": "2026-09-06T23:37:11.446Z",
+  "queue_last_sample": "2026-09-07T00:35:15.123Z",
+  "queue_samples": 59,
+  "service_first_observed_epoch": 1788737942.4833663,
+  "service_last_observed_epoch": 1788741302.6390648,
+  "service_samples": 57,
+  "preflight_errors": "Two initial queue connections failed (certificate and unsupported startup option); neither ran a query. Collector then connected with existing app TLS behavior and explicit READ ONLY transactions. Earlier local-socket probe found no matching database. No writes were performed."
+}
