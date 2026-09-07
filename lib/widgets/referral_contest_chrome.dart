@@ -33,3 +33,10 @@ String formatReferralContestTimeLeft(GiveawayContest contest) {
   }
   return '${delta.inMinutes.clamp(1, 59)}M LEFT';
 }
+
+/// Prize ink must contrast with parchment in both palettes. Decorative gold
+/// and violet button shadows are too faint to serve as text colors.
+Color referralContestPrizeColor(BuildContext context) {
+  final colors = AppColors.of(context);
+  return colors.isDark ? colors.feedGold : const Color(0xFF795611);
+}

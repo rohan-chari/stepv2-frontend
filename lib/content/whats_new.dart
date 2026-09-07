@@ -35,6 +35,15 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.13',
+    title: 'A CLEARER VIEW',
+    bullets: <String>[
+      'The Shop tutorial now highlights the full Store and Inventory switcher.',
+      'Referral contest prizes and official rules are easier to read.',
+      'Switch between Activity and Team Chat above the race feed, with clearer section headings.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.3.12',
     title: 'KEEP THE RACE GOING',
     bullets: <String>[

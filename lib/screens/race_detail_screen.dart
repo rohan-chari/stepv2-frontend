@@ -5631,7 +5631,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   /// Gold-tick light section header on the checker (races/home tab language).
-  Widget _checkerSectionHeader(String title, {Widget? trailing}) {
+  Widget _checkerSectionHeader(
+    String title, {
+    Widget? trailing,
+    Key? titleKey,
+  }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Row(
@@ -5649,6 +5653,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           Expanded(
             child: Text(
               title,
+              key: titleKey,
               style: PixelText.title(
                 size: 16,
                 color: AppColors.of(context).textLight,
@@ -8855,15 +8860,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            'ACTIVITY & CHAT',
-            key: const Key('race-timeline-heading'),
-            style: PixelText.title(size: 15, color: colors.textDark),
-          ),
+        _checkerSectionHeader(
+          'ACTIVITY & CHAT',
+          titleKey: const Key('race-timeline-heading'),
         ),
-        const SizedBox(height: 10),
+        if (_teamChatAvailable) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: IgnorePointer(
+              ignoring: _switchingChatAudience,
+              child: Opacity(
+                opacity: _switchingChatAudience ? 0.6 : 1,
+                child: ArcadeTabSelector(
+                  key: const Key('race-chat-audience-selector'),
+                  labels: const ['ACTIVITY', 'TEAM CHAT'],
+                  activeIndex: _chatAudience == 'TEAM' ? 1 : 0,
+                  onChanged: _setChatAudience,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         _sectionCard(
           padding: const EdgeInsets.all(10),
           child: SizedBox(
@@ -8871,22 +8889,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             child: Column(
               children: [
                 Expanded(child: body),
-                if (_teamChatAvailable)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
-                    child: IgnorePointer(
-                      ignoring: _switchingChatAudience,
-                      child: Opacity(
-                        opacity: _switchingChatAudience ? 0.6 : 1,
-                        child: ArcadeTabSelector(
-                          key: const Key('race-chat-audience-selector'),
-                          labels: const ['ALL', 'TEAM'],
-                          activeIndex: _chatAudience == 'TEAM' ? 1 : 0,
-                          onChanged: _setChatAudience,
-                        ),
-                      ),
-                    ),
-                  ),
                 _buildMessageComposer(),
               ],
             ),

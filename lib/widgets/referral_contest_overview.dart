@@ -95,14 +95,14 @@ class _ReferralContestOverviewState extends State<ReferralContestOverview> {
               key: const Key('contest-overview-official-rules'),
               onPressed: widget.onRules,
               style: TextButton.styleFrom(
-                foregroundColor: colors.pillGold,
+                foregroundColor: colors.textLight,
                 minimumSize: const Size.fromHeight(44),
               ),
               child: Text(
                 'Official Rules',
                 style: PixelText.body(
                   size: 17,
-                  color: colors.pillGold,
+                  color: colors.textLight,
                 ).copyWith(decoration: TextDecoration.underline),
               ),
             ),
@@ -155,7 +155,7 @@ class _PrizeCard extends StatelessWidget {
                     '${formatReferralContestCoins(contest.prize.coins)} COINS',
                     style: PixelText.title(
                       size: 19.5,
-                      color: colors.pillGoldDark,
+                      color: referralContestPrizeColor(context),
                     ),
                   ),
                 ),

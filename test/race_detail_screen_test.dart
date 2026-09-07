@@ -964,8 +964,21 @@ void main() {
       find.byKey(const Key('race-chat-audience-selector')),
       findsOneWidget,
     );
+    expect(find.text('ACTIVITY'), findsOneWidget);
+    expect(find.text('TEAM CHAT'), findsOneWidget);
+    final selector = find.byKey(const Key('race-chat-audience-selector'));
+    expect(
+      tester.getBottomLeft(selector).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('race-timeline-list'))).dy,
+      ),
+    );
+    final heading = tester.widget<Text>(
+      find.byKey(const Key('race-timeline-heading')),
+    );
+    expect(heading.style?.color, AppPalette.light.textLight);
     expect(find.text('Catch me if you can'), findsOneWidget);
-    await tester.tap(find.text('TEAM'));
+    await tester.tap(find.text('TEAM CHAT'));
     await tester.pump();
     await tester.pump();
 
@@ -1009,7 +1022,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(TextField), findsNothing);
-    await tester.tap(find.text('TEAM'));
+    await tester.tap(find.text('TEAM CHAT'));
     await tester.pump();
     await tester.pump();
     expect(api.lastTimelineAudience, 'TEAM');

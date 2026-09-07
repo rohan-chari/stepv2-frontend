@@ -343,6 +343,62 @@ Future<void> _openOverviewRules(WidgetTester tester) async {
 }
 
 void main() {
+  double contrast(Color a, Color b) {
+    final x = a.computeLuminance();
+    final y = b.computeLuminance();
+    return ((x > y ? x : y) + .05) / ((x > y ? y : x) + .05);
+  }
+
+  for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('referral rules and prizes remain readable in $mode', (
+      tester,
+    ) async {
+      await _pumpContest(
+        tester,
+        _GlobalGiveawayApi(payload: _globalCurrent(entryStatus: 'ELIGIBLE')),
+        themeMode: mode,
+      );
+      final buttonFinder = find.byKey(
+        const Key('contest-dashboard-official-rules'),
+      );
+      final button = tester.widget<TextButton>(buttonFinder);
+      final label = tester.widget<Text>(
+        find.descendant(
+          of: buttonFinder,
+          matching: find.text('OFFICIAL RULES'),
+        ),
+      );
+      final background = button.style!.backgroundColor!.resolve({})!;
+      expect(
+        contrast(label.style!.color!, background),
+        greaterThanOrEqualTo(4.5),
+      );
+      await tester.ensureVisible(buttonFinder);
+      await tester.tap(buttonFinder);
+      await tester.pumpAndSettle();
+      final card = tester.widget<Container>(
+        find.byKey(const Key('giveaway-rules-summary-card')),
+      );
+      final cardColor = (card.decoration! as BoxDecoration).color!;
+      final prize = tester.widget<Text>(find.text('5,000 COINS'));
+      expect(contrast(prize.style!.color!, cardColor), greaterThanOrEqualTo(3));
+      final status = tester.widget<Text>(find.text('OPEN'));
+      final badge = tester.widget<Container>(
+        find
+            .ancestor(of: find.text('OPEN'), matching: find.byType(Container))
+            .first,
+      );
+      final badgeColor = Color.alphaBlend(
+        (badge.decoration! as BoxDecoration).color!,
+        cardColor,
+      );
+      expect(
+        contrast(status.style!.color!, badgeColor),
+        greaterThanOrEqualTo(4.5),
+      );
+    });
+  }
+
   testWidgets('joined contest uses the night event palette in dark mode', (
     tester,
   ) async {

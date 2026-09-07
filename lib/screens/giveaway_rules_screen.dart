@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/giveaway.dart';
 import '../styles.dart';
+import '../widgets/referral_contest_chrome.dart';
 import '../theme_controller.dart';
 import '../widgets/pill_button.dart';
 
@@ -212,7 +213,7 @@ class _CompactContestSummary extends StatelessWidget {
                     '${_commas(contest.prize.coins)} COINS',
                     style: PixelText.title(
                       size: 23,
-                      color: colors.pillGoldDark,
+                      color: referralContestPrizeColor(context),
                     ),
                   ),
                 ),
@@ -260,7 +261,7 @@ class _StatusBadge extends StatelessWidget {
         label,
         style: PixelText.title(
           size: 12,
-          color: open ? colors.grassDark : colors.textMid,
+          color: open ? colors.textAccent : colors.textMid,
         ),
       ),
     );

@@ -220,6 +220,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   bool _saving = false;
   Map<String, dynamic>? _purchaseOverlayItem;
   OverlayEntry? _purchaseOverlayEntry;
+  final _tutorialOverlaySpaceKey = GlobalKey();
   int? _tutorialStep;
   Rect? _tutorialTarget;
   bool _tutorialDecisionScheduled = false;
@@ -442,8 +443,15 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         renderObject.size.isEmpty) {
       return null;
     }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    final rect = origin & renderObject.size;
+    final overlaySpace = _tutorialOverlaySpaceKey.currentContext
+        ?.findRenderObject();
+    if (overlaySpace is! RenderBox || !overlaySpace.hasSize) return null;
+    // The route can still be sliding in when the catalog resolves. Measure
+    // in the overlay's space so its cutout doesn't retain a screen offset.
+    final rect = MatrixUtils.transformRect(
+      renderObject.getTransformTo(overlaySpace),
+      Offset.zero & renderObject.size,
+    );
     return rect.left.isFinite &&
             rect.top.isFinite &&
             rect.right.isFinite &&
@@ -1434,6 +1442,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       canPop: _purchaseOverlayItem == null,
       child: Scaffold(
         body: Stack(
+          key: _tutorialOverlaySpaceKey,
           children: [
             Positioned.fill(
               child: ColoredBox(

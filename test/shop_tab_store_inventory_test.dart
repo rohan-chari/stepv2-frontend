@@ -229,6 +229,139 @@ Future<void> _selectCategory(WidgetTester tester, String label) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('shop spotlight covers the control in overlay coordinates', (
+    tester,
+  ) async {
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
+    final auth = await _createAuthService(api);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Padding(
+          padding: const EdgeInsets.only(left: 40, top: 60),
+          child: ShopTab(
+            authService: auth,
+            backendApiService: api,
+            forceTutorialReplay: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    final overlay = find.byType(SpotlightOverlay);
+    final target = tester.widget<SpotlightOverlay>(overlay).targetRect!;
+    final control = tester.getRect(
+      find.byKey(const Key('shop-segment-control')),
+    );
+    final overlayOrigin = tester.getTopLeft(overlay);
+    expect(target.shift(overlayOrigin), control);
+    expect(
+      target
+          .shift(overlayOrigin)
+          .contains(tester.getCenter(find.text('STORE'))),
+      isTrue,
+    );
+    expect(
+      target
+          .shift(overlayOrigin)
+          .contains(tester.getCenter(find.text('INVENTORY'))),
+      isTrue,
+    );
+  });
+
+  for (final replay in [false, true]) {
+    testWidgets(
+      'shop spotlight follows route entry and Back (replay=$replay)',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final api = _FakeShopApi(
+          catalog: _catalog(),
+          powerupCatalog: _powerupCatalog(),
+          inventory: _inventory(),
+        );
+        final auth = await _createAuthService(api);
+        await auth.syncFromBackendUser(const {
+          'id': 'user-1',
+          'shopTutorialCompletedAt': null,
+        }, authoritative: true);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    PageRouteBuilder<void>(
+                      transitionDuration: const Duration(milliseconds: 700),
+                      pageBuilder: (_, animation, secondaryAnimation) =>
+                          ShopTab(
+                            authService: auth,
+                            backendApiService: api,
+                            forceTutorialReplay: replay,
+                          ),
+                      transitionsBuilder:
+                          (_, animation, secondaryAnimation, child) =>
+                              SlideTransition(
+                                position: Tween(
+                                  begin: const Offset(1, 0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                    ),
+                  ),
+                  child: const Text('Open shop'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open shop'));
+        await tester.pump();
+        var measurements = 0;
+        void checkTarget() {
+          final overlay = find.byType(SpotlightOverlay);
+          if (overlay.evaluate().isEmpty) return;
+          final target = tester.widget<SpotlightOverlay>(overlay).targetRect!;
+          final actual = target.shift(tester.getTopLeft(overlay));
+          final control = tester.getRect(
+            find.byKey(const Key('shop-segment-control')),
+          );
+          expect(actual.left, closeTo(control.left, .01));
+          expect(actual.top, closeTo(control.top, .01));
+          expect(actual.right, closeTo(control.right, .01));
+          expect(actual.bottom, closeTo(control.bottom, .01));
+          measurements++;
+        }
+
+        for (var i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 80));
+          checkTarget();
+        }
+        expect(measurements, greaterThan(3));
+        await tester.tap(find.text('NEXT'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump();
+        await tester.tap(find.text('BACK'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump();
+        checkTarget();
+        expect(find.text('STORE OR INVENTORY'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('explicit incomplete state launches once and skip completes it', (
     tester,
   ) async {

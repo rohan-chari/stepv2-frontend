@@ -112,7 +112,13 @@ class ReferralContestJoinedDashboard extends StatelessWidget {
               ),
               onPressed: onRules,
               icon: const Icon(Icons.menu_book_rounded, size: 18),
-              label: Text('OFFICIAL RULES', style: PixelText.title(size: 11)),
+              label: Text(
+                'OFFICIAL RULES',
+                style: PixelText.title(
+                  size: 11,
+                  color: AppColors.of(context).textDark,
+                ),
+              ),
             ),
           ],
         ),
@@ -245,7 +251,10 @@ class _ContestSummaryState extends State<_ContestSummary> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     '${formatReferralContestCoins(data.contest.prize.coins)} COINS',
-                    style: PixelText.title(size: 23, color: colors.feedGold),
+                    style: PixelText.title(
+                      size: 23,
+                      color: referralContestPrizeColor(context),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
