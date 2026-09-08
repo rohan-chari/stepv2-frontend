@@ -1,5 +1,42 @@
 # iOS-first billing setup verification — September 8, 2026
 
+## Deployment update
+
+The user subsequently authorized production backend deployment and TestFlight
+upload. Backend `7e27dc1` is deployed, tagged
+`deploy/ios-billing-20260908-7e27dc1`. All eleven billing migrations applied
+successfully over a direct connection with a 5-second lock timeout and 60-second
+statement timeout. Prisma was regenerated before the guarded reload. The reload
+passed its topology and pool-budget checks: two HTTP workers, one cron worker,
+one resolution worker, aggregate pool ceiling 32; staging remained stopped.
+The previous server environment was backed up and its package-lock modification
+was preserved byte-for-byte.
+
+Production smoke checks confirmed:
+
+- Public health and legal-page responses succeed.
+- Authenticated legacy shop reads return HTTP 200.
+- iOS billing bootstrap returns available with five products; Android returns
+  unavailable with no products. The existing reviewer used for this check is
+  still in the production billing realm; its account was not converted.
+- A synthetic TEST webhook returns 401 without authorization and 200 with it.
+  Repeating the same event produces one durable inbox row. This verifies the
+  backend endpoint, not actual RevenueCat-to-backend delivery or store checkout.
+- No unresolved migration failures; referral-contest convergence audits report
+  zero missing activity and ownership rows. The existing billing scheduler has
+  attempted queued reconciliation. Real provider fulfillment remains untested.
+- The balance drift audit reports existing Decoy differences between the live
+  configuration and committed snapshot. Live economy settings were preserved.
+
+Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED` for 2.3.13 (3).
+Missing dSYM warnings for AppLovinSDK and FBAudienceNetwork did not block upload.
+Apple processing and internal TestFlight availability are verified separately;
+no App Store review submission or customer release was requested.
+
+The sections below retain the pre-deployment preparation record. Their pending
+deployment statements are superseded by this update; sandbox account setup,
+product localization and real purchase lifecycle tests are still outstanding.
+
 The user explicitly authorized iOS-only preparation and deferred Android.
 RevenueCat iOS products, Apple credentials, notification settings and webhook
 have been configured through the dashboard. Public and server keys are saved
