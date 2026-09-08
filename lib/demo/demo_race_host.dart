@@ -1,3 +1,4 @@
+import '../widgets/billing_scope.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -538,7 +539,9 @@ class _DemoRaceHostState extends State<DemoRaceHost>
               // and the REAL invite screen — and everything after them is the
               // race. Each is the shipped widget against the demo backend; none
               // of the three is a mock-up of a screen.
-              Positioned.fill(child: _buildStage(beat)),
+              Positioned.fill(
+                child: BillingScope.disabled(child: _buildStage(beat)),
+              ),
 
               // Focus scrim. The demo shows the WHOLE race screen — leaderboard,
               // powerup tray, activity/chat — so without this every region competes

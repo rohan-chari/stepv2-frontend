@@ -1,3 +1,6 @@
+import '../../services/billing_controller.dart';
+import '../../widgets/billing_scope.dart';
+import '../../widgets/bara_plus_card.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -257,6 +260,58 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   final Set<ExtraSpinAdController> _activeShopAdControllers = {};
   int _shopActionGeneration = 0;
 
+  BillingController? _billing;
+  int _billingDiscount = 0;
+  BuildContext? _billingItemSheetContext;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final billing = BillingScope.maybeOf(context);
+    if (identical(billing, _billing)) return;
+    _billing?.removeListener(_billingChanged);
+    _billing = billing;
+    _billingDiscount = billing?.snapshot.effectiveDiscountPercent ?? 0;
+    billing?.addListener(_billingChanged);
+  }
+
+  void _billingChanged() {
+    final discount = _billing?.snapshot.effectiveDiscountPercent ?? 0;
+    if (discount == _billingDiscount) return;
+    _billingDiscount = discount;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sheetContext = _billingItemSheetContext;
+      if (sheetContext != null &&
+          sheetContext.mounted &&
+          ModalRoute.of(sheetContext)?.isCurrent == true) {
+        Navigator.of(sheetContext).pop();
+      }
+      _clearPurchaseOverlay();
+      _selectedCosmeticItem = null;
+      unawaited(_loadCatalog());
+    });
+  }
+
+  void _refreshChangedShopQuote() {
+    final sheet = _billingItemSheetContext;
+    if (sheet != null &&
+        sheet.mounted &&
+        ModalRoute.of(sheet)?.isCurrent == true) {
+      Navigator.of(sheet).pop();
+    }
+    _selectedCosmeticItem = null;
+    unawaited(_loadCatalog());
+  }
+
+  String? _memberPriceCopy(Map<String, dynamic> item) {
+    if (_billing == null) return null;
+    final original = item['basePriceCoins'];
+    final current = item['priceCoins'];
+    if (original is! num || current is! num || current >= original) return null;
+    return 'Bara+ price · ${current.toInt()} coins (usually ${original.toInt()})';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -271,6 +326,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _billing?.removeListener(_billingChanged);
     _shopSessionGeneration++;
     _shopStateEpoch++;
     _catalogRequestGeneration++;
@@ -1033,6 +1089,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       final result = await _backendApiService.purchaseShopItem(
         identityToken: token,
         itemId: itemId,
+        expectedPriceCoins: item['priceCoins'] is num
+            ? (item['priceCoins'] as num).toInt()
+            : null,
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-${DateTime.now().microsecondsSinceEpoch}',
       );
@@ -1084,7 +1143,15 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(context, error.message);
+        showErrorToast(
+          context,
+          error.code == 'PRICE_CHANGED'
+              ? 'The price changed. Please review the updated shop price.'
+              : error.message,
+        );
+        if (error.code == 'PRICE_CHANGED') {
+          _refreshChangedShopQuote();
+        }
       }
     } catch (_) {
       if (!mounted) return;
@@ -1138,6 +1205,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       final result = await _backendApiService.purchasePowerupItem(
         identityToken: token,
         sku: sku,
+        expectedPriceCoins: item['priceCoins'] is num
+            ? (item['priceCoins'] as num).toInt()
+            : null,
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-pw-${DateTime.now().microsecondsSinceEpoch}',
       );
@@ -1188,7 +1258,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(context, error.message);
+        showErrorToast(
+          context,
+          error.code == 'PRICE_CHANGED'
+              ? 'The price changed. Please review the updated shop price.'
+              : error.message,
+        );
+        if (error.code == 'PRICE_CHANGED') _refreshChangedShopQuote();
       }
     } catch (_) {
       if (!mounted) return;
@@ -1468,6 +1544,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     SliverToBoxAdapter(
                       child: _buildHeader(showBackButton: showBackButton),
                     ),
+                    if (BillingScope.maybeOf(context)?.canShowMembership ==
+                        true)
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          child: BaraPlusCard(
+                            key: Key('billing-shop-membership'),
+                          ),
+                        ),
+                      ),
                     SliverToBoxAdapter(child: _buildBody()),
                   ],
                 ),
@@ -1588,17 +1674,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     coins: widget.authService.coins,
                     // "+" = earn more coins -> the Get Coins hub (watch an
                     // ad, invite friends, daily box).
-                    onAddTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => GetCoinsScreen(
-                          authService: widget.authService,
-                          backendApiService: _backendApiService,
-                          adController: widget.getCoinsAdController,
-                          rewardedCoinsController:
-                              widget.rewardedCoinsController,
-                        ),
-                      ),
-                    ),
+                    onAddTap: _openGetCoins,
                   ),
                 ],
               ),
@@ -1949,7 +2025,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final detail = selectedName == null
         ? '${preview.animalName} · ${preview.accessories.length} equipped'
         : _section == _ShopSection.store
-        ? '$selectedName · ${price is num ? price.toInt() : 0} coins'
+        ? (_memberPriceCopy(selected ?? const {}) ??
+              '$selectedName · ${price is num ? price.toInt() : 0} coins')
         : selectedEquipped
         ? '$selectedName is equipped'
         : '$selectedName is ready to try';
@@ -2274,86 +2351,89 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          key: const Key('shop-item-sheet'),
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).parchmentBorder,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Center(
-                child: Container(
-                  width: 112,
-                  height: 112,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).parchmentDark,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
+      builder: (ctx) {
+        _billingItemSheetContext = ctx;
+        return SafeArea(
+          child: SingleChildScrollView(
+            key: const Key('shop-item-sheet'),
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
                       color: AppColors.of(context).parchmentBorder,
-                      width: 1,
+                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
-                  child: art,
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                name,
-                textAlign: TextAlign.center,
-                style: PixelText.title(
-                  size: 20,
-                  color: AppColors.of(context).textDark,
-                ),
-              ),
-              if (slotLabel != null || badge != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 18),
                 Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (slotLabel != null)
-                        _sheetChip(slotLabel, AppColors.of(context).textMid),
-                      if (slotLabel != null && badge != null)
-                        const SizedBox(width: 6),
-                      if (badge != null)
-                        _sheetChip(badge, AppColors.of(context).textAccent),
-                    ],
+                  child: Container(
+                    width: 112,
+                    height: 112,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.of(context).parchmentDark,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.of(context).parchmentBorder,
+                        width: 1,
+                      ),
+                    ),
+                    child: art,
                   ),
                 ),
-              ],
-              if (description != null && description.isNotEmpty) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Text(
-                  description,
-                  textAlign: TextAlign.left,
-                  style: PixelText.body(
-                    size: 15,
-                    color: AppColors.of(context).textMid,
+                  name,
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(
+                    size: 20,
+                    color: AppColors.of(context).textDark,
                   ),
                 ),
+                if (slotLabel != null || badge != null) ...[
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (slotLabel != null)
+                          _sheetChip(slotLabel, AppColors.of(context).textMid),
+                        if (slotLabel != null && badge != null)
+                          const SizedBox(width: 6),
+                        if (badge != null)
+                          _sheetChip(badge, AppColors.of(context).textAccent),
+                      ],
+                    ),
+                  ),
+                ],
+                if (description != null && description.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    description,
+                    textAlign: TextAlign.left,
+                    style: PixelText.body(
+                      size: 15,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                ],
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  ...actions,
+                ],
               ],
-              if (actions.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                ...actions,
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
-    );
+        );
+      },
+    ).whenComplete(() => _billingItemSheetContext = null);
   }
 
   Widget _sheetChip(String label, Color color) {
@@ -2529,6 +2609,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             ? item['description'] as String
             : '',
         actions: [
+          if (_memberPriceCopy(item) case final copy?)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                copy,
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
+              ),
+            ),
           ?_adUnlockCapNotice(price),
           switch (route) {
             _AffordRoute.affordable => PillButton(
@@ -2590,7 +2681,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       key: Key('shop-cosmetic-selector-$id'),
       art: _cosmeticArt(item),
       name: name,
-      marker: '$price',
+      marker: _memberPriceCopy(item) != null ? '$price · PLUS' : '$price',
       markerLeading: const CoinGlyph(size: 11),
       selected: selected,
       equipped: false,
@@ -2911,14 +3002,25 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   void _openGetCoins() {
+    final inheritedBilling = BillingScope.read(context);
+    final disabledBilling =
+        widget.forceTutorialReplay ||
+        widget.isTutorialPreview ||
+        inheritedBilling == null;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GetCoinsScreen(
-          authService: widget.authService,
-          backendApiService: _backendApiService,
-          adController: widget.getCoinsAdController,
-          rewardedCoinsController: widget.rewardedCoinsController,
-        ),
+        builder: (_) {
+          final screen = GetCoinsScreen(
+            authService: widget.authService,
+            backendApiService: _backendApiService,
+            adController: widget.getCoinsAdController,
+            rewardedCoinsController: widget.rewardedCoinsController,
+          );
+          if (disabledBilling) {
+            return BillingScope.disabled(child: screen);
+          }
+          return BillingScope(controller: inheritedBilling, child: screen);
+        },
       ),
     );
   }
@@ -3324,7 +3426,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           art: _powerupArt(type, fallbackSize: 64),
           name: name,
           badge: owned > 0 ? 'OWNED x$owned' : null,
-          description: item['description'] as String? ?? '',
+          description: [
+            item['description'] is String ? item['description'] as String : '',
+            ?_memberPriceCopy(item),
+          ].where((part) => part.isNotEmpty).join('\n\n'),
           actions: [
             ?_adUnlockCapNotice(price),
             _powerupSheetAction(
@@ -3347,7 +3452,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
       // Item 23 — the strip is the PRICE, always. See _storeCosmeticTile.
-      stripLabel: '$price',
+      stripLabel: _memberPriceCopy(item) != null ? '$price · PLUS' : '$price',
       stripLeading: const CoinGlyph(),
       stripEnabled: !_saving,
       onStrip: openSheet,

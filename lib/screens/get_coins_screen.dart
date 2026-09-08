@@ -8,6 +8,9 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/ad_banner_slot.dart';
+import '../widgets/billing_scope.dart';
+import '../widgets/coin_pack_offers.dart';
+import '../widgets/bara_plus_card.dart';
 import '../widgets/coin_balance_badge.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
@@ -186,7 +189,20 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
     }
   }
 
+  bool _previewUnavailable() {
+    if (BillingScope.read(context)?.isPreview != true) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This earn method is unavailable in the offline preview.',
+        ),
+      ),
+    );
+    return true;
+  }
+
   void _openReferral() {
+    if (_previewUnavailable()) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ReferralScreen(
@@ -198,6 +214,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   }
 
   void _openDailyReward() {
+    if (_previewUnavailable()) return;
     // Same blurred-overlay push the StreakChip uses.
     Navigator.of(context)
         .push(
@@ -249,6 +266,16 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                     children: [
+                      if (BillingScope.maybeOf(context)?.isAvailable ==
+                          true) ...[
+                        const CoinPackOffers(onGreenSurface: true),
+                        const SizedBox(height: 20),
+                      ],
+                      if (BillingScope.maybeOf(context)?.canShowMembership ==
+                          true) ...[
+                        const BaraPlusCard(),
+                        const SizedBox(height: 24),
+                      ],
                       if (_adCoinReward != null &&
                           _adController.isSupported) ...[
                         _buildWatchAdCard(),
@@ -260,7 +287,10 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
                     ],
                   ),
                 ),
-                const AdBannerSlot(withBottomSafeArea: true),
+                AdBannerSlot(
+                  withBottomSafeArea: true,
+                  hidden: BillingScope.maybeOf(context)?.isPreview == true,
+                ),
               ],
             ),
           ),
@@ -288,7 +318,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
                       Icons.arrow_back,
                       color: AppColors.of(context).textLight,
                     ),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
                   const Spacer(),
                   CoinBalanceBadge(coins: widget.authService.coins),

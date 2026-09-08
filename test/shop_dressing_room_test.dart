@@ -79,6 +79,7 @@ class _DressingRoomApi extends BackendApiService {
     required String identityToken,
     required String itemId,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
     purchaseWrites += 1;
     final pending = nextPurchase;

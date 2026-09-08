@@ -1,3 +1,5 @@
+import '../../widgets/billing_scope.dart';
+import '../../widgets/bara_plus_card.dart';
 import 'package:flutter/material.dart';
 import '../../models/loadable.dart';
 import '../../models/step_data.dart';
@@ -136,7 +138,18 @@ class _ProfileTabState extends State<ProfileTab> {
     await _refreshAfterEdit();
   }
 
+  bool _previewUnavailable() {
+    if (BillingScope.read(context)?.isPreview != true) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('This action is unavailable in the offline preview.'),
+      ),
+    );
+    return true;
+  }
+
   Future<void> _openSettings() async {
+    if (_previewUnavailable()) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => SettingsScreen(
@@ -153,6 +166,7 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _handleAvatarTap() async {
+    if (_previewUnavailable()) return;
     final hasPhoto = widget.authService.profilePhotoUrl != null;
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -254,6 +268,15 @@ class _ProfileTabState extends State<ProfileTab> {
                   SliverToBoxAdapter(
                     child: _buildProfileHeader(showBackButton: showBackButton),
                   ),
+                  if (BillingScope.maybeOf(context)?.canShowMembership == true)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
+                        child: BaraPlusCard(
+                          key: Key('billing-profile-membership'),
+                        ),
+                      ),
+                    ),
                   SliverToBoxAdapter(child: _buildBody()),
                 ],
               ),
@@ -367,6 +390,19 @@ class _ProfileTabState extends State<ProfileTab> {
                             ).copyWith(shadows: _textShadows),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                          ),
+                        if (BillingScope.maybeOf(context)?.snapshot.isMember ==
+                            true)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              'BARA+',
+                              key: const Key('billing-profile-badge'),
+                              style: PixelText.body(
+                                size: 12,
+                                color: AppColors.of(context).pillGold,
+                              ),
+                            ),
                           ),
                         if (showEmail) ...[
                           const SizedBox(height: 4),

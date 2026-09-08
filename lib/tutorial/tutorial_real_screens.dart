@@ -1,3 +1,4 @@
+import '../widgets/billing_scope.dart';
 import 'package:flutter/material.dart';
 
 import '../models/loadable.dart';
@@ -50,7 +51,7 @@ class TutorialRealHost extends StatelessWidget {
     // right after a page mounts, and a mid-bounce element measures misaligned.
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(disableAnimations: true),
-      child: _buildHost(tabIndex),
+      child: BillingScope.disabled(child: _buildHost(tabIndex)),
     );
   }
 

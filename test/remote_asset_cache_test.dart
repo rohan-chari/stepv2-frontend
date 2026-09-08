@@ -444,6 +444,10 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(RemoteAssetCache.manifestPrefsKey), isNotNull);
+
+      // refreshManifest intentionally starts cache warming in the background.
+      // Join that same work before teardown deletes its temporary directory.
+      await RemoteAssetCache.instance.prefetchMissing();
     });
 
     test('a failed manifest fetch keeps the previous registry', () async {

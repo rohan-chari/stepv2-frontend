@@ -7,6 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/animals.dart';
 import '../models/loadable.dart';
+import '../models/billing.dart';
+import '../services/billing_controller.dart';
+import '../widgets/billing_scope.dart';
+import '../widgets/reroll_payment_sheet.dart';
 import '../models/race_payouts.dart';
 import '../models/next_race.dart';
 import '../models/race_prize_pool.dart';
@@ -625,10 +629,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     };
     _effectExpiryRefresh.update(
       raw is List
-          ? raw.where((effect) => effect is Map &&
-              (effect['onSelf'] == true || visibleUsers.contains(effect['targetUserId'])))
+          ? raw.where(
+              (effect) =>
+                  effect is Map &&
+                  (effect['onSelf'] == true ||
+                      visibleUsers.contains(effect['targetUserId'])),
+            )
           : const [],
-      enabled: mounted &&
+      enabled:
+          mounted &&
           !widget.demoMode &&
           _routeVisible &&
           _appResumed &&
@@ -772,9 +781,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return route == null || route.isCurrent;
   }
 
+  BillingController? _billingController;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _billingController = BillingScope.maybeOf(context);
     final route = ModalRoute.of(context);
     if (route != null && !identical(route, _subscribedRoute)) {
       if (_subscribedRoute != null) appRouteObserver.unsubscribe(this);
@@ -1733,14 +1745,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final pending = _progressRequest;
     if (reuseInFlight && pending != null) return pending;
     late final Future<void> request;
-    request = _fetchProgress(
-      prefetched: prefetched,
-      refetchOnNullPrefetch: refetchOnNullPrefetch,
-      append: append,
-      participantsOffset: participantsOffset,
-    ).whenComplete(() {
-      if (identical(_progressRequest, request)) _progressRequest = null;
-    });
+    request =
+        _fetchProgress(
+          prefetched: prefetched,
+          refetchOnNullPrefetch: refetchOnNullPrefetch,
+          append: append,
+          participantsOffset: participantsOffset,
+        ).whenComplete(() {
+          if (identical(_progressRequest, request)) _progressRequest = null;
+        });
     _progressRequest = request;
     return request;
   }
@@ -1807,11 +1820,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             limit: requestedLimit,
           )).progress;
 
-      if (!mounted || fetchSeq != _progressFetchSeq ||
+      if (!mounted ||
+          fetchSeq != _progressFetchSeq ||
           token != widget.authService.authToken) {
         return;
       }
-      final projection = compactResult?.projectionMetadata ??
+      final projection =
+          compactResult?.projectionMetadata ??
           RaceProjectionMetadata.tryParse(progress);
       if (_isOlderProgress(projection, requestedOffset)) {
         setState(() {
@@ -1825,7 +1840,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _applyGlobalPowerupInventory(compactResult?.globalPowerupInventory);
       }
 
-      if (!mounted || fetchSeq != _progressFetchSeq ||
+      if (!mounted ||
+          fetchSeq != _progressFetchSeq ||
           token != widget.authService.authToken) {
         return;
       }
@@ -2007,7 +2023,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         }
       }
     } on ApiException catch (e) {
-      if (!mounted || fetchSeq != _progressFetchSeq ||
+      if (!mounted ||
+          fetchSeq != _progressFetchSeq ||
           token != widget.authService.authToken) {
         return;
       }
@@ -2029,7 +2046,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         showErrorToast(context, 'Couldn’t refresh race progress.');
       }
     } catch (e) {
-      if (!mounted || fetchSeq != _progressFetchSeq ||
+      if (!mounted ||
+          fetchSeq != _progressFetchSeq ||
           token != widget.authService.authToken) {
         return;
       }
@@ -4116,9 +4134,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: PillButton(
                     key: const Key('stash-held-reroll'),
-                    label: 'REROLL · WATCH AD',
+                    label: _billingRerolls == null
+                        ? 'REROLL · WATCH AD'
+                        : 'REROLL',
                     variant: PillButtonVariant.rewardedAd,
-                    trailing: const Icon(Icons.play_circle_outline, size: 18),
+                    trailing: Icon(
+                      _billingRerolls == null
+                          ? Icons.play_circle_outline
+                          : Icons.refresh_rounded,
+                      size: 18,
+                    ),
                     fullWidth: true,
                     onPressed: () {
                       Navigator.of(ctx).pop();
@@ -4465,7 +4490,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     const SizedBox(height: 8),
                     PillButton(
                       key: const Key('stash-held-reroll'),
-                      label: 'REROLL · WATCH AD',
+                      label: _billingRerolls == null
+                          ? 'REROLL · WATCH AD'
+                          : 'REROLL',
                       variant: PillButtonVariant.rewardedAd,
                       fontSize: 13,
                       fullWidth: true,
@@ -4473,7 +4500,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         horizontal: 24,
                         vertical: 10,
                       ),
-                      trailing: const Icon(Icons.play_circle_outline, size: 18),
+                      trailing: Icon(
+                        _billingRerolls == null
+                            ? Icons.play_circle_outline
+                            : Icons.refresh_rounded,
+                        size: 18,
+                      ),
                       onPressed: _isActing
                           ? null
                           : () {
@@ -4872,7 +4904,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     withBottomSafeArea: true,
                     hideWhenKeyboardOpen: true,
                     // F5/§5.6: no ad is requested or rendered inside the demo.
-                    hidden: widget.demoMode,
+                    hidden:
+                        widget.demoMode ||
+                        BillingScope.maybeOf(context)?.isPreview == true,
                   ),
                 ],
               ),
@@ -7207,12 +7241,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               }
             },
             openAll: () => _performOpenAll(token, slotIds),
-            // Item 1 (batch 2026-08-10b) — one ad rerolls the whole bank.
-            // Null (button hidden) unless the backend advertised
-            // `boxRerollBatch`, a reroll ad unit exists, and we're not in the
-            // demo. On Android there is no reroll ad unit, so this is always
-            // null and the summary renders exactly as it does today.
-            onRerollAll: _boxRerollBatchEnabled ? _rerollAllBoxPowerups : null,
+            // One action for the whole bank. Paid funding requires an injected
+            // adapter; the legacy ad capability stays independently guarded.
+            onRerollAll: _boxRerollBatchEnabled ? _chooseBatchReroll : null,
+            rerollLabel: _billingRerolls == null ? null : 'REROLL ALL',
+            rerollIcon: _billingRerolls == null ? null : Icons.refresh_rounded,
           ),
           transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
@@ -7282,21 +7315,104 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return out;
   }
 
-  /// Item 11 — whether the backend is advertising the box-reroll feature.
-  ///
-  /// STRICTLY additive and read defensively: the flag only exists on a backend
-  /// with `ADS_BOX_REROLL_ENABLED` on that also saw this client declare `ads`
-  /// in `X-Client-Features`. Anything other than a literal `true` (absent,
-  /// null, a string, an older backend, the demo service) hides the button.
-  /// Demo mode never shows it regardless of what the payload says.
-  bool get _boxRerollEnabled {
-    if (widget.demoMode) return false;
-    if (_powerupData?['boxReroll'] != true) return false;
-    // No dedicated ad unit baked into this build => no button. Passing an
-    // empty adUnitId to AdService would fall through to the EXTRA-SPIN unit
-    // (see AdService._adUnitId), which is exactly the borrowing we removed.
-    // An injected controller (widget tests) bypasses the define entirely.
-    return widget.boxRerollAdController != null || AdService.boxRerollSupported;
+  /// Paid controls require an explicitly injected adapter for this account and
+  /// race. Without one, older backends and the existing ad flow are unchanged.
+  BillingController? get _billingRerolls {
+    if (widget.demoMode) return null;
+    final billing = _billingController;
+    if (billing == null ||
+        billing.userId != _myUserId ||
+        !billing.supportsRace(widget.raceId)) {
+      return null;
+    }
+    return billing;
+  }
+
+  bool get _boxRerollAdEnabled =>
+      !widget.demoMode &&
+      _powerupData?['boxReroll'] == true &&
+      (widget.boxRerollAdController != null || AdService.boxRerollSupported);
+
+  bool get _boxRerollBatchAdEnabled =>
+      !widget.demoMode &&
+      _powerupData?['boxRerollBatch'] == true &&
+      (widget.boxRerollAdController != null || AdService.boxRerollSupported);
+
+  bool get _boxRerollEnabled => _billingRerolls != null || _boxRerollAdEnabled;
+
+  Future<Map<String, dynamic>?> _chooseSingleReroll(String id) async {
+    if (_billingRerolls == null) return _rerollBoxPowerup(id);
+    final rows = await _choosePaidReroll([id], batch: false);
+    return rows == null || rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>?> _chooseBatchReroll(
+    List<String> ids,
+  ) async {
+    if (_billingRerolls == null) return _rerollAllBoxPowerups(ids);
+    return _choosePaidReroll(ids, batch: true);
+  }
+
+  Future<List<Map<String, dynamic>>?> _choosePaidReroll(
+    List<String> ids, {
+    required bool batch,
+  }) async {
+    final billing = _billingRerolls;
+    final token = widget.authService.authToken;
+    final userId = _myUserId;
+    if (billing == null || token == null || userId.isEmpty) return null;
+    final adSupported =
+        (batch ? _boxRerollBatchAdEnabled : _boxRerollAdEnabled) &&
+        (widget.boxRerollAdController?.isSupported ??
+            AdService.boxRerollSupported);
+    final pendingFunding = await billing.pendingReroll(
+      raceId: widget.raceId,
+      ids: ids,
+    );
+    if (!mounted ||
+        !_rerollFlowCurrent(token, userId) ||
+        !identical(_billingRerolls, billing)) {
+      return null;
+    }
+    final funding = await showRerollPaymentSheet(
+      context,
+      controller: billing,
+      pendingFunding: pendingFunding,
+      adSupported: adSupported,
+      batch: batch,
+    );
+    if (funding == null ||
+        !_rerollFlowCurrent(token, userId) ||
+        !identical(_billingRerolls, billing)) {
+      return null;
+    }
+    if (funding == RerollFunding.ad) {
+      if (batch) return _rerollAllBoxPowerups(ids);
+      final row = await _rerollBoxPowerup(ids.single);
+      return row == null ? null : [row];
+    }
+    try {
+      final result = await billing.reroll(
+        raceId: widget.raceId,
+        ids: ids,
+        funding: funding,
+      );
+      if (!mounted ||
+          !_rerollFlowCurrent(token, userId) ||
+          !identical(_billingRerolls, billing)) {
+        return null;
+      }
+      if (!result.success) {
+        showErrorToast(context, result.message);
+        return null;
+      }
+      return result.rows;
+    } catch (_) {
+      if (mounted && _rerollFlowCurrent(token, userId)) {
+        showErrorToast(context, "Couldn't reroll. Please try again.");
+      }
+      return null;
+    }
   }
 
   /// The server now includes these one-shot fields for held box results. Every
@@ -7324,7 +7440,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final id = powerup['id'] as String;
     setState(() => _isActing = true);
     try {
-      final result = await _rerollBoxPowerup(id);
+      final result = await _chooseSingleReroll(id);
       if (result == null || !mounted) return;
       // Reconcile first, then stamp the local row as consumed as protection
       // against an older intermediary cache returning the pre-reroll row.
@@ -7376,20 +7492,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     });
   }
 
-  /// Batch 2026-08-10b item 1 — whether the backend is advertising the BATCH
-  /// box-reroll (REROLL ALL after OPEN ALL).
-  ///
-  /// A hand-copy of [_boxRerollEnabled], deliberately carrying BOTH of its
-  /// guards: the demo-mode bail (OPEN ALL is separately suppressed in the demo
-  /// today, but that suppression is not this getter's job to depend on) and
-  /// the "no ad unit baked in => no button" tail. Anything other than a
-  /// literal `true` — absent key, null, a string, an older backend, the demo
-  /// service — hides the button and the Open All summary renders as today.
-  bool get _boxRerollBatchEnabled {
-    if (widget.demoMode) return false;
-    if (_powerupData?['boxRerollBatch'] != true) return false;
-    return widget.boxRerollAdController != null || AdService.boxRerollSupported;
-  }
+  bool get _boxRerollBatchEnabled =>
+      _billingRerolls != null || _boxRerollBatchAdEnabled;
 
   /// Lazily-built rewarded-ad controller for the reroll. Its own AdMob unit
   /// and its own SSV customData prefix, so its grants can never be consumed by
@@ -7438,7 +7542,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   void _warmRerollAd() {
-    if (widget.demoMode || (!_boxRerollEnabled && !_boxRerollBatchEnabled)) {
+    if (widget.demoMode ||
+        (!_boxRerollAdEnabled && !_boxRerollBatchAdEnabled)) {
       return;
     }
     final context = _rerollAdContext;
@@ -7448,7 +7553,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   void _disposeRerollIfUnavailable() {
-    if (_boxRerollEnabled || _boxRerollBatchEnabled) return;
+    if (_boxRerollAdEnabled || _boxRerollBatchAdEnabled) return;
     final controller = _rerollAdCtrl;
     final boundContext = _rerollBoundContext;
     if (controller != null) {
@@ -7744,9 +7849,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               raceId: widget.raceId,
               powerupId: boxId,
             ),
-            // Item 11 — the rewarded-ad reroll. Null (button hidden) unless
-            // the backend advertised the feature AND we're not in the demo.
-            onReroll: _boxRerollEnabled ? _rerollBoxPowerup : null,
+            // The injected adapter offers paid funding; otherwise preserve
+            // the backend-advertised ad-only flow. Demos have neither.
+            onReroll: _boxRerollEnabled ? _chooseSingleReroll : null,
+            rerollLabel: _billingRerolls == null ? null : 'REROLL',
+            rerollIcon: _billingRerolls == null ? null : Icons.refresh_rounded,
             onRollStarted: widget.demoMode
                 ? () => _demoPendingBoxIds.add(boxId)
                 : null,

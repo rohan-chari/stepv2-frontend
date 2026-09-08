@@ -1,3 +1,4 @@
+import '../widgets/billing_scope.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -446,10 +447,12 @@ class _SettingsContentState extends State<_SettingsContent> {
                 onPressed: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => ShopTab(
-                        authService: widget.authService,
-                        backendApiService: widget.backendApiService,
-                        forceTutorialReplay: true,
+                      builder: (_) => BillingScope.disabled(
+                        child: ShopTab(
+                          authService: widget.authService,
+                          backendApiService: widget.backendApiService,
+                          forceTutorialReplay: true,
+                        ),
                       ),
                       fullscreenDialog: true,
                     ),

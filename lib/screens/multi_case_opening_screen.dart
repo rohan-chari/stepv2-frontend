@@ -57,6 +57,9 @@ class MultiCaseOpeningScreen extends StatefulWidget {
   final Future<List<Map<String, dynamic>>?> Function(List<String> powerupIds)?
   onRerollAll;
 
+  final String? rerollLabel;
+  final IconData? rerollIcon;
+
   const MultiCaseOpeningScreen({
     super.key,
     required this.boxCount,
@@ -66,6 +69,8 @@ class MultiCaseOpeningScreen extends StatefulWidget {
     this.rarityByType,
     this.dropOdds,
     this.onRerollAll,
+    this.rerollLabel,
+    this.rerollIcon,
   });
 
   @override
@@ -163,7 +168,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
     final subject = n > rerollBatchMaxCount
         ? '$rerollBatchMaxCount of these boxes'
         : 'ALL of these boxes';
-    return 'Watch an ad to reroll $subject. Every roll is replaced. '
+    final lead = widget.rerollLabel == null
+        ? 'Watch an ad to reroll'
+        : 'Reroll';
+    return '$lead $subject. Every roll is replaced. '
         'The new rolls are final.';
   }
 
@@ -509,8 +517,8 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               const SizedBox(height: 14),
               PillButton(
                 key: const Key('open-all-reroll-button'),
-                label: 'REROLL ALL',
-                icon: Icons.ondemand_video_rounded,
+                label: widget.rerollLabel ?? 'REROLL ALL',
+                icon: widget.rerollIcon ?? Icons.ondemand_video_rounded,
                 variant: PillButtonVariant.rewardedAd,
                 fontSize: 13,
                 fullWidth: true,

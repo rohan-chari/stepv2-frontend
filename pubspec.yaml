@@ -63,6 +63,8 @@ dependencies:
   # Exact adapter release built/tested against google_mobile_ads 9.0.0.
   gma_mediation_liftoffmonetize: 1.5.2
   app_tracking_transparency: ^2.0.7
+  purchases_flutter: ^10.11.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

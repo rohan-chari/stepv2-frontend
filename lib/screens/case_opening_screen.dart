@@ -1,3 +1,4 @@
+import '../widgets/billing_scope.dart';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -57,6 +58,8 @@ class CaseOpeningScreen extends StatefulWidget {
   /// race screen's own banner fix does not reach. Nothing about the reel, the
   /// odds sheet or the reveal changes.
   final bool demoMode;
+  final String? rerollLabel;
+  final IconData? rerollIcon;
 
   const CaseOpeningScreen({
     super.key,
@@ -68,6 +71,8 @@ class CaseOpeningScreen extends StatefulWidget {
     this.dropOdds,
     this.rarityByType,
     this.onReroll,
+    this.rerollLabel,
+    this.rerollIcon,
     this.demoMode = false,
   });
 
@@ -247,6 +252,8 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hideAds =
+        widget.demoMode || BillingScope.maybeOf(context)?.isPreview == true;
     return PopScope(
       // Block the Android back button and the iOS swipe-back gesture while the
       // reel is mid-spin; allow it before the roll and after the reveal.
@@ -276,9 +283,9 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   AdBannerSlot(
                     placement: AdBannerPlacement.boxTop,
                     reserveSpaceWhileLoading: true,
-                    hidden: widget.demoMode,
+                    hidden: hideAds,
                   ),
-                  if (!widget.demoMode)
+                  if (!hideAds)
                     const AdBannerSpacing(placement: AdBannerPlacement.boxTop),
                   Expanded(
                     child: Center(
@@ -301,11 +308,8 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   // Bottom banner, in-flow below the centered card so it reserves
                   // its own space and never covers the Continue button. Collapses
                   // to zero size unless banners are enabled AND an ad loads.
-                  if (!widget.demoMode) const AdBannerSpacing(),
-                  AdBannerSlot(
-                    reserveSpaceWhileLoading: true,
-                    hidden: widget.demoMode,
-                  ),
+                  if (!hideAds) const AdBannerSpacing(),
+                  AdBannerSlot(reserveSpaceWhileLoading: true, hidden: hideAds),
                 ],
               ),
             ),
@@ -471,8 +475,11 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               const SizedBox(height: 10),
               PillButton(
                 key: const Key('case-reroll-button'),
-                label: 'REROLL · WATCH AD',
-                trailing: const Icon(Icons.ondemand_video_rounded, size: 15),
+                label: widget.rerollLabel ?? 'REROLL · WATCH AD',
+                trailing: Icon(
+                  widget.rerollIcon ?? Icons.ondemand_video_rounded,
+                  size: 15,
+                ),
                 variant: PillButtonVariant.rewardedAd,
                 fontSize: 13,
                 fullWidth: true,

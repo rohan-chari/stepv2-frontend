@@ -75,6 +75,7 @@ class _FakeShopApi extends BackendApiService {
     String? sku,
     String? powerupType,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
     powerupPurchaseCalls++;
     return {'coins': 990, 'inventory': <Map<String, dynamic>>[]};

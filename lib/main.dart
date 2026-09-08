@@ -1,3 +1,4 @@
+import 'widgets/live_billing_scope.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -131,61 +132,64 @@ class StepTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppThemeScope(
-      controller: themeController,
-      child: AnimatedBuilder(
-        animation: themeController,
-        builder: (context, _) {
-          final reduceMotion = WidgetsBinding
-              .instance
-              .platformDispatcher
-              .accessibilityFeatures
-              .disableAnimations;
-          final dark = themeController.resolvedMode == ThemeMode.dark;
-          return AdConsentScope(
-            coordinator: adConsentCoordinator,
-            child: MaterialApp(
-              title: 'Bara',
-              debugShowCheckedModeBanner: false,
-              navigatorObservers: [appRouteObserver],
-              theme: AppThemeData.light(),
-              darkTheme: AppThemeData.night(),
-              themeMode: themeController.resolvedMode,
-              themeAnimationDuration: reduceMotion
-                  ? Duration.zero
-                  : const Duration(milliseconds: 250),
-              themeAnimationCurve: Curves.easeOutCubic,
-              builder: (context, child) =>
-                  AnnotatedRegion<SystemUiOverlayStyle>(
-                    value: SystemUiOverlayStyle(
-                      statusBarColor: Colors.transparent,
-                      statusBarIconBrightness: dark
-                          ? Brightness.light
-                          : Brightness.dark,
-                      statusBarBrightness: dark
-                          ? Brightness.dark
-                          : Brightness.light,
-                      systemNavigationBarColor: AppColors.of(
-                        context,
-                      ).parchmentLight,
-                      systemNavigationBarIconBrightness: dark
-                          ? Brightness.light
-                          : Brightness.dark,
+    return LiveBillingScope(
+      auth: authService,
+      child: AppThemeScope(
+        controller: themeController,
+        child: AnimatedBuilder(
+          animation: themeController,
+          builder: (context, _) {
+            final reduceMotion = WidgetsBinding
+                .instance
+                .platformDispatcher
+                .accessibilityFeatures
+                .disableAnimations;
+            final dark = themeController.resolvedMode == ThemeMode.dark;
+            return AdConsentScope(
+              coordinator: adConsentCoordinator,
+              child: MaterialApp(
+                title: 'Bara',
+                debugShowCheckedModeBanner: false,
+                navigatorObservers: [appRouteObserver],
+                theme: AppThemeData.light(),
+                darkTheme: AppThemeData.night(),
+                themeMode: themeController.resolvedMode,
+                themeAnimationDuration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 250),
+                themeAnimationCurve: Curves.easeOutCubic,
+                builder: (context, child) =>
+                    AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        statusBarIconBrightness: dark
+                            ? Brightness.light
+                            : Brightness.dark,
+                        statusBarBrightness: dark
+                            ? Brightness.dark
+                            : Brightness.light,
+                        systemNavigationBarColor: AppColors.of(
+                          context,
+                        ).parchmentLight,
+                        systemNavigationBarIconBrightness: dark
+                            ? Brightness.light
+                            : Brightness.dark,
+                      ),
+                      child: _EnvironmentBanner(child: child),
                     ),
-                    child: _EnvironmentBanner(child: child),
-                  ),
-              home: AdConsentBootstrap(
-                coordinator: adConsentCoordinator,
-                child: _VersionGate(
-                  child: SessionGate(
-                    authService: authService,
-                    notificationService: notificationService,
+                home: AdConsentBootstrap(
+                  coordinator: adConsentCoordinator,
+                  child: _VersionGate(
+                    child: SessionGate(
+                      authService: authService,
+                      notificationService: notificationService,
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

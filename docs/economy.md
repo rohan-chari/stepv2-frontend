@@ -948,7 +948,7 @@ incentive.
 | Cost | 1 verified watch = 1 reroll, consumed CAS | `CODE rerollMysteryBox.js:225-250` |
 | Eligibility | `status=HELD`, `rarity != null`, `upgradeLevel = 0`, `rerolledAt = null` | same |
 | Odds used | fresh roll at **current raw-steps position**, no Lucky Horseshoe floor | `CODE :283-297` |
-| Transaction boundary | The grant CAS, replacement CAS, and audit event are currently separate statements. A failure or competing mutation after grant consumption can spend the watch without committing the replacement. | `CODE rerollMysteryBox.js` |
+| Transaction boundary (re-verified 2026-09-07) | Single reroll now commits grant, replacement, and audit together, locking race → participant → powerup → ad grant. Batch still consumes its grant and writes replacements separately; this is a code-path disagreement, not shared atomic behavior. | `CODE rerollMysteryBox.js:155-171,280-287,406`; `rerollMysteryBoxBatch.js:237-344` |
 | Platform | Client code supports dedicated iOS and Android units (`ADMOB_BOX_REROLL_AD_UNIT_ID` / `_ANDROID`), each with no fallback. A missing platform define compiles the button out. | `FE AdService` |
 
 **Rerollable population.** Spin-granted powerups carry a rarity (506 rows with
@@ -2280,38 +2280,175 @@ rolling 24 hours, including across account recreation.
 
 ---
 
-## 13. Consumable coin IAP — planning defaults, NOT LIVE (2026-08-18)
+## 13. Coin IAP and Bara+ — approved product inputs, implementation pending (2026-09-07)
 
-No IAP product, purchase ledger or IAP-sourced coin transaction exists in the
-verified production model. The accepted planning defaults are product inputs,
-not DB/code values:
+This section supersedes the earlier August 18 pack table. Values below are
+**user-selected product requirements**, not production DB values. The current
+request authorizes real implementation after the isolated frontend preview;
+this review did not query production or claim billing has shipped. Source:
+`docs/bara-plus-billing-requirements.md` confirmed-decisions section and the
+user's September 7 implementation authorization.
 
-| Pack | Base + displayed bonus | Total coins | US reference price | Coins / US$ |
+| Offer | Coins | Paid reroll actions | US reference price | Coins / US$ |
 |---|---:|---:|---:|---:|
-| Small | 500 + 0 | 500 | $0.99 | 505.1 |
-| Medium | 1,250 + 250 | 1,500 | $3.99 | 375.9 |
-| Large | 2,500 + 500 | 3,000 | $7.99 | 375.5 |
-| XL | 4,000 + 1,000 | 5,000 | $14.99 | 333.6 |
+| Small pack | 500 | 0 | $0.99 | 505.05 |
+| Medium pack | 2,800 | 0 | $4.99 | 561.12 |
+| Large pack | 6,000 | 0 | $9.99 | 600.60 |
+| Bara+ monthly, each qualifying payment | 500 | 10 | $4.99 | 100.20, excluding other benefits |
+| Bara+ annual, each qualifying payment, entirely upfront | 6,000 | 120 | $49.99 | 120.02, excluding other benefits |
 
-The client is planned to show Apple/Google localized store price metadata; the
-US figures are reference prices only. At the current p50 recurring rate of 9
-coins per active day, the packs equal 55.6 / 166.7 / 333.3 / 555.6 active days
-of play; at p90 75.4/day, 6.6 / 19.9 / 39.8 / 66.3 days. The packs equal 20 /
-60 / 120 / 200 direct coin-ad grants, or 6.7 / 20 / 40 / 66.7 days at the live
-three-grant (75-coin) daily cap.
+Larger packs offer 11.10% and 18.92% more coins per dollar than the smallest.
+Annual membership costs 16.52% less than twelve monthly payments ($59.88).
+Platform-localized product metadata supplies actual displayed purchase prices.
+A restored entitlement or a product-change notification is not another charge.
 
-The displayed bonuses are 20%, 20% and 25% of each larger pack's stated base,
-but the base is not tied to the small-pack exchange rate. At US reference
-prices, four small packs cost $3.96 and provide 2,000 coins (500 more than the
-$3.99 medium); eight cost $7.92 and provide 4,000 (1,000 more than the $7.99
-large); fifteen cost $14.85 and provide 7,500 (2,500 more than the $14.99 XL).
+Bara+ includes a 15% cosmetic/powerup shop discount, a shared-calendar cosmetic,
+and member badge/profile styling. Paid credits carry over and remain usable
+after membership expiry. The seven-day trial includes discount/styling and
+three expiring trial reroll actions; permanent coins/cosmetics and full paid
+credits start only after successful payment. Annual currency and credits have
+no monthly drip or duplicate monthly award. Source: same approved requirements.
 
-Until this source ships, economy projections must represent paid issuance as:
+One paid reroll action costs 50 coins or one eligible credit, including Reroll
+All. It retains the existing per-item one-reroll limit, eligible held-item
+rules, current-position odds, and replacement behavior. Ads remain an
+alternative. At full utilization, monthly coins plus credits substitute for
+1,000 coins of spending and annual for 12,000, **only when those actions would
+otherwise cost coins**; replacing an ad saves time rather than wallet coins.
+A 15% discount gives approximately 17.65% more eligible buying power before
+integer rounding. Exact rounding is still an implementation policy to record.
 
-`paid coins/day = 500 × small grants + 1,500 × medium grants + 3,000 × large grants + 5,000 × XL grants − refunded coins`
+### 13.1 Local-default reroll calculation — verified 2026-09-07
 
-and must not count store checkout starts or client purchase callbacks as
-issuance.
+Local code defaults are COMMON/UNCOMMON/RARE discard payouts 2/5/10, leader
+probabilities .48/.25/.27 and last-place .20/.35/.45. Sources:
+`CODE src/modules/economy/balanceConfig.defaults.js:266-270,364-366`;
+`powerups/powerupOdds.js:35-58`. Stored `balance_config` overrides these defaults
+through `balanceConfig.js:60-74`; the live row was **not re-queried** for this
+review, so this is a default-config bound, not a new live-odds assertion.
+
+Expected fresh discard value is 4.91 coins at first and 6.65 at last.
+For n COMMON original items, incremental value from paying once, replacing all,
+then discarding is `n × (E[new discard] − 2) − 50`.
+Exact discrete convolution (independent draws, no Monte Carlo error) gives:
+
+| Position / batch n | Incremental mean | p10 | p90 | Maximum |
+|---|---:|---:|---:|---:|
+| First / 1 | −47.09 | −50 | −42 | −42 |
+| Last / 1 | −45.35 | −50 | −42 | −42 |
+| First / 5 | −35.45 | −44 | −26 | −10 |
+| Last / 5 | −26.75 | −36 | −18 | −10 |
+| First / 8 (command upper bound) | −26.72 | −39 | −15 | +14 |
+| Last / 8 (command upper bound) | −12.80 | −25 | −1 | +14 |
+
+The eight-item command bound is not evidence that eight eligible items can be
+physically acquired in the same live inventory; September 6 observed slot
+capacity bounded ordinary simultaneous openings at five (§3.7). Higher-value
+originals only reduce these incremental returns. Free credits remove the
+50-coin fee; five COMMON originals then gain 14.55–23.25 expected discard coins
+per action, conditional on eligible inventory and remaining discard limits.
+Three trial credits could consequently leave permanent rerolled items or
+43.65–69.75 incremental discard coins from three five-item batches, even though
+the trial does not directly grant permanent currency. No new caps are selected.
+
+### 13.2 Issuance, affordability, and source separation
+
+For daily verified unique grants S/M/L packs, P monthly payments, A annual
+payments, bounded refund recovery R, and coin-paid reroll actions C:
+
+`direct paid coin mint = 500S + 2800M + 6000L + 500P + 6000A − R`
+
+`new reroll coin sink = 50C`
+
+With unchanged eligible basket volume at base-price total B, membership
+reduces the shop sink by approximately `0.15B` (subject to integer rounding).
+Credit/ad substitution, changed purchase demand, and extra discard receipts
+are behavioral terms; do not count credits as coin mint or subtract their
+50-coin nominal value from the ledger. One hundred monthly subscribers add
+50,000 coins per payment cycle (~1,667/day using a 30-day comparison) before
+pack purchases, discounts, refunds, and changed spending. One hundred annual
+signups create an immediate 600,000-coin grant burst, not a monthly drip.
+
+The most recent recorded recurring-income snapshot here is August 29 (§0g):
+p50 10.80 coins/active day, p90 78.95, p10 zero; it is historical, not freshly
+queried. At those rates, the selected packs equal 46.3 / 259.3 / 555.6 median
+active days and 6.3 / 35.5 / 76.0 p90 active days. A 50-coin action is 4.63
+median active days; a 200-coin item discounted to 170 falls from 18.52 to 15.74
+days. Historical daily gross source/sink baseline was +10,000.63/−3,839.43;
+no current purchase-conversion or subscriber forecast has been measured.
+
+Confirmed refund rule absorbs spent shortfalls with no debt or future earning
+recovery; purchased coins remain usable anywhere. Bounded current-wallet
+recovery, reversal of unused credits linked to the refunded purchase, retention
+of cosmetics, UTC calendar boundaries, and thirteen overlapping calendar
+months for some annual periods were explicitly approved by the owner with
+“yes to all” on 2026-09-07. Refund recovery may include later-earned coins in
+the current wallet; absorbed shortfalls never become future deductions.
+
+### 13.3 Monthly plus permanent premium planning update — 2026-09-07
+
+The owner now requests removal of the unshipped annual offer and addition of
+a one-time permanent-premium purchase, retaining monthly membership. This
+supersedes annual as a future sales choice in §13; annual amounts above remain
+historical requirements. The owner subsequently selected **$19.99 once** for
+permanent premium, including **500 coins and 10 credits every month forever**.
+Monthly remains **$4.99**, with the seven-day trial offered only on monthly.
+Permanent membership retains the existing 15% discount, member styling, and
+calendar cosmetics. The user subsequently authorized finishing all code using
+our stated recommendations: immediate first rewards for free/trial accounts,
+otherwise the original verified paid period end; recurring UTC anniversaries
+clamp to the original day. Missed eligible months accumulate. Existing actual
+subscription payments retain their own bundle, with cancellation guidance;
+permanent restore or extra receipts never start a second schedule. These are
+implementation requirements, not deployed values. Annual sales are retired while
+historical annual receipts remain recognized.
+
+The selected permanent-owner monthly 500 coins and 10 credits add 6,000 coins and
+120 credits per owner per 12 grants, or 30,000 coins and 600 credits over 60
+grants. There is no activity condition in the selected monthly-forever promise;
+missed eligible months are reconciled in bounded resumable batches. Credits substitute for up to
+50 coins of reroll spending each only when used instead of coin payment;
+they are not wallet coin mint. A 15% shop discount reduces unchanged eligible
+basket sinks by approximately 0.15 times base basket spend, subject to rounding.
+
+The selected $19.99 equals **4.006 monthly payments** at $4.99: four payments
+cost $19.96, while five cost $24.95. This is simple nominal consumer break-even
+for matching access/benefits without retention, discount-rate, tax, or platform
+fee assumptions; it is not a revenue forecast. Over 12 / 36 / 60 monthly grants,
+permanent membership issues 6,000 / 18,000 / 30,000 coins and 120 / 360 / 600
+credits, respectively, for that one $19.99 payment. Direct coins per dollar
+therefore rise from 300.15 at 12 grants to 900.45 at 36 and 1,500.75 at 60.
+The $9.99 6,000-coin pack remains immediately delivered rather than delayed
+across grants, so these rates do not describe interchangeable purchase timing.
+
+Fresh production aggregate baseline, read on 2026-09-07 under explicit
+`BEGIN READ ONLY`, covers 2026-08-08 inclusive to 2026-09-07 exclusive. All
+dates/calculations stay in SQL; retained review accounts are excluded. Active
+means `steps.steps > 0`; user step-day mean and total recurring receipts per
+active day are calculated per user before percentile aggregation.
+
+| Metric | Verified value | Source of truth |
+|---|---:|---|
+| Active users / step-active days | 1,296 / 17,675 | DB `steps × users` |
+| Steps per active day, per-user p10 / p50 / p90 | 2,395.42 / 6,180.25 / 11,649.52 | DB `steps × users` |
+| Recurring coins per active day, per-user p10 / p50 / p90 | 0 / 11.7758 / 85.6014 | DB `coin_transactions × steps × users` |
+| Gross retained-ledger positive / negative flow per day | +39,832.70 / −18,549.77 | DB `coin_transactions × users`, 37,057 rows |
+
+Recurring receipts include observed reasons `ad_coin_reward`, `ad_extra_spin`,
+`daily_reward`, `powerup_discard`, `race_payout_ad_double`,
+`race_prize_pool_payout`, `step_milestone`, `tournament_champion_reward`, and
+`tournament_prize_pool_payout`. Reason labels were queried before filtering.
+Tutorial, referral, admin/support, refund, and redistributed buy-in receipts
+are excluded from this recurring-income measure; gross ledger totals include
+them and therefore are not a measure of net new economic mint alone.
+
+At that median, 500 coins equal 42.46 active days and a 50-coin reroll equals
+4.25; at p90 the corresponding values are 5.84 and 0.58 days. At p10 the
+recurring-income denominator is zero. One hundred permanent owners receiving
+500 each month add 50,000 coins per grant cycle, or about 1,667/day on a 30-day
+comparison (4.18% of the observed gross positive flow), plus indirect changes
+to shop/discard/reroll activity. This cohort example assumes all monthly grants
+are issued; it is not a conversion or engagement forecast.
 
 ## 14. Funded-exposure cap removal — verified inputs and safeguards (2026-08-23)
 

@@ -9,6 +9,27 @@ Two iOS app listings in App Store Connect, each pointed at a different backend. 
 
 The same `--dart-define=BACKEND_BASE_URL=…` value is baked at build time; a built binary cannot accidentally hit the wrong env.
 
+## RevenueCat billing configuration
+
+Complete [the billing store setup](docs/bara-billing-store-setup.md) before
+shipping purchases. Supply the matching app's **public SDK key** on each
+store-backed build: `REVENUECAT_IOS_API_KEY` on iOS and
+`REVENUECAT_ANDROID_API_KEY` on Android. A missing key leaves native checkout
+unavailable; it is not proof that billing was tested. Never put the RevenueCat
+secret API key or webhook secret in a Flutter build.
+
+The production commands below require those public-key shell variables to be
+set. Preserve all existing backend, OAuth and AdMob arguments when adding them.
+Use the production package for TestFlight/Play internal billing tests, with
+backend-provisioned isolated sandbox accounts. A staging package needs its own
+store/RevenueCat app and matching keys; do not reuse production package products
+under staging. Keep the existing iOS/Android version-number mapping below.
+
+Deploy and verify the additive billing backend first under a separate approved
+deployment. Native debug builds without keys verify compilation only. Complete
+real sandbox checkout, renewals, refunds and restoration on both platforms before
+customer release.
+
 ---
 
 ## Branch model
@@ -196,6 +217,7 @@ For most releases, you can deploy backend first because the old App Store binary
 # a flag or code change.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
@@ -376,6 +398,7 @@ flutter build appbundle --release --flavor staging \
 # Prod (Android production ad units are not provisioned yet, so ads stay off)
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define="REVENUECAT_ANDROID_API_KEY=${REVENUECAT_ANDROID_API_KEY:?Set the RevenueCat Android public SDK key}" \
   --build-number=<versionCode>
 ```
 

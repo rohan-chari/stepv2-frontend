@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="com.android.vending.BILLING" />
     <!-- Required for all network access. Flutter only injects INTERNET into the debug/profile
          manifests, so a RELEASE build needs it declared here or all networking fails. -->
     <uses-permission android:name="android.permission.INTERNET"/>

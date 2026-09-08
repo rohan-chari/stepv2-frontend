@@ -69,6 +69,7 @@ class _FakeShopApi extends BackendApiService {
     String? sku,
     String? powerupType,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
     return {
       'coins': 0,

@@ -5,6 +5,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../services/ad_service.dart';
 import '../styles.dart';
+import 'billing_scope.dart';
 
 /// How the banner dresses itself for its host surface.
 enum AdBannerStyle {
@@ -37,7 +38,8 @@ class AdBannerSpacing extends StatelessWidget {
     valueListenable: AdService.bannerAdsEnabledListenable,
     builder: (context, enabled, child) => SizedBox(
       height:
-          enabled &&
+          (BillingScope.maybeOf(context)?.isPreview != true) &&
+              enabled &&
               (placement == AdBannerPlacement.boxTop
                   ? AdService.boxTopBannerEnabled
                   : AdService.bannersEnabled)
@@ -153,7 +155,11 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   }
 
   void _maybeStartLoad() {
-    if (_loadStarted || widget.hidden) return;
+    if (_loadStarted ||
+        widget.hidden ||
+        BillingScope.read(context)?.isPreview == true) {
+      return;
+    }
     _loadStarted = true;
     _load();
   }

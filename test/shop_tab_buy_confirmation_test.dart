@@ -39,6 +39,8 @@ class _FakeShopApi extends BackendApiService {
   final Map<String, dynamic>? cosmeticPurchaseResult;
   final Completer<Map<String, dynamic>>? powerupPurchaseCompleter;
 
+  int? quotedCosmeticPrice;
+  int? quotedPowerupPrice;
   int cosmeticPurchases = 0;
   int powerupPurchases = 0;
   int powerupCatalogReads = 0;
@@ -85,7 +87,9 @@ class _FakeShopApi extends BackendApiService {
     required String identityToken,
     required String itemId,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
+    quotedCosmeticPrice = expectedPriceCoins;
     cosmeticPurchases++;
     return cosmeticPurchaseResult ?? {'coins': 900};
   }
@@ -96,7 +100,9 @@ class _FakeShopApi extends BackendApiService {
     String? sku,
     String? powerupType,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
+    quotedPowerupPrice = expectedPriceCoins;
     powerupPurchases++;
     final pending = powerupPurchaseCompleter;
     if (pending != null) return pending.future;
@@ -302,6 +308,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(api.powerupPurchases, 1);
+    expect(api.quotedPowerupPrice, 300);
     expect(api.powerupCatalogReads, 1);
     expect(api.inventoryReads, 1);
     expect(auth.coins, 700);
@@ -329,6 +336,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(api.powerupPurchases, 1);
+    expect(api.quotedPowerupPrice, 300);
     expect(api.powerupCatalogReads, 2);
     expect(api.inventoryReads, 2);
     expect(auth.coins, 625);

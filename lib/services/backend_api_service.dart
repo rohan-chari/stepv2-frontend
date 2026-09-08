@@ -6019,6 +6019,56 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchBillingBootstrap({
+    required String identityToken,
+    required String platform,
+  }) async {
+    return _decodeJsonResponse(
+      await _sendGetRequest(
+        path: '/billing/bootstrap?platform=$platform',
+        identityToken: identityToken,
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> syncBilling({
+    required String identityToken,
+    required String platform,
+    String? transactionId,
+  }) async {
+    return _decodeJsonResponse(
+      await _sendJsonRequest(
+        method: 'POST',
+        path: '/billing/sync?platform=$platform',
+        identityToken: identityToken,
+        body: {'transactionId': ?transactionId},
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> purchaseBoxReroll({
+    required String identityToken,
+    required String raceId,
+    required List<String> powerupIds,
+    required String funding,
+    required String idempotencyKey,
+    int? expectedCoinCost,
+  }) async {
+    return _decodeJsonResponse(
+      await _sendJsonRequest(
+        method: 'POST',
+        path: '/races/${Uri.encodeComponent(raceId)}/powerups/reroll-purchase',
+        identityToken: identityToken,
+        headers: {'Idempotency-Key': idempotencyKey},
+        body: {
+          'powerupIds': powerupIds,
+          'funding': funding,
+          'expectedCoinCost': ?expectedCoinCost,
+        },
+      ),
+    );
+  }
+
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async {
@@ -6046,11 +6096,12 @@ class BackendApiService {
     required String identityToken,
     required String itemId,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/shop/items/$itemId/purchase',
-      body: const <String, dynamic>{},
+      body: <String, dynamic>{'expectedPriceCoins': ?expectedPriceCoins},
       identityToken: identityToken,
       headers: {'Idempotency-Key': idempotencyKey},
     );
@@ -6079,8 +6130,9 @@ class BackendApiService {
     String? sku,
     String? powerupType,
     required String idempotencyKey,
+    int? expectedPriceCoins,
   }) async {
-    final body = <String, dynamic>{};
+    final body = <String, dynamic>{'expectedPriceCoins': ?expectedPriceCoins};
     if (sku != null) body['sku'] = sku;
     if (powerupType != null) body['powerupType'] = powerupType;
 
