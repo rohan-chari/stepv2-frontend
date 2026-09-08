@@ -22,6 +22,7 @@ class OnboardingFlow extends StatelessWidget {
     required this.tutorialOnboardingSeen,
     required this.firstRaceOnboardingSeen,
     required this.onEnableHealth,
+    this.onHealthHelp,
     required this.onEnableNotifications,
     required this.onStartTutorial,
     required this.onSkipTutorial,
@@ -59,6 +60,7 @@ class OnboardingFlow extends StatelessWidget {
   final bool firstRaceOnboardingSeen;
 
   final VoidCallback onEnableHealth;
+  final VoidCallback? onHealthHelp;
   final VoidCallback onEnableNotifications;
 
   /// Launches the tutorial (which grants the one-time reward on completion).
@@ -168,6 +170,7 @@ class OnboardingFlow extends StatelessWidget {
             'Bara only reads your step count. It never reads your routes, '
             'workouts, heart rate, or location. Your steps are used for races and '
             'nothing else, and we never sell your data.',
+        onHelp: onHealthHelp,
         icon: Icons.favorite_rounded,
         onContinue: onEnableHealth,
         error: error,
@@ -656,10 +659,12 @@ class _OnboardingReferralWelcomeStepState
     // race" but no longer completes the referral, so the qualifying action is
     // named explicitly here too.
     if (mine == null || mine <= 0) {
-      body = 'Coins start landing after you qualify. '
+      body =
+          'Coins start landing after you qualify. '
           '$kReferralQualificationCopy';
     } else if (theirs != null && theirs == mine) {
-      body = 'You each pocket $mine coins. Yours to spend right away. '
+      body =
+          'You each pocket $mine coins. Yours to spend right away. '
           '$kReferralQualificationCopy';
     } else {
       body = '$mine coins are yours. $kReferralQualificationCopy';

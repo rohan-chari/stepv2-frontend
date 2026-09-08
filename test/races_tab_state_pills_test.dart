@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:step_tracker/widgets/ad_inline_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/loadable.dart';
@@ -25,19 +26,22 @@ Future<AuthService> _auth() async {
 }
 
 Map<String, dynamic> _race(String id, String name, String status) => {
-      'id': id,
-      'name': name,
-      'status': status,
-      'myStatus': 'ACCEPTED',
-      'maxDurationDays': 7,
-      'participantCount': 3,
-      'isCreator': false,
-      'endsAt':
-          DateTime.now().add(const Duration(days: 2)).toUtc().toIso8601String(),
-    };
+  'id': id,
+  'name': name,
+  'status': status,
+  'myStatus': 'ACCEPTED',
+  'maxDurationDays': 7,
+  'participantCount': 3,
+  'isCreator': false,
+  'endsAt': DateTime.now()
+      .add(const Duration(days: 2))
+      .toUtc()
+      .toIso8601String(),
+};
 
 Future<void> _pump(
   WidgetTester tester, {
+  bool showNativeAd = false,
   List<Map<String, dynamic>> active = const [],
   List<Map<String, dynamic>> pending = const [],
   List<Map<String, dynamic>> completed = const [],
@@ -49,6 +53,7 @@ Future<void> _pump(
       home: Scaffold(
         body: RacesTab(
           authService: auth,
+          showNativeAd: showNativeAd,
           racesState: Loadable.success({
             'active': active,
             'pending': pending,
@@ -78,9 +83,44 @@ String _countText(WidgetTester tester, String state) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'inline ad follows populated real content and disappears for empty or preview lists',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _pump(
+        tester,
+        showNativeAd: true,
+        active: [_race('r1', 'Active Race', 'ACTIVE')],
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(AdInlineCard, skipOffstage: false), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(AdInlineCard, skipOffstage: false)).dy,
+        greaterThan(tester.getTopLeft(find.text('Active Race')).dy),
+      );
+      expect(
+        tester.getSize(find.byType(AdInlineCard, skipOffstage: false)).height,
+        0,
+        reason: 'Missing unit must not reserve a gap',
+      );
+      await _selectState(tester, 'pending');
+      expect(find.byType(AdInlineCard, skipOffstage: false), findsNothing);
+      await _pump(tester, active: [_race('r1', 'Active Race', 'ACTIVE')]);
+      await _selectState(tester, 'active');
+      expect(find.text('Active Race'), findsOneWidget);
+      expect(
+        find.byType(AdInlineCard, skipOffstage: false),
+        findsNothing,
+        reason: 'Tutorial/default caller must never request an ad',
+      );
+    },
+  );
+
   group('pills always render', () {
-    testWidgets('all three appear with count badges, defaulting to ACTIVE',
-        (tester) async {
+    testWidgets('all three appear with count badges, defaulting to ACTIVE', (
+      tester,
+    ) async {
       await _pump(tester, active: [_race('r1', 'Active Race', 'ACTIVE')]);
 
       for (final state in ['active', 'pending', 'completed']) {
@@ -108,10 +148,7 @@ void main() {
     testWidgets('each state counts both sources', (tester) async {
       await _pump(
         tester,
-        active: [
-          _race('r1', 'A1', 'ACTIVE'),
-          _race('r2', 'A2', 'ACTIVE'),
-        ],
+        active: [_race('r1', 'A1', 'ACTIVE'), _race('r2', 'A2', 'ACTIVE')],
         pending: [_race('r3', 'P1', 'PENDING')],
         completed: [_race('r4', 'C1', 'COMPLETED')],
         tournaments: [
@@ -192,8 +229,9 @@ void main() {
       expect(find.text('Pending Race'), findsNothing);
     });
 
-    testWidgets('rows build inside a lazy SliverList, not a Column',
-        (tester) async {
+    testWidgets('rows build inside a lazy SliverList, not a Column', (
+      tester,
+    ) async {
       // A long list must not materialise every row. With a short viewport only
       // a bounded number of the 60 rows should be built.
       await _pump(
@@ -211,8 +249,9 @@ void main() {
   });
 
   group('state-specific empty messages', () {
-    testWidgets('an empty selected state explains which shelf is empty',
-        (tester) async {
+    testWidgets('an empty selected state explains which shelf is empty', (
+      tester,
+    ) async {
       await _pump(tester, active: [_race('r1', 'Active Race', 'ACTIVE')]);
 
       await _selectState(tester, 'completed');
@@ -226,8 +265,9 @@ void main() {
       expect(find.textContaining('Nothing waiting to start'), findsOneWidget);
     });
 
-    testWidgets('a user with nothing at all still gets the pills',
-        (tester) async {
+    testWidgets('a user with nothing at all still gets the pills', (
+      tester,
+    ) async {
       await _pump(tester);
       expect(find.byKey(const Key('personal-state-active')), findsOneWidget);
       // …plus the fuller onboarding nudge rather than a terse one-liner.
@@ -236,8 +276,9 @@ void main() {
   });
 
   group('older-backend shapes', () {
-    testWidgets('a payload with no tournaments key renders normally',
-        (tester) async {
+    testWidgets('a payload with no tournaments key renders normally', (
+      tester,
+    ) async {
       final auth = await _auth();
       await tester.pumpWidget(
         MaterialApp(
@@ -260,19 +301,24 @@ void main() {
       expect(_countText(tester, 'active'), '1');
     });
 
-    testWidgets('a tournament with only the legacy raceId still counts ACTIVE',
-        (tester) async {
-      await _pump(tester, tournaments: [
-        {
-          'id': 't1',
-          'name': 'Legacy Bracket',
-          'status': 'ACTIVE',
-          'myStatus': 'ACCEPTED',
-          'myCurrentMatchRaceId': 'race-9',
-        },
-      ]);
-      expect(_countText(tester, 'active'), '1');
-      expect(find.text('Legacy Bracket'), findsOneWidget);
-    });
+    testWidgets(
+      'a tournament with only the legacy raceId still counts ACTIVE',
+      (tester) async {
+        await _pump(
+          tester,
+          tournaments: [
+            {
+              'id': 't1',
+              'name': 'Legacy Bracket',
+              'status': 'ACTIVE',
+              'myStatus': 'ACCEPTED',
+              'myCurrentMatchRaceId': 'race-9',
+            },
+          ],
+        );
+        expect(_countText(tester, 'active'), '1');
+        expect(find.text('Legacy Bracket'), findsOneWidget);
+      },
+    );
   });
 }

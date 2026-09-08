@@ -16,6 +16,75 @@ import java.time.ZoneId
 import java.util.ArrayDeque
 
 class StepSyncEngineTest {
+    @Test fun `permission revoked during background read terminates without upload`() = runBlocking {
+        var allowed = true
+        val transport = FakeTransport(ArrayDeque(listOf(markerResponse())))
+        val gateway = object : AndroidStepSyncHealthGateway {
+            override suspend fun hasStepReadPermission() = allowed
+            override suspend fun accurateSteps(start: Instant, end: Instant): Int {
+                allowed = false
+                throw SecurityException("revoked")
+            }
+        }
+        val result = runStepSyncWorker(FakeState(), AndroidStepSyncHealth(gateway), transport)
+        assertTrue(result is ListenableWorker.Result.Success)
+        assertTrue(transport.requests.isEmpty())
+    }
+
+    @Test fun `page budget exhaustion refuses partial data`() = runBlocking {
+        var pages = 0
+        val transport = FakeTransport(ArrayDeque(listOf(markerResponse())))
+        val gateway = object : AndroidStepSyncHealthGateway {
+            override suspend fun hasStepReadPermission() = true
+            override suspend fun accurateSteps(start: Instant, end: Instant): Int =
+                readAccurateStepTotal({ 1000L }, maxPages = 3) {
+                    pages++
+                    ManualStepPage(1, "page-$pages")
+                }
+        }
+        val result = runStepSyncWorker(FakeState(), AndroidStepSyncHealth(gateway), transport)
+        assertTrue(result is ListenableWorker.Result.Retry)
+        assertEquals(3, pages)
+        assertTrue(transport.requests.isEmpty())
+    }
+
+    @Test
+    fun `worker subtracts manual records across pages before uploading`() = runBlocking {
+        val transport = FakeTransport(ArrayDeque(listOf(markerResponse())))
+        val gateway = object : AndroidStepSyncHealthGateway {
+            override suspend fun hasStepReadPermission() = true
+            override suspend fun accurateSteps(start: Instant, end: Instant): Int =
+                readAccurateStepTotal({ 1000L }) { token ->
+                    if (token == null) ManualStepPage(200, "next") else ManualStepPage(300, null)
+                }
+        }
+        val outcome = runStepSyncWorker(FakeState(), AndroidStepSyncHealth(gateway), transport,
+            now = { Instant.parse("2026-08-24T00:30:00Z") }, zone = { ZoneId.of("UTC") })
+        assertTrue(outcome is ListenableWorker.Result.Success)
+        assertEquals(500, JSONObject(transport.requests.single().body).getInt("steps"))
+    }
+
+    @Test
+    fun `worker does not upload an incomplete manual read`() = runBlocking {
+        for (repeatToken in listOf(false, true)) {
+            val state = FakeState()
+            val transport = FakeTransport(ArrayDeque(listOf(markerResponse())))
+            val gateway = object : AndroidStepSyncHealthGateway {
+                override suspend fun hasStepReadPermission() = true
+                override suspend fun accurateSteps(start: Instant, end: Instant): Int =
+                    readAccurateStepTotal({ 1000L }) { token ->
+                        if (token != null && !repeatToken) throw IllegalStateException("provider read failed")
+                        ManualStepPage(100, "repeated")
+                    }
+            }
+            val outcome = runStepSyncWorker(state, AndroidStepSyncHealth(gateway), transport,
+                now = { Instant.parse("2026-08-24T00:30:00Z") }, zone = { ZoneId.of("UTC") })
+            assertTrue(outcome is ListenableWorker.Result.Retry)
+            assertTrue(transport.requests.isEmpty())
+            assertEquals(0, state.writeCalls)
+        }
+    }
+
     @Test
     fun `one logical sync sends one combined v2 request with capability headers`() = runBlocking {
         val state = FakeState()
@@ -457,6 +526,28 @@ class StepSyncEngineTest {
             Instant.parse("2026-11-01T04:00:00Z") to Instant.parse("2026-11-01T05:00:00Z"),
             Instant.parse("2026-11-01T05:00:00Z") to Instant.parse("2026-11-01T06:00:00Z"),
         ), fall)
+    }
+
+    @Test fun `hourly manual read failure never uploads a partial snapshot`() = runBlocking {
+        for (revoked in listOf(false, true)) {
+            var reads = 0
+            val gateway = object : AndroidStepSyncHealthGateway {
+                override suspend fun hasStepReadPermission() = !(revoked && reads > 1)
+                override suspend fun accurateSteps(start: Instant, end: Instant): Int {
+                    reads++
+                    if (reads > 1) throw IllegalStateException("manual page unavailable")
+                    return 500
+                }
+            }
+            val state = FakeState()
+            val transport = FakeTransport(ArrayDeque(listOf(markerResponse())))
+            val result = runStepSyncWorker(state = state, health = AndroidStepSyncHealth(gateway),
+                transport = transport, now = { Instant.parse("2026-08-24T19:37:00Z") },
+                appVersion = "1.2.3")
+            assertEquals(workerResultFor(if (revoked) StepSyncRunOutcome.SUCCESS else StepSyncRunOutcome.RETRY), result)
+            assertTrue(transport.requests.isEmpty())
+            assertEquals(0, state.writeCalls)
+        }
     }
 
     private fun engine(

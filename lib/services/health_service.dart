@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'platform_settings_service.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 
@@ -19,8 +19,61 @@ import '../models/step_sample_data.dart';
 /// self-heals the moment steps appear.
 enum HealthSetupResult { authorized, denied, needsHealthConnect, inconclusive }
 
+enum BackgroundStepAccess {
+  unsupported,
+  needsSteps,
+  available,
+  granted,
+  unknown,
+}
+
 class HealthService {
-  HealthService({Health? health}) : _health = health ?? Health();
+  HealthService({Health? health, bool? isAndroidForTesting})
+    : _health = health ?? Health(),
+      isAndroid = isAndroidForTesting ?? Platform.isAndroid;
+
+  final bool isAndroid;
+
+  /// Null means the OS could not establish permission; it is not a denial.
+  Future<bool?> getStepPermission() async {
+    if (!isAndroid) return null; // HealthKit deliberately hides read grants.
+    try {
+      return await _health.hasPermissions(
+        const [HealthDataType.STEPS],
+        permissions: const [HealthDataAccess.READ],
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<BackgroundStepAccess> backgroundStepAccess() async {
+    if (!isAndroid) return BackgroundStepAccess.unsupported;
+    try {
+      if (!await _health.isHealthDataInBackgroundAvailable()) {
+        return BackgroundStepAccess.unsupported;
+      }
+      final granted = await getStepPermission();
+      if (granted == null) return BackgroundStepAccess.unknown;
+      if (!granted) return BackgroundStepAccess.needsSteps;
+      return await _health.isHealthDataInBackgroundAuthorized()
+          ? BackgroundStepAccess.granted
+          : BackgroundStepAccess.available;
+    } catch (_) {
+      return BackgroundStepAccess.unknown;
+    }
+  }
+
+  Future<BackgroundStepAccess> requestBackgroundSteps() async {
+    final state = await backgroundStepAccess();
+    if (state != BackgroundStepAccess.available) return state;
+    try {
+      await _health.requestHealthDataInBackgroundAuthorization();
+    } catch (_) {
+      return BackgroundStepAccess.unknown;
+    }
+    return backgroundStepAccess();
+  }
 
   final Health _health;
 
@@ -48,7 +101,7 @@ class HealthService {
   /// Keyed on `isAndroid` (not `!isIOS`) on purpose: the host test runner and
   /// web are neither, and keep the iOS path so existing tests stay valid.
   Future<int?> _stepsInInterval(DateTime start, DateTime end) async {
-    if (!Platform.isAndroid) {
+    if (!isAndroid) {
       return _health.getTotalStepsInInterval(
         start,
         end,
@@ -107,6 +160,12 @@ class HealthService {
   Future<bool> restoreHealthAuthState() async {
     final prefs = await SharedPreferences.getInstance();
     _authorized = prefs.getBool(_keyHealthAuthorized) ?? false;
+    // An external settings grant may be the first successful connection. Keep
+    // the historical grant for onboarding, but reconcile live access separately.
+    if (isAndroid && await getStepPermission() == true) {
+      _authorized = true;
+      await prefs.setBool(_keyHealthAuthorized, true);
+    }
     return _authorized;
   }
 
@@ -137,7 +196,7 @@ class HealthService {
   /// [HealthSetupResult.needsHealthConnect] so the caller can prompt a retry.
   /// See ANDROID.md §C.
   Future<HealthSetupResult> setUpHealthAccess() async {
-    if (Platform.isAndroid) {
+    if (isAndroid) {
       final status = await _health.getHealthConnectSdkStatus();
       if (status != HealthConnectSdkStatus.sdkAvailable) {
         // sdkUnavailable / sdkUnavailableProviderUpdateRequired (or null):
@@ -150,7 +209,7 @@ class HealthService {
     if (!authorized) return HealthSetupResult.denied;
     // iOS never reports a denial, so probe instead. Android's `authorized` is
     // truthful, so it never needs the probe and never returns inconclusive.
-    if (!Platform.isAndroid) {
+    if (!isAndroid) {
       final steps = await probeTrailingSteps();
       if (steps <= 0) return HealthSetupResult.inconclusive;
     }
@@ -179,29 +238,7 @@ class HealthService {
   /// Returns false when nothing could be launched, so the caller can fall back
   /// to the plain retry rather than appearing to do nothing.
   Future<bool> openPlatformHealthSettings() async {
-    final candidates = Platform.isAndroid
-        ? const [
-            // Health Connect (Android 14+ ships it in the OS; older devices
-            // have it as an app, hence the second, package-scoped fallback).
-            'intent:#Intent;action=androidx.health.connect.action.HEALTH_CONNECT_SETTINGS;end',
-            // Last resort: this app's own OS settings page, which is at least a
-            // real destination if Health Connect can't be resolved.
-            'intent:#Intent;action=android.settings.APPLICATION_DETAILS_SETTINGS;'
-                'S.android.provider.extra.APP_PACKAGE=com.rohanchari.steptracker;end',
-          ]
-        : const ['app-settings:'];
-    for (final candidate in candidates) {
-      try {
-        final uri = Uri.parse(candidate);
-        if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-          return true;
-        }
-      } catch (_) {
-        // Try the next candidate; an unresolvable intent must not throw into
-        // the onboarding gate.
-      }
-    }
-    return false;
+    return PlatformSettingsService().openHealthSettings();
   }
 
   Future<bool> requestAuthorization() async {
@@ -261,6 +298,11 @@ class HealthService {
           : currentDate.add(const Duration(days: 1));
       final steps = await _stepsInInterval(currentDate, intervalEnd);
 
+      if (isAndroid && steps == null) {
+        throw StateError(
+          'Health Connect could not read steps. Please try again.',
+        );
+      }
       entries.add(StepData(steps: steps ?? 0, date: currentDate));
 
       currentDate = currentDate.add(const Duration(days: 1));
@@ -348,7 +390,8 @@ class HealthService {
     // Each active hour keeps its window, its trusted total, and the index
     // range of its fine buckets inside the batched fineWindows list, so the
     // normalization below can slice per hour after ONE batched read.
-    final activeHours = <({_Window hour, int total, int fineStart, int fineCount})>[];
+    final activeHours =
+        <({_Window hour, int total, int fineStart, int fineCount})>[];
     for (var i = 0; i < hourWindows.length; i++) {
       final total = hourTotals[i];
       if (total != null && total > 0) {
@@ -379,7 +422,10 @@ class HealthService {
     // all came back 0/null still ships as one hourly sample so no steps vanish.
     final samples = <StepSampleData>[];
     for (final h in activeHours) {
-      final windows = fineWindows.sublist(h.fineStart, h.fineStart + h.fineCount);
+      final windows = fineWindows.sublist(
+        h.fineStart,
+        h.fineStart + h.fineCount,
+      );
       final raw = fineTotals
           .sublist(h.fineStart, h.fineStart + h.fineCount)
           .map((v) => (v == null || v < 0) ? 0 : v)
@@ -403,11 +449,14 @@ class HealthService {
   static List<int> scaleToTotal(List<int> values, int total) {
     final sum = values.fold<int>(0, (a, v) => a + v);
     final floors = List<int>.filled(values.length, 0);
-    final remainders = List<({int index, double frac})>.generate(values.length, (i) {
-      final exact = values[i] * total / sum;
-      floors[i] = exact.floor();
-      return (index: i, frac: exact - exact.floor());
-    });
+    final remainders = List<({int index, double frac})>.generate(
+      values.length,
+      (i) {
+        final exact = values[i] * total / sum;
+        floors[i] = exact.floor();
+        return (index: i, frac: exact - exact.floor());
+      },
+    );
     var leftover = total - floors.fold<int>(0, (a, v) => a + v);
     remainders.sort((a, b) => b.frac.compareTo(a.frac));
     for (var i = 0; leftover > 0 && i < remainders.length; i++, leftover--) {
@@ -433,7 +482,7 @@ class HealthService {
     DateTime rangeStart,
     DateTime rangeEnd,
   ) async {
-    if (!Platform.isAndroid) {
+    if (!isAndroid) {
       return _mapWithConcurrency<_Window, int?>(
         windows,
         _hourlyConcurrency,

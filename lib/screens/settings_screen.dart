@@ -1,4 +1,6 @@
 import '../widgets/billing_scope.dart';
+import '../widgets/android_health_controls.dart';
+import '../services/platform_settings_service.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1032,7 +1034,8 @@ class _ConnectHealthRow extends StatefulWidget {
   State<_ConnectHealthRow> createState() => _ConnectHealthRowState();
 }
 
-class _ConnectHealthRowState extends State<_ConnectHealthRow> {
+class _ConnectHealthRowState extends State<_ConnectHealthRow>
+    with WidgetsBindingObserver {
   late final HealthService _health = widget.healthService ?? HealthService();
   final OnboardingStateService _onboardingState = OnboardingStateService();
   bool _connected = true;
@@ -1041,15 +1044,34 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load();
   }
 
   Future<void> _load() async {
     final authorized = await _health.restoreHealthAuthState();
+    final permission = _health.isAndroid
+        ? await _health.getStepPermission()
+        : null;
     final escaped = await _onboardingState.escapedHealthGate();
     final inconclusive = await _onboardingState.probeInconclusive();
     if (!mounted) return;
-    setState(() => _connected = authorized && !escaped && !inconclusive);
+    setState(
+      () => _connected = _health.isAndroid
+          ? permission == true
+          : authorized && !escaped && !inconclusive,
+    );
   }
 
   Future<void> _connect() async {
@@ -1066,7 +1088,16 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
       }
       // Denied, inconclusive, or Health Connect missing: the prompt can't
       // resolve this, so hand the user to the OS surface that can.
-      await _health.openPlatformHealthSettings();
+      final opened = await _health.openPlatformHealthSettings();
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Couldn’t open settings. Open your phone’s health permissions to allow Steps.',
+            ),
+          ),
+        );
+      }
     } catch (_) {
       // Nothing to report beyond the row staying visible.
     } finally {
@@ -1092,7 +1123,11 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
 
   @override
   Widget build(BuildContext context) {
-    if (_connected) return const SizedBox.shrink();
+    if (_connected) {
+      return _health.isAndroid
+          ? AndroidHealthControls(healthService: _health)
+          : const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -1118,6 +1153,7 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
           'else, and we never sell your data.',
           style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
+        if (_health.isAndroid) AndroidHealthControls(healthService: _health),
       ],
     );
   }
@@ -1136,34 +1172,81 @@ class _NotificationToggle extends StatefulWidget {
   State<_NotificationToggle> createState() => _NotificationToggleState();
 }
 
-class _NotificationToggleState extends State<_NotificationToggle> {
+class _NotificationToggleState extends State<_NotificationToggle>
+    with WidgetsBindingObserver {
   bool? _granted;
+  bool _settingsRequired = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load();
   }
 
   Future<void> _load() async {
     // OS truth, not the cached flag — the cache can say "granted" long after
     // a reinstall/denial has silently killed pushes.
+    final token = widget.authToken;
     final state = await widget.notificationService.getSystemPermissionState();
-    if (mounted) setState(() => _granted = state ?? false);
+    final previous = await widget.notificationService.getPermissionState();
+    if (mounted && token == widget.authToken) {
+      final recovered = state == true && _granted == false;
+      setState(() {
+        _granted = state ?? false;
+        _settingsRequired = state == false && previous != null;
+      });
+      if (recovered) {
+        await widget.notificationService.ensureTokenRegistered(token);
+      }
+    }
   }
 
   Future<void> _enable() async {
+    if (_settingsRequired) {
+      final opened = await PlatformSettingsService().openNotificationSettings();
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Open phone Settings → Bara → Notifications to allow notifications.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
     final granted = await widget.notificationService.requestPermission(
       widget.authToken,
     );
-    if (mounted) setState(() => _granted = granted);
+    if (mounted) {
+      setState(() {
+        _granted = granted;
+        _settingsRequired = !granted;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_granted == null) return const SizedBox.shrink();
 
-    final label = _granted! ? 'NOTIFICATIONS ON' : 'ENABLE NOTIFICATIONS';
+    final label = _granted!
+        ? 'NOTIFICATIONS ON'
+        : _settingsRequired
+        ? 'OPEN NOTIFICATION SETTINGS'
+        : 'ENABLE NOTIFICATIONS';
 
     return PillButton(
       label: label,

@@ -149,7 +149,10 @@
           the button would silently do nothing on exactly the users who need it.
         -->
         <intent>
-            <action android:name="androidx.health.connect.action.HEALTH_CONNECT_SETTINGS" />
+            <action android:name="androidx.health.ACTION_HEALTH_CONNECT_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.health.connect.action.HEALTH_HOME_SETTINGS" />
         </intent>
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />

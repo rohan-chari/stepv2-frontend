@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -51,6 +52,20 @@ class _FakeHealthService extends HealthService {
 class _FailingHealthService extends _FakeHealthService {
   @override
   Future<StepData> getStepsToday() async => throw StateError('health failed');
+}
+
+class _AndroidPermissionHealth extends _FakeHealthService {
+  bool? permission = false;
+  int reads = 0;
+  @override
+  bool get isAndroid => true;
+  @override
+  Future<bool?> getStepPermission() async => permission;
+  @override
+  Future<StepData> getStepsToday() async {
+    reads++;
+    return super.getStepsToday();
+  }
 }
 
 class _MissingRaceApi extends _FakeBackendApiService {
@@ -1014,6 +1029,109 @@ void main() {
         BackendApiService.clientFeaturesHeader.split(','),
         contains('impact_summary_expiry_v1'),
       );
+    },
+  );
+
+  for (final supported in [false, true]) {
+    testWidgets(
+      'cold Home loads steps with ${supported ? 'iOS' : 'Android unsupported'} background registration',
+      (tester) async {
+        final calls = <String>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          BackgroundSyncBootstrapService.channel,
+          (call) async {
+            calls.add(call.method);
+            if (!supported) throw MissingPluginException();
+            return null;
+          },
+        );
+        addTearDown(() {
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            BackgroundSyncBootstrapService.channel,
+            null,
+          );
+        });
+        final authService = await _authService();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MainShell(
+              authService: authService,
+              healthService: _FakeHealthService(),
+              backendApiService: _FakeBackendApiService(),
+              backgroundSyncBootstrapService: BackgroundSyncBootstrapService(),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(tester.takeException(), isNull);
+        expect(calls, contains('enableHealthKitBackgroundDelivery'));
+        expect(find.bySemanticsLabel('Loading today’s steps'), findsNothing);
+        expect(find.byKey(const Key('home-step-count')), findsOneWidget);
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text('1,234'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets(
+    'Android revoked access exposes recovery and resumes after external grant',
+    (tester) async {
+      final health = _AndroidPermissionHealth();
+      final auth = await _authService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: auth,
+            healthService: health,
+            backendApiService: _FakeBackendApiService(),
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(health.reads, 0);
+      expect(find.bySemanticsLabel('Loading today’s steps'), findsNothing);
+      expect(find.textContaining('Steps aren’t connected'), findsOneWidget);
+      health.permission = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(health.reads, greaterThan(0));
+      expect(find.textContaining('Steps aren’t connected'), findsNothing);
+      expect(find.byKey(const Key('home-step-count')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'unknown Android permission settles Home without zero or a false reconnect diagnosis',
+    (tester) async {
+      final health = _AndroidPermissionHealth()..permission = null;
+      final auth = await _authService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: auth,
+            healthService: health,
+            backendApiService: _FakeBackendApiService(),
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(health.reads, 0);
+      expect(find.bySemanticsLabel('Loading today’s steps'), findsNothing);
+      expect(find.textContaining('Steps aren’t connected'), findsNothing);
+      expect(find.byKey(const Key('home-step-count')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

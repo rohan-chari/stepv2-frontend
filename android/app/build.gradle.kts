@@ -51,6 +51,7 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+
     defaultConfig {
         // Matches the iOS prod bundle id (Bara). Permanent on the Play Store once published.
         applicationId = "com.rohanchari.steptracker"
@@ -139,4 +140,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.mockito:mockito-core:5.15.2")
 }

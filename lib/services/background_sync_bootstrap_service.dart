@@ -35,8 +35,11 @@ class BackgroundSyncBootstrapService {
   Future<void> enableHealthKitBackgroundDelivery() async {
     try {
       await channel.invokeMethod('enableHealthKitBackgroundDelivery');
+    } on MissingPluginException {
+      // Android's channel only implements enqueueExpeditedSync. Its
+      // notImplemented response must not abort foreground step loading.
     } on PlatformException {
-      // Ignore in tests and non-iOS contexts.
+      // Background registration is best-effort; foreground sync can continue.
     }
   }
 }

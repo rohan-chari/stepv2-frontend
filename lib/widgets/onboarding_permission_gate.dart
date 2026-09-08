@@ -22,6 +22,7 @@ class OnboardingPermissionGate extends StatelessWidget {
     this.retryLabel,
     this.onOpenSettings,
     this.onEscape,
+    this.onHelp,
   });
 
   final String label;
@@ -50,6 +51,7 @@ class OnboardingPermissionGate extends StatelessWidget {
   /// behaves exactly as it does today — which is what keeps the notifications
   /// gate on v1/v2 visually untouched.
   final VoidCallback? onEscape;
+  final VoidCallback? onHelp;
 
   @override
   Widget build(BuildContext context) => OnboardingTheme(builder: _buildGate);
@@ -67,6 +69,17 @@ class OnboardingPermissionGate extends StatelessWidget {
       dockBody: body,
       error: error,
       actions: [
+        if (onHelp != null)
+          TextButton(
+            onPressed: onHelp,
+            child: Text(
+              'USING GOOGLE FIT?',
+              style: PixelText.body(
+                size: 13,
+                color: colors.textLight,
+              ).copyWith(shadows: PixelText.skyOutline(1.4)),
+            ),
+          ),
         if (isLoading)
           SizedBox(
             height: 52,

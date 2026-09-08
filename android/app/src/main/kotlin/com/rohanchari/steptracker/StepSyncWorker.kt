@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.AggregateRequest
@@ -142,33 +143,33 @@ internal interface AndroidStepSyncHealthGateway {
 private class HealthConnectStepSyncGateway(
     private val client: HealthConnectClient,
 ) : AndroidStepSyncHealthGateway {
-    override suspend fun hasStepReadPermission(): Boolean =
-        client.permissionController.getGrantedPermissions().contains(
-            HealthPermission.getReadPermission(StepsRecord::class)
-        )
+    override suspend fun hasStepReadPermission(): Boolean {
+        if (client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND)
+            != HealthConnectFeatures.FEATURE_STATUS_AVAILABLE) return false
+        val granted = client.permissionController.getGrantedPermissions()
+        return granted.contains(HealthPermission.getReadPermission(StepsRecord::class)) &&
+            granted.contains(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+    }
 
-    override suspend fun accurateSteps(start: Instant, end: Instant): Int {
-        val aggregate = client.aggregate(
-            AggregateRequest(
+    override suspend fun accurateSteps(start: Instant, end: Instant): Int =
+        readAccurateStepTotal(aggregate = {
+            client.aggregate(AggregateRequest(
                 metrics = setOf(StepsRecord.COUNT_TOTAL),
                 timeRangeFilter = TimeRangeFilter.between(start, end),
+            ))[StepsRecord.COUNT_TOTAL] ?: 0L
+        }) { token ->
+            val page = client.readRecords(ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end),
+                pageSize = 1000,
+                pageToken = token,
+            ))
+            ManualStepPage(
+                page.records.filter { it.metadata.recordingMethod == RECORDING_METHOD_MANUALLY_ENTERED }
+                    .fold(0L) { sum, record -> Math.addExact(sum, record.count) },
+                page.pageToken,
             )
-        )
-        val deduped = aggregate[StepsRecord.COUNT_TOTAL] ?: 0L
-        val manual = try {
-            client.readRecords(
-                ReadRecordsRequest(
-                    recordType = StepsRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
-                )
-            ).records
-                .filter { it.metadata.recordingMethod == RECORDING_METHOD_MANUALLY_ENTERED }
-                .sumOf { it.count }
-        } catch (_: Exception) {
-            0L
         }
-        return (deduped - manual).coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-    }
 
     companion object {
         private const val RECORDING_METHOD_MANUALLY_ENTERED = 3
@@ -207,8 +208,11 @@ internal class AndroidStepSyncHealth(
                     )
                 }
             }
-        } catch (_: Exception) {
-            // Preserve the daily intake when an optional hourly read fails.
+        } catch (error: Exception) {
+            // Never upload partial samples after an incomplete manual-entry
+            // read, or after access was revoked during this snapshot.
+            if (!gateway.hasStepReadPermission()) return null
+            throw error
         }
         return StepSyncSnapshot(
             date = localNow.toLocalDate().toString(),

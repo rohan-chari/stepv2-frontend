@@ -7,6 +7,7 @@
 //  * Item 9 (client half) — admin VERSIONS + RACES sections, hidden when the
 //    fields are absent.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,6 +74,33 @@ class _GrantedNotificationService extends NotificationService {
   Future<bool?> getSystemPermissionState() async => true;
 }
 
+class _RevokedAndroidHealth extends HealthService {
+  bool granted = false;
+  @override
+  bool get isAndroid => true;
+  @override
+  Future<bool> restoreHealthAuthState() async => true;
+  @override
+  Future<bool?> getStepPermission() async => granted;
+  @override
+  Future<BackgroundStepAccess> backgroundStepAccess() async =>
+      BackgroundStepAccess.unsupported;
+}
+
+class _RecoveringNotifications extends NotificationService {
+  bool granted = false;
+  int registrations = 0;
+  @override
+  Future<bool?> getPermissionState() async => false;
+  @override
+  Future<bool?> getSystemPermissionState() async => granted;
+  @override
+  Future<String> ensureTokenRegistered(String? authToken) async {
+    registrations++;
+    return 'registered';
+  }
+}
+
 Future<AuthService> _authService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -92,6 +120,7 @@ Future<void> _pumpSettings(
   WidgetTester tester,
   _PrefsApi api, {
   HealthService? healthService,
+  NotificationService? notificationService,
   ActivationAnalyticsService? activationAnalyticsService,
   AppThemeController? themeController,
   Size physicalSize = const Size(1170, 2532),
@@ -105,7 +134,7 @@ Future<void> _pumpSettings(
   final auth = await _authService();
   final settings = SettingsScreen(
     authService: auth,
-    notificationService: _GrantedNotificationService(),
+    notificationService: notificationService ?? _GrantedNotificationService(),
     backendApiService: api,
     healthService: healthService,
     activationAnalyticsService: activationAnalyticsService,
@@ -142,6 +171,63 @@ void main() {
       buildSignature: '',
     );
   });
+
+  testWidgets('Android Settings reconnect follows current grant on resume', (
+    tester,
+  ) async {
+    final health = _RevokedAndroidHealth();
+    await _pumpSettings(
+      tester,
+      _PrefsApi(prefsPayload: const {}),
+      healthService: health,
+    );
+    expect(find.byKey(const Key('settings-connect-health')), findsOneWidget);
+    expect(find.text('CONNECT GOOGLE FIT'), findsOneWidget);
+    health.granted = true;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-connect-health')), findsNothing);
+    expect(find.text('CONNECT GOOGLE FIT'), findsOneWidget);
+  });
+
+  testWidgets(
+    'notification settings recovery registers token after external grant',
+    (tester) async {
+      final notifications = _RecoveringNotifications();
+      final calls = <String>[];
+      const channel = MethodChannel('com.steptracker/settings');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        calls.add(call.method);
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+      await _pumpSettings(
+        tester,
+        _PrefsApi(prefsPayload: const {}),
+        notificationService: notifications,
+      );
+      final recovery = find.text('OPEN NOTIFICATION SETTINGS');
+      await tester.ensureVisible(recovery);
+      await tester.tap(recovery);
+      await tester.pumpAndSettle();
+      expect(calls, ['openNotificationSettings']);
+      notifications.granted = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('NOTIFICATIONS ON'), findsOneWidget);
+      expect(recovery, findsNothing);
+      expect(notifications.registrations, 1);
+    },
+  );
 
   testWidgets(
     'About Us placeholder is immediately followed by donation action',

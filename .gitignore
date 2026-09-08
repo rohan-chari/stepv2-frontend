@@ -78,3 +78,6 @@ tmp/
 
 # Machine-specific Claude config
 CLAUDE.local.md
+
+# Local release credentials
+/.secrets/

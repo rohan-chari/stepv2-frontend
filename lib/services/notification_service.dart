@@ -119,24 +119,7 @@ class NotificationService {
   Future<void> _initAndroidMessaging() async {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    final local = FlutterLocalNotificationsPlugin();
-    await local.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      ),
-      onDidReceiveNotificationResponse: (response) {
-        final payload = response.payload;
-        if (payload != null && payload.isNotEmpty) {
-          _onNotificationTapFromData(_decodeData(payload));
-        }
-      },
-    );
-    await local
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(_androidChannel);
-    _localNotifications = local;
+    await initializeLocalNotifications();
 
     // Foreground messages: the system tray does NOT show them automatically, so
     // render a local notification carrying the data payload for tap routing.
@@ -183,6 +166,42 @@ class NotificationService {
     FirebaseMessaging.instance.onTokenRefresh.listen(
       (token) => _onDeviceToken(token, _pendingAuthToken),
     );
+  }
+
+  Future<void>? _localInitialization;
+
+  /// The same native local-notification startup path is used on a normal launch
+  /// and when a tray notification starts a terminated Android process.
+  Future<void> initializeLocalNotifications() =>
+      _localInitialization ??= _initializeLocalNotifications();
+
+  Future<void> _initializeLocalNotifications() async {
+    final local = FlutterLocalNotificationsPlugin();
+    await local.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+      onDidReceiveNotificationResponse: (response) {
+        final payload = response.payload;
+        if (payload != null && payload.isNotEmpty) {
+          _onNotificationTapFromData(_decodeData(payload));
+        }
+      },
+    );
+    await local
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_androidChannel);
+    _localNotifications = local;
+
+    final launch = await local.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      final payload = launch?.notificationResponse?.payload;
+      if (payload != null && payload.isNotEmpty) {
+        _onNotificationTapFromData(_decodeData(payload));
+      }
+    }
   }
 
   Map<String, dynamic> _decodeData(String payload) {

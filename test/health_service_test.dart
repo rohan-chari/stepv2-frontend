@@ -27,6 +27,20 @@ class _FakeHealth extends Health {
 }
 
 void main() {
+  test('Android null aggregate is an error, never a fabricated zero', () async {
+    final service = HealthService(
+      health: _FakeHealth([null]),
+      isAndroidForTesting: true,
+    );
+    await expectLater(
+      service.getStepsForDateRange(
+        startDate: DateTime(2026, 9, 8),
+        endDate: DateTime(2026, 9, 8, 12),
+      ),
+      throwsStateError,
+    );
+  });
+
   test(
     'getStepsForDateRange sums each day via getTotalStepsInInterval and excludes manual entries',
     () async {
@@ -47,10 +61,7 @@ void main() {
       expect(fakeHealth.capturedEnds.last, DateTime(2026, 3, 17, 15, 30));
 
       // Manual entries must always be excluded.
-      expect(
-        fakeHealth.capturedIncludeManualEntry,
-        everyElement(isFalse),
-      );
+      expect(fakeHealth.capturedIncludeManualEntry, everyElement(isFalse));
 
       expect(result.length, 2);
       expect(result[0].steps, 4100);

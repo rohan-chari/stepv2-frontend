@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/android_health_controls.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -181,6 +182,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// [kTutorialAbandonLimit] of them, even while the backend flag is on.
   int _tutorialAbandons = 0;
   bool _escapedHealthGate = false;
+  bool _healthPermissionRevoked = false;
   bool _probeInconclusive = false;
   int? _probeArmedAtMs;
   bool _homeReachedRecorded = false;
@@ -540,13 +542,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// onboarding, so the tab bar and the ad banner render exactly as they do for
   /// everyone else. Suppressing them would re-create the dead end this state
   /// exists to fix.
-  bool get _stepsDisconnected => OnboardingStateService.degradedBannerVisible(
-    onboardingV3Enabled: widget.authService.onboardingV3Enabled,
-    healthAuthorized: _healthAuthorized,
-    escapedHealthGate: _escapedHealthGate,
-    probeInconclusive: _probeInconclusive,
-    probeArmedAtMs: _probeArmedAtMs,
-  );
+  bool get _stepsDisconnected =>
+      _healthPermissionRevoked ||
+      OnboardingStateService.degradedBannerVisible(
+        onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+        healthAuthorized: _healthAuthorized,
+        escapedHealthGate: _escapedHealthGate,
+        probeInconclusive: _probeInconclusive,
+        probeArmedAtMs: _probeArmedAtMs,
+      );
 
   /// Loads the persisted v3 bookkeeping. Runs before anything reads
   /// [_escapedHealthGate] — notably `_restoreAndFetch`, which would otherwise
@@ -1585,6 +1589,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // still needs refreshing on resume — otherwise the degraded app is also a
     // stale one.
     if (state == AppLifecycleState.resumed &&
+        _healthService.isAndroid &&
+        !_healthAuthorized &&
+        !_escapedHealthGate) {
+      unawaited(_recoverInitialAndroidGrant());
+    }
+    if (state == AppLifecycleState.resumed &&
         (_healthAuthorized || _escapedHealthGate)) {
       if (_currentTab == _homeTabIndex) {
         _homeSuggestionsImpressionRecorded = false;
@@ -1607,7 +1617,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       unawaited(_reprobeSteps());
       // Mirror initial load: refresh every home surface, then surface the
       // results modals only once all calls have settled.
-      unawaited(_loadHomeAndShowResults());
+      unawaited(_resumeHealthAndHome());
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
@@ -1628,6 +1638,39 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _fetchSteps();
       }
     });
+  }
+
+  Future<void> _resumeHealthAndHome() async {
+    if (_healthService.isAndroid) {
+      final owner = widget.authService.userId;
+      final token = widget.authService.authToken;
+      final permission = await _healthService.getStepPermission();
+      if (!mounted ||
+          owner != widget.authService.userId ||
+          token != widget.authService.authToken) {
+        return;
+      }
+      final restored = _healthPermissionRevoked && permission == true;
+      if (permission != null) {
+        setState(() => _healthPermissionRevoked = !permission);
+      }
+      // A result modal or unrelated Home network request can keep the previous
+      // load alive across the settings round trip. It must not swallow recovery.
+      if (restored && _homeLoadInFlight != null) await _fetchSteps();
+    }
+    if (mounted) await _loadHomeAndShowResults();
+  }
+
+  Future<void> _recoverInitialAndroidGrant() async {
+    final token = widget.authService.authToken;
+    final granted = await _healthService.getStepPermission();
+    if (!mounted ||
+        token != widget.authService.authToken ||
+        _healthAuthorized ||
+        granted != true) {
+      return;
+    }
+    await _restoreAndFetch();
   }
 
   void _stopForegroundPolling() {
@@ -2058,6 +2101,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Future<_StepSyncOutcome> _persistSteps({bool homePull = false}) async {
     final identityToken = widget.authService.authToken;
     final ownerUserId = widget.authService.userId;
+    if (_healthService.isAndroid) {
+      final permission = await _healthService.getStepPermission();
+      if (!mounted ||
+          identityToken != widget.authService.authToken ||
+          ownerUserId != widget.authService.userId) {
+        return const _StepSyncOutcome(persisted: false, error: true);
+      }
+      if (permission != null) {
+        setState(() {
+          _healthPermissionRevoked = !permission;
+          if (permission) _healthAuthorized = true;
+        });
+      }
+      if (permission == false) {
+        throw StateError('Allow Bara to read Steps in Health Connect.');
+      }
+      if (permission == null) {
+        throw StateError('Could not check Health Connect access. Try again.');
+      }
+    }
     final now = DateTime.now();
     final results = await Future.wait([
       _healthService.getStepsToday(),
@@ -4820,6 +4883,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                       },
                     )
                   : OnboardingFlow(
+                      onHealthHelp: _healthService.isAndroid
+                          ? () => showAndroidStepHelp(context, _healthService)
+                          : null,
                       healthAuthorized: _healthAuthorized,
                       notificationsState: _notificationsState,
                       tutorialOnboardingSeen:
@@ -4927,6 +4993,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                       },
                       children: [
                         HomeTab(
+                          onStepHelp: _healthService.isAndroid
+                              ? () =>
+                                    showAndroidStepHelp(context, _healthService)
+                              : null,
                           streakChipKey: _streakChipKey,
                           stepMilestonesKey: _stepMilestonesKey,
                           stepData: _stepData,
@@ -5005,6 +5075,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           suppressPendingInvite: _homeInvitePopupOpen,
                         ),
                         RacesTab(
+                          showNativeAd: !_isOnboarding,
                           authService: widget.authService,
                           backendApiService: _backendApiService,
                           racesData: _racesData,

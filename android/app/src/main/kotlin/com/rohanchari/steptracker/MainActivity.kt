@@ -1,11 +1,13 @@
 package com.rohanchari.steptracker
 
 import android.os.Bundle
+import android.os.Build
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 
 // FlutterFragmentActivity (an androidx ComponentActivity), NOT FlutterActivity:
 // the health plugin's Health Connect permission flow uses the AndroidX Activity
@@ -23,6 +25,18 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        GoogleMobileAdsPlugin.registerNativeAdFactory(flutterEngine, "raceFeedAd", RaceFeedNativeAdFactory(this))
+        val settings = PlatformSettingsLauncher(packageName, Build.VERSION.SDK_INT) {
+            startActivity(it)
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.steptracker/settings")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "openHealthSettings" -> result.success(settings.openHealthSettings())
+                    "openNotificationSettings" -> result.success(settings.openNotificationSettings())
+                    else -> result.notImplemented()
+                }
+            }
         // Phase 3 — let Dart (FCM STEP_SYNC_REQUEST handling) request an immediate
         // background step sync. Reliable while the app process is alive; a fully
         // detached FCM background isolate falls back to the periodic worker.

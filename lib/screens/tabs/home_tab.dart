@@ -52,6 +52,7 @@ const _homeCardShadow = [
 class HomeTab extends StatelessWidget {
   final StepData? stepData;
   final Loadable<StepData>? stepDataState;
+  final VoidCallback? onStepHelp;
   final bool isLoading;
   final String? error;
   final bool healthAuthorized;
@@ -134,6 +135,7 @@ class HomeTab extends StatelessWidget {
     super.key,
     required this.stepData,
     this.stepDataState,
+    this.onStepHelp,
     required this.isLoading,
     required this.error,
     required this.healthAuthorized,
@@ -1352,6 +1354,17 @@ class HomeTab extends StatelessWidget {
               color: AppColors.of(context).textLight.withValues(alpha: 0.85),
             ).copyWith(shadows: _heroShadows, letterSpacing: 3),
           ),
+          if (steps == 0 && healthAuthorized && onStepHelp != null)
+            TextButton(
+              key: const Key('home-empty-step-help'),
+              onPressed: onStepHelp,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.of(context).textLight,
+                padding: const EdgeInsets.all(4),
+                minimumSize: const Size(48, 32),
+              ),
+              child: Text('MISSING STEPS?', style: PixelText.body(size: 12)),
+            ),
         ],
       );
     }

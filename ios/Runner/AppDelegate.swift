@@ -10,6 +10,7 @@ import google_mobile_ads
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var notificationChannel: FlutterMethodChannel?
+  private var settingsChannel: FlutterMethodChannel?
   private var backgroundSyncChannel: FlutterMethodChannel?
   private var appInfoChannel: FlutterMethodChannel?
   private var referralChannel: FlutterMethodChannel?
@@ -49,6 +50,20 @@ import google_mobile_ads
     )
 
     let controller = window!.rootViewController as! FlutterViewController
+    settingsChannel = FlutterMethodChannel(
+      name: "com.steptracker/settings", binaryMessenger: controller.binaryMessenger
+    )
+    settingsChannel?.setMethodCallHandler { call, result in
+      guard call.method == "openHealthSettings" || call.method == "openNotificationSettings" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let url = URL(string: UIApplication.openSettingsURLString) else {
+        result(false)
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
+    }
 
     // Meta requires its advertiser-tracking flag to be set from the app's ATT
     // result before Google Mobile Ads initializes. Dart owns the ATT prompt, so

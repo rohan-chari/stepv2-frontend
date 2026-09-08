@@ -499,6 +499,9 @@ void main() {
         );
 
         await RemoteAssetCache.instance.refreshManifest();
+        // refreshManifest intentionally starts prefetch in the background.
+        // Join those coalesced fetches before teardown removes the cache dir.
+        await RemoteAssetCache.instance.prefetchMissing();
 
         expect(
           RemoteAssetCache.instance.entry(

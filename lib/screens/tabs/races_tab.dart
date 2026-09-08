@@ -28,6 +28,7 @@ import '../../widgets/spinning_crate.dart';
 import '../../widgets/team_scoreline.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
+import '../../widgets/ad_inline_card.dart';
 import '../tournament_detail_screen.dart';
 
 // Hard-offset "game piece" shadow shared with the home tab's card language.
@@ -66,6 +67,8 @@ class RacesTab extends StatefulWidget {
   // invite accept/decline calls.
   final BackendApiService? backendApiService;
   final RaceDetailNavigator? raceDetailNavigator;
+  // Enabled only by the real shell; tutorial/demo constructors never load ads.
+  final bool showNativeAd;
 
   const RacesTab({
     super.key,
@@ -88,6 +91,7 @@ class RacesTab extends StatefulWidget {
     this.tutorialBoxKey,
     this.backendApiService,
     this.raceDetailNavigator,
+    this.showNativeAd = false,
   });
 
   @override
@@ -1036,6 +1040,8 @@ class _RacesTabState extends State<RacesTab> {
       SliverToBoxAdapter(child: _buildStatePills()),
       if (pinned.isNotEmpty) ..._pinnedSectionSlivers(pinned),
       ..._selectedStateSlivers(),
+      if (widget.showNativeAd && _entriesFor(_selectedState).isNotEmpty)
+        const SliverToBoxAdapter(child: AdInlineCard()),
     ];
   }
 
