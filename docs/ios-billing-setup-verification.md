@@ -30,8 +30,15 @@ Production smoke checks confirmed:
 
 Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED` for 2.3.13 (3).
 Missing dSYM warnings for AppLovinSDK and FBAudienceNetwork did not block upload.
-Apple processing and internal TestFlight availability are verified separately;
-no App Store review submission or customer release was requested.
+Apple processing is VALID. After recording the exempt-encryption declaration,
+the build's internal state reached IN_BETA_TESTING. No App Store review
+submission or customer release was requested.
+
+The proposed support Google account does not yet exist in Bara. Obtain its
+immutable Google identity before first login and pre-register its hash through
+the existing sandbox identity mechanism. Ordinary signup auto-enrolls players
+in races, which prevents later sandbox conversion. No support identity has
+been registered yet; the mail-only OAuth grant does not expose its user ID.
 
 The sections below retain the pre-deployment preparation record. Their pending
 deployment statements are superseded by this update; sandbox account setup,
