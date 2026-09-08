@@ -1,5 +1,21 @@
 # iOS-first billing setup verification — September 8, 2026
 
+## Session fix TestFlight update
+
+Build **2.3.13 (4)** carries shared sign-in/billing session fix `f2cb53a`;
+release version commit `0715bc0`. Required shared AuthService wiring covers
+initial login, sign-out, account deletion and expired-session login. The new
+widget regression failed before the fix and passes afterward; 71 relevant
+tests and Flutter analysis pass, and independent code review found no issues.
+
+The signed archive and all eleven production defines were verified. IPA SHA-256:
+`25ad67f0ea7b3a7aa4d91bbca73d40416b6dd7f8993d930e340b36915ed590c1`.
+Xcode upload succeeded; Apple processing is VALID and internal build state is
+IN_BETA_TESTING after recording the exempt-encryption declaration. Build ID:
+`010f4b48-1d37-44a8-a09f-4c6d0dcd1bd4`. AppLovinSDK and FBAudienceNetwork missing
+dSYM warnings remain non-blocking. This was an explicitly authorized iOS-only
+TestFlight upload, with no backend deployment or App Review submission.
+
 ## Deployment update
 
 The user subsequently authorized production backend deployment and TestFlight
