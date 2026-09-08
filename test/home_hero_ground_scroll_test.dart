@@ -1,3 +1,4 @@
+import 'package:step_tracker/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/screens/start_screen.dart';
@@ -111,7 +112,9 @@ void main() {
   testWidgets('the title screen scrolls its ground too', (tester) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(const MaterialApp(home: StartScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: StartScreen(authService: AuthService())),
+    );
     await tester.pump();
     final scene = tester.widget<HomeHeroScene>(find.byType(HomeHeroScene));
     expect(scene.groundScrollSpeed, greaterThan(0));

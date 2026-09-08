@@ -1811,7 +1811,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
         showErrorToast(context, 'Session expired. Please sign in again.');
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const StartScreen()),
+          MaterialPageRoute(
+            builder: (context) => StartScreen(
+              authService: widget.authService,
+              notificationService: widget.notificationService,
+            ),
+          ),
           (route) => false,
         );
         return false;

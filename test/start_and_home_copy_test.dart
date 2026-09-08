@@ -21,7 +21,9 @@ void main() {
   testWidgets('StartScreen describes Bara as a social step challenge app', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: StartScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: StartScreen(authService: AuthService())),
+    );
 
     expect(find.text('Bara'), findsOneWidget);
     expect(

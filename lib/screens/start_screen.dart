@@ -18,7 +18,13 @@ import '../widgets/home_course_track.dart';
 import '../widgets/home_hero_scene.dart';
 
 class StartScreen extends StatefulWidget {
-  const StartScreen({super.key, this.notificationService});
+  const StartScreen({
+    super.key,
+    required this.authService,
+    this.notificationService,
+  });
+
+  final AuthService authService;
 
   final NotificationService? notificationService;
 
@@ -27,7 +33,7 @@ class StartScreen extends StatefulWidget {
 }
 
 class _StartScreenState extends State<StartScreen> {
-  final AuthService _authService = AuthService();
+  AuthService get _authService => widget.authService;
   bool _isSigningIn = false;
 
   // Hidden 6-tap-in-3s gesture on the "Bara" title opens a reviewer

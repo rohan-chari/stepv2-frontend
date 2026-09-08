@@ -286,7 +286,12 @@ class _SettingsContentState extends State<_SettingsContent> {
       await widget.authService.deleteAccount();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const StartScreen()),
+        MaterialPageRoute(
+          builder: (context) => StartScreen(
+            authService: widget.authService,
+            notificationService: widget.notificationService,
+          ),
+        ),
         (route) => false,
       );
     } catch (error) {
@@ -302,7 +307,12 @@ class _SettingsContentState extends State<_SettingsContent> {
     await widget.authService.signOut();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const StartScreen()),
+      MaterialPageRoute(
+        builder: (context) => StartScreen(
+          authService: widget.authService,
+          notificationService: widget.notificationService,
+        ),
+      ),
       (route) => false,
     );
   }

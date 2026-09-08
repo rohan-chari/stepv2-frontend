@@ -398,7 +398,10 @@ class _SessionGateState extends State<SessionGate> {
       );
     }
 
-    return StartScreen(notificationService: widget.notificationService);
+    return StartScreen(
+      authService: widget.authService,
+      notificationService: widget.notificationService,
+    );
   }
 }
 

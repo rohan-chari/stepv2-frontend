@@ -244,7 +244,9 @@ void main() {
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(const MaterialApp(home: StartScreen()));
+      await tester.pumpWidget(
+        MaterialApp(home: StartScreen(authService: AuthService())),
+      );
       await tester.pump(const Duration(milliseconds: 100));
 
       final title = find.text('Bara');
