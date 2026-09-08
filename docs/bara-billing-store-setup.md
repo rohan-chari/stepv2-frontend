@@ -178,6 +178,15 @@ Backend-only configuration:
 - `BILLING_TERMS_URL` — HTTPS URL of deployed `/billing-terms.html`.
 - `BILLING_PRIVACY_URL` — HTTPS URL of deployed `/privacy.html`.
 
+Each platform's checkout requires its own app ID. For the user-authorized
+iOS-first setup, leave `REVENUECAT_ANDROID_APP_ID` absent until the Google Play
+app is configured. With the shared credentials, legal URLs and iOS app ID set,
+iOS checkout and account reconciliation work; Android bootstrap reports
+`available: false` and an empty product list while retaining wallet/member state.
+Use the full REST API project ID shown in Project settings (including `proj`),
+not the shortened ID in the dashboard URL. These are credential requirements,
+not release flags.
+
 Webhook route: `/billing/webhook/revenuecat` on the approved backend deployment.
 Public legal pages are included in the backend web build. Review their purchase
 terms and billing disclosure before publishing the deployment.
@@ -205,6 +214,13 @@ approved deployment/operation. None of these production operations has been run
 as part of implementation.
 
 ### Dedicated sandbox accounts
+
+TestFlight builds use Apple's sandbox for purchases. Uploading a build does not
+require the purchase products to be approved. To test the products, Apple's
+minimum metadata is a reference name, product ID, localized name and price;
+complete any missing localization before testing. A review screenshot is not
+listed in that sandbox minimum, but is still needed for product submission.
+See [Apple's sandbox testing requirements](https://developer.apple.com/documentation/storekit/in-app_purchase/testing_in-app_purchases_with_sandbox).
 
 Use a fresh Bara account before it earns/spends coins, joins competitions, makes
 referrals or establishes friendships. Check eligibility first, then apply:

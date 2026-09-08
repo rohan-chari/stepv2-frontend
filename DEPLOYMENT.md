@@ -18,6 +18,11 @@ store-backed build: `REVENUECAT_IOS_API_KEY` on iOS and
 unavailable; it is not proof that billing was tested. Never put the RevenueCat
 secret API key or webhook secret in a Flutter build.
 
+For the explicitly requested iOS-first billing setup, the backend supports
+configuring the iOS RevenueCat app independently. Android checkout stays
+unavailable until its own app ID and SDK key are supplied. This does not remove
+the normal platform-parity requirement for subsequent customer releases.
+
 The production commands below require those public-key shell variables to be
 set. Preserve all existing backend, OAuth and AdMob arguments when adding them.
 Use the production package for TestFlight/Play internal billing tests, with
