@@ -3,7 +3,30 @@ import '../models/billing.dart';
 
 /// Injected purchase boundary. Presentation never grants wallet balances or
 /// member benefits; the live implementation reconciles verified server state.
+class PendingBillingFeedback {
+  const PendingBillingFeedback(this.sequence, this.userId, this.result);
+  final int sequence;
+  final String userId;
+  final BillingResult result;
+}
+
 abstract class BillingController extends ChangeNotifier {
+  int _feedbackSequence = 0;
+  PendingBillingFeedback? _pendingFeedback;
+  PendingBillingFeedback? get pendingFeedback => _pendingFeedback;
+
+  /// Terminal reconciliation of an earlier pending checkout. Widgets only
+  /// consume this after originating that pending operation in the same session.
+  @protected
+  void publishPendingFeedback(BillingResult result) {
+    _pendingFeedback = PendingBillingFeedback(
+      ++_feedbackSequence,
+      userId,
+      result,
+    );
+    notifyListeners();
+  }
+
   String get userId;
   bool get isPreview;
   bool get isAvailable => isPreview;

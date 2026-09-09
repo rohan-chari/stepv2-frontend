@@ -5,12 +5,12 @@ import 'game_toast.dart';
 
 /// Shows a game-styled error toast that slides down from the top
 /// and auto-dismisses after [duration].
-void showErrorToast(
+VoidCallback showErrorToast(
   BuildContext context,
   String message, {
   Duration duration = const Duration(seconds: 3),
 }) {
-  showGameToast(
+  return showGameToast(
     context,
     message,
     duration: duration,

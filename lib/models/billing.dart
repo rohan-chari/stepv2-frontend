@@ -5,6 +5,8 @@ enum BillingPlan { monthly, annual, permanent }
 
 enum BillingOperationStatus { idle, loading, pending, success, failed }
 
+enum BillingDisposition { success, error, cancelled, pending, notice }
+
 enum RerollFunding { credits, coins, ad }
 
 class CoinPackOffer {
@@ -102,7 +104,15 @@ class BillingSnapshot {
 class BillingResult {
   final bool success;
   final String message;
-  const BillingResult({required this.success, required this.message});
+  final BillingDisposition? _disposition;
+  BillingDisposition get disposition =>
+      _disposition ??
+      (success ? BillingDisposition.success : BillingDisposition.error);
+  const BillingResult({
+    required this.success,
+    required this.message,
+    BillingDisposition? disposition,
+  }) : _disposition = disposition;
 }
 
 class BillingRerollResult extends BillingResult {

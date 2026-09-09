@@ -18,6 +18,17 @@ void main() {
     await tester.pumpWidget(BillingPreviewApp(controller: controller));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('OPEN SHOP'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+  }
+
+  Future<void> exitShop(WidgetTester tester) async {
+    await closeShopMembership(tester);
+    await tester.tap(find.text('Back'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
   }
 
   testWidgets(
@@ -27,11 +38,18 @@ void main() {
       final controller = PreviewBillingController();
       addTearDown(controller.dispose);
       await launch(tester, controller);
+      await exitShop(tester);
       await tester.tap(find.byKey(const Key('preview-nav-coins')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const Key('preview-nav-shop')), findsNothing);
+      expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
+      await exitShop(tester);
       await tester.tap(find.byKey(const Key('preview-nav-shop')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      await exitShop(tester);
       expect(find.byKey(const Key('preview-nav-shop')), findsOneWidget);
       await controller.auth.updateHeldCoins(0);
       expect(
@@ -60,11 +78,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     expect(controller.snapshot.coins, 680);
+    await exitShop(tester);
     await tester.tap(find.byKey(const Key('preview-nav-profile')));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.byKey(const Key('billing-profile-badge')), findsOneWidget);
-    expect(find.byKey(const Key('billing-profile-membership')), findsOneWidget);
+    expect(find.byKey(const Key('billing-profile-membership')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -75,6 +94,7 @@ void main() {
     final controller = PreviewBillingController();
     addTearDown(controller.dispose);
     await launch(tester, controller);
+    await exitShop(tester);
     await tester.tap(find.byKey(const Key('preview-nav-coins')));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));

@@ -80,7 +80,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text(r'$0.99'));
+      await tester.tap(find.byKey(const Key('buy-coins-coins_500')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(
@@ -91,7 +91,7 @@ void main() {
       controller.finishPending();
       await tester.pump();
       expect(controller.snapshot.coins, 850);
-      await tester.tap(find.text(r'$0.99'));
+      await tester.tap(find.byKey(const Key('buy-coins-coins_500')));
       await tester.pump();
       controller.setScenario(PreviewBillingScenario.free);
       await tester.pump(const Duration(seconds: 1));

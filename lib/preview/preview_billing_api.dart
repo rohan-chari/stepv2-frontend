@@ -1,3 +1,4 @@
+import '../models/character_wardrobe.dart';
 import '../demo/demo_race_api_service.dart';
 import '../demo/demo_race_engine.dart';
 import '../services/backend_api_service.dart';
@@ -37,6 +38,267 @@ class PreviewBillingApi extends DemoRaceApiService {
     }
   }
 
+  String _activeCharacter = 'default';
+  int _appearanceRevision = 0;
+  final Map<String, Map<String, String?>> _outfits = {};
+  final Map<String, int> _outfitRevisions = {};
+  bool conflictNextOutfitSave = false;
+  bool hideOutfitItems = false;
+  bool _wardrobeExamples = false;
+  Future<void>? nextWardrobeRead;
+  Future<void>? nextOutfitSave;
+
+  void resetShopState() {
+    _activeCharacter = 'default';
+    _appearanceRevision = 0;
+    _outfits.clear();
+    _outfitRevisions.clear();
+    _equipment.clear();
+    _purchases.clear();
+    conflictNextOutfitSave = false;
+    hideOutfitItems = false;
+    _wardrobeExamples = false;
+    nextWardrobeRead = null;
+    nextOutfitSave = null;
+  }
+
+  /// Deterministic offline examples using existing bundled artwork.
+  void seedWardrobeExamples() {
+    _wardrobeExamples = true;
+    controller.ownedCosmetics.addAll([
+      'baseball_cap',
+      'sunglasses',
+      'gold_chain',
+    ]);
+    _outfits['default'] = {..._slotsFor('default'), 'NECK': 'gold_chain'};
+    _projectActive();
+  }
+
+  bool _available(Map<String, dynamic> item) =>
+      !_wardrobeExamples || item['id'] != 'baseball_cap';
+
+  Map<String, dynamic> _wardrobeEnvelope() => {
+    'contract': wardrobeContract,
+    'appearanceRevision': _appearanceRevision,
+    'activeCharacterKey': _activeCharacter,
+    'activeCharacterVisible': true,
+    'coins': controller.auth.coins,
+    'adUnlock': null,
+  };
+  Map<String, String?> _slotsFor(String key) =>
+      _outfits[key] ?? {for (final slot in wardrobeSlots) slot: null};
+  Map<String, dynamic> _outfitFor(String key) => {
+    'revision': _outfitRevisions[key] ?? 0,
+    'editable': !hideOutfitItems,
+    'hasHiddenItems': hideOutfitItems,
+    'slots': _slotsFor(key),
+    'items': [
+      for (final item in _cosmetics)
+        if (_slotsFor(key).values.contains(item['id'])) item,
+    ],
+    'unavailableItemIds': <String>[],
+  };
+  bool _characterOwned(String key) =>
+      key == 'default' || controller.ownedCosmetics.contains(key);
+  @override
+  Future<Map<String, dynamic>> fetchShopCharacters({
+    required String identityToken,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    ..._wardrobeEnvelope(),
+    'characters': [
+      for (final key in ['default', 'corgi_puppy', 'turtle'])
+        {
+          'characterKey': key,
+          'name': key == 'default'
+              ? 'Capybara'
+              : key == 'turtle'
+              ? 'Turtle'
+              : 'Corgi',
+          'item': key == 'default'
+              ? null
+              : _cosmetics.firstWhere((item) => item['id'] == key),
+          'owned': _characterOwned(key),
+          'active': key == _activeCharacter,
+          'canPurchase': !_characterOwned(key),
+          'canActivate': _characterOwned(key),
+          'canEdit': _characterOwned(key),
+          'availability': 'available',
+          'outfit': _characterOwned(key) ? _outfitFor(key) : null,
+        },
+    ],
+    'nextCursor': null,
+  };
+  @override
+  Future<Map<String, dynamic>> fetchCharacterWardrobe({
+    required String identityToken,
+    required String characterKey,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async {
+    if (!_characterOwned(characterKey)) {
+      throw const ApiException(
+        'Character not owned.',
+        statusCode: 403,
+        code: 'CHARACTER_NOT_OWNED',
+      );
+    }
+    final response = <String, dynamic>{
+      ..._wardrobeEnvelope(),
+      'characterKey': characterKey,
+      'name': characterKey == 'default'
+          ? 'Capybara'
+          : characterKey == 'turtle'
+          ? 'Turtle'
+          : 'Corgi',
+      'active': characterKey == _activeCharacter,
+      'canActivate': true,
+      'outfit': _outfitFor(characterKey),
+      'accessories': [
+        for (final item in _cosmetics.where(
+          (item) =>
+              item['slot'] != 'CHARACTER' &&
+              (characterKey == 'default' ||
+                  controller.ownedCosmetics.contains(item['id'])),
+        ))
+          {
+            'item': {
+              ...item,
+              if (_wardrobeExamples && item['id'] == 'sunglasses')
+                'earnOnly': true,
+            },
+            'owned': controller.ownedCosmetics.contains(item['id']),
+            'canPurchase':
+                characterKey == 'default' &&
+                _available(item) &&
+                !controller.ownedCosmetics.contains(item['id']),
+            'canSelect':
+                characterKey == 'default' &&
+                _available(item) &&
+                controller.ownedCosmetics.contains(item['id']),
+            'canPreview': characterKey == 'default' && _available(item),
+            'fit': characterKey == 'default' && _available(item)
+                ? (_wardrobeExamples && item['id'] == 'gold_chain'
+                      ? 'legacy-preserved'
+                      : 'approved')
+                : 'preservation-only',
+            'unavailableReason': characterKey == 'default' && _available(item)
+                ? null
+                : 'incompatible',
+          },
+      ],
+      'nextCursor': null,
+    };
+    final gate = nextWardrobeRead;
+    nextWardrobeRead = null;
+    if (gate != null) await gate;
+    return response;
+  }
+
+  @override
+  Future<Map<String, dynamic>> saveCharacterOutfit({
+    required String identityToken,
+    required String characterKey,
+    required int expectedOutfitRevision,
+    required Map<String, String?> slots,
+  }) async {
+    final gate = nextOutfitSave;
+    nextOutfitSave = null;
+    if (gate != null) await gate;
+    if (conflictNextOutfitSave ||
+        expectedOutfitRevision != (_outfitRevisions[characterKey] ?? 0)) {
+      conflictNextOutfitSave = false;
+      throw const ApiException(
+        'Your outfit changed on another device.',
+        statusCode: 409,
+        code: 'OUTFIT_CHANGED',
+      );
+    }
+    if (!_characterOwned(characterKey) ||
+        slots.values.whereType<String>().any(
+          (id) => !controller.ownedCosmetics.contains(id),
+        )) {
+      throw const ApiException(
+        'Unlock this item first.',
+        statusCode: 403,
+        code: 'ITEM_NOT_OWNED',
+      );
+    }
+    if (hideOutfitItems) {
+      throw const ApiException(
+        'Outfit is unavailable.',
+        statusCode: 409,
+        code: 'WARDROBE_NOT_EDITABLE',
+      );
+    }
+    final changed = wardrobeSlots.any(
+      (slot) => slots[slot] != _slotsFor(characterKey)[slot],
+    );
+    if (changed) {
+      _outfits[characterKey] = {...slots};
+      _outfitRevisions[characterKey] = expectedOutfitRevision + 1;
+      if (characterKey == _activeCharacter) {
+        _appearanceRevision++;
+        _projectActive();
+      }
+    }
+    return {
+      ..._wardrobeEnvelope(),
+      'characterKey': characterKey,
+      'outfit': _outfitFor(characterKey),
+      'appearanceChanged': changed && characterKey == _activeCharacter,
+      'equipped': _equipped,
+    };
+  }
+
+  void _projectActive() {
+    _equipment.clear();
+    if (_activeCharacter != 'default') {
+      _equipment['CHARACTER'] = _activeCharacter;
+    }
+    for (final entry in _slotsFor(_activeCharacter).entries) {
+      if (entry.value case final id?) _equipment[entry.key] = id;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> activateShopCharacter({
+    required String identityToken,
+    required String characterKey,
+    required int expectedAppearanceRevision,
+    required int expectedOutfitRevision,
+  }) async {
+    if (!_characterOwned(characterKey)) {
+      throw const ApiException(
+        'Character not owned.',
+        statusCode: 403,
+        code: 'CHARACTER_NOT_OWNED',
+      );
+    }
+    if (expectedAppearanceRevision != _appearanceRevision ||
+        expectedOutfitRevision != (_outfitRevisions[characterKey] ?? 0)) {
+      throw const ApiException(
+        'Your outfit changed on another device.',
+        statusCode: 409,
+        code: 'APPEARANCE_CHANGED',
+      );
+    }
+    final changed = _activeCharacter != characterKey;
+    _activeCharacter = characterKey;
+    if (changed) _appearanceRevision++;
+    _projectActive();
+    return {
+      ..._wardrobeEnvelope(),
+      'characterKey': characterKey,
+      'outfit': _outfitFor(characterKey),
+      'appearanceChanged': changed,
+      'equipped': _equipped,
+    };
+  }
+
   int _price(int base) =>
       controller.snapshot.isMember ? (base * 85 / 100).ceil() : base;
   Map<String, dynamic> _pricing(int base) => {
@@ -51,6 +313,8 @@ class PreviewBillingApi extends DemoRaceApiService {
       ('baseball_cap', 'Baseball Cap', 'HEAD', 200),
       ('sunglasses', 'Sunglasses', 'FACE', 250),
       ('gold_chain', 'Gold Chain', 'NECK', 300),
+      ('corgi_puppy', 'Corgi', 'CHARACTER', 300),
+      ('turtle', 'Turtle', 'CHARACTER', 500),
     ])
       {
         'id': entry.$1,

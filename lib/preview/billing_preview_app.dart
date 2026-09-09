@@ -160,6 +160,7 @@ class _PreviewHomeState extends State<_PreviewHome> {
                             : scenario.name.toUpperCase(),
                       ),
                       onPressed: () {
+                        widget.api.resetShopState();
                         widget.controller.setScenario(scenario);
                         setState(() => generation++);
                         Navigator.pop(context);
@@ -203,26 +204,31 @@ class _PreviewHomeState extends State<_PreviewHome> {
     ),
   );
 
+  void _openShop(int entry) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ShopTab(
+          authService: widget.controller.auth,
+          backendApiService: widget.api,
+          initialFocus: entry == 1
+              ? ShopFocus.coins
+              : entry == 2
+              ? ShopFocus.membership
+              : ShopFocus.featured,
+          adControllerBuilder: () => PreviewUnsupportedAds(),
+          getCoinsAdController: ads,
+        ),
+      ),
+    );
+  }
+
   Widget _page() => switch (page) {
-    0 => ShopTab(
-      authService: widget.controller.auth,
-      backendApiService: widget.api,
-      adControllerBuilder: () => PreviewUnsupportedAds(),
-      getCoinsAdController: ads,
-    ),
-    1 => ShopTab(
-      key: const ValueKey('preview-coins'),
-      authService: widget.controller.auth,
-      backendApiService: widget.api,
-      initialFocus: ShopFocus.coins,
-      adControllerBuilder: () => PreviewUnsupportedAds(),
-    ),
-    2 => ShopTab(
-      key: const ValueKey('preview-membership'),
-      authService: widget.controller.auth,
-      backendApiService: widget.api,
-      initialFocus: ShopFocus.membership,
-      adControllerBuilder: () => PreviewUnsupportedAds(),
+    0 || 1 || 2 => Center(
+      child: PillButton(
+        label: 'OPEN SHOP',
+        icon: Icons.storefront_rounded,
+        onPressed: () => _openShop(page),
+      ),
     ),
     3 => ProfileTab(
       authService: widget.controller.auth,
@@ -284,7 +290,10 @@ class _PreviewHomeState extends State<_PreviewHome> {
     ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: page,
-      onDestinationSelected: (value) => setState(() => page = value),
+      onDestinationSelected: (value) {
+        setState(() => page = value);
+        if (value < 3) _openShop(value);
+      },
       destinations: const [
         NavigationDestination(
           key: Key('preview-nav-shop'),

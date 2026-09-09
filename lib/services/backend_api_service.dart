@@ -6247,6 +6247,77 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchShopCharacters({
+    required String identityToken,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => _decodeJsonResponse(
+    await _sendGetRequest(
+      path: Uri(
+        path: '/shop/characters',
+        queryParameters: {
+          'limit': '$limit',
+          'cursor': ?cursor,
+          'localDate': ?localDate,
+        },
+      ).toString(),
+      identityToken: identityToken,
+    ),
+  );
+
+  Future<Map<String, dynamic>> fetchCharacterWardrobe({
+    required String identityToken,
+    required String characterKey,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => _decodeJsonResponse(
+    await _sendGetRequest(
+      path: Uri(
+        path: '/shop/characters/${Uri.encodeComponent(characterKey)}/wardrobe',
+        queryParameters: {
+          'limit': '$limit',
+          'cursor': ?cursor,
+          'localDate': ?localDate,
+        },
+      ).toString(),
+      identityToken: identityToken,
+    ),
+  );
+
+  Future<Map<String, dynamic>> saveCharacterOutfit({
+    required String identityToken,
+    required String characterKey,
+    required int expectedOutfitRevision,
+    required Map<String, String?> slots,
+  }) async => _decodeJsonResponse(
+    await _sendJsonRequest(
+      method: 'PUT',
+      path: '/shop/characters/${Uri.encodeComponent(characterKey)}/outfit',
+      identityToken: identityToken,
+      body: {'expectedOutfitRevision': expectedOutfitRevision, 'slots': slots},
+    ),
+  );
+
+  Future<Map<String, dynamic>> activateShopCharacter({
+    required String identityToken,
+    required String characterKey,
+    required int expectedAppearanceRevision,
+    required int expectedOutfitRevision,
+  }) async => _decodeJsonResponse(
+    await _sendJsonRequest(
+      method: 'PUT',
+      path: '/shop/active-character',
+      identityToken: identityToken,
+      body: {
+        'characterKey': characterKey,
+        'expectedAppearanceRevision': expectedAppearanceRevision,
+        'expectedOutfitRevision': expectedOutfitRevision,
+      },
+    ),
+  );
+
   Future<Map<String, dynamic>> equipAccessory({
     required String identityToken,
     required String slot,

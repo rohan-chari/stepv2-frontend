@@ -3,6 +3,7 @@ import '../models/billing.dart';
 import '../services/billing_controller.dart';
 import '../styles.dart';
 import 'billing_scope.dart';
+import 'billing_action_feedback.dart';
 import 'pill_button.dart';
 import 'loading_skeleton.dart';
 import 'shop_product_grid.dart';
@@ -27,20 +28,25 @@ class CoinPackOffers extends StatefulWidget {
 
 class _CoinPackOffersState extends State<CoinPackOffers> {
   bool _busy = false;
-  String? _message;
+  String? _busyOfferId;
+  late final _feedback = BillingActionFeedback(
+    context: () => context,
+    isMounted: () => mounted,
+  );
   BillingController? _controller;
   String? _userId;
   int _generation = 0;
 
   void _observe(BillingController? controller) {
+    _feedback.observe(controller);
     if (identical(controller, _controller) && controller?.userId == _userId) {
       return;
     }
     _controller = controller;
     _userId = controller?.userId;
     _generation++;
-    _message = null;
     _busy = false;
+    _busyOfferId = null;
   }
 
   Future<void> _buy(BillingController controller, CoinPackOffer offer) async {
@@ -48,22 +54,27 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
     final userId = controller.userId;
     bool current() =>
         mounted && generation == _generation && controller.userId == userId;
+    if (_busy || controller.snapshot.busy) return;
     setState(() {
       _busy = true;
-      _message = null;
+      _busyOfferId = offer.id;
     });
     try {
-      final result = await controller.buyCoins(offer);
-      if (current()) setState(() => _message = result.message);
-    } catch (_) {
-      if (current()) {
-        setState(
-          () => _message = 'Purchase could not be completed. Please try again.',
-        );
-      }
+      await _feedback.perform(controller, () => controller.buyCoins(offer));
     } finally {
-      if (current()) setState(() => _busy = false);
+      if (current()) {
+        setState(() {
+          _busy = false;
+          _busyOfferId = null;
+        });
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _feedback.dispose();
+    super.dispose();
   }
 
   String _art(CoinPackOffer offer) => switch (offer.id) {
@@ -157,15 +168,14 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
               ],
             ),
           ),
-        if (state?.message != null || _message != null)
+        if (state?.operationStatus == BillingOperationStatus.pending) ...[
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              state?.message ?? _message ?? '',
+              state?.message ?? 'Purchase is awaiting confirmation.',
               style: PixelText.body(size: 13, color: headingColor),
             ),
           ),
-        if (state?.operationStatus == BillingOperationStatus.pending)
           TextButton(
             onPressed: controller?.refresh,
             child: Text(
@@ -173,6 +183,7 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
               style: PixelText.body(size: 13, color: headingColor),
             ),
           ),
+        ],
         if (controller?.isPreview == true)
           Padding(
             padding: const EdgeInsets.only(top: 14),
@@ -244,11 +255,12 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
               padding: const EdgeInsets.all(4),
               child: PillButton(
                 key: Key('buy-coins-${offer.id}'),
-                label: offer.price,
+                label: 'Buy · ${offer.price}',
+                loading: _busy && _busyOfferId == offer.id,
                 fontSize: 12,
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
                 fullWidth: true,
-                variant: PillButtonVariant.secondary,
+                variant: PillButtonVariant.primary,
                 onPressed: _busy || controller.snapshot.busy
                     ? null
                     : () => _buy(controller, offer),

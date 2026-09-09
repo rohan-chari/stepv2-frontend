@@ -1,3 +1,9 @@
+import '../../widgets/game_toast.dart';
+import '../../models/character_wardrobe.dart';
+import '../../services/character_wardrobe_controller.dart';
+import '../../widgets/shop_character_card.dart';
+import '../character_wardrobe_screen.dart';
+import '../../widgets/shop_category_bar.dart';
 import '../../services/billing_controller.dart';
 import '../../models/billing.dart';
 import '../../widgets/billing_scope.dart';
@@ -28,7 +34,6 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
-import '../../widgets/race_ui.dart';
 import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
 
@@ -106,22 +111,6 @@ const _knownEquipmentSlots = <String>{
 };
 
 const _defaultCharacterSelectionId = '__default_capybara__';
-
-extension on _ShopCategory {
-  String get label => switch (this) {
-    _ShopCategory.featured => 'FEATURED',
-    _ShopCategory.powerups => 'POWERUPS',
-    _ShopCategory.characters => 'CHARACTERS',
-    _ShopCategory.accessories => 'ACCESSORIES',
-  };
-
-  IconData get icon => switch (this) {
-    _ShopCategory.featured => Icons.auto_awesome,
-    _ShopCategory.powerups => Icons.bolt_rounded,
-    _ShopCategory.characters => Icons.pets_rounded,
-    _ShopCategory.accessories => Icons.checkroom_rounded,
-  };
-}
 
 /// Powerup store sub-filter (item 9). Matches the additive `category` field on
 /// each catalog item; an older backend that omits it defaults every item to
@@ -217,7 +206,18 @@ class ShopTab extends StatefulWidget {
 class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   final _storeScrollController = ScrollController();
   final _coinsKey = GlobalKey();
+  final _headerKey = GlobalKey();
+  double _toastTop = 100;
+  final List<VoidCallback> _toasts = [];
+  void _showInfo(BuildContext unused, String message) =>
+      _toasts.add(showInfoToast(_headerKey.currentContext ?? context, message));
+  void _showError(BuildContext unused, String message) => _toasts.add(
+    showErrorToast(_headerKey.currentContext ?? context, message),
+  );
+
   bool _membershipOpen = false;
+  bool _characterActivating = false;
+  BuildContext? _characterMenuContext;
   BuildContext? _membershipSheetContext;
   String? _membershipUserId;
   _ShopCategory _lastItemCategory = _ShopCategory.powerups;
@@ -229,6 +229,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   ];
 
   late final BackendApiService _backendApiService;
+  late final CharacterWardrobeController _wardrobes;
   Map<String, dynamic>? _catalog;
   Loadable<Map<String, dynamic>> _catalogState = const Loadable.initial();
 
@@ -241,6 +242,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   bool _loading = true;
   bool _saving = false;
+  final Map<String, String> _cosmeticPurchaseKeys = {};
   Map<String, dynamic>? _purchaseOverlayItem;
   OverlayEntry? _purchaseOverlayEntry;
   final _tutorialOverlaySpaceKey = GlobalKey();
@@ -310,7 +312,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       }
       _clearPurchaseOverlay();
       _selectedCosmeticItem = null;
-      unawaited(_loadCatalog());
+      unawaited(
+        _loadCatalog().then((_) {
+          if (mounted) return _wardrobes.load();
+        }),
+      );
     });
   }
 
@@ -337,6 +343,26 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _backendApiService = widget.backendApiService ?? BackendApiService();
+    _wardrobes = CharacterWardrobeController(
+      api: _backendApiService,
+      auth: widget.authService,
+      onAppearanceChanged: (appearance) {
+        _shopStateEpoch++;
+        _catalogRequestGeneration++;
+        final next = {...?_catalog, ...appearance};
+        setState(() {
+          _catalog = next;
+          _catalogState = Loadable.success(next);
+        });
+        widget.onShopChanged?.call(next);
+      },
+    )..addListener(_wardrobesChanged);
+    _storeScrollController.addListener(() {
+      if (_activeCategory == _ShopCategory.characters &&
+          _storeScrollController.position.extentAfter < 300) {
+        _wardrobes.load(more: true);
+      }
+    });
     _shopSessionUserId = widget.authService.userId;
     _shopSessionToken = widget.authService.authToken;
     WidgetsBinding.instance.addObserver(this);
@@ -357,6 +383,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    for (final dismiss in _toasts) {
+      dismiss();
+    }
+    _toasts.clear();
+    _wardrobes.removeListener(_wardrobesChanged);
+    _wardrobes.dispose();
     _storeScrollController.dispose();
     _billing?.removeListener(_billingChanged);
     _shopSessionGeneration++;
@@ -394,6 +426,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
 
     if (nextUserId != _shopSessionUserId) _closeMembershipForIdentityChange();
+    final menuContext = _characterMenuContext;
+    _characterMenuContext = null;
+    _characterActivating = false;
+    if (menuContext != null && menuContext.mounted) {
+      final route = ModalRoute.of(menuContext);
+      if (route != null) Navigator.of(menuContext).removeRoute(route);
+    }
+    _cosmeticPurchaseKeys.clear();
     _shopSessionUserId = nextUserId;
     _shopSessionToken = nextToken;
     _shopSessionGeneration++;
@@ -411,6 +451,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       _disposeShopAdTarget();
     }
     _removePurchaseOverlayEntry();
+    for (final dismiss in _toasts) {
+      dismiss();
+    }
+    _toasts.clear();
     if (!mounted) return;
     setState(() {
       _catalog = null;
@@ -492,24 +536,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   static const _tutorialTargets = <Key>[
-    Key('shop-segment-control'),
-    Key('shop-category-pills'),
-    Key('shop-character-preview'),
-    Key('shop-product-grid'),
+    Key('shop-bottom-navigation'),
+    Key('shop-character-default'),
   ];
-
-  static const _tutorialTitles = <String>[
-    'STORE OR INVENTORY',
-    'PICK A CATEGORY',
-    'TRY IT ON',
-    'CHOOSE YOUR ITEM',
-  ];
-
-  static const _tutorialBodies = <String>[
-    'Browse new gear in Store, then manage everything you own in Inventory.',
-    'Jump between powerups, characters, and accessories.',
-    'The dressing room previews your Bara before you buy or equip.',
-    'Tap any card for details, then buy or unlock when you’re ready.',
+  static const _tutorialTitles = ['PICK A CATEGORY', 'YOUR CHARACTERS'];
+  static const _tutorialBodies = [
+    'Featured has coins and Bara+. Powerups has Buy and Owned. Characters keeps every character together.',
+    'Owned and locked characters share one collection. Open an owned character to edit its saved outfit or make it active.',
   ];
 
   Element? _elementWithKey(Key key) {
@@ -560,11 +593,20 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   bool get _allTutorialTargetsMounted =>
-      _tutorialTargets.every((key) => _mountedTutorialTargetRect(key) != null);
+      _mountedTutorialTargetRect(_tutorialTargets.first) != null;
 
   Future<Rect?> _measureTutorialTarget(int step) async {
     if (!mounted || step < 0 || step >= _tutorialTargets.length) return null;
     final key = _tutorialTargets[step];
+    if (step == 1 && _activeCategory != _ShopCategory.characters) {
+      setState(() {
+        _category = _ShopCategory.characters;
+        _storeFeatured = false;
+      });
+      await _wardrobes.load();
+      if (!mounted) return null;
+      await WidgetsBinding.instance.endOfFrame;
+    }
     final target = _elementWithKey(key);
     if (target == null || !target.mounted) return null;
     await Scrollable.ensureVisible(
@@ -620,10 +662,35 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final step = _tutorialStep;
     if (step == null) return;
     if (step == _tutorialTargets.length - 1) {
-      _finishTutorial();
+      unawaited(_launchWardrobeTutorial());
       return;
     }
     unawaited(_showTutorialStep(step + 1));
+  }
+
+  Future<void> _launchWardrobeTutorial() async {
+    final character =
+        _wardrobes.characters['default'] ??
+        ShopCharacter.fromJson({
+          'characterKey': 'default',
+          'name': 'Capybara',
+          'owned': true,
+          'canEdit': true,
+        });
+    setState(() => _tutorialStep = null);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CharacterWardrobeScreen(
+          character: character,
+          controller: _wardrobes,
+          onBuy: (_) async => null,
+          tutorial: true,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _tutorialStep = 1);
+    _finishTutorial();
   }
 
   void _backTutorial() {
@@ -788,7 +855,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         _loading = false;
         _catalogState = Loadable.error(error.message, data: previous);
       });
-      showErrorToast(context, error.message);
+      _showError(context, error.message);
     } catch (_) {
       if (!mounted) return;
       if (token == null ||
@@ -808,7 +875,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           data: previous,
         );
       });
-      showErrorToast(context, 'Could not load the shop. Please try again.');
+      _showError(context, 'Could not load the shop. Please try again.');
     }
   }
 
@@ -1032,9 +1099,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return _validEquipmentRow(slot, catalog: catalog)?['id'] == id;
   }
 
-  bool _defaultCharacterIsEquipped({Map<String, dynamic>? catalog}) =>
-      _validEquipmentRow('CHARACTER', catalog: catalog) == null;
-
   bool _isCosmeticOwned(
     Map<String, dynamic> item, {
     Map<String, dynamic>? catalog,
@@ -1043,27 +1107,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final id = item['id'];
     final rawOwned = (catalog ?? _catalog)?['ownedItemIds'];
     return id is String && rawOwned is List && rawOwned.contains(id);
-  }
-
-  Map<String, dynamic>? _validatedEquipmentMap(Object? raw) {
-    if (raw is! Map) return null;
-    final normalized = <String, dynamic>{};
-    for (final entry in raw.entries) {
-      final slot = entry.key;
-      if (slot is! String || !_knownEquipmentSlots.contains(slot)) continue;
-      final value = entry.value;
-      if (value == null) continue;
-      if (value is! Map) return null;
-      final id = value['id'];
-      if (id is! String || id.trim().isEmpty || value['slot'] != slot) {
-        return null;
-      }
-      normalized[slot] = <String, dynamic>{
-        for (final rowEntry in value.entries)
-          if (rowEntry.key is String) rowEntry.key as String: rowEntry.value,
-      };
-    }
-    return normalized;
   }
 
   Map<String, dynamic>? _revalidatedSelection(Map<String, dynamic> catalog) {
@@ -1132,9 +1175,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         expectedPriceCoins: item['priceCoins'] is num
             ? (item['priceCoins'] as num).toInt()
             : null,
-        idempotencyKey:
-            '${widget.authService.userId ?? 'user'}-${DateTime.now().microsecondsSinceEpoch}',
+        idempotencyKey: _cosmeticPurchaseKeys.putIfAbsent(
+          itemId,
+          () =>
+              '${widget.authService.userId ?? 'user'}-${DateTime.now().microsecondsSinceEpoch}',
+        ),
       );
+      _cosmeticPurchaseKeys.remove(itemId);
       if (!_sessionIsCurrent(
         generation: generation,
         userId: userId,
@@ -1173,9 +1220,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       )) {
         if (!mounted) return;
         _clearPurchaseOverlay();
-        showInfoToast(context, '${item['name'] ?? 'Accessory'} unlocked.');
+        _showInfo(context, '${item['name'] ?? 'Accessory'} unlocked.');
+        unawaited(_wardrobes.load());
       }
     } on ApiException catch (error) {
+      if (error.statusCode != null && error.statusCode! < 500) {
+        _cosmeticPurchaseKeys.remove(itemId);
+      }
       if (!mounted) return;
       if (_sessionIsCurrent(
         generation: generation,
@@ -1183,7 +1234,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(
+        _showError(
           context,
           error.code == 'PRICE_CHANGED'
               ? 'The price changed. Please review the updated shop price.'
@@ -1201,10 +1252,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(
-          context,
-          'Could not buy this accessory. Please try again.',
-        );
+        _showError(context, 'Could not buy this accessory. Please try again.');
       }
     } finally {
       if (_sessionIsCurrent(
@@ -1217,16 +1265,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         _maybeScheduleTutorial();
       }
     }
-  }
-
-  String _equipErrorMessage(ApiException error) {
-    // ACCESSORY_CONFLICT is additive: frozen backends and all existing
-    // failures still retain their original server-provided copy. A malformed
-    // newer error payload gets a useful message instead of a blank toast.
-    if (error.code == 'ACCESSORY_CONFLICT' && error.message.trim().isEmpty) {
-      return 'That accessory conflicts with your current outfit.';
-    }
-    return error.message;
   }
 
   Future<void> _purchasePowerup(Map<String, dynamic> item) async {
@@ -1288,7 +1326,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         epoch: acceptedEpoch,
       )) {
         _clearPurchaseOverlay();
-        showInfoToast(context, '${item['name'] ?? 'Powerup'} purchased.');
+        _showInfo(context, '${item['name'] ?? 'Powerup'} purchased.');
       }
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -1298,7 +1336,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(
+        _showError(
           context,
           error.code == 'PRICE_CHANGED'
               ? 'The price changed. Please review the updated shop price.'
@@ -1314,10 +1352,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(
-          context,
-          'Could not buy this powerup. Please try again.',
-        );
+        _showError(context, 'Could not buy this powerup. Please try again.');
       }
     } finally {
       if (_sessionIsCurrent(
@@ -1328,82 +1363,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         _clearPurchaseOverlay();
         setState(() => _saving = false);
         _maybeScheduleTutorial();
-      }
-    }
-  }
-
-  Future<void> _equip(String slot, String? itemId) async {
-    if (_saving) return;
-
-    final token = widget.authService.authToken;
-    final userId = widget.authService.userId;
-    final generation = _shopSessionGeneration;
-    final startedEpoch = _shopStateEpoch;
-    if (token == null || token.isEmpty) return;
-
-    setState(() => _saving = true);
-    try {
-      final result = await _backendApiService.equipAccessory(
-        identityToken: token,
-        slot: slot,
-        itemId: itemId,
-      );
-      if (!_sessionIsCurrent(
-        generation: generation,
-        userId: userId,
-        token: token,
-        epoch: startedEpoch,
-      )) {
-        return;
-      }
-      final acceptedEpoch = ++_shopStateEpoch;
-      final equipped = _validatedEquipmentMap(result['equipped']);
-      if (equipped != null && _catalog != null) {
-        final next = {..._catalog!, 'equipped': equipped};
-        setState(() {
-          _catalog = next;
-          _catalogState = Loadable.success(next);
-          _selectedCosmeticItem = null;
-          _loading = false;
-        });
-        widget.onShopChanged?.call(next);
-      } else {
-        await _refreshCosmetics(
-          token,
-          generation: generation,
-          userId: userId,
-          epoch: acceptedEpoch,
-          clearSelection: false,
-        );
-      }
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      if (_sessionIsCurrent(
-        generation: generation,
-        userId: userId,
-        token: token,
-      )) {
-        showErrorToast(context, _equipErrorMessage(error));
-      }
-    } catch (_) {
-      if (!mounted) return;
-      if (_sessionIsCurrent(
-        generation: generation,
-        userId: userId,
-        token: token,
-      )) {
-        showErrorToast(
-          context,
-          'Could not update your outfit. Please try again.',
-        );
-      }
-    } finally {
-      if (_sessionIsCurrent(
-        generation: generation,
-        userId: userId,
-        token: token,
-      )) {
-        setState(() => _saving = false);
       }
     }
   }
@@ -1552,67 +1511,97 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    final showBackButton = Navigator.canPop(context);
-    final tabBarHeight = showBackButton ? bottomInset : 77.5 + bottomInset;
-
-    return PopScope(
-      canPop: _purchaseOverlayItem == null,
-      child: Scaffold(
-        body: Stack(
+    final topInset = MediaQuery.paddingOf(context).top;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _headerKey.currentContext?.findRenderObject();
+      if (box is RenderBox && box.hasSize) {
+        final top = box.localToGlobal(Offset(0, box.size.height)).dy + 8;
+        if ((top - _toastTop).abs() > .5) setState(() => _toastTop = top);
+      }
+    });
+    return GameToastAnchor(
+      top: _toastTop,
+      child: PopScope(
+        canPop: _purchaseOverlayItem == null,
+        child: Stack(
           key: _tutorialOverlaySpaceKey,
           children: [
-            Positioned.fill(
-              child: ColoredBox(
-                color: AppColors.of(context).roofLight,
-                child: CustomPaint(
-                  painter: ArcadeCheckerPainter(drawBottomStripe: false),
+            Scaffold(
+              backgroundColor: AppColors.of(context).roofLight,
+              bottomNavigationBar: ShopCategoryBar(
+                selected: ShopCategory.values.firstWhere(
+                  (value) => value.name == _activeCategory.name,
+                  orElse: () => ShopCategory.characters,
+                ),
+                onSelected: (value) => _selectCategory(
+                  _ShopCategory.values.firstWhere(
+                    (category) => category.name == value.name,
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: EdgeInsets.only(
-                top: topInset + 14,
-                bottom: tabBarHeight,
-              ),
-              child: Column(
+              body: Stack(
                 children: [
-                  _buildHeader(showBackButton: showBackButton),
-                  Expanded(
-                    child: AppRefreshIndicator(
-                      onRefresh: _loadCatalog,
-                      child: CustomScrollView(
-                        controller: _storeScrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(child: _buildItemsHeader()),
-                          SliverToBoxAdapter(
-                            child: _activeCategory == _ShopCategory.featured
-                                ? _buildFeatured()
-                                : _buildBody(),
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: ArcadeCheckerPainter(drawBottomStripe: false),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(top: topInset + 14),
+                    child: Column(
+                      children: [
+                        KeyedSubtree(
+                          key: _headerKey,
+                          child: _buildHeader(
+                            showBackButton: Navigator.canPop(context),
                           ),
-                        ],
-                      ),
+                        ),
+                        Expanded(
+                          child: AppRefreshIndicator(
+                            onRefresh: () async {
+                              await _loadCatalog();
+                              if (_activeCategory == _ShopCategory.characters) {
+                                await _wardrobes.load();
+                              }
+                            },
+                            child: CustomScrollView(
+                              controller: _storeScrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverToBoxAdapter(child: _buildItemsHeader()),
+                                SliverToBoxAdapter(
+                                  child:
+                                      _activeCategory == _ShopCategory.featured
+                                      ? _buildFeatured()
+                                      : _activeCategory ==
+                                            _ShopCategory.characters
+                                      ? _buildCharacters()
+                                      : _buildBody(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            if (_purchaseOverlayItem == null)
-              if (_tutorialStep case final step?)
-                Positioned.fill(
-                  child: SpotlightOverlay(
-                    targetRect: _tutorialTarget,
-                    title: _tutorialTitles[step],
-                    body: _tutorialBodies[step],
-                    stepIndex: step,
-                    stepCount: _tutorialTargets.length,
-                    onNext: _advanceTutorial,
-                    onBack: step == 0 ? null : _backTutorial,
-                    onSkip: _finishTutorial,
-                  ),
+            if (_purchaseOverlayItem == null && _tutorialStep != null)
+              Positioned.fill(
+                child: SpotlightOverlay(
+                  targetRect: _tutorialTarget,
+                  title: _tutorialTitles[_tutorialStep ?? 0],
+                  body: _tutorialBodies[_tutorialStep ?? 0],
+                  stepIndex: _tutorialStep ?? 0,
+                  stepCount: 6,
+                  onNext: _advanceTutorial,
+                  onBack: _tutorialStep == 0 ? null : _backTutorial,
+                  onSkip: _finishTutorial,
                 ),
+              ),
           ],
         ),
       ),
@@ -1687,11 +1676,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (showBackButton) ...[
-                    IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 40,
-                        height: 40,
+                    TextButton.icon(
+                      label: Text(
+                        'Back',
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.of(context).textLight,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        padding: EdgeInsets.zero,
                       ),
                       icon: Icon(
                         Icons.arrow_back,
@@ -1739,11 +1734,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCharacterPreview(),
-        const SizedBox(height: 6),
-        _buildSegmentControl(),
-        const SizedBox(height: 8),
-        _buildCategoryPills(),
+        if (_activeCategory == _ShopCategory.powerups) _buildSegmentControl(),
         // Powerup-store filter + sort live in the (fixed) header so they
         // don't disturb the body's stagger-in tile list.
         if (_section == _ShopSection.store &&
@@ -1767,9 +1758,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             _disposeShopAdTarget();
             setState(() {
               _section = section;
-              _category = section == _ShopSection.store && _storeFeatured
-                  ? _ShopCategory.featured
-                  : _lastItemCategory;
+              _category = _ShopCategory.powerups;
               _selectedCosmeticItem = null;
               if (section == _ShopSection.inventory) _deferTutorial = false;
             });
@@ -1807,9 +1796,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       ),
       child: Row(
         children: [
-          segment('STORE', _ShopSection.store),
+          segment('BUY', _ShopSection.store),
           const SizedBox(width: 3),
-          segment('INVENTORY', _ShopSection.inventory),
+          segment('OWNED', _ShopSection.inventory),
         ],
       ),
     );
@@ -1818,12 +1807,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// Categories offered as pills. POWERUPS drops out entirely when the
   /// powerup endpoints are missing (older backend) — the same condition that
   /// hides the powerup section today, so those users never see a dead pill.
-  List<_ShopCategory> get _visibleCategories => [
-    if (_section == _ShopSection.store) _ShopCategory.featured,
-    if (_powerupsAvailable || !_powerupsAvailabilityResolved)
-      _ShopCategory.powerups,
+  List<_ShopCategory> get _visibleCategories => const [
+    _ShopCategory.featured,
+    _ShopCategory.powerups,
     _ShopCategory.characters,
-    _ShopCategory.accessories,
   ];
 
   /// The active category, coerced into the visible set. Guards the case where
@@ -1838,128 +1825,257 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           );
   }
 
-  Widget _buildCategoryPills() {
-    final visible = _visibleCategories;
-    final active = _activeCategory;
-    final showIcons = _section == _ShopSection.inventory;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        var minWidth = 76.0;
-        for (final category in visible) {
-          final painter = TextPainter(
-            text: TextSpan(
-              text: category.label,
-              style: PixelText.title(
-                size: 10.5,
-                color: AppColors.of(context).textDark,
-              ),
-            ),
-            textDirection: Directionality.of(context),
-            textScaler: MediaQuery.textScalerOf(context),
-          )..layout();
-          minWidth = math.max(minWidth, painter.width + (showIcons ? 32 : 12));
-          painter.dispose();
-        }
-        final width = math.max(
-          minWidth,
-          (constraints.maxWidth - (visible.length - 1) * 6) / visible.length,
-        );
-        return SingleChildScrollView(
-          key: const Key('shop-category-pills'),
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (var i = 0; i < visible.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                SizedBox(
-                  width: width,
-                  child: _categoryPill(visible[i], visible[i] == active),
+  void _wardrobesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _selectCategory(_ShopCategory category) {
+    if (_activeCategory == category) return;
+    _disposeShopAdTarget();
+    setState(() {
+      if (category != _ShopCategory.featured) {
+        _lastItemCategory = category;
+        _deferTutorial = false;
+      }
+      _category = category;
+      _storeFeatured = category == _ShopCategory.featured;
+      _selectedCosmeticItem = null;
+    });
+    if (category == _ShopCategory.characters &&
+        _wardrobes.state == WardrobeLoadState.initial) {
+      _wardrobes.load();
+    }
+    if (category != _ShopCategory.featured) _maybeScheduleTutorial();
+  }
+
+  Widget _buildCharacters() {
+    if (_wardrobes.state == WardrobeLoadState.initial) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _wardrobes.load();
+      });
+    }
+    final unavailable = _wardrobes.state == WardrobeLoadState.unsupported;
+    final rows =
+        unavailable ||
+            (_shouldShowTutorial &&
+                _wardrobes.characters.isEmpty &&
+                _wardrobes.state != WardrobeLoadState.loading)
+        ? _legacyCharacterRows()
+        : _wardrobes.characters.values.toList();
+    return Column(
+      children: [
+        if (_wardrobes.state == WardrobeLoadState.loading && rows.isEmpty)
+          const _ShopLoadingSkeleton(cosmetic: true),
+        if (unavailable || _wardrobes.error != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  unavailable
+                      ? 'Saved wardrobes are currently unavailable. You can still browse and buy characters.'
+                      : _wardrobes.error ?? '',
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.of(context).textLight,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _wardrobes.load,
+                  child: const Text('Try again'),
                 ),
               ],
-            ],
+            ),
+          ),
+        ShopProductGrid(
+          compact: true,
+          gridKey: const Key('shop-cosmetic-grid'),
+          children: [
+            for (final row in rows)
+              ShopCharacterCard(
+                key: Key('shop-character-${row.key}'),
+                character: row,
+                onPressed: () => _openCharacterMenu(row),
+              ),
+          ],
+        ),
+        if (_wardrobes.state == WardrobeLoadState.paging)
+          const CircularProgressIndicator(),
+        if (_wardrobes.nextCursor != null &&
+            _wardrobes.state != WardrobeLoadState.paging)
+          TextButton(
+            onPressed: () => _wardrobes.load(more: true),
+            child: const Text('Load more'),
+          ),
+      ],
+    );
+  }
+
+  List<ShopCharacter> _legacyCharacterRows() {
+    final equipment = wardrobeMap(_catalog?['equipped']);
+    final current = wardrobeMap(equipment['CHARACTER']);
+    final rows = <ShopCharacter>[
+      ShopCharacter.fromJson({
+        'characterKey': 'default',
+        'name': 'Capybara',
+        'owned': true,
+        'active': current.isEmpty,
+        'canActivate': false,
+        'canEdit': false,
+        'canPurchase': false,
+        'availability': 'unavailable',
+      }),
+    ];
+    for (final item in wardrobeMaps(_catalog?['items']).where(_isCharacter)) {
+      final id = wardrobeString(item['id']);
+      if (id == null) continue;
+      final owned = _isCosmeticOwned(item);
+      rows.add(
+        ShopCharacter.fromJson({
+          'characterKey': id,
+          'name': item['name'],
+          'item': item,
+          'owned': owned,
+          'active': current['id'] == id,
+          'canPurchase': !owned,
+          'canActivate': false,
+          'canEdit': false,
+          'availability': 'unavailable',
+        }),
+      );
+    }
+    return rows;
+  }
+
+  Future<void> _openCharacterMenu(ShopCharacter character) async {
+    final generation = _shopSessionGeneration;
+    final userId = widget.authService.userId;
+    final token = widget.authService.authToken;
+    if (token == null) return;
+    bool current() =>
+        _sessionIsCurrent(generation: generation, userId: userId, token: token);
+    if (_characterActivating) return;
+    if (!character.owned && character.canPurchase) {
+      _openStoreCosmeticSheet(character.item);
+      return;
+    }
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).parchment,
+      builder: (context) {
+        _characterMenuContext = context;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .85,
+            ),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      character.name,
+                      style: PixelText.title(
+                        size: 22,
+                        color: AppColors.of(context).textDark,
+                      ),
+                    ),
+                    if (character.key == 'default')
+                      Text(
+                        'The original. Steady, sociable, and always in your corner.',
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.of(context).textDark,
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    PillButton(
+                      label: 'Edit outfit',
+                      onPressed: character.canEdit
+                          ? () => Navigator.pop(context, 'edit')
+                          : null,
+                    ),
+                    const SizedBox(height: 10),
+                    PillButton(
+                      label: character.active
+                          ? 'Active character'
+                          : 'Use character',
+                      onPressed:
+                          !character.active &&
+                              character.canActivate &&
+                              _wardrobes.appearanceRevision != null &&
+                              character.outfit?.revision != null
+                          ? () => Navigator.pop(context, 'activate')
+                          : null,
+                    ),
+                    if (!character.canEdit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          'Saved outfit is currently unavailable.',
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.of(context).textDark,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },
     );
-  }
-
-  Widget _categoryPill(_ShopCategory category, bool selected) {
-    return Semantics(
-      key: Key('shop-category-semantics-${category.label}'),
-      button: true,
-      selected: selected,
-      label: '${category.label} category',
-      child: GestureDetector(
-        key: Key('shop-category-${category.label}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          if (_activeCategory == category) return;
-          _disposeShopAdTarget();
-          setState(() {
-            if (category != _ShopCategory.featured) {
-              if (_lastItemCategory != category) _selectedCosmeticItem = null;
-              _lastItemCategory = category;
-              _deferTutorial = false;
-            }
-            _category = category;
-            if (_section == _ShopSection.store) {
-              _storeFeatured = category == _ShopCategory.featured;
-            }
-          });
-          if (category != _ShopCategory.featured) _maybeScheduleTutorial();
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOut,
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.of(context).parchment
-                : Colors.black.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? AppColors.of(context).pillGoldDark
-                  : AppColors.of(context).textLight.withValues(alpha: 0.14),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_section == _ShopSection.inventory) ...[
-                Icon(
-                  category.icon,
-                  size: 15,
-                  color: selected
-                      ? AppColors.of(context).coinDark
-                      : AppColors.of(context).textLight.withValues(alpha: 0.82),
-                ),
-                const SizedBox(width: 5),
-              ],
-              Flexible(
-                child: Text(
-                  category.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: PixelText.title(
-                    size: 10.5,
-                    color: selected
-                        ? AppColors.of(context).textDark
-                        : AppColors.of(
-                            context,
-                          ).textLight.withValues(alpha: 0.88),
-                  ),
-                ),
-              ),
-            ],
+    _characterMenuContext = null;
+    if (!mounted || !current()) return;
+    if (action == 'edit') {
+      final category = await Navigator.of(context).push<ShopCategory>(
+        MaterialPageRoute(
+          builder: (_) => CharacterWardrobeScreen(
+            character: character,
+            controller: _wardrobes,
+            onBuy: _openStoreCosmeticSheet,
           ),
         ),
-      ),
-    );
+      );
+      if (mounted && current() && category != null) {
+        _selectCategory(
+          _ShopCategory.values.firstWhere(
+            (value) => value.name == category.name,
+          ),
+        );
+      }
+    } else if (action == 'activate') {
+      setState(() => _characterActivating = true);
+      try {
+        await _wardrobes.activate(character);
+        if (mounted && current()) {
+          _showInfo(context, '${character.name} is active.');
+        }
+      } on ApiException catch (error) {
+        if (mounted && current()) {
+          _showError(context, error.message);
+          await _wardrobes.load();
+        }
+      } catch (_) {
+        if (mounted && current()) {
+          await _wardrobes.load();
+          if (mounted && current()) {
+            _showError(
+              context,
+              'Could not verify character activation. Please review the current look.',
+            );
+          }
+        }
+      } finally {
+        if (mounted && current()) setState(() => _characterActivating = false);
+      }
+    }
   }
 
   Widget _buildBody() {
@@ -2009,391 +2125,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     );
   }
 
-  void _previewSelection(Map<String, dynamic> item) {
-    final slot = item['slot'];
-    if (slot is! String || slot.isEmpty || !mounted) return;
-    setState(() => _selectedCosmeticItem = Map<String, dynamic>.from(item));
-  }
-
-  Widget _buildCharacterPreview() {
-    if (_activeCategory == _ShopCategory.powerups ||
-        _activeCategory == _ShopCategory.featured) {
-      return _buildCompactCharacterPreview();
-    }
-    return _buildDressingRoomStage();
-  }
-
-  _PreviewComposition _previewComposition() {
-    final rows = <Map<String, dynamic>>[];
-    final equipped = _catalog?['equipped'];
-    if (equipped is Map) {
-      for (final entry in equipped.entries) {
-        final slot = entry.key;
-        if (slot is! String) continue;
-        final row = _validEquipmentRow(slot);
-        if (row != null) rows.add(row);
-      }
-    }
-
-    final draft = _selectedCosmeticItem;
-    if (draft != null) {
-      final slot = draft['slot'];
-      final replacedAt = rows.indexWhere((row) => row['slot'] == slot);
-      if (replacedAt != -1) rows.removeAt(replacedAt);
-      if (draft['id'] != _defaultCharacterSelectionId) {
-        if (replacedAt == -1 || replacedAt >= rows.length) {
-          rows.add(draft);
-        } else {
-          rows.insert(replacedAt, draft);
-        }
-      }
-    }
-
-    String? animal;
-    var animalName = 'Capybara';
-    final accessories = <Map<String, dynamic>>[];
-    for (final row in rows) {
-      final assetKey = row['assetKey'];
-      if (row['slot'] == 'CHARACTER') {
-        if (assetKey is String && assetKey.isNotEmpty) {
-          animal = assetKey;
-          final rawName = row['name'];
-          animalName = rawName is String && rawName.isNotEmpty
-              ? rawName
-              : assetKey.replaceAll('_', ' ');
-        }
-      } else if (assetKey is String && assetKey.isNotEmpty) {
-        accessories.add(row);
-      }
-    }
-
-    return _PreviewComposition(
-      animal: animal,
-      animalName: animalName,
-      accessories: accessories,
-    );
-  }
-
-  Widget _previewAvatar(
-    _PreviewComposition preview, {
-    required double avatarSize,
-  }) {
-    final accessoryKey = preview.accessories
-        .map((item) => item['assetKey'])
-        .whereType<String>()
-        .join('-');
-    final avatarKey =
-        'shop-preview-${preview.animal ?? kDefaultAnimal}-$accessoryKey';
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    return AnimatedSwitcher(
-      key: const Key('shop-stage-avatar-transition'),
-      duration: reducedMotion
-          ? Duration.zero
-          : const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        if (reducedMotion) {
-          return FadeTransition(opacity: animation, child: child);
-        }
-        return FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
-            child: child,
-          ),
-        );
-      },
-      child: RacerAvatar(
-        key: ValueKey(avatarKey),
-        rank: 1,
-        size: avatarSize,
-        showMedalRing: false,
-        animal: preview.animal,
-        accessories: preview.accessories,
-      ),
-    );
-  }
-
-  Widget _buildDressingRoomStage() {
-    final colors = AppColors.of(context);
-    final preview = _previewComposition();
-    final selected = _selectedCosmeticItem;
-    final selectedName = selected?['name'] is String
-        ? selected!['name'] as String
-        : null;
-    final isDefault = selected?['id'] == _defaultCharacterSelectionId;
-    final selectedEquipped = selected == null
-        ? false
-        : isDefault
-        ? _defaultCharacterIsEquipped()
-        : _isCosmeticEquipped(selected);
-    final price = selected?['priceCoins'];
-    final status = selectedName == null
-        ? 'Your equipped look'
-        : 'Previewing $selectedName';
-    final detail = selectedName == null
-        ? '${preview.animalName} · ${preview.accessories.length} equipped'
-        : _section == _ShopSection.store
-        ? (_memberPriceCopy(selected ?? const {}) ??
-              '$selectedName · ${price is num ? price.toInt() : 0} coins')
-        : selectedEquipped
-        ? '$selectedName is equipped'
-        : '$selectedName is ready to try';
-    final semantics = selectedName == null
-        ? 'Your Bara. Base character ${preview.animalName}. Equipped outfit.'
-        : 'Your Bara. Base character ${preview.animalName}. Previewing $selectedName.';
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 600;
-        final narrow = constraints.maxWidth < 360;
-        // The 2dp top margin participates in the keyed widget's measured
-        // footprint, so the painted panel stays within the 210–250dp contract.
-        final stageHeight = wide
-            ? 248.0
-            : narrow
-            ? 216.0
-            : 228.0;
-        final artDimension = wide
-            ? 166.0
-            : narrow
-            ? 132.0
-            : 146.0;
-        final avatarSize = wide
-            ? 140.0
-            : narrow
-            ? 120.0
-            : 132.0;
-        return KeyedSubtree(
-          key: const Key('shop-character-preview'),
-          child: Semantics(
-            container: true,
-            image: true,
-            label: semantics,
-            child: Container(
-              key: const Key('shop-dressing-room-stage'),
-              height: stageHeight,
-              margin: const EdgeInsets.only(top: 2),
-              padding: EdgeInsets.fromLTRB(
-                narrow ? 10 : 14,
-                12,
-                narrow ? 10 : 14,
-                12,
-              ),
-              decoration: BoxDecoration(
-                color: colors.parchment,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: colors.parchmentBorder, width: 1.5),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x44000000),
-                    offset: Offset(0, 4),
-                    blurRadius: 0,
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: artDimension,
-                    height: double.infinity,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colors.parchmentDark,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: colors.parchmentBorder),
-                      ),
-                      child: Center(
-                        child: _previewAvatar(preview, avatarSize: avatarSize),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: narrow ? 10 : 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'YOUR BARA',
-                            style: PixelText.title(
-                              size: 14,
-                              color: colors.textDark,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 7),
-                        Semantics(
-                          liveRegion: true,
-                          label: status,
-                          child: Text(
-                            status,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: PixelText.title(
-                              size: 12.5,
-                              color: colors.textDark,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            detail,
-                            maxLines: 1,
-                            style: PixelText.body(
-                              size: 11.5,
-                              color: colors.textMid,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (selected != null)
-                          _buildStageActions(
-                            selected,
-                            selectedEquipped: selectedEquipped,
-                            isDefault: isDefault,
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStageActions(
-    Map<String, dynamic> selected, {
-    required bool selectedEquipped,
-    required bool isDefault,
-  }) {
-    if (_section == _ShopSection.store) {
-      return _DressingRoomActionButton(
-        key: const Key('shop-stage-primary-action'),
-        label: 'DETAILS & BUY',
-        icon: Icons.shopping_bag_rounded,
-        primary: true,
-        enabled: !_saving,
-        onPressed: () => _openStoreCosmeticSheet(selected),
-      );
-    }
-
-    final inertDefault = isDefault && selectedEquipped;
-    final primaryLabel = inertDefault
-        ? 'EQUIPPED'
-        : selectedEquipped
-        ? 'CLEAR'
-        : 'EQUIP';
-    final slot = selected['slot'] as String? ?? '';
-    final id = selected['id'] as String?;
-    return Row(
-      children: [
-        Expanded(
-          child: _DressingRoomActionButton(
-            key: const Key('shop-stage-primary-action'),
-            label: primaryLabel,
-            icon: inertDefault
-                ? Icons.check_rounded
-                : selectedEquipped
-                ? Icons.close_rounded
-                : Icons.check_rounded,
-            primary: !selectedEquipped,
-            enabled: !_saving && !inertDefault && slot.isNotEmpty,
-            onPressed: () =>
-                _equip(slot, isDefault || selectedEquipped ? null : id),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _DressingRoomActionButton(
-            key: const Key('shop-stage-details-action'),
-            label: 'DETAILS',
-            icon: Icons.info_outline_rounded,
-            primary: false,
-            enabled: true,
-            onPressed: () => _openInventoryCosmeticSheet(selected),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompactCharacterPreview() {
-    final preview = _previewComposition();
-    return Container(
-      key: const Key('shop-character-preview'),
-      margin: const EdgeInsets.only(top: 2),
-      constraints: const BoxConstraints(minHeight: 92),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).parchment,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppColors.of(context).parchmentBorder,
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          SizedBox.square(
-            dimension: 66,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.of(context).parchmentDark,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.of(context).parchmentBorder,
-                ),
-              ),
-              child: Center(
-                child: Transform.scale(
-                  scale: 1.45,
-                  child: _previewAvatar(preview, avatarSize: 30),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'YOUR BARA',
-                  style: PixelText.title(
-                    size: 13,
-                    color: AppColors.of(context).textDark,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'Your equipped look',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: PixelText.body(
-                    size: 12,
-                    color: AppColors.of(context).textMid,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Parchment game-piece card — same language as the other tabs.
   BoxDecoration _shopCardDecoration() {
     return BoxDecoration(
       color: AppColors.of(context).parchment,
@@ -2418,6 +2149,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       StaggerIn(
         index: staggerIndex,
         child: ShopProductGrid(
+          compact: true,
           gridKey: const Key('shop-product-grid'),
           children: tiles,
         ),
@@ -2594,95 +2326,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// Deliberately total: any shape the backend might send — a future scalar, a
   /// malformed row, an absent key — resolves to "no character equipped" rather
   /// than throwing. The backend may be a different version than this build.
-  Map<String, dynamic> _defaultCharacterItem() => {
-    'id': _defaultCharacterSelectionId,
-    'sku': 'DEFAULT_CAPYBARA',
-    'name': 'Capybara',
-    'description': 'The original. Steady, sociable, and always in your corner.',
-    'slot': 'CHARACTER',
-    'assetKey': kDefaultAnimal,
-    'priceCoins': 0,
-    'owned': true,
-  };
-
-  /// Item 6 — the always-present Capybara tile at the head of Inventory →
-  /// CHARACTERS.
-  ///
-  /// Purely local. "Equipped" means the backend's `equipped['CHARACTER']` is
-  /// null, which is exactly how the backend itself reads capybara
-  /// (`isCapybara` = no CHARACTER row), so this can never disagree with the
-  /// server. EQUIP is the existing `_equip('CHARACTER', null)` clear call — no
-  /// new endpoint, no fake catalog row, safe on every backend version.
-  Widget _capybaraInventoryTile() {
-    final item = _defaultCharacterItem();
-    final equipped = _defaultCharacterIsEquipped();
-    final selected =
-        _selectedCosmeticItem?['id'] == _defaultCharacterSelectionId;
-    final sprite = animalSpriteFor(kDefaultAnimal);
-    Widget art({double iconSize = 30}) => AccessoryThumbnail(
-      assetKey: kDefaultAnimal,
-      assetPath: sprite.asset,
-      animationFrames: sprite.frameCount,
-      errorBuilder: (context, error, stackTrace) => Icon(
-        Icons.pets_rounded,
-        size: iconSize,
-        color: equipped
-            ? AppColors.of(context).accent
-            : AppColors.of(context).textMid,
-      ),
-    );
-    return KeyedSubtree(
-      key: const Key('shop-capybara-tile'),
-      child: _CosmeticSelector(
-        key: const Key('shop-cosmetic-selector-__default_capybara__'),
-        art: art(),
-        name: 'Capybara',
-        marker: equipped ? 'EQUIPPED' : 'OWNED',
-        selected: selected,
-        equipped: equipped,
-        equippedMarkerKey: equipped
-            ? const Key('shop-cosmetic-equipped-__default_capybara__')
-            : null,
-        semanticLabel:
-            'Capybara, character, owned, ${selected ? 'selected' : 'not selected'}, ${equipped ? 'equipped' : 'not equipped'}',
-        onPressed: () => _previewSelection(item),
-      ),
-    );
-  }
-
-  void _openInventoryCosmeticSheet(Map<String, dynamic> item) {
-    final isDefault = item['id'] == _defaultCharacterSelectionId;
-    final equipped = isDefault
-        ? _defaultCharacterIsEquipped()
-        : _isCosmeticEquipped(item);
-    final name = item['name'] as String? ?? 'Accessory';
-    final sprite = animalSpriteFor(kDefaultAnimal);
-    final art = isDefault
-        ? AccessoryThumbnail(
-            assetKey: kDefaultAnimal,
-            assetPath: sprite.asset,
-            animationFrames: sprite.frameCount,
-            errorBuilder: (context, error, stackTrace) => Icon(
-              Icons.pets_rounded,
-              size: 48,
-              color: AppColors.of(context).textMid,
-            ),
-          )
-        : _cosmeticArt(item, iconSize: 48);
-    unawaited(
-      _showItemSheet(
-        art: art,
-        name: name,
-        slotLabel: _slotLabels[item['slot']],
-        badge: equipped ? 'EQUIPPED' : 'OWNED',
-        description: item['description'] is String
-            ? item['description'] as String
-            : '',
-      ),
-    );
-  }
-
-  void _openStoreCosmeticSheet(Map<String, dynamic> item) {
+  Future<ShopCategory?> _openStoreCosmeticSheet(
+    Map<String, dynamic> item,
+  ) async {
+    Future<void>? operation;
+    var getCoins = false;
     final name = item['name'] as String? ?? 'Accessory';
     final rawPrice = item['priceCoins'];
     final price = rawPrice is num ? rawPrice.toInt() : 0;
@@ -2694,119 +2342,77 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         ? _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock)
         : null;
     _warmShopAd(adContext);
-    unawaited(
-      _showItemSheet(
-        art: _cosmeticArt(item, iconSize: 48),
-        name: name,
-        slotLabel: _slotLabels[item['slot']],
-        description: item['description'] is String
-            ? item['description'] as String
-            : '',
-        actions: [
-          if (_memberPriceCopy(item) case final copy?)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                copy,
-                style: PixelText.body(
-                  size: 12,
-                  color: AppColors.of(context).textMid,
-                ),
+    await _showItemSheet(
+      art: _cosmeticArt(item, iconSize: 48),
+      name: name,
+      slotLabel: _slotLabels[item['slot']],
+      description: item['description'] is String
+          ? item['description'] as String
+          : '',
+      actions: [
+        if (_memberPriceCopy(item) case final copy?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              copy,
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
               ),
             ),
-          ?_adUnlockCapNotice(price),
-          switch (route) {
-            _AffordRoute.affordable => PillButton(
-              label: 'BUY · $price',
-              leading: const CoinGlyph(size: 16),
-              variant: PillButtonVariant.secondary,
-              fontSize: 14,
-              fullWidth: true,
-              onPressed: _saving
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      _purchase(item);
-                    },
-            ),
-            _AffordRoute.watchAds => PillButton(
-              label: adsNeeded == 1
-                  ? 'WATCH 1 AD TO UNLOCK'
-                  : 'WATCH $adsNeeded ADS TO UNLOCK',
-              icon: Icons.smart_display_rounded,
-              variant: PillButtonVariant.rewardedAd,
-              fontSize: 13,
-              fullWidth: true,
-              onPressed: _saving
-                  ? null
-                  : () {
-                      _shopActionContext = adContext;
-                      Navigator.of(context).pop();
-                      _unlockCosmeticWithAds(item, adsNeeded);
-                    },
-            ),
-            _AffordRoute.getCoins => PillButton(
-              label: 'GET MORE COINS',
-              icon: Icons.add_circle_rounded,
-              variant: PillButtonVariant.secondary,
-              fontSize: 14,
-              fullWidth: true,
-              onPressed: () {
-                Navigator.of(context).pop();
-                _openGetCoins();
-              },
-            ),
-          },
-        ],
-      ).whenComplete(() {
-        if (_shopActionContext != adContext) _disposeShopAdTarget();
-      }),
-    );
+          ),
+        ?_adUnlockCapNotice(price),
+        switch (route) {
+          _AffordRoute.affordable => PillButton(
+            label: 'BUY · $price',
+            leading: const CoinGlyph(size: 16),
+            variant: PillButtonVariant.primary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    operation = _purchase(item);
+                  },
+          ),
+          _AffordRoute.watchAds => PillButton(
+            label: adsNeeded == 1
+                ? 'WATCH 1 AD TO UNLOCK'
+                : 'WATCH $adsNeeded ADS TO UNLOCK',
+            icon: Icons.smart_display_rounded,
+            variant: PillButtonVariant.rewardedAd,
+            fontSize: 13,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    _shopActionContext = adContext;
+                    Navigator.of(context).pop();
+                    operation = _unlockCosmeticWithAds(item, adsNeeded);
+                  },
+          ),
+          _AffordRoute.getCoins => PillButton(
+            label: 'GET MORE COINS',
+            icon: Icons.add_circle_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: () {
+              Navigator.of(context).pop();
+              getCoins = true;
+              _openGetCoins();
+            },
+          ),
+        },
+      ],
+    ).whenComplete(() {
+      if (_shopActionContext != adContext) _disposeShopAdTarget();
+    });
+    await operation;
+    return getCoins ? ShopCategory.featured : null;
   }
 
-  Widget _storeCosmeticTile(Map<String, dynamic> item) {
-    final id = item['id'] as String? ?? '';
-    final name = item['name'] as String? ?? 'Accessory';
-    final slot = item['slot'] as String? ?? 'ITEM';
-    final rawPrice = item['priceCoins'];
-    final price = rawPrice is num ? rawPrice.toInt() : 0;
-    final selected = _selectedCosmeticItem?['id'] == id;
-    return _CosmeticSelector(
-      key: Key('shop-cosmetic-selector-$id'),
-      art: _cosmeticArt(item),
-      name: name,
-      marker: _memberPriceCopy(item) != null ? '$price · PLUS' : '$price',
-      markerLeading: const CoinGlyph(size: 11),
-      selected: selected,
-      equipped: false,
-      semanticLabel:
-          '$name, $slot, not owned, $price coins, ${selected ? 'selected' : 'not selected'}, not equipped',
-      onPressed: () => _previewSelection(item),
-    );
-  }
-
-  Widget _inventoryCosmeticTile(Map<String, dynamic> item) {
-    final id = item['id'] as String? ?? '';
-    final name = item['name'] as String? ?? 'Accessory';
-    final slot = item['slot'] as String? ?? 'ITEM';
-    final equipped = _isCosmeticEquipped(item);
-    final selected = _selectedCosmeticItem?['id'] == id;
-    return _CosmeticSelector(
-      key: Key('shop-cosmetic-selector-$id'),
-      art: _cosmeticArt(item),
-      name: name,
-      marker: equipped ? 'EQUIPPED' : 'OWNED',
-      selected: selected,
-      equipped: equipped,
-      equippedMarkerKey: equipped ? Key('shop-cosmetic-equipped-$id') : null,
-      semanticLabel:
-          '$name, $slot, owned, ${selected ? 'selected' : 'not selected'}, ${equipped ? 'equipped' : 'not equipped'}',
-      onPressed: () => _previewSelection(item),
-    );
-  }
-
-  /// Powerup art that fills the tile like the cosmetics do: thumb-first
-  /// via AccessoryThumbnail, PowerupIcon as the unknown-type fallback.
   Widget _powerupArt(String type, {double fallbackSize = 44}) {
     final path = PowerupIcon.assetPathFor(type);
     if (path == null) return PowerupIcon(type: type, size: fallbackSize);
@@ -3184,9 +2790,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 ),
               Expanded(
                 child: SingleChildScrollView(
-                  child: BaraPlusBody(
-                    key: ValueKey('membership-${billing?.userId}'),
-                    controller: billing,
+                  child: GameToastAnchor(
+                    top: _toastTop,
+                    child: BaraPlusBody(
+                      key: ValueKey('membership-${billing?.userId}'),
+                      controller: billing,
+                    ),
                   ),
                 ),
               ),
@@ -3420,7 +3029,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (!current.isSupported) {
       current.dispose();
       if (mounted) {
-        showErrorToast(this.context, 'Ads aren’t available on this device.');
+        _showError(this.context, 'Ads aren’t available on this device.');
       }
       return false;
     }
@@ -3436,7 +3045,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         }
         if (!current.isReadyFor(context)) {
           if (mounted) {
-            showErrorToast(this.context, 'Ad didn’t load. No coins spent.');
+            _showError(this.context, 'Ad didn’t load. No coins spent.');
           }
           return false;
         }
@@ -3459,7 +3068,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         if (!earned) {
           if (next != null) _disposeActiveShopController(next);
           if (mounted) {
-            showErrorToast(this.context, 'Ad not finished. No coins spent.');
+            _showError(this.context, 'Ad not finished. No coins spent.');
           }
           return false;
         }
@@ -3560,7 +3169,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         epoch: acceptedEpoch,
       )) {
         _clearPurchaseOverlay();
-        showInfoToast(context, '$name unlocked!');
+        _showInfo(context, '$name unlocked!');
       }
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -3570,7 +3179,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(context, error.message);
+        _showError(context, error.message);
       }
     } catch (_) {
       if (!mounted) return;
@@ -3580,10 +3189,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(
-          context,
-          'Couldn’t unlock this powerup. Please try again.',
-        );
+        _showError(context, 'Couldn’t unlock this powerup. Please try again.');
       }
     } finally {
       if (_sessionIsCurrent(
@@ -3686,7 +3292,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       )) {
         if (!mounted) return;
         _clearPurchaseOverlay();
-        showInfoToast(context, '$name unlocked!');
+        _showInfo(context, '$name unlocked!');
       }
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -3705,7 +3311,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         return;
       }
       _clearPurchaseOverlay();
-      showErrorToast(context, error.message);
+      _showError(context, error.message);
     } catch (_) {
       if (!mounted) return;
       if (_sessionIsCurrent(
@@ -3714,7 +3320,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         token: token,
       )) {
         _clearPurchaseOverlay();
-        showErrorToast(context, 'Couldn’t unlock this item. Please try again.');
+        _showError(context, 'Couldn’t unlock this item. Please try again.');
       }
     } finally {
       if (_sessionIsCurrent(
@@ -3801,7 +3407,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       return PillButton(
         label: 'BUY · $price',
         leading: const CoinGlyph(size: 16),
-        variant: PillButtonVariant.secondary,
+        variant: PillButtonVariant.primary,
         fontSize: 14,
         fullWidth: true,
         onPressed: _saving
@@ -3893,125 +3499,31 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return [_buildSectionGroup(tiles, staggerIndex: 0)];
   }
 
-  List<Widget> _buildCosmeticCategoryBody(
-    List<Widget> selectors, {
-    required IconData emptyIcon,
-    required String emptyMessage,
-  }) {
-    if (selectors.isEmpty) {
-      return [
-        StaggerIn(
-          index: 0,
-          child: _buildEmptyState(icon: emptyIcon, message: emptyMessage),
-        ),
-      ];
-    }
-    return [
-      StaggerIn(
-        index: 0,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 600
-                ? 6
-                : constraints.maxWidth >= 360
-                ? 4
-                : 3;
-            return GridView.builder(
-              key: const Key('shop-cosmetic-grid'),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 9,
-                childAspectRatio: 0.82,
-              ),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-              itemCount: selectors.length,
-              itemBuilder: (context, index) => selectors[index],
-            );
-          },
-        ),
-      ),
-    ];
-  }
+  List<Widget> _buildStore(
+    List<Map<String, dynamic>> items,
+  ) => _buildCategoryBody(
+    [for (final item in _visiblePowerupStoreItems()) _storePowerupTile(item)],
+    emptyIcon: Icons.bolt_rounded,
+    emptyMessage: !_powerupsAvailable && _powerupsAvailabilityResolved
+        ? 'Powerups are currently unavailable. Pull down to try again.'
+        : _powerupFilter == _PowerupFilter.all
+        ? 'No powerups for sale right now.'
+        : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
+  );
 
-  // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────
-  List<Widget> _buildStore(List<Map<String, dynamic>> items) {
-    final unowned = items.where((i) => !_isCosmeticOwned(i)).toList();
-
-    return switch (_activeCategory) {
-      _ShopCategory.featured => [_buildFeatured()],
-      _ShopCategory.powerups => _buildCategoryBody(
-        [
-          for (final item in _visiblePowerupStoreItems())
-            _storePowerupTile(item),
-        ],
-        emptyIcon: Icons.bolt_rounded,
-        emptyMessage: _powerupFilter == _PowerupFilter.all
-            ? 'No powerups for sale right now.'
-            : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
-      ),
-      _ShopCategory.characters => _buildCosmeticCategoryBody(
-        [
-          for (final item in unowned.where(_isCharacter))
-            _storeCosmeticTile(item),
-        ],
-        emptyIcon: Icons.pets_rounded,
-        emptyMessage: 'You own every character! Check your Inventory.',
-      ),
-      _ShopCategory.accessories => _buildCosmeticCategoryBody(
-        [
-          for (final item in unowned.where((i) => !_isCharacter(i)))
-            _storeCosmeticTile(item),
-        ],
-        emptyIcon: Icons.checkroom_rounded,
-        emptyMessage: 'You own all the gear! Check your Inventory.',
-      ),
-    };
-  }
-
-  // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────
-  List<Widget> _buildInventory(List<Map<String, dynamic>> items) {
-    final owned = items.where(_isCosmeticOwned).toList();
-
-    return switch (_activeCategory) {
-      _ShopCategory.featured => [_buildFeatured()],
-      _ShopCategory.powerups => _buildCategoryBody(
+  List<Widget> _buildInventory(List<Map<String, dynamic>> items) =>
+      _buildCategoryBody(
         [
           for (final entry
-              in _powerupInventory.entries.where((e) => e.value > 0).toList()
+              in _powerupInventory.entries
+                  .where((entry) => entry.value > 0)
+                  .toList()
                 ..sort((a, b) => a.key.compareTo(b.key)))
             _ownedPowerupTile(entry.key, entry.value),
         ],
         emptyIcon: Icons.bolt_rounded,
-        emptyMessage: 'No powerups yet. Buy some from the Store.',
-      ),
-      _ShopCategory.characters => _buildCosmeticCategoryBody(
-        [
-          // Item 6 — the capybara is the compiled-in default, not a shop item,
-          // so it is never `owned` and had no tile. The only route back was the
-          // CLEAR strip on whichever character you were wearing, which nobody
-          // found. This synthetic tile is client-side only: no catalog row, no
-          // backend call beyond the equip that already exists, so it works
-          // against every backend version.
-          _capybaraInventoryTile(),
-          for (final item in owned.where(_isCharacter))
-            _inventoryCosmeticTile(item),
-        ],
-        emptyIcon: Icons.pets_rounded,
-        emptyMessage: 'No extra characters yet. Buy some from the Store.',
-      ),
-      _ShopCategory.accessories => _buildCosmeticCategoryBody(
-        [
-          for (final item in owned.where((i) => !_isCharacter(i)))
-            _inventoryCosmeticTile(item),
-        ],
-        emptyIcon: Icons.inventory_2_rounded,
-        emptyMessage: 'No gear yet. Buy some from the Store.',
-      ),
-    };
-  }
+        emptyMessage: 'No powerups yet. Tap Buy to find your first one.',
+      );
 
   int _ownedQuantityFor(Map<String, dynamic> item) {
     final fromInventory = _powerupInventory[item['powerupType'] as String?];
@@ -4046,239 +3558,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 }
 
-class _PreviewComposition {
-  const _PreviewComposition({
-    required this.animal,
-    required this.animalName,
-    required this.accessories,
-  });
-
-  final String? animal;
-  final String animalName;
-  final List<Map<String, dynamic>> accessories;
-}
-
-class _DressingRoomActionButton extends StatelessWidget {
-  const _DressingRoomActionButton({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.primary,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool primary;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final fill = primary
-        ? colors.pillGold.withValues(alpha: enabled ? 0.52 : 0.18)
-        : colors.parchmentDark;
-    final border = primary ? colors.pillGoldDark : colors.parchmentBorder;
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: border, width: primary ? 1.5 : 1),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 14,
-                  color: enabled
-                      ? colors.textDark
-                      : colors.textMid.withValues(alpha: 0.62),
-                ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      style: PixelText.title(
-                        size: 10.5,
-                        color: enabled
-                            ? colors.textDark
-                            : colors.textMid.withValues(alpha: 0.62),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CosmeticSelector extends StatelessWidget {
-  const _CosmeticSelector({
-    super.key,
-    required this.art,
-    required this.name,
-    required this.marker,
-    required this.selected,
-    required this.equipped,
-    required this.semanticLabel,
-    required this.onPressed,
-    this.markerLeading,
-    this.equippedMarkerKey,
-  });
-
-  final Widget art;
-  final String name;
-  final String marker;
-  final Widget? markerLeading;
-  final bool selected;
-  final bool equipped;
-  final String semanticLabel;
-  final VoidCallback onPressed;
-  final Key? equippedMarkerKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Semantics(
-      container: true,
-      button: true,
-      selected: selected,
-      label: semanticLabel,
-      onTap: onPressed,
-      excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 160),
-            curve: Curves.easeOutCubic,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            decoration: BoxDecoration(
-              color: colors.parchment,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected
-                    ? colors.pillGoldDark
-                    : equipped
-                    ? colors.accent
-                    : colors.parchmentBorder,
-                width: selected
-                    ? 3
-                    : equipped
-                    ? 2
-                    : 1,
-              ),
-              boxShadow: selected
-                  ? const [
-                      BoxShadow(
-                        color: Color(0x44000000),
-                        offset: Offset(0, 3),
-                        blurRadius: 0,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(11),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: ColoredBox(
-                      color: colors.parchmentDark,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Center(
-                          child: Transform.scale(scale: 1.22, child: art),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    height: 32,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: _FittedTileName(
-                        name: name,
-                        color: colors.textDark,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    key: equippedMarkerKey,
-                    height: 22,
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: equipped
-                          ? colors.accent.withValues(alpha: 0.16)
-                          : colors.parchmentDark,
-                      border: Border(
-                        top: BorderSide(color: colors.parchmentBorder),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (markerLeading != null) ...[
-                          markerLeading!,
-                          const SizedBox(width: 3),
-                        ],
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              marker,
-                              maxLines: 1,
-                              style: PixelText.title(
-                                size: equipped ? 8.5 : 9.5,
-                                color: equipped
-                                    ? colors.accent
-                                    : colors.textMid,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Loading placeholder for the store. Mirrors the real merchandise grid so the
-/// catalog does not visibly reflow when data lands.
 class _ShopLoadingSkeleton extends StatelessWidget {
   const _ShopLoadingSkeleton({required this.cosmetic});
 
@@ -4323,13 +3602,13 @@ class _ShopLoadingSkeleton extends StatelessWidget {
             // Name
             Container(
               key: const Key('shop-skeleton-name-band'),
-              height: cosmetic ? 32 : 38,
+              height: 32,
               alignment: Alignment.center,
               child: const SkeletonLine(width: 52, height: 10),
             ),
             // Price strip
             Container(
-              height: cosmetic ? 22 : 48,
+              height: 26,
               decoration: BoxDecoration(
                 color: AppColors.of(context).parchmentDark,
                 border: Border(
@@ -4348,38 +3627,11 @@ class _ShopLoadingSkeleton extends StatelessWidget {
     );
   }
 
-  Widget _section(BuildContext context, int tileCount) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 600;
-        final columns = cosmetic
-            ? wide
-                  ? 6
-                  : constraints.maxWidth >= 360
-                  ? 4
-                  : 3
-            : wide
-            ? 4
-            : 3;
-        final tileAspectRatio = cosmetic
-            ? 0.82
-            : !wide && constraints.maxWidth < 350
-            ? 0.70
-            : 0.82;
-        return GridView.count(
-          key: const Key('shop-loading-grid'),
-          crossAxisCount: columns,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-          mainAxisSpacing: cosmetic ? 10 : 14,
-          crossAxisSpacing: cosmetic ? 9 : 12,
-          childAspectRatio: tileAspectRatio,
-          children: [for (var i = 0; i < tileCount; i++) _tile(context)],
-        );
-      },
-    );
-  }
+  Widget _section(BuildContext context, int tileCount) => ShopProductGrid(
+    compact: true,
+    gridKey: const Key('shop-loading-grid'),
+    children: [for (var i = 0; i < tileCount; i++) _tile(context)],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -4499,7 +3751,7 @@ class _ShopTile extends StatelessWidget {
                           // important for tall powerup art.
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
-                            vertical: 12,
+                            vertical: 4,
                           ),
                           child: Center(
                             // The bundled thumbnails have deliberately
@@ -4528,7 +3780,7 @@ class _ShopTile extends StatelessWidget {
               // The responsive grid gives product names enough width to read
               // as merchandise instead of inventory abbreviations.
               Container(
-                height: 38,
+                height: 32,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 child: _FittedTileName(
@@ -4537,10 +3789,9 @@ class _ShopTile extends StatelessWidget {
                 ),
               ),
               // Action strip
-              GestureDetector(
-                onTap: stripEnabled ? onStrip : null,
+              KeyedSubtree(
                 child: Container(
-                  height: 48,
+                  height: 26,
                   decoration: BoxDecoration(
                     color: onStrip == null
                         ? AppColors.of(context).parchmentDark

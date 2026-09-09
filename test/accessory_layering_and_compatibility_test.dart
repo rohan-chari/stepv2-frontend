@@ -1,3 +1,5 @@
+import 'support/shop_navigation.dart';
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,7 +30,8 @@ class _TunerApi extends BackendApiService {
   };
 }
 
-class _ConflictShopApi extends BackendApiService {
+class _ConflictShopApi extends BackendApiService
+    with LegacyShopWardrobeFixture {
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
@@ -286,41 +289,36 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _ConflictShopApi();
     await tester.pumpWidget(
       MaterialApp(
         home: ShopTab(
           initialFocus: ShopFocus.items,
           authService: await _auth(),
-          backendApiService: _ConflictShopApi(),
+          backendApiService: api,
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('INVENTORY'));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(const Key('shop-category-ACCESSORIES')));
-    await tester.pump(const Duration(milliseconds: 300));
-
+    await selectShopCategory(tester, 'ACCESSORIES');
     expect(find.text('Knight Helmet'), findsOneWidget);
     expect(find.text('3D Glasses'), findsOneWidget);
-    expect(find.text('EQUIPPED'), findsOneWidget);
+    expect(find.text('Selected'), findsOneWidget);
     await tester.ensureVisible(find.text('3D Glasses'));
     await tester.tap(find.text('3D Glasses'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const Key('shop-dressing-room-stage')),
-        matching: find.text('EQUIP'),
-      ),
-    );
+    await tester.tap(find.text('Save outfit'));
     await tester.pump();
 
     expect(
       find.text('That accessory conflicts with Knight Helmet.'),
       findsOneWidget,
     );
-    expect(find.text('EQUIPPED'), findsOneWidget);
-    expect(find.text('EQUIP'), findsOneWidget);
+    expect(find.text('Selected'), findsNWidgets(2));
+    expect(api.fixtureSaves, 1);
+    expect(api.fixtureEquipment, isNull);
+    expect(find.text('Save outfit'), findsOneWidget);
+    expect(find.text('Trying on'), findsOneWidget);
   });
 }

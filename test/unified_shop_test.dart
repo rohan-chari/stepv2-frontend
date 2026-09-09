@@ -17,6 +17,48 @@ import 'billing_components_test.dart' show FakeBilling;
 
 class ShopApi extends BackendApiService {
   @override
+  Future<Map<String, dynamic>> fetchShopCharacters({
+    required String identityToken,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    'contract': 'character-wardrobes-v1',
+    'appearanceRevision': 0,
+    'activeCharacterKey': 'default',
+    'activeCharacterVisible': true,
+    'coins': 100,
+    'characters': [
+      {
+        'characterKey': 'default',
+        'name': 'Capybara',
+        'item': null,
+        'owned': true,
+        'active': true,
+        'canPurchase': false,
+        'canActivate': true,
+        'canEdit': true,
+        'availability': 'available',
+        'outfit': {
+          'revision': 0,
+          'editable': true,
+          'hasHiddenItems': false,
+          'slots': {
+            'HEAD': null,
+            'FACE': null,
+            'NECK': null,
+            'BACK': null,
+            'FEET': null,
+          },
+          'items': [],
+          'unavailableItemIds': [],
+        },
+      },
+    ],
+    'nextCursor': null,
+  };
+
+  @override
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async => {'coins': 100, 'items': [], 'ownedItemIds': [], 'equipped': {}};
@@ -147,10 +189,12 @@ void main() {
     expect(find.text('FEATURED'), findsOneWidget);
     expect(find.byType(CoinPackOffers), findsOneWidget);
     expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
-    expect(find.text('INVENTORY'), findsOneWidget);
+    expect(find.text('INVENTORY'), findsNothing);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
     await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
-    expect(find.text('INVENTORY'), findsOneWidget);
+    expect(find.text('INVENTORY'), findsNothing);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
     expect(find.byType(CoinPackOffers), findsNothing);
   });
   testWidgets('coin pack artwork replaces placeholder icons', (tester) async {
@@ -198,7 +242,8 @@ void main() {
   testWidgets('normal first visit mounts Items tutorial', (tester) async {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling(), tutorialDue: true);
-    expect(find.text('INVENTORY'), findsOneWidget);
+    expect(find.text('INVENTORY'), findsNothing);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
     expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
   });
   testWidgets('missing billing keeps Items and shows no sample prices', (
@@ -210,7 +255,8 @@ void main() {
     expect(find.byKey(const Key('buy-coins-coins_500')), findsNothing);
     await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
-    expect(find.text('INVENTORY'), findsOneWidget);
+    expect(find.text('INVENTORY'), findsNothing);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
   });
   testWidgets('sections recover independently from unavailable store', (
     tester,
@@ -247,7 +293,7 @@ void main() {
       ];
     await pumpShop(tester, billing: billing);
     expect(find.text('777'), findsOneWidget);
-    expect(find.text('€2,49'), findsOneWidget);
+    expect(find.text('Buy · €2,49'), findsOneWidget);
     expect(
       find.image(const AssetImage('assets/images/shop/coin_sack_small.png')),
       findsOneWidget,
@@ -347,38 +393,38 @@ void main() {
       isNotNull,
     );
   });
-  testWidgets('Profile Membership opens same Shop with embedded management', (
-    tester,
-  ) async {
-    addTearDown(tester.view.reset);
-    final auth = await shopAuth();
-    final billing = FakeBilling()
-      ..state = const BillingSnapshot(
-        status: BillingStatus.active,
-        plan: BillingPlan.monthly,
-      );
-    await tester.pumpWidget(
-      BillingScope(
-        controller: billing,
-        child: MaterialApp(
-          home: ProfileTab(
-            authService: auth,
-            displayName: 'Walker',
-            onSettingsChanged: () {},
-            backendApiService: ShopApi(),
+  testWidgets(
+    'Profile omits Membership while Featured retains embedded management',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      final auth = await shopAuth();
+      final billing = FakeBilling()
+        ..state = const BillingSnapshot(
+          status: BillingStatus.active,
+          plan: BillingPlan.monthly,
+        );
+      await tester.pumpWidget(
+        BillingScope(
+          controller: billing,
+          child: MaterialApp(
+            home: ProfileTab(
+              authService: auth,
+              displayName: 'Walker',
+              onSettingsChanged: () {},
+              backendApiService: ShopApi(),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
-    await tester.tap(find.text('Membership'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(ShopTab), findsOneWidget);
-    expect(find.byType(BaraPlusBody), findsOneWidget);
-    expect(find.byType(BaraPlusScreen), findsNothing);
-    expect(find.byKey(const Key('manage-bara')), findsOneWidget);
-  });
+      );
+      await tester.pump();
+      expect(find.text('Membership'), findsNothing);
+      await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
+      expect(find.byType(ShopTab), findsOneWidget);
+      expect(find.byType(BaraPlusBody), findsOneWidget);
+      expect(find.byType(BaraPlusScreen), findsNothing);
+      expect(find.byKey(const Key('manage-bara')), findsOneWidget);
+    },
+  );
   for (final width in [320.0, 390.0]) {
     for (final palette in [AppPalette.light, AppPalette.night]) {
       testWidgets(

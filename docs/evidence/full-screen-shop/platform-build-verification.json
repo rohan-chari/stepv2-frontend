@@ -1,0 +1,39 @@
+{
+  "verifiedAtUtc": "2026-09-09T22:32:48.749792+00:00",
+  "artifacts": [
+    {
+      "platform": "iOS",
+      "path": "build/ios/ipa/Bara.ipa",
+      "version": "2.3.13",
+      "build": 10,
+      "sizeBytes": 75746021,
+      "sha256": "2793964f66348f08657989cfe03bf6c37e8370e02b44d7bacc605d1c9161cd04"
+    },
+    {
+      "platform": "Android",
+      "path": "build/app/outputs/bundle/prodRelease/app-prod-release.aab",
+      "version": "2.3.13",
+      "build": 203140,
+      "sizeBytes": 106082236,
+      "sha256": "c2b4eb64fc100beb564b8f48487df0d17febe02a2202184dfeef9c81b7a50291"
+    }
+  ],
+  "checks": [
+    "iOS production IPA build succeeded with all README defines.",
+    "Re-export succeeded with manageAppVersionAndBuildNumber=false; ZIP Info.plist version and build verified.",
+    "Android prod release appbundle build succeeded with README defines.",
+    "Bundletool read actual AAB manifest and validated bundle successfully.",
+    "Jarsigner reports jar verified; standard self-signed certificate and JarInputStream-order warnings retained in local log."
+  ],
+  "limits": [
+    "Local validation only; no upload, review submission, customer release, or physical-device/native-store transaction verification.",
+    "Existing build numbers intentionally retained; later uploads need new monotonic build numbers."
+  ],
+  "localLogs": [
+    "/tmp/shop-ios-verification-build.log",
+    "/tmp/shop-ios-validation-export.log",
+    "/tmp/shop-android-verification-build.log",
+    "/tmp/shop-android-bundle-validation.log",
+    "/tmp/shop-android-signature.log"
+  ]
+}

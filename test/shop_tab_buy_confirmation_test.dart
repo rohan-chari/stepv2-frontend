@@ -1,3 +1,5 @@
+import 'support/shop_navigation.dart';
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,7 +18,7 @@ import 'package:step_tracker/widgets/pill_button.dart';
 // (tile body and price strip) open the detail sheet, and the sheet's BUY
 // button is the only thing that spends coins.
 
-class _FakeShopApi extends BackendApiService {
+class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   _FakeShopApi({
     required this.catalog,
     required this.powerupCatalog,
@@ -200,7 +202,7 @@ Future<void> _pumpShop(
 }
 
 Future<void> _selectSegment(WidgetTester tester, String label) async {
-  final seg = find.text(label);
+  final seg = find.text(label == 'STORE' ? 'BUY' : 'OWNED');
   if (seg.evaluate().isNotEmpty) {
     await tester.tap(seg.last);
     await tester.pump();
@@ -208,14 +210,8 @@ Future<void> _selectSegment(WidgetTester tester, String label) async {
   }
 }
 
-Future<void> _selectCategory(WidgetTester tester, String label) async {
-  final pill = find.text(label);
-  if (pill.evaluate().isNotEmpty) {
-    await tester.tap(pill.first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-  }
-}
+Future<void> _selectCategory(WidgetTester tester, String label) =>
+    selectShopCategory(tester, label);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -484,9 +480,7 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
     await _selectCategory(tester, 'ACCESSORIES');
-    final hatSelector = find.byKey(
-      const Key('shop-cosmetic-selector-item-hat'),
-    );
+    final hatSelector = find.byKey(const Key('wardrobe-item-item-hat'));
     await tester.scrollUntilVisible(
       hatSelector,
       180,
@@ -495,12 +489,10 @@ void main() {
     await tester.pump();
     await tester.tap(hatSelector);
     await tester.pump(const Duration(milliseconds: 180));
-    final stage = find.byKey(const Key('shop-dressing-room-stage'));
+    final stage = find.byKey(const Key('wardrobe-preview'));
     await tester.ensureVisible(stage);
     await tester.pump();
-    await tester.tap(
-      find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
-    );
+    await tester.tap(find.text('Buy · 100'));
     await tester.pump(const Duration(milliseconds: 300));
     final buyButton = tester.widget<PillButton>(
       find.ancestor(
@@ -517,6 +509,10 @@ void main() {
     await tester.pump();
     await tester.tap(powerupsCategory);
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Discard changes'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
@@ -634,10 +630,8 @@ void main() {
       await _selectSegment(tester, 'STORE');
       await _selectCategory(tester, 'ACCESSORIES');
 
-      expect(find.text('100'), findsOneWidget);
-      final hatSelector = find.byKey(
-        const Key('shop-cosmetic-selector-item-hat'),
-      );
+      expect(find.text('100 coins'), findsOneWidget);
+      final hatSelector = find.byKey(const Key('wardrobe-item-item-hat'));
       await tester.scrollUntilVisible(
         hatSelector,
         180,
@@ -649,12 +643,10 @@ void main() {
       expect(api.cosmeticPurchases, 0);
       expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
 
-      final stage = find.byKey(const Key('shop-dressing-room-stage'));
+      final stage = find.byKey(const Key('wardrobe-preview'));
       await tester.ensureVisible(stage);
       await tester.pump();
-      await tester.tap(
-        find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
-      );
+      await tester.tap(find.text('Buy · 100'));
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text(_hatDescription), findsOneWidget);

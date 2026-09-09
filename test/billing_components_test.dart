@@ -18,17 +18,31 @@ class FakeBilling extends BillingController {
   @override
   BillingSnapshot get snapshot => state;
   CoinPackOffer? purchased;
+  BillingResult? nextResult;
   int restores = 0;
   int cancels = 0;
   int rerolls = 0;
   void update(BillingSnapshot value) {
+    final wasPending = state.operationStatus == BillingOperationStatus.pending;
     state = value;
-    notifyListeners();
+    if (wasPending && value.operationStatus == BillingOperationStatus.failed) {
+      publishPendingFeedback(
+        BillingResult(
+          success: false,
+          message: value.message ?? 'Purchase failed.',
+        ),
+      );
+    } else {
+      notifyListeners();
+    }
   }
 
   @override
   Future<BillingResult> buyCoins(CoinPackOffer pack) async {
     purchased = pack;
+    final result = nextResult;
+    nextResult = null;
+    if (result != null) return result;
     return const BillingResult(
       success: true,
       message: 'Preview purchase complete',
@@ -104,6 +118,13 @@ void main() {
     await tester.pump();
     expect(billing.purchased?.coins, 500);
     expect(find.text('Preview purchase complete'), findsOneWidget);
+    billing.nextResult = const BillingResult(
+      success: false,
+      message: 'Waiting for approval',
+      disposition: BillingDisposition.pending,
+    );
+    await tester.tap(find.byKey(const Key('buy-coins-coins_500')));
+    await tester.pump();
     billing.update(
       const BillingSnapshot(
         operationStatus: BillingOperationStatus.pending,

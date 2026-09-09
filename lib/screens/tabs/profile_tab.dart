@@ -1,5 +1,4 @@
 import '../../widgets/billing_scope.dart';
-import 'shop_tab.dart';
 import 'package:flutter/material.dart';
 import '../../models/loadable.dart';
 import '../../models/step_data.dart';
@@ -270,47 +269,6 @@ class _ProfileTabState extends State<ProfileTab> {
                   SliverToBoxAdapter(
                     child: _buildProfileHeader(showBackButton: showBackButton),
                   ),
-                  if (BillingScope.maybeOf(context) != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            key: const Key('billing-profile-membership'),
-                            icon: Icon(
-                              Icons.card_membership_rounded,
-                              size: 18,
-                              color: AppColors.of(context).textLight,
-                            ),
-                            label: Text(
-                              'Membership',
-                              style: PixelText.body(
-                                size: 13,
-                                color: AppColors.of(context).textLight,
-                              ),
-                            ),
-                            onPressed: () {
-                              final billing = BillingScope.read(context);
-                              if (billing == null) return;
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => BillingScope(
-                                    controller: billing,
-                                    child: ShopTab(
-                                      authService: widget.authService,
-                                      backendApiService: _api,
-                                      initialFocus: ShopFocus.membership,
-                                      onShopChanged: widget.onShopChanged,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
                   SliverToBoxAdapter(child: _buildBody()),
                 ],
               ),

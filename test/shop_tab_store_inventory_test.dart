@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -35,6 +36,81 @@ class _FakeShopApi extends BackendApiService {
   final Map<String, dynamic> inventory;
   final bool powerupEndpointsAvailable;
   int tutorialCompletionCalls = 0;
+
+  Map<String, dynamic> get outfit => {
+    'revision': 0,
+    'editable': true,
+    'hasHiddenItems': false,
+    'slots': {
+      'HEAD': null,
+      'FACE': null,
+      'NECK': null,
+      'BACK': null,
+      'FEET': null,
+    },
+    'items': [],
+    'unavailableItemIds': [],
+  };
+  Map<String, dynamic> get envelope => {
+    'contract': 'character-wardrobes-v1',
+    'appearanceRevision': 0,
+    'activeCharacterKey': 'default',
+    'activeCharacterVisible': true,
+  };
+  @override
+  Future<Map<String, dynamic>> fetchShopCharacters({
+    required String identityToken,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    ...envelope,
+    'characters': [
+      {
+        'characterKey': 'default',
+        'name': 'Capybara',
+        'owned': true,
+        'active': true,
+        'canEdit': true,
+        'canActivate': true,
+        'canPurchase': false,
+        'item': null,
+        'availability': 'available',
+        'outfit': outfit,
+      },
+    ],
+    'nextCursor': null,
+  };
+  @override
+  Future<Map<String, dynamic>> fetchCharacterWardrobe({
+    required String identityToken,
+    required String characterKey,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    ...envelope,
+    'characterKey': 'default',
+    'name': 'Capybara',
+    'active': true,
+    'canActivate': true,
+    'outfit': outfit,
+    'accessories': [
+      for (final item
+          in catalog['items'] is List ? catalog['items'] as List : [])
+        if (item is Map)
+          {
+            'item': item,
+            'owned': item['owned'] == true,
+            'canPurchase': item['owned'] != true,
+            'canSelect': item['owned'] == true,
+            'canPreview': true,
+            'fit': 'approved',
+            'unavailableReason': null,
+          },
+    ],
+    'nextCursor': null,
+  };
 
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
@@ -211,7 +287,7 @@ Future<void> _pumpShop(
 }
 
 Future<void> _selectSegment(WidgetTester tester, String label) async {
-  final seg = find.text(label);
+  final seg = find.text(label == 'STORE' ? 'BUY' : 'OWNED');
   if (seg.evaluate().isNotEmpty) {
     await tester.tap(seg.last);
     await tester.pump();
@@ -223,16 +299,31 @@ Future<void> _selectSegment(WidgetTester tester, String label) async {
 /// Taps a category pill (POWERUPS / CHARACTERS / ACCESSORIES). One category is
 /// shown at a time, so a test wanting cosmetics must select ACCESSORIES first.
 Future<void> _selectCategory(WidgetTester tester, String label) async {
-  final pill = find.text(label);
-  if (pill.evaluate().isNotEmpty) {
-    await tester.tap(pill.first);
+  final target = label == 'ACCESSORIES' ? 'CHARACTERS' : label;
+  await tester.tap(find.byKey(Key('shop-category-$target')));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  if (label == 'ACCESSORIES') {
+    await tester.tap(find.byKey(const Key('shop-character-default')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Edit outfit'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
   }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'test',
+      version: '1',
+      buildNumber: '1',
+      buildSignature: '',
+    ),
+  );
 
   testWidgets('shop spotlight covers the control in overlay coordinates', (
     tester,
@@ -264,20 +355,20 @@ void main() {
     final overlay = find.byType(SpotlightOverlay);
     final target = tester.widget<SpotlightOverlay>(overlay).targetRect!;
     final control = tester.getRect(
-      find.byKey(const Key('shop-segment-control')),
+      find.byKey(const Key('shop-bottom-navigation')),
     );
     final overlayOrigin = tester.getTopLeft(overlay);
     expect(target.shift(overlayOrigin), control);
     expect(
       target
           .shift(overlayOrigin)
-          .contains(tester.getCenter(find.text('STORE'))),
+          .contains(tester.getCenter(find.text('FEATURED'))),
       isTrue,
     );
     expect(
       target
           .shift(overlayOrigin)
-          .contains(tester.getCenter(find.text('INVENTORY'))),
+          .contains(tester.getCenter(find.text('CHARACTERS'))),
       isTrue,
     );
   });
@@ -340,7 +431,7 @@ void main() {
           final target = tester.widget<SpotlightOverlay>(overlay).targetRect!;
           final actual = target.shift(tester.getTopLeft(overlay));
           final control = tester.getRect(
-            find.byKey(const Key('shop-segment-control')),
+            find.byKey(const Key('shop-bottom-navigation')),
           );
           expect(actual.left, closeTo(control.left, .01));
           expect(actual.top, closeTo(control.top, .01));
@@ -363,7 +454,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump();
         checkTarget();
-        expect(find.text('STORE OR INVENTORY'), findsOneWidget);
+        expect(find.text('PICK A CATEGORY'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -385,7 +476,7 @@ void main() {
 
     await _pumpShop(tester, auth, api);
     expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
-    expect(find.text('STORE OR INVENTORY'), findsOneWidget);
+    expect(find.text('PICK A CATEGORY'), findsOneWidget);
 
     await tester.tap(find.text('SKIP'));
     await tester.pump();
@@ -437,9 +528,7 @@ void main() {
       await tester.pump();
 
       for (final key in const [
-        Key('shop-segment-control'),
-        Key('shop-category-pills'),
-        Key('shop-character-preview'),
+        Key('shop-bottom-navigation'),
         Key('shop-product-grid'),
       ]) {
         expect(find.byKey(key), findsOneWidget);
@@ -582,12 +671,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    for (final label in ['INVENTORY', 'CHARACTERS', 'ACCESSORIES']) {
+    for (final label in ['FEATURED', 'CHARACTERS']) {
       expect(
         tester.widget<Text>(find.text(label)).style?.color,
-        label == 'INVENTORY'
-            ? AppPalette.night.textLight
-            : AppPalette.night.textLight.withValues(alpha: 0.88),
+        AppPalette.night.textLight,
       );
     }
   });
@@ -637,25 +724,28 @@ void main() {
     );
   });
 
-  testWidgets('STORE shows unowned cosmetics but NOT owned ones', (
-    tester,
-  ) async {
-    final auth = await _createAuthService();
-    final api = _FakeShopApi(
-      catalog: _catalog(),
-      powerupCatalog: _powerupCatalog(),
-      inventory: _inventory(),
-    );
+  testWidgets(
+    'wardrobe shows purchasable and owned cosmetics with distinct actions',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+      );
 
-    await _pumpShop(tester, auth, api);
-    await _selectSegment(tester, 'STORE');
-    await _selectCategory(tester, 'ACCESSORIES');
+      await _pumpShop(tester, auth, api);
+      await _selectSegment(tester, 'STORE');
+      await _selectCategory(tester, 'ACCESSORIES');
 
-    // Unowned cosmetic is offered in the store...
-    expect(find.text('Blue Hat'), findsWidgets);
-    // ...but the OWNED cosmetic is not in the store list.
-    expect(find.text('Red Scarf'), findsNothing);
-  });
+      // Unowned cosmetic is offered in the store...
+      expect(find.text('Blue Hat'), findsWidgets);
+      // ...but the OWNED cosmetic is not in the store list.
+      expect(find.text('Red Scarf'), findsWidgets);
+      expect(find.text('100 coins'), findsOneWidget);
+      expect(find.text('Owned'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'INVENTORY hides retired residue and keeps owned powerup counts',
@@ -695,22 +785,7 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'INVENTORY');
     await _selectCategory(tester, 'CHARACTERS');
-    await tester.ensureVisible(find.byKey(const Key('shop-capybara-tile')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('shop-capybara-tile')));
-    await tester.pump(const Duration(milliseconds: 180));
-    await tester.ensureVisible(
-      find.byKey(const Key('shop-dressing-room-stage')),
-    );
-    await tester.pump();
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const Key('shop-dressing-room-stage')),
-        matching: find.text('DETAILS'),
-      ),
-    );
-    // The character thumbnail animates forever; settle the sheet with fixed
-    // frames instead of pumpAndSettle.
+    await tester.tap(find.byKey(const Key('shop-character-default')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -737,13 +812,15 @@ void main() {
     // POWERUPS pill is absent entirely, so it must not be selectable.
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
-    expect(find.text('POWERUPS'), findsNothing);
+    expect(find.text('POWERUPS'), findsOneWidget);
+    expect(
+      find.textContaining('Powerups are currently unavailable'),
+      findsOneWidget,
+    );
 
     await _selectCategory(tester, 'ACCESSORIES');
     expect(find.text('Blue Hat'), findsWidgets);
 
-    await _selectSegment(tester, 'INVENTORY');
-    await _selectCategory(tester, 'ACCESSORIES');
     expect(find.text('Red Scarf'), findsWidgets);
   });
 }

@@ -1,3 +1,4 @@
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -16,7 +17,7 @@ import 'package:step_tracker/widgets/streak_chip.dart';
 /// Batch 2026-07-27 — items 3 (paw coin, not a dollar sign), 4 (PillButton
 /// silently ellipsizes), 22 (centre the EQUIPPED pill) and 23 (the price lives
 /// in the strip, always).
-class _FakeShopApi extends BackendApiService {
+class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   _FakeShopApi({
     required this.powerupCatalog,
     this.cosmetics = const [],
@@ -143,8 +144,6 @@ Future<void> _pump(
 }
 
 Future<void> _openInventoryCharacters(WidgetTester tester) async {
-  await tester.tap(find.text('INVENTORY'));
-  await tester.pump(const Duration(milliseconds: 300));
   await selectShopCategory(tester, 'CHARACTERS');
   await tester.pump(const Duration(milliseconds: 300));
 }
@@ -452,14 +451,9 @@ void main() {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
       await _openInventoryCharacters(tester);
 
-      final tile = find.byKey(const Key('shop-capybara-tile'));
+      final tile = find.byKey(const Key('shop-character-default'));
       expect(tile, findsOneWidget);
-      final badge = find.descendant(
-        of: tile,
-        matching: find.byKey(
-          const Key('shop-cosmetic-equipped-__default_capybara__'),
-        ),
-      );
+      final badge = find.descendant(of: tile, matching: find.text('ACTIVE'));
       expect(badge, findsOneWidget);
       expect(
         tester.getCenter(badge).dy,
@@ -477,7 +471,7 @@ void main() {
           ],
         ),
       );
-      await tester.tap(find.text('INVENTORY'));
+      await tester.tap(find.text('OWNED'));
       await tester.pump(const Duration(milliseconds: 300));
       await selectShopCategory(tester, 'POWERUPS');
       await tester.pump(const Duration(milliseconds: 300));
@@ -538,7 +532,7 @@ void main() {
       );
       await selectShopCategory(tester, 'ACCESSORIES');
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('60'), findsOneWidget);
+      expect(find.text('60 coins'), findsOneWidget);
     });
 
     testWidgets('tapping an unaffordable tile opens the sheet', (tester) async {

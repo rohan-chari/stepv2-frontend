@@ -7,6 +7,7 @@ import '../models/billing.dart';
 import '../services/billing_controller.dart';
 import '../styles.dart';
 import '../widgets/billing_scope.dart';
+import '../widgets/billing_action_feedback.dart';
 import '../widgets/pill_button.dart';
 
 /// Internal full-page wrapper; app entry points use the embedded Shop body.
@@ -35,24 +36,46 @@ class BaraPlusBody extends StatefulWidget {
 class _BaraPlusScreenState extends State<BaraPlusBody> {
   BillingPlan _plan = BillingPlan.monthly;
   bool _busy = false;
-  String? _message;
-  Future<void> _perform(Future<BillingResult> Function() action) async {
-    setState(() {
-      _busy = true;
-      _message = null;
-    });
-    try {
-      final result = await action();
-      if (mounted) setState(() => _message = result.message);
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _message = 'That could not be completed. Please try again.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  late final _feedback = BillingActionFeedback(
+    context: () => context,
+    isMounted: () => mounted,
+  );
+  BillingController? _observedController;
+  String? _observedUser;
+  int _generation = 0;
+
+  void _observe(BillingController? controller) {
+    if (!identical(controller, _observedController) ||
+        controller?.userId != _observedUser) {
+      _generation++;
+      _busy = false;
+      _observedController = controller;
+      _observedUser = controller?.userId;
     }
+    _feedback.observe(controller);
+  }
+
+  Future<void> _perform(Future<BillingResult> Function() action) async {
+    final controller = widget.controller ?? BillingScope.read(context);
+    if (controller == null || _busy) return;
+    _observe(controller);
+    final generation = _generation;
+    setState(() => _busy = true);
+    try {
+      await _feedback.perform(controller, action);
+    } finally {
+      if (mounted &&
+          generation == _generation &&
+          controller.userId == _observedUser) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _feedback.dispose();
+    super.dispose();
   }
 
   Widget _text(
@@ -391,6 +414,7 @@ class _BaraPlusScreenState extends State<BaraPlusBody> {
   Widget build(BuildContext context) {
     final billing = widget.controller ?? BillingScope.maybeOf(context);
     final colors = AppColors.of(context);
+    _observe(billing);
     if (billing == null) {
       return Padding(
         padding: const EdgeInsets.all(20),
@@ -401,6 +425,7 @@ class _BaraPlusScreenState extends State<BaraPlusBody> {
       listenable: billing,
       builder: (context, _) {
         final state = billing.snapshot;
+        _observe(billing);
         final cosmetic = billing.cosmetic;
         final selectedPlan = state.isMember ? BillingPlan.permanent : _plan;
         final permanent = selectedPlan == BillingPlan.permanent;
@@ -735,15 +760,6 @@ class _BaraPlusScreenState extends State<BaraPlusBody> {
                     child: _text('Preview first payment', size: 13),
                   ),
               ],
-              if (state.message != null || _message != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: _text(
-                    state.message ?? _message ?? '',
-                    size: 13,
-                    color: colors.textDark,
-                  ),
-                ),
               TextButton(
                 key: const Key('restore-bara'),
                 onPressed: disabled ? null : () => _perform(billing.restore),
@@ -765,11 +781,16 @@ class _BaraPlusScreenState extends State<BaraPlusBody> {
                       ),
                   ],
                 ),
-              if (state.operationStatus == BillingOperationStatus.pending)
+              if (state.operationStatus == BillingOperationStatus.pending) ...[
+                _text(
+                  state.message ?? 'Purchase is awaiting confirmation.',
+                  size: 13,
+                ),
                 TextButton(
                   onPressed: () => billing.refresh(),
                   child: _text('Check purchase status', size: 13),
                 ),
+              ],
               if (billing.isPreview)
                 _text(
                   'Frontend preview · Sample USD prices and cosmetic. Checkout and subscription management are simulated.',

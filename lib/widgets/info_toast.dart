@@ -5,13 +5,13 @@ import 'game_toast.dart';
 
 /// Shows a floating game-styled info toast that slides down from the top
 /// and auto-dismisses after [duration].
-void showInfoToast(
+VoidCallback showInfoToast(
   BuildContext context,
   String message, {
   Duration duration = const Duration(seconds: 3),
   VoidCallback? onDismissed,
 }) {
-  showGameToast(
+  return showGameToast(
     context,
     message,
     duration: duration,

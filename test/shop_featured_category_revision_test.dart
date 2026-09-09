@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -44,18 +45,14 @@ void main() {
       'auth_coins': 100,
     });
   });
-  testWidgets('Featured belongs below Store Inventory with item categories', (
-    tester,
-  ) async {
+  testWidgets('Featured uses three shop bottom destinations', (tester) async {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling());
     expect(find.text('ITEMS'), findsNothing);
-    final categories = find.byKey(const Key('shop-category-pills'));
-    expect(
-      find.descendant(of: categories, matching: find.text('FEATURED')),
-      findsOneWidget,
-    );
-    for (final name in ['POWERUPS', 'CHARACTERS', 'ACCESSORIES']) {
+    expect(find.text('INVENTORY'), findsNothing);
+    expect(find.text('ACCESSORIES'), findsNothing);
+    final categories = find.byKey(const Key('shop-bottom-navigation'));
+    for (final name in ['FEATURED', 'POWERUPS', 'CHARACTERS']) {
       expect(
         find.descendant(of: categories, matching: find.text(name)),
         findsOneWidget,
@@ -63,53 +60,59 @@ void main() {
     }
     expect(
       tester.getTopLeft(categories).dy,
-      greaterThan(
-        tester.getBottomLeft(find.byKey(const Key('shop-segment-control'))).dy,
-      ),
+      greaterThan(tester.getBottomLeft(find.text('SHOP')).dy),
     );
     expect(find.byType(CoinPackOffers), findsOneWidget);
   });
   for (final width in [320.0, 390.0, 800.0]) {
-    testWidgets('Featured pack and membership match Powerup tiles at $width', (
-      tester,
-    ) async {
-      addTearDown(tester.view.reset);
-      await pumpShop(tester, billing: FakeBilling(), width: width);
-      final membership = tester.getSize(
-        find.byKey(const Key('shop-membership-toggle')),
-      );
-      final coin = tester.getSize(find.byKey(const Key('coin-tile-coins_500')));
-      expect(coin, membership);
-      await tester.ensureVisible(find.text('POWERUPS'));
-      await tester.pump();
-      await tester.tap(find.text('POWERUPS'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(
-        coin,
-        tester.getSize(find.byKey(const Key('shop-product-card')).first),
-      );
-    });
+    testWidgets(
+      'Featured cards match each other and Powerups match Characters at $width',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        await pumpShop(tester, billing: FakeBilling(), width: width);
+        final membership = tester.getSize(
+          find.byKey(const Key('shop-membership-toggle')),
+        );
+        final coin = tester.getSize(
+          find.byKey(const Key('coin-tile-coins_500')),
+        );
+        expect(coin, membership);
+        await tester.ensureVisible(find.text('POWERUPS'));
+        await tester.pump();
+        await tester.tap(find.text('POWERUPS'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        final powerup = tester.getSize(
+          find.byKey(const Key('shop-product-card')).first,
+        );
+        await selectShopCategory(tester, 'CHARACTERS');
+        final character = tester.getSize(
+          find.byKey(const Key('shop-character-default')),
+        );
+        expect(powerup.width, character.width);
+        expect(powerup.height, character.height);
+        expect(powerup.width, lessThanOrEqualTo(coin.width));
+      },
+    );
   }
-  testWidgets('Inventory excludes Featured and Store restores its category', (
+  testWidgets('Powerups remembers local Owned selection across destinations', (
     tester,
   ) async {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling(), focus: ShopFocus.coins);
-    await tester.ensureVisible(find.text('INVENTORY'));
+    await selectShopCategory(tester, 'POWERUPS');
+    await tester.tap(find.text('OWNED'));
     await tester.pump();
-    await tester.tap(find.text('INVENTORY'));
-    await tester.pump();
-    expect(find.text('FEATURED'), findsNothing);
-    expect(find.byType(CoinPackOffers), findsNothing);
-    await tester.tap(find.text('CHARACTERS'));
-    await tester.pump();
-    await tester.tap(find.text('STORE'));
-    await tester.pump();
+    expect(find.byKey(const Key('shop-product-card')), findsNothing);
+    await selectShopCategory(tester, 'CHARACTERS');
+    expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
+    await selectShopCategory(tester, 'FEATURED');
     expect(find.byType(CoinPackOffers), findsOneWidget);
-    await tester.tap(find.text('INVENTORY'));
+    await selectShopCategory(tester, 'POWERUPS');
+    expect(find.byKey(const Key('shop-product-card')), findsNothing);
+    await tester.tap(find.text('BUY'));
     await tester.pump();
-    expect(find.byKey(const Key('shop-capybara-tile')), findsOneWidget);
+    expect(find.byKey(const Key('shop-product-card')), findsOneWidget);
   });
   testWidgets(
     'membership focus loading opens details and observes products arriving',
@@ -162,12 +165,12 @@ void main() {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling(), width: 320, textScale: 1.6);
     final firstY = tester.getTopLeft(find.text('FEATURED')).dy;
-    for (final label in ['POWERUPS', 'CHARACTERS', 'ACCESSORIES']) {
+    for (final label in ['POWERUPS', 'CHARACTERS']) {
       expect(tester.getTopLeft(find.text(label)).dy, firstY);
     }
-    await tester.ensureVisible(find.text('ACCESSORIES'));
+    await tester.ensureVisible(find.text('CHARACTERS'));
     await tester.pump();
-    await tester.tap(find.text('ACCESSORIES'));
+    await tester.tap(find.text('CHARACTERS'));
     await tester.pump();
     expect(find.byType(CoinPackOffers), findsNothing);
   });

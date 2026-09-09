@@ -417,10 +417,12 @@ class LiveBillingController extends BillingController {
             : null;
         _retry?.cancel();
         _notify();
-        return BillingResult(
+        final result = BillingResult(
           success: true,
           message: _message ?? 'Purchases are up to date.',
         );
+        if (_current(generation) && pending) publishPendingFeedback(result);
+        return result;
       }
     } on ApiException catch (error) {
       if (error.code == 'PURCHASE_ACCOUNT_MISMATCH' ||
@@ -432,10 +434,12 @@ class LiveBillingController extends BillingController {
               : 'This store purchase cannot be used with this Bara account.';
           _notify();
         }
-        return BillingResult(
+        final result = BillingResult(
           success: false,
           message: _message ?? 'Purchase account mismatch.',
         );
+        if (_current(generation) && pending) publishPendingFeedback(result);
+        return result;
       }
     } catch (_) {
       /* Durable marker survives transport failure. */
@@ -453,6 +457,9 @@ class LiveBillingController extends BillingController {
     return BillingResult(
       success: false,
       message: _message ?? 'Purchases could not be refreshed.',
+      disposition: pending
+          ? BillingDisposition.pending
+          : BillingDisposition.error,
     );
   }
 
@@ -535,14 +542,24 @@ class LiveBillingController extends BillingController {
         await prefs.remove(_syncKey(user));
       }
       if (_current(generation)) {
-        _operation = error.pending || error.uncertain
+        _operation = error.cancelled
+            ? BillingOperationStatus.idle
+            : error.pending || error.uncertain
             ? BillingOperationStatus.pending
             : BillingOperationStatus.failed;
         _message = error.message;
         if (error.pending || error.uncertain) _scheduleRetry(generation);
         _notify();
       }
-      return BillingResult(success: false, message: error.message);
+      return BillingResult(
+        success: false,
+        message: error.message,
+        disposition: error.cancelled
+            ? BillingDisposition.cancelled
+            : error.pending || error.uncertain
+            ? BillingDisposition.pending
+            : BillingDisposition.error,
+      );
     } catch (_) {
       if (!nativeStarted) {
         if (_current(generation)) {
@@ -564,6 +581,7 @@ class LiveBillingController extends BillingController {
       return const BillingResult(
         success: false,
         message: 'Checking the purchase.',
+        disposition: BillingDisposition.pending,
       );
     } finally {
       if (_current(generation)) {
@@ -670,7 +688,13 @@ class LiveBillingController extends BillingController {
         _operation = BillingOperationStatus.failed;
         _message = error.message;
       }
-      return BillingResult(success: false, message: error.message);
+      return BillingResult(
+        success: false,
+        message: error.message,
+        disposition: error.cancelled
+            ? BillingDisposition.notice
+            : BillingDisposition.error,
+      );
     } catch (_) {
       const message =
           'The plan change could not be confirmed. Check your store subscription settings before trying again.';
@@ -713,15 +737,29 @@ class LiveBillingController extends BillingController {
       return await _sync(generation, null, true);
     } on StoreBillingException catch (error) {
       final prefs = await SharedPreferences.getInstance();
-      if (error.accountMismatch) await prefs.remove(_syncKey(user));
+      if (error.accountMismatch || error.cancelled) {
+        await prefs.remove(_syncKey(user));
+      }
       if (_current(generation)) {
-        _operation = error.accountMismatch
+        _operation = error.cancelled
+            ? BillingOperationStatus.idle
+            : error.accountMismatch
             ? BillingOperationStatus.failed
             : BillingOperationStatus.pending;
         _message = error.message;
-        if (!error.accountMismatch) _scheduleRetry(generation);
+        if (!error.accountMismatch && !error.cancelled) {
+          _scheduleRetry(generation);
+        }
       }
-      return BillingResult(success: false, message: error.message);
+      return BillingResult(
+        success: false,
+        message: error.message,
+        disposition: error.cancelled
+            ? BillingDisposition.cancelled
+            : error.accountMismatch
+            ? BillingDisposition.error
+            : BillingDisposition.pending,
+      );
     } catch (_) {
       if (_current(generation)) {
         _operation = BillingOperationStatus.pending;
@@ -731,6 +769,7 @@ class LiveBillingController extends BillingController {
       return const BillingResult(
         success: false,
         message: 'Restore is being confirmed.',
+        disposition: BillingDisposition.pending,
       );
     } finally {
       if (_current(generation)) {
@@ -748,6 +787,7 @@ class LiveBillingController extends BillingController {
       return const BillingResult(
         success: true,
         message: 'Manage renewal in your store subscription settings.',
+        disposition: BillingDisposition.notice,
       );
     } catch (_) {
       return const BillingResult(

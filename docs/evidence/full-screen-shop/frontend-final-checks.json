@@ -1,0 +1,78 @@
+{
+  "verifiedAtUtc": "2026-09-09T22:26:45.036863+00:00",
+  "frontendBaseline": "f5bd7762bbae01c1c25fd608399c19ef88b3d343",
+  "commands": [
+    {
+      "command": "flutter test",
+      "exitCode": 0,
+      "passed": 3186,
+      "failed": 0,
+      "durationSeconds": 123,
+      "localLog": "/tmp/full-shop-flutter-platform-final.log"
+    },
+    {
+      "command": "flutter analyze",
+      "exitCode": 0,
+      "issues": 0,
+      "localLog": "/tmp/shop-final-build-analyze.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "sourceSha256": {
+    "lib/models/billing.dart": "0ef32460a77651898dee9d8e85845fca0265a794256a6857bbf9adfbca8dd793",
+    "lib/models/character_wardrobe.dart": "15154812a6043ca04c6e940363ff0fd6dd3ffe0ce219694299a1bf75cc24bc49",
+    "lib/preview/billing_preview_app.dart": "18db83d389705a56b94d6d8779afbb4a4bae67eb1526ed6c5eecc920180eb806",
+    "lib/preview/preview_billing_api.dart": "1f377fd3fbef38dbd2ee3a84b6a89c2c873e238fdbc11c28b6dac4e54a81c880",
+    "lib/preview/preview_billing_controller.dart": "34482db66b85ed213fc6151edfa42a30fdaeb10b2c1676fdb7316bc138d75313",
+    "lib/screens/bara_plus_screen.dart": "27ab156ca1623227bcf8c903f0f0e3f803987391d6ac0a8b1d5c25330bb0b7e9",
+    "lib/screens/character_wardrobe_screen.dart": "5595cbfdfe91163b9d482a180ceb425fdc6927333b96020287fa35cd708ab0c6",
+    "lib/screens/tabs/profile_tab.dart": "9dc7c8bf0936e0f36f5061395ac1b2fb4ce308bfeaa52f5907e472458df592fb",
+    "lib/screens/tabs/shop_tab.dart": "fecafcd2f7afcc9fd617f3046e85ad5b74987db1da6c503147f2092c17d316b3",
+    "lib/services/backend_api_service.dart": "fee2fda2899264f6f2b05844a307a261c3f16d4b30e9ea4cbb5d905205a33b0c",
+    "lib/services/billing_controller.dart": "399a8139edc9bbbdf33aaf2c08153e0dd8401eb54fa4fcfb666a870a98e827df",
+    "lib/services/character_wardrobe_controller.dart": "f3f6d4fd4bcbd3bb6cfa95fa911f95d4f09b55c6780fae71928fd4537a5d11bd",
+    "lib/services/live_billing_controller.dart": "62f15dd7c7d2f4cd7445bf18da311ea5f4b4c75ee78f557eff949e4f2f244451",
+    "lib/widgets/billing_action_feedback.dart": "387b42616d46d30d9d6b484492c5360201bf28b3ee2ac0b0f616cb53868aae88",
+    "lib/widgets/coin_pack_offers.dart": "5b988b09ba8fae012d1730f6a52adaecba87c86e879a8d9809447edbcbbf598e",
+    "lib/widgets/error_toast.dart": "e0b4e3b474ea116b162bb75199079e93e24352492e27049432bc44b89f03bf61",
+    "lib/widgets/game_toast.dart": "c1c0ba59674b55d709179efb54ee5912cc3eae62c84ea2cb18e5e60c42972719",
+    "lib/widgets/info_toast.dart": "fccd35a594a61799f134c03b1f75ba9713412039f36715548d7d13067bc3a270",
+    "lib/widgets/shop_category_bar.dart": "c6f1e017f46b041e2165a6b059bb7f7b197f380154a947bca9615b164f9993b4",
+    "lib/widgets/shop_character_card.dart": "d1336d0a18f1724b26640a649ea47a9c4e1aa04ae0e55ca0776a88e6373920e3",
+    "lib/widgets/shop_product_grid.dart": "6e6ea4b6e1e63a43cfcc0f88d158a8ae8d36ac08504198bf4f7f7617e77f4bb3",
+    "test/accessory_layering_and_compatibility_test.dart": "143655c78b025090f72cc64b4ae17b960bee3264f3644f2566ac8ef8d28bf676",
+    "test/batch_2026_07_26_shop_test.dart": "353435cad2c7a33292d2ccd6dfb0e0676e417c827e7a66dcbb3f8a77669a9837",
+    "test/batch_2026_07_27_shop_coin_pill_test.dart": "c01cc4658e877c837192e1b0a0e32e172eba7becebf08a84a88ceef3f6bd9a77",
+    "test/batch_2026_08_09_shop_spacing_test.dart": "aa03da64df538bb3cb11b3b3c1752a51f074f4c0ba309d374d4ac9c8ce2bfc1b",
+    "test/billing_components_test.dart": "7c5c96a3dcc2ae366c98fe53828e1f0dc4a70e6d03cbdc2af5ff358070563db4",
+    "test/billing_preview_flows_test.dart": "477ad79cd799c887fad1c48047179c8ca332316ab3a1fa0ec00822f2d9c014fb",
+    "test/billing_preview_integration_test.dart": "8a3522530dbdb931d39b0fc43137477f24af89fcffc0f7ce329328cd7cddbb5f",
+    "test/billing_preview_network_guard_test.dart": "7df5c27b2596666f774210372ea698f5e7cf0246eb13641a43a82f0ea55c36c1",
+    "test/billing_toast_feedback_test.dart": "a5b592759436403322c75ffc391c02680abf3003c55e0c7b577dba0aff35e046",
+    "test/character_wardrobe_screen_test.dart": "c26ba0a1b6b7a96836b75212dd762d3c90ebcab70a703e1c38a3464279e20139",
+    "test/full_screen_shop_test.dart": "8551ea3bf9199042343a5df94af25a33bc701f2094a9002478c1b5ac639acff9",
+    "test/home_shop_entry_test.dart": "889c5dcbe1ee16486e3b5ce87469d7b4cd9408c21626c6a6f28422f62d4f3ab4",
+    "test/live_billing_test.dart": "bbfe6904c8ddd05f6ba61bf2e5199d40988d33d8e665b10dd64be182b0bad2ae",
+    "test/main_shell_nav_order_test.dart": "636b8103c44b768eef1d30c0f49f6d4a399bb09828350caf094229b5c1f22049",
+    "test/preview_wardrobe_fixtures_test.dart": "7fae327ba1c11880a4626ce84b08fe7d20a23f6559c57794030351d72c163bb0",
+    "test/profile_membership_entry_test.dart": "8f2ecb53c8515886e54826eb1c80696699f8ee35426aee33f0f2cb1034dcb472",
+    "test/shop_ad_unlock_and_type_scale_test.dart": "c6ea89c2b2772852c6763be27dbe3947617868eaa1a0cbf377aa995371930fe0",
+    "test/shop_dressing_room_test.dart": "b11374d3c3ee611714b6c5480bdaaf9830c83e4b7b0370bd314b838b70e94272",
+    "test/shop_equipped_character_shape_test.dart": "ad12d2c9f4fb69bd6cc07289c991d1eb9f55b0d4e5f73eaa6b2b50ca67a65213",
+    "test/shop_featured_category_revision_test.dart": "99ca486403448cfe2fc92dbd6c52faee7d716b2ec3aca18c718e02f6c628ceb9",
+    "test/shop_tab_buy_confirmation_test.dart": "a6ac707ebd547887fa2101efa1972bc8dfb75ee4bdf1086ec2922ded8bb28634",
+    "test/shop_tab_store_inventory_test.dart": "29f795f97ead1f4901f0dfe33a834dbacbe7100ab82f14f0c9afc5633768c5e6",
+    "test/support/legacy_shop_wardrobe_fixture.dart": "c662aaf0bb7ebe66bc9a5c5b1961089863d6609a15d5f2fa129e826b631d100b",
+    "test/support/shop_navigation.dart": "34dfecf951277078ce9466bad75c088e42a98647f144aa02798bad0081bd4665",
+    "test/turtle_character_test.dart": "034537329608e1f824ef6edcbcfc8a353ab56115717225b12e1ac65216707300",
+    "test/unified_shop_test.dart": "19be97b8980352ea422b248d90fcb3f4ebe24f76f21f330a3be8d5194762424c"
+  },
+  "limits": [
+    "Widget tests exercise real screens with fake services, not live store transactions.",
+    "Paired native release builds and artifact checks passed; see platform-build-verification.json. Physical-device manual checks remain outstanding.",
+    "Backend candidate has separate pending verification."
+  ]
+}

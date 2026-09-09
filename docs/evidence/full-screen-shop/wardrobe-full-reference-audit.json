@@ -1,0 +1,2626 @@
+{
+  "contract": "wardrobe-content-audit-v1",
+  "readAt": "2026-09-09T21:50:28.018Z",
+  "source": "SELECT-only REPEATABLE READ",
+  "missingTables": [
+    "character_wardrobe_items"
+  ],
+  "requestsChecked": 227,
+  "usersChecked": 0,
+  "activeMismatches": 0,
+  "items": [
+    {
+      "id": "0d672fb1-922f-4f56-bad5-66f4ecad9a1d",
+      "sku": "pirate_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "pirate_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1,
+        "offsetX": -0.05279661016949268,
+        "offsetY": 0.06499999999999999,
+        "rotation": -0.18,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1,
+            "offsetX": 0.18253968253968256,
+            "offsetY": 0.23897707231040544,
+            "rotation": -0.18
+          },
+          "corgi_puppy": {
+            "scale": 1.05,
+            "offsetX": -0.015,
+            "offsetY": 0.14723163841807974,
+            "rotation": -0.1666949152542275
+          }
+        }
+      },
+      "refs": {
+        "owners": 21,
+        "equipped": 9,
+        "purchases": 5,
+        "ads": 5,
+        "dailyRewards": 11,
+        "replay": 5
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "03457ac4f944e408d658282ffcd9a609d3e6dbbf77eeb229d74caba0fdb4484b"
+    },
+    {
+      "id": "0fadf61f-938d-40ad-b268-c968a546a3c2",
+      "sku": "party_blower",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "party_blower",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.9,
+        "offsetX": 0.16,
+        "offsetY": 0.06,
+        "rotation": 0,
+        "animationFrames": 6
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "a524584483ccff3199e4aa19bdb0fa4dc25b7e868d3c9ed34266e8283a983f13"
+    },
+    {
+      "id": "175faed8-8210-48f6-95d8-14ba8962c560",
+      "sku": "sweatband",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "sweatband",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9,
+        "offsetX": -0.022598870056497078,
+        "offsetY": 0.11983050847457877,
+        "rotation": -0.14466101694914765,
+        "perAnimal": {
+          "turtle": {
+            "scale": 0.8999999999999994,
+            "offsetX": 0.22839506172839652,
+            "offsetY": 0.2865961199294539,
+            "rotation": -0.0722222222222233
+          },
+          "corgi_puppy": {
+            "scale": 1.1,
+            "offsetX": 0.02,
+            "offsetY": 0.22316384180791238,
+            "rotation": -0.1423728813559384
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "ed4cfa0235c26aab5b541fbe110079b435a18ee1f82ff28cc5cccf2e1ef0cbfd"
+    },
+    {
+      "id": "19798b2c-b95a-4c80-800b-736339538725",
+      "sku": "peacock_tail",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "peacock_tail",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.4,
+        "offsetX": -0.16,
+        "offsetY": -0.05,
+        "rotation": 0,
+        "renderLayer": "behind",
+        "animationFrames": 6
+      },
+      "refs": {
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "1962a0d419fb43b423242041b94a8d19bce75908c8ef5a2bbb130430ed9da812"
+    },
+    {
+      "id": "22564fc5-a946-494b-bd7c-d92a79dbed45",
+      "sku": "flower_crown",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "flower_crown",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.5296610169491538,
+        "offsetX": 0.005,
+        "offsetY": 0.11505649717514377,
+        "rotation": -0.1,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 0.6296610169491539,
+            "offsetX": 0.025,
+            "offsetY": 0.21005649717514385,
+            "rotation": -0.1
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "equipped": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "3c5208bbab3b01069aee100ae88f17a4ad71bdbcc24a7f2af9831ae374ddf6ec"
+    },
+    {
+      "id": "272b5a01-a6ce-4c52-81cd-f8d52f7b2804",
+      "sku": "jetpack",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "jetpack",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.2,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "1d6335caf1eda76e15201d3b3b6bb96ffeff73224ebff8a9462d250c224e8446"
+    },
+    {
+      "id": "2882e2b5-906e-46b7-b8e2-196ffcb30f05",
+      "sku": "chef_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "chef_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.2000000000000002,
+        "offsetX": -0.07974576271186429,
+        "offsetY": 0.01,
+        "rotation": -0.18,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.2000000000000002,
+            "offsetX": 0.16843033509700112,
+            "offsetY": 0.17548500881834106,
+            "rotation": -0.12555555555555664
+          },
+          "corgi_puppy": {
+            "scale": 1.470370370370369,
+            "offsetX": -0.020282186948854086,
+            "offsetY": 0.07495590828924104,
+            "rotation": 0.020000000000000007
+          }
+        }
+      },
+      "refs": {
+        "owners": 32,
+        "equipped": 6,
+        "purchases": 3,
+        "ads": 8,
+        "dailyRewards": 21,
+        "replay": 3
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "b4b97cefa4e1ddb4df73e0022dfcb9fde83b2fce6fef34f4b8013f21fe970c23"
+    },
+    {
+      "id": "29cf75a7-61a6-4e8b-bd4a-ee5370286b66",
+      "sku": "devil_horns",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "devil_horns",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "679c50f9ef1134f294369bcbba9228d73587fbcb4084fcab9bb7b3c71e54176a"
+    },
+    {
+      "id": "2c6e9480-5d0b-4255-94c8-dd79c750c450",
+      "sku": "bunny_tail",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "bunny_tail",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.65,
+        "offsetX": -0.13,
+        "offsetY": 0.09,
+        "rotation": 0,
+        "renderLayer": "behind",
+        "animationFrames": 6
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "5185a62c764694846bc3301f8e71fbc6e922f9be415d1b78fe8dc363ed150b62"
+    },
+    {
+      "id": "2c8041ec-ac3b-4bee-9643-f3b81c7a7793",
+      "sku": "headphones",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "headphones",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.8004237288135609,
+        "offsetX": -0.05310734463276835,
+        "offsetY": 0.0925706214689257,
+        "rotation": 0.49830508474576085,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.1,
+            "offsetX": -0.02,
+            "offsetY": 0.1503954802259896,
+            "rotation": 0.5961864406779789
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "1817ec1052111028a8d078ff444762a8a37e91061b32e32ad1241d9251cbda5a"
+    },
+    {
+      "id": "2d8198d6-968f-4e4b-a926-270004920a9f",
+      "sku": "glasses_3d",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "glasses_3d",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.6605932203389826,
+        "offsetX": -0.0838700564971756,
+        "offsetY": -0.01694915254237289,
+        "rotation": -0.24025423728813378,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.6605932203389826,
+            "offsetX": 0.08730158730158855,
+            "offsetY": 0.1437389770723121,
+            "rotation": -0.16111111111111232
+          },
+          "corgi_puppy": {
+            "scale": 1.755508474576272,
+            "offsetX": -0.06542372881355953,
+            "offsetY": 0.10317460317460425,
+            "rotation": -0.2693220338983062
+          }
+        }
+      },
+      "refs": {
+        "owners": 43,
+        "equipped": 13,
+        "purchases": 7,
+        "ads": 9,
+        "dailyRewards": 27,
+        "replay": 7
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "352b4a6fff4e19db51a69330bf53e5100af0fc64d57e471c41d6a170e246b981"
+    },
+    {
+      "id": "312e1103-9bde-4b75-903f-09a455a226f5",
+      "sku": "heart_glasses",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "heart_glasses",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.6012711864406826,
+        "offsetX": -0.09322033898305071,
+        "offsetY": -0.022598870056496634,
+        "rotation": -0.23135593220338713,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.4512711864406824,
+            "offsetX": 0.10493827160493896,
+            "offsetY": 0.14021164021163957,
+            "rotation": -0.23135593220338713
+          },
+          "corgi_puppy": {
+            "scale": 1.8012711864406827,
+            "offsetX": -0.04822033898305069,
+            "offsetY": 0.1073446327683637,
+            "rotation": -0.23135593220338713
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "equipped": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "066fe862b8bfa1c611251a7172f8ef563fbc8da6757483ce9639c51484bd17e8"
+    },
+    {
+      "id": "3ad58f64-4081-47b2-93f1-7bf00b1c1bbc",
+      "sku": "football_helmet",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "football_helmet",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.2296296296296294,
+        "offsetX": 0.05379188712521987,
+        "offsetY": 0.16137566137566184,
+        "rotation": 0.08333333333333348,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.1222222222222222,
+            "offsetX": 0.23721340388007028,
+            "offsetY": 0.28659611992945355,
+            "rotation": 0.03888888888888831
+          },
+          "corgi_puppy": {
+            "scale": 1.4,
+            "offsetX": 0.07142857142857129,
+            "offsetY": 0.23897707231040566,
+            "rotation": 0.026694915254218188
+          }
+        }
+      },
+      "refs": {
+        "owners": 24,
+        "equipped": 6,
+        "purchases": 6,
+        "ads": 4,
+        "dailyRewards": 14,
+        "replay": 6
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "596d029e90760b58356847db83cfd6740fc5ebe1bafb68e74ae7451946f848e9"
+    },
+    {
+      "id": "3ba1247d-b9e3-49d6-b6ac-d4e5c6162cf3",
+      "sku": "turtle_shell",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "turtle_shell",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.5851851851851864,
+        "offsetX": 0.04497354497354478,
+        "offsetY": 0.046737213403880484,
+        "rotation": -0.2611111111111106,
+        "perAnimal": {
+          "turtle": {
+            "scale": 2.4259259259259256,
+            "offsetX": 0.11139329805996545,
+            "offsetY": 0.07613756613756595,
+            "rotation": 0.06111111111110201
+          },
+          "corgi_puppy": {
+            "scale": 1.5851851851851864,
+            "offsetX": 0.04497354497354478,
+            "offsetY": 0.09435626102292782,
+            "rotation": -0.2611111111111106
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "40067efdbda4dd8c7872a03435e44a2cb2f538dcadae9de5480227314efe76ed"
+    },
+    {
+      "id": "41d30f37-86f0-4a08-847e-f25a02689ef9",
+      "sku": "graduation_cap",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "graduation_cap",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.1500000000000001,
+        "offsetX": -0.049999999999999996,
+        "offsetY": 0.07497175141242662,
+        "rotation": -0.3559322033898309,
+        "perAnimal": {
+          "turtle": {
+            "scale": 0.95,
+            "offsetX": 0.23870056497175152,
+            "offsetY": 0.2374011299435027,
+            "rotation": -0.13347457627118597
+          },
+          "corgi_puppy": {
+            "scale": 1.243220338983048,
+            "offsetX": -0.0011864406779660986,
+            "offsetY": 0.15875706214689345,
+            "rotation": -0.273813559322035
+          }
+        }
+      },
+      "refs": {
+        "owners": 38,
+        "equipped": 6,
+        "purchases": 4,
+        "ads": 11,
+        "dailyRewards": 23,
+        "replay": 4
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "74058e33bef467209487d200aa69d2a70e21b39b6a0cd84cbbae88cbbd9e91b4"
+    },
+    {
+      "id": "4254a885-2b6a-4e8c-a059-ddbc1078bba1",
+      "sku": "snorkel_mask",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "snorkel_mask",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 2.4631355932203403,
+        "offsetX": -0.06824858757062126,
+        "offsetY": 0,
+        "rotation": -0.24915254237288575,
+        "perAnimal": {
+          "turtle": {
+            "scale": 2.4631355932203403,
+            "offsetX": 0.15961199294532624,
+            "offsetY": 0.15432098765432123,
+            "rotation": -0.24915254237288575
+          },
+          "corgi_puppy": {
+            "scale": 2.5,
+            "offsetX": 0,
+            "offsetY": 0.11000000000000003,
+            "rotation": -0.22703389830508464
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "32bbda0620c017cb39a7574d6eae1dc3567cf1ae160e0bd308ee65e706d3cba3"
+    },
+    {
+      "id": "442bf6fe-c21f-487f-8f60-61d2c9ed412f",
+      "sku": "halo",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "halo",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9,
+        "offsetX": 0,
+        "offsetY": -0.08,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "07628b160382d3064e7f06544c6c16cd8c8c5c7ab9e3d9f21a1928d6e9a06513"
+    },
+    {
+      "id": "46cdd5e1-2f34-47e4-82a5-3843edd99313",
+      "sku": "scarf",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "scarf",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.571610169491525,
+        "offsetX": -0.1709039548022599,
+        "offsetY": -0.07954802259886981,
+        "rotation": 0.19999999999999998,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.7716101694915252,
+            "offsetX": -0.17231638418079126,
+            "offsetY": 0.03107344632768483,
+            "rotation": 0.19999999999999998
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "9025e7522f31f2e639800ca34ce9fbe35e5d502c5012246a0e4766d5c8824b20"
+    },
+    {
+      "id": "48a4a200-5ef4-400e-a649-be86d1f12c0f",
+      "sku": "angel_wings",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "angel_wings",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.5,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0,
+        "renderLayer": "behind"
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "c0f10902470cf0af296ccced65162e68eb2589aac170bd5d97677f663e179327"
+    },
+    {
+      "id": "4b8c6b4e-4b4d-4012-9686-8ba869ea4a76",
+      "sku": "basketball",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "basketball",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9,
+        "offsetX": 0,
+        "offsetY": -0.15,
+        "rotation": 0,
+        "animationFrames": 6
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "7fb17fc0abd3e40622b9ec5a91e47ccff478e3a121919140b122bc66526b088e"
+    },
+    {
+      "id": "5112cb43-7fd8-4c68-8548-89171fd7ca3f",
+      "sku": "sunglasses",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "sunglasses",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.3999999999999997,
+        "offsetX": -0.09463276836158163,
+        "offsetY": -0.02,
+        "rotation": -0.2800000000000001,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.0499999999999994,
+            "offsetX": 0.13884180790960432,
+            "offsetY": 0.11581920903954956,
+            "rotation": -0.1800000000000001
+          },
+          "corgi_puppy": {
+            "scale": 1.3999999999999997,
+            "offsetX": -0.024011299435027778,
+            "offsetY": 0.08,
+            "rotation": -0.3000000000000001
+          }
+        }
+      },
+      "refs": {
+        "owners": 88,
+        "equipped": 52,
+        "purchases": 40,
+        "ads": 9,
+        "dailyRewards": 38,
+        "replay": 40
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "a42890342c06897a83ac8f76828302be8af696b418757e8d57af286847f2add7"
+    },
+    {
+      "id": "51ba15d4-1d73-4779-8a53-1c769cd8d37e",
+      "sku": "bunny_ears",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "bunny_ears",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.4500000000000002,
+        "offsetX": 0.04262786596120015,
+        "offsetY": -0.05410052910052945,
+        "rotation": 0.01222222222221352,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.4500000000000002,
+            "offsetX": 0.2639770723104061,
+            "offsetY": 0.10433862433862429,
+            "rotation": 0.01222222222221352
+          },
+          "corgi_puppy": {
+            "scale": 1.6000000000000003,
+            "offsetX": 0.08377425044091569,
+            "offsetY": 0.011463844797177103,
+            "rotation": 0.01222222222221352
+          }
+        }
+      },
+      "refs": {
+        "owners": 19,
+        "equipped": 10,
+        "purchases": 7,
+        "ads": 3,
+        "dailyRewards": 9,
+        "replay": 7
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "45fe6514e018baa9fe371875dcab2584b9b1428eb2be0820230ea87ef817e16c"
+    },
+    {
+      "id": "539b98f4-440d-426a-b2f5-e470d6b92d73",
+      "sku": "beard",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "beard",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 2.45,
+        "offsetX": 0.0004519774011292003,
+        "offsetY": 0.09464726631393428,
+        "rotation": -0.43888888888888866,
+        "perAnimal": {
+          "turtle": {
+            "scale": 2.081481481481484,
+            "offsetX": 0.1507936507936508,
+            "offsetY": 0.21075837742504433,
+            "rotation": -0.31666666666667176
+          },
+          "corgi_puppy": {
+            "scale": 2.5,
+            "offsetX": 0.0304519774011292,
+            "offsetY": 0.17372134038800757,
+            "rotation": -0.5388888888888843
+          }
+        }
+      },
+      "refs": {
+        "owners": 29,
+        "equipped": 9,
+        "purchases": 5,
+        "ads": 4,
+        "dailyRewards": 20,
+        "replay": 5
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "67ed1ab1abc2d031758dbba0eba783c9d5b0bc3a066be87672ee32c59c9f336a"
+    },
+    {
+      "id": "564d2abf-b735-4235-b51e-6b462292e639",
+      "sku": "corgi_puppy",
+      "slot": "CHARACTER",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "corgi_puppy",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.26906779661017,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0,
+        "animationFrames": 6
+      },
+      "refs": {
+        "owners": 21,
+        "equipped": 18,
+        "purchases": 18,
+        "replay": 163
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": false,
+      "remoteAssetReferenced": false,
+      "fitClassification": null,
+      "approvedCharacterKeys": [],
+      "classification": "Preserve released",
+      "expectedFingerprint": "f8303a481fc19d1556a9fad6df336a380e6643974e9154d93e4d4869b27227c2"
+    },
+    {
+      "id": "6957dc6b-a373-4d17-903d-8945e14f5c3a",
+      "sku": "bell_collar",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "bell_collar",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.8,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "a5f28fafa390fe08c28ed880c9e70879b4f5e64d3eca14e1e6cf4bfc3f9c53c7"
+    },
+    {
+      "id": "69d4bfcc-09ef-4f76-b648-740033361c21",
+      "sku": "top_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "top_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.1,
+            "offsetX": 0.22750440917107528,
+            "offsetY": 0.15902998236331534,
+            "rotation": -0.06
+          },
+          "corgi_puppy": {
+            "scale": 1.2740740740740737,
+            "offsetX": 0.014991181657848407,
+            "offsetY": 0.08730158730158744,
+            "rotation": -0.16
+          }
+        }
+      },
+      "refs": {
+        "owners": 21,
+        "equipped": 6,
+        "purchases": 2,
+        "ads": 8,
+        "dailyRewards": 11,
+        "replay": 2
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "d65ecbf305cb8ea93cff7c0e5341c184b2ef745776451a66530707c427c31195"
+    },
+    {
+      "id": "6d0fd2d1-b1eb-4f0b-b7be-5afc8560ba19",
+      "sku": "necktie",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "necktie",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.257203389830508,
+        "offsetX": 0.07485875706214962,
+        "offsetY": 0.04008474576271239,
+        "rotation": -0.19999999999999998,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.4322033898305095,
+            "offsetX": 0.11211864406779903,
+            "offsetY": 0.1554802259887026,
+            "rotation": -0.14940677966101762
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "04d36c22d712614a6b0cd1d945f7f21fa98d56f7bfa3ed7e70a316fb6383dd1b"
+    },
+    {
+      "id": "6f63145a-b038-49de-9799-6066c84a0ce7",
+      "sku": "clown_nose",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "clown_nose",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.9372881355932157,
+        "offsetX": 0.09008474576271018,
+        "offsetY": -0.006751412429377685,
+        "rotation": -0.30254237288133856,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.186016949152541,
+            "offsetX": 0.23935028248587642,
+            "offsetY": 0.12723163841808005,
+            "rotation": -0.30254237288133856
+          },
+          "corgi_puppy": {
+            "scale": 1.3182203389830336,
+            "offsetX": 0.1200847457627102,
+            "offsetY": 0.10505649717514542,
+            "rotation": -0.30254237288133856
+          }
+        }
+      },
+      "refs": {
+        "owners": 4,
+        "purchases": 3,
+        "dailyRewards": 1,
+        "replay": 3
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "7242ebf8d5261623f6ea3fdb91b2f03f555b37d989c18380670ff48455e97b77"
+    },
+    {
+      "id": "74060140-eb85-449a-b5ed-1e4b46c2f91b",
+      "sku": "coach_whistle",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "coach_whistle",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.8,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "94dec3791a45235ca7dc172e14584cd78d472493936cfe958ac0c3c71604462f"
+    },
+    {
+      "id": "791e1976-2953-4001-824b-c4404d1d0541",
+      "sku": "ranked_legend_crown",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": true,
+      "remoteOnly": false,
+      "assetKey": "legend_crown",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0.03,
+        "rotation": 0
+      },
+      "refs": {
+        "owners": 1,
+        "dailyRewards": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": true,
+      "bundledAsset": false,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve released",
+      "expectedFingerprint": "4297f960dbd2f85bb59743e5b941b6682936c2875c130933fa1990eae6a9f8c3"
+    },
+    {
+      "id": "7f9f5370-178d-47a3-8f6c-d8eef4b194a5",
+      "sku": "santa_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "santa_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.95,
+        "offsetX": -0.0757062146892668,
+        "offsetY": 0.0561581920903982,
+        "rotation": 0.08008474576270519,
+        "perAnimal": {
+          "turtle": {
+            "scale": 0.8037037037037038,
+            "offsetX": 0.16372134038800668,
+            "offsetY": 0.2460317460317465,
+            "rotation": 0.08008474576270519
+          },
+          "corgi_puppy": {
+            "scale": 0.9814814814814816,
+            "offsetX": -0.03086419753086428,
+            "offsetY": 0.1719576719576713,
+            "rotation": 0
+          }
+        }
+      },
+      "refs": {
+        "owners": 17,
+        "equipped": 3,
+        "purchases": 1,
+        "ads": 4,
+        "dailyRewards": 12,
+        "replay": 1
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "c444395b1b03513d45e736c3e1849c8b37858b7f662c0df0fad736a0bdb0314b"
+    },
+    {
+      "id": "857a8e2f-5f88-4902-b33c-a32f48c03706",
+      "sku": "fox_tail",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "fox_tail",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.7,
+        "offsetX": -0.14,
+        "offsetY": 0.05,
+        "rotation": 0,
+        "renderLayer": "behind",
+        "animationFrames": 6
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "d1bd3cae2e1dab2dd71eccac64ce71486cd75cefcadfbe0e95d4fc5243b52b5b"
+    },
+    {
+      "id": "8805116a-2154-4ba1-a04e-7b48d5bf8bb2",
+      "sku": "rocket",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "rocket",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.4,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0,
+        "renderLayer": "behind"
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": false,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "a903117f2b8af9cc03ad71b66be1aac933d4ca7b0bbe3f36fdf667c3b4cbddb2"
+    },
+    {
+      "id": "8ca732ba-b506-4024-8dcc-3f1b25dfccac",
+      "sku": "gold_medal",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "gold_medal",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "9ccc997b67c2b3eab50c8758dfe9f6acc39e6b7d953aab0e707ecb2750984bc7"
+    },
+    {
+      "id": "8ceb320b-8d6a-453d-b826-f3fcc5b248b6",
+      "sku": "shoes",
+      "slot": "FEET",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "shoes",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.5000000000000004,
+        "offsetX": 0.019999999999999993,
+        "offsetY": 0.009999999999999998,
+        "rotation": -0.060000000000000005,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.5000000000000004,
+            "offsetX": -0.05844632768361569,
+            "offsetY": -0.005000000000000002,
+            "rotation": -0.060000000000000005
+          },
+          "corgi_puppy": {
+            "scale": 1.5000000000000004,
+            "offsetX": -0.020000000000000007,
+            "offsetY": 0.049999999999999996,
+            "rotation": -0.060000000000000005
+          }
+        }
+      },
+      "refs": {
+        "owners": 44,
+        "equipped": 22,
+        "purchases": 12,
+        "ads": 1,
+        "dailyRewards": 30,
+        "replay": 12
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "addb456adc931cfde4b9c3712f17f7042e608b01ddd7ed2371c14203a2293c69"
+    },
+    {
+      "id": "94663bb1-1691-4091-8dba-af43cb5bf68d",
+      "sku": "flower_lei",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "flower_lei",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.2000000000000002,
+        "offsetX": -0.062146892655367214,
+        "offsetY": -0.05999999999999999,
+        "rotation": -0.5605932203389852,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.3165254237288146,
+            "offsetX": -0.025960451977401502,
+            "offsetY": 0.046836158192092164,
+            "rotation": -0.5605932203389852
+          }
+        }
+      },
+      "refs": {
+        "owners": 2,
+        "equipped": 1,
+        "purchases": 2,
+        "replay": 2
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "d103f7402d5f52cab59a88d86362c584873f74eb0ab51e760f44aa6f426e1054"
+    },
+    {
+      "id": "982a18cc-7f2b-45c1-ac3f-dcb3695ba017",
+      "sku": "pearl_necklace",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "pearl_necklace",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9851694915254245,
+        "offsetX": -0.07485875706214712,
+        "offsetY": -0.048135593220338994,
+        "rotation": -0.2535593220338987,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.1,
+            "offsetX": -0.04,
+            "offsetY": 0.045,
+            "rotation": -0.1
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "ea99518cb6f50c7f0d38a1a7f358e5fdcaec73da8987f0ee8f9d5da521f83457"
+    },
+    {
+      "id": "9df2691b-b118-4d01-a33c-0be7f25328af",
+      "sku": "wizard_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "wizard_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.3000000000000003,
+        "offsetX": -0.06999999999999999,
+        "offsetY": 0.02,
+        "rotation": -0.27999999999999997,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.3000000000000003,
+            "offsetX": 0.17901234567901292,
+            "offsetY": 0.17901234567901425,
+            "rotation": -0.27999999999999997
+          },
+          "corgi_puppy": {
+            "scale": 1.656355932203392,
+            "offsetX": -0.02,
+            "offsetY": 0.09500000000000001,
+            "rotation": -0.27999999999999997
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "equipped": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "b60309ba53c49442d43c5a9521801e06b5ef907a98c27c38dc805f387930ceff"
+    },
+    {
+      "id": "a2c2cca6-b8a3-490f-a879-9f5a9d6f4b05",
+      "sku": "mustache",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "mustache",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.05,
+        "offsetX": 0.01,
+        "offsetY": 0.049999999999999996,
+        "rotation": 0,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.05,
+            "offsetX": 0.030000000000000002,
+            "offsetY": 0.16265536723163865,
+            "rotation": 0
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "121a26bd234b7f7bfd0d3ca65e4a4f40911f8c0eb5f0be2a14b02c94c36ca420"
+    },
+    {
+      "id": "a4ab6910-2d56-490b-a7bb-fc67f580c3f0",
+      "sku": "bandana",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "bandana",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9,
+        "offsetX": -0.05999999999999999,
+        "offsetY": 0.12932203389830166,
+        "rotation": -1.1896610169491577,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 0.9409090909090909,
+            "offsetX": -0.006734006734006759,
+            "offsetY": 0.11784511784511786,
+            "rotation": -1.230303030303031
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "c055ec959bc8d89bb6da0211217e2b6f197232d462e59d4a5aacdcb5e7b66d22"
+    },
+    {
+      "id": "ab4c935a-d5e8-4f34-b7db-e815644a711c",
+      "sku": "knight_helmet",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "knight_helmet",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.7851851851851848,
+        "offsetX": -0.05555555555555475,
+        "offsetY": 0.08730158730158866,
+        "rotation": 0.250000000000004,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.5481481481481478,
+            "offsetX": 0.13668430335097004,
+            "offsetY": 0.2125220458553797,
+            "rotation": 0.2722222222222235
+          },
+          "corgi_puppy": {
+            "scale": 1.940740740740741,
+            "offsetX": -0.029100529100529127,
+            "offsetY": 0.19312169312169358,
+            "rotation": 0.22777777777778052
+          }
+        }
+      },
+      "refs": {
+        "owners": 14,
+        "equipped": 7,
+        "purchases": 6,
+        "ads": 3,
+        "dailyRewards": 5,
+        "replay": 6
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "25bbee069cf4b9733aab2c85baa10d9e27faeb9c507f4ec96fcca96c46c178fa"
+    },
+    {
+      "id": "b09e14ca-bbda-4d5b-819e-fba20851a0f8",
+      "sku": "nerd_glasses",
+      "slot": "FACE",
+      "active": false,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "nerd_glasses",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.2610169491525427,
+        "offsetX": -0.15254237288135625,
+        "offsetY": 0.0225988700564983,
+        "rotation": -0.40042372881357213
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "1824b9bdd1e869c0c8a22651eed0a8b34fee9944bce6d15115440b71f4f8bc56"
+    },
+    {
+      "id": "b12e0f58-f776-4d1f-ab52-33ae691a1b1a",
+      "sku": "dragon_tail",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "dragon_tail",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.6925925925925929,
+        "offsetX": -0.5,
+        "offsetY": -0.09611992945326275,
+        "rotation": 0.5722222222222202,
+        "perAnimal": {
+          "turtle": {
+            "scale": 0.637037037037037,
+            "offsetX": -0.5,
+            "offsetY": 0.04320987654320896,
+            "rotation": 0.4388888888888878
+          },
+          "corgi_puppy": {
+            "scale": 0.8185185185185184,
+            "offsetX": -0.5,
+            "offsetY": 0.027336860670193808,
+            "rotation": 0.49444444444443736
+          }
+        },
+        "renderLayer": "behind",
+        "animationFrames": 6
+      },
+      "refs": {
+        "owners": 1,
+        "equipped": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "4d6c6d61eafff57e5f423f80cc5ed0c9275ef4faefb05b17e6163ad78718bca6"
+    },
+    {
+      "id": "b4172519-e8a9-418f-9024-b109dcbaf8ea",
+      "sku": "cape",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "cape",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 2.1499999999999995,
+        "offsetX": -0.1,
+        "offsetY": -0.00423728813559332,
+        "rotation": 0.24915254237288265,
+        "renderLayer": "front",
+        "animationFrames": 6
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "af1ab28230ef47334013028c58030231c6a681693c22ab6723b685d753275aad"
+    },
+    {
+      "id": "b702ad44-2c7f-4755-a492-1cde899cf9fe",
+      "sku": "hydration_pack",
+      "slot": "BACK",
+      "active": false,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "hydration_pack",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.3,
+        "offsetX": 0.14,
+        "offsetY": -0.02,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "7060759c911bc281417ce348959626cc9c53e60faecf30f86dc7d4424d18db0e"
+    },
+    {
+      "id": "b7efae05-79a6-43c1-b247-550514961882",
+      "sku": "monocle",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "monocle",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.8572033898305116,
+        "offsetX": -0.08500000000000002,
+        "offsetY": 0.03000000000000001,
+        "rotation": -0.2,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.3904040404040405,
+            "offsetX": -0.006734006734006759,
+            "offsetY": 0.1292760942760942,
+            "rotation": -0.22272727272727266
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "20c664d9daa7407c5c852012dfa16e0619de739a83f8ddeee1a495b1402c33c4"
+    },
+    {
+      "id": "b9e3a35c-c20a-4beb-a04c-93fec8b221a0",
+      "sku": "backpack",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "backpack",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.385593220338982,
+        "offsetX": 0.10692090395480525,
+        "offsetY": 0.05999999999999999,
+        "rotation": 1.0767796610169396,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.5355932203389822,
+            "offsetX": 0.10692090395480525,
+            "offsetY": 0.15000000000000005,
+            "rotation": 1.0767796610169396
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "aaeec18051efc7d6309c0c536cf0bf3fcaa8cb72247462fc940d90516dabbba8"
+    },
+    {
+      "id": "be86856a-c1c4-426a-980b-3d5290e25994",
+      "sku": "cycling_helmet",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "cycling_helmet",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.107627118644069,
+        "offsetX": -0.08734463276836224,
+        "offsetY": 0.06172316384180528,
+        "rotation": -0.1956779661016993,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.107627118644069,
+            "offsetX": -0.062344632768362225,
+            "offsetY": 0.12005649717514266,
+            "rotation": -0.1956779661016993
+          }
+        }
+      },
+      "refs": {
+        "owners": 1,
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "a00cac95dbd7066d4d6a8bdf2289cdbb42cb33283003adcdf749a0e384d3c10f"
+    },
+    {
+      "id": "bf4326a8-35c1-48e1-bf28-b3bc1c16afc8",
+      "sku": "viking_helmet",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "viking_helmet",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.05,
+        "offsetX": -0.04,
+        "offsetY": 0.045,
+        "rotation": -0.3470338983050847,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.1521186440677962,
+            "offsetX": 0,
+            "offsetY": 0.1056214689265561,
+            "rotation": -0.20466101694915073
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "c29b3ae20c70a316c305e6489758cba7dfb720147ccc16ea56acc08b57f7aee6"
+    },
+    {
+      "id": "c725d512-0508-4f32-927c-ad229ece96e8",
+      "sku": "gold_chain",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "gold_chain",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 2.5,
+        "offsetX": -0.045,
+        "offsetY": -0.06432203389830515,
+        "rotation": -0.24000000000000007,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.4555555555555575,
+            "offsetX": 0.11493827160493997,
+            "offsetY": 0.05115520282186823,
+            "rotation": 0.2722222222222319
+          },
+          "corgi_puppy": {
+            "scale": 2.5,
+            "offsetX": -0.022175141242937492,
+            "offsetY": 0.03149717514124598,
+            "rotation": -0.24000000000000007
+          }
+        }
+      },
+      "refs": {
+        "owners": 49,
+        "equipped": 36,
+        "purchases": 19,
+        "ads": 3,
+        "dailyRewards": 27,
+        "replay": 19
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "81861ea63c91cef03e949984daa073d78fba21a8ee8ada3cdc7dbcde25abfc10"
+    },
+    {
+      "id": "c812c13c-2c72-483b-a42a-a30dd91759b1",
+      "sku": "catchers_mask",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "catchers_mask",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.7288135593220302,
+        "offsetX": 0.06638418079096087,
+        "offsetY": 0.014124293785312214,
+        "rotation": 0,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.57881355932203,
+            "offsetX": 0.11016949152542488,
+            "offsetY": 0.1468926553672355,
+            "rotation": 0.1334745762711922
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "845f6926d0b4465809e04797604856715cadb34369849de5bdd700a240d97ef8"
+    },
+    {
+      "id": "cc3aee57-1247-4f17-9f93-d6ef5595e737",
+      "sku": "eyepatch",
+      "slot": "FACE",
+      "active": false,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "eyepatch",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.1889830508474577,
+        "offsetX": -0.16525423728813637,
+        "offsetY": -0.0083615819209052,
+        "rotation": -0.5444915254237419,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.1423728813559306,
+            "offsetX": -0.09920903954802224,
+            "offsetY": 0.09833333333333438,
+            "rotation": 0
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "a315c77985edffac056763de6c1060939b2dee8ca4580488fb5e52ac11c00490"
+    },
+    {
+      "id": "ceb1c8d8-9d02-4fa0-b2a9-4e9d8bdcb635",
+      "sku": "bowtie",
+      "slot": "NECK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "bowtie",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.0000000000000002,
+        "offsetX": 0.030000000000000002,
+        "offsetY": -0.015,
+        "rotation": 0,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.0000000000000002,
+            "offsetX": 0.08474576271186474,
+            "offsetY": 0.1129943502824885,
+            "rotation": 0
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "fb6defc58f45c47bf692d4ac6a9e3691b296c2e3129df34d5eb5f58358226c7c"
+    },
+    {
+      "id": "d07c252c-84ac-48dd-a1f3-83f4cc854d9c",
+      "sku": "reindeer_antlers",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "reindeer_antlers",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "0c28b1fc645f8367fe0c61d5a353c2fa9a352bbf579b094e2b47c3d4f61816b1"
+    },
+    {
+      "id": "db5c5664-fd2a-412a-ac18-c66c30307e46",
+      "sku": "domino_mask",
+      "slot": "FACE",
+      "active": false,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "domino_mask",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.610169491525418,
+        "offsetX": -0.16666666666666657,
+        "offsetY": 0,
+        "rotation": 0,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.64237288135593,
+            "offsetX": -0.10615819209039618,
+            "offsetY": 0.0949717514124283,
+            "rotation": 0
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "427b4722a327186035001044582864cfa5ecc33aa70465c24a85b60b2d7f8f52"
+    },
+    {
+      "id": "de53e4b8-cd1a-4ea9-93c6-7c51783e112f",
+      "sku": "butterfly_wings",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "butterfly_wings",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.5,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0,
+        "renderLayer": "behind"
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "8c3814da8ae721de48d43253220c6f2ff93e96c7017f36a71187c903db647d17"
+    },
+    {
+      "id": "df2438fb-ef8b-4e75-a43a-e9442409dbe9",
+      "sku": "pumpkin_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "pumpkin_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "7a6a215b44517f0dba33204b7d692ce80d9a6da679de71d4c739f55f61df644d"
+    },
+    {
+      "id": "df3dcbe7-8363-41f1-b11c-654bb32ebcb3",
+      "sku": "beanie",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "beanie",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.95,
+        "offsetX": -0.025,
+        "offsetY": 0.05999999999999999,
+        "rotation": -0.04000000000000001,
+        "perAnimal": {
+          "turtle": {
+            "scale": 0.95,
+            "offsetX": 0.21134038800705512,
+            "offsetY": 0.23808641975308686,
+            "rotation": -0.04000000000000001
+          },
+          "corgi_puppy": {
+            "scale": 1.1,
+            "offsetX": 0.005000000000000002,
+            "offsetY": 0.13000000000000003,
+            "rotation": 0.020000000000000007
+          }
+        }
+      },
+      "refs": {
+        "owners": 44,
+        "equipped": 16,
+        "purchases": 4,
+        "ads": 15,
+        "dailyRewards": 25,
+        "replay": 4
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "e2e9c73f8897f35d246d4a122d329b47687918388433c7ccdb8f5eaa4d0d7d8f"
+    },
+    {
+      "id": "e3564307-25a5-4768-be01-22a788886719",
+      "sku": "tennis_visor",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "tennis_visor",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9904040404040403,
+        "offsetX": 0.01851851851851849,
+        "offsetY": 0.08922558922558921,
+        "rotation": -0.19090909090909092,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.0893939393939394,
+            "offsetX": 0.01851851851851849,
+            "offsetY": 0.15319865319865322,
+            "rotation": -0.1166666666666667
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "4914b9f21af68182a45090d51494df1a238e41021309e5f56b7f27f8516fcc27"
+    },
+    {
+      "id": "e8bfc9d4-0db5-425a-af9f-0216563c7716",
+      "sku": "birthday_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "birthday_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.995762711864405,
+        "offsetX": -0.019689265536722303,
+        "offsetY": 0.12516949152542345,
+        "rotation": -0.17186440677965953,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.895762711864405,
+            "offsetX": 0.21838983050847416,
+            "offsetY": 0.29541446208112854,
+            "rotation": -0.17186440677965953
+          },
+          "corgi_puppy": {
+            "scale": 2.5,
+            "offsetX": 0.02432203389830561,
+            "offsetY": 0.20016949152542352,
+            "rotation": -0.22245762711864625
+          }
+        }
+      },
+      "refs": {
+        "owners": 12,
+        "equipped": 3,
+        "purchases": 3,
+        "dailyRewards": 8,
+        "replay": 3
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "0db6ac3aad7a6d161bede8a7aa4318646aba3f8c382a89bf5a3c7f9fe884d869"
+    },
+    {
+      "id": "eaa3fa49-6135-4d27-b3a2-0b3703c05f16",
+      "sku": "ski_goggles",
+      "slot": "FACE",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "ski_goggles",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.7050847457627016,
+        "offsetX": -0.0847457627118649,
+        "offsetY": -0.02,
+        "rotation": -0.32923728813559716,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.8444444444444454,
+            "offsetX": 0.07671957671957641,
+            "offsetY": 0.14197530864197772,
+            "rotation": -0.32923728813559716
+          },
+          "corgi_puppy": {
+            "scale": 1.7050847457627016,
+            "offsetX": -0.06474576271186488,
+            "offsetY": 0.08734463276836468,
+            "rotation": -0.32923728813559716
+          }
+        }
+      },
+      "refs": {
+        "owners": 17,
+        "equipped": 10,
+        "purchases": 6,
+        "ads": 4,
+        "dailyRewards": 7,
+        "replay": 6
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "6b1f6ef786facfc7a34e83c3d4deca35fa3c6d7b641c8be1d6601039914a4290"
+    },
+    {
+      "id": "f53649c0-1d81-4b5c-9554-aefefb699c64",
+      "sku": "sunglasses_style_1",
+      "slot": "FACE",
+      "active": false,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "sunglasses_style_1",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.75,
+        "offsetX": -0.12963276836158166,
+        "offsetY": -0.009999999999999998,
+        "rotation": -0.4400000000000002,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.4999999999999998,
+            "offsetX": 0.10180790960451958,
+            "offsetY": 0.14146892655367171,
+            "rotation": -0.36000000000000015
+          },
+          "corgi_puppy": {
+            "scale": 1.9500000000000002,
+            "offsetX": -0.05997175141242917,
+            "offsetY": 0.10028248587570898,
+            "rotation": -0.42000000000000015
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "10d4e7998a762d6a1fb35fd640ec8b6306c122f3bbf3f2d08c1e197f720d5f6e"
+    },
+    {
+      "id": "f54bbbb4-2a79-445a-8413-a602873ff903",
+      "sku": "balloon_bundle",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "balloon_bundle",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.5,
+        "offsetX": 0,
+        "offsetY": 0,
+        "rotation": 0,
+        "renderLayer": "behind"
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "c103f64a721cdf80851acff6436cbadd7d2101c85077b27495aabcacbbdd6333"
+    },
+    {
+      "id": "fa5ea940-ac91-4db3-bade-8248d31f6d2b",
+      "sku": "turtle",
+      "slot": "CHARACTER",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "turtle",
+      "assetVersion": "f3410027eade",
+      "renderMetadata": {
+        "scale": 0.7,
+        "offsetX": 0,
+        "offsetY": 0.085,
+        "rotation": 0,
+        "animationFrames": 8
+      },
+      "refs": {
+        "owners": 21,
+        "equipped": 19,
+        "purchases": 19,
+        "replay": 147
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": false,
+      "remoteAssetReferenced": true,
+      "fitClassification": null,
+      "approvedCharacterKeys": [],
+      "classification": "Preserve released",
+      "expectedFingerprint": "5cdea1f8a11858360c88d3b397035267c014a87474b049e593983b61bd3fe543"
+    },
+    {
+      "id": "fac093ee-58e5-4ef9-9c93-73c45a1ff8b6",
+      "sku": "beaver_tail",
+      "slot": "BACK",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "beaver_tail",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.9012711864406793,
+        "offsetX": -0.18881355932203348,
+        "offsetY": -0.15536723163841776,
+        "rotation": -0.19999999999999998,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.2012711864406795,
+            "offsetX": -0.2288135593220335,
+            "offsetY": -0.08036723163841769,
+            "rotation": -0.19999999999999998
+          }
+        },
+        "renderLayer": "behind",
+        "animationFrames": 6
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "d9c50810a1bcef32bf312802fd151f8ca6d54d0f6ca1cdea9746aa3d5f6e51b5"
+    },
+    {
+      "id": "fc8160e0-5b13-4a3c-914d-130d7433f3a5",
+      "sku": "propeller_cap",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "propeller_cap",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 0.95,
+        "offsetX": 0,
+        "offsetY": 0.030000000000000002,
+        "rotation": -0.27584745762711815,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.1,
+            "offsetX": 0.030000000000000002,
+            "offsetY": 0.08016949152542574,
+            "rotation": -0.32
+          }
+        }
+      },
+      "refs": {},
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Needs investigation",
+      "expectedFingerprint": "ef0c545c432bc2af406142d8546781b3a8cfe0d18d0b972c60c1245d177ccdab"
+    },
+    {
+      "id": "fe867983-3b7d-4374-ae86-3a39ddac42c5",
+      "sku": "skateboard",
+      "slot": "FEET",
+      "active": true,
+      "testOnly": true,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "skateboard",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.5419491525423705,
+        "offsetX": -0.1793785310734452,
+        "offsetY": -0.02,
+        "perFoot": false,
+        "rotation": 0,
+        "perAnimal": {
+          "corgi_puppy": {
+            "scale": 1.991949152542371,
+            "offsetX": -0.1793785310734452,
+            "offsetY": 0.08,
+            "rotation": 0
+          }
+        }
+      },
+      "refs": {
+        "purchases": 1,
+        "replay": 1
+      },
+      "rewardPoolEligible": false,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "preservation-only",
+      "approvedCharacterKeys": [],
+      "classification": "Preserve owned-or-referenced",
+      "expectedFingerprint": "8a0ffd0f003457f4a182388aead1a61805711f2d14cf4662a942df66b769fbd4"
+    },
+    {
+      "id": "shop-baseball-cap",
+      "sku": "baseball_cap",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "baseball_cap",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1.2136363636363614,
+        "offsetX": -0.0010822510822514064,
+        "offsetY": 0.040194805194804804,
+        "rotation": -0.45865800865800915,
+        "perAnimal": {
+          "turtle": {
+            "scale": 1.1636363636363614,
+            "offsetX": 0.2683615819209033,
+            "offsetY": 0.2053672316384183,
+            "rotation": -0.2758474576271146
+          },
+          "corgi_puppy": {
+            "scale": 1.5627118644067806,
+            "offsetX": 0.03672316384180685,
+            "offsetY": 0.12019480519480483,
+            "rotation": -0.45865800865800915
+          }
+        }
+      },
+      "refs": {
+        "owners": 60,
+        "equipped": 12,
+        "purchases": 11,
+        "ads": 9,
+        "dailyRewards": 39,
+        "replay": 11
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "873a0981a71288a0401ed6c4c5a3bdfe672ca81e62b9724a16eaab5898f3f297"
+    },
+    {
+      "id": "shop-cowboy-hat",
+      "sku": "cowboy_hat",
+      "slot": "HEAD",
+      "active": true,
+      "testOnly": false,
+      "earnOnly": false,
+      "remoteOnly": false,
+      "assetKey": "cowboy_hat",
+      "assetVersion": null,
+      "renderMetadata": {
+        "scale": 1,
+        "offsetX": 0.009700176366842284,
+        "offsetY": 0.03,
+        "rotation": -0.14,
+        "perAnimal": {
+          "turtle": {
+            "scale": 0.7999999999999998,
+            "offsetX": 0.24152542372881236,
+            "offsetY": 0.20124293785310765,
+            "rotation": -0.06
+          },
+          "corgi_puppy": {
+            "scale": 1.0677966101694945,
+            "offsetX": 1.734723475976807e-18,
+            "offsetY": 0.14322033898305142,
+            "rotation": -0.2399999999999999
+          }
+        }
+      },
+      "refs": {
+        "owners": 82,
+        "equipped": 41,
+        "purchases": 33,
+        "ads": 5,
+        "dailyRewards": 44,
+        "replay": 33
+      },
+      "rewardPoolEligible": true,
+      "rankedReference": false,
+      "bundledAsset": true,
+      "remoteAssetReferenced": false,
+      "fitClassification": "approved",
+      "approvedCharacterKeys": [
+        "default",
+        "564d2abf-b735-4235-b51e-6b462292e639",
+        "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+      ],
+      "classification": "Preserve released",
+      "expectedFingerprint": "4905ea86450fa3234e2a5acf8b3563860c4f3f9c6cb282cee5a68f072f0f6ca8"
+    }
+  ],
+  "nextCheckpoint": null,
+  "unverified": [
+    "Historical release status requires reviewed evidence for every retirement candidate.",
+    "Bundled presence does not prove visual fit; manually verify the approved mapping in both clients.",
+    "No source asset is deleted by this report."
+  ]
+}

@@ -12,6 +12,8 @@ void main() {
     final calls = <String>{};
     for (final path in [
       'lib/screens/tabs/shop_tab.dart',
+      'lib/screens/character_wardrobe_screen.dart',
+      'lib/services/character_wardrobe_controller.dart',
       'lib/screens/tabs/profile_tab.dart',
       'lib/screens/get_coins_screen.dart',
       'lib/screens/race_detail_screen.dart',

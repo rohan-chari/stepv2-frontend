@@ -101,7 +101,7 @@ void main() {
     await _pump(tester);
 
     final segment = find.byKey(const Key('shop-segment-control'));
-    final pills = find.byKey(const Key('shop-category-pills'));
+    final pills = find.byKey(const Key('shop-bottom-navigation'));
     final controls = find.byKey(const Key('shop-filter-sort-button'));
 
     expect(segment, findsOneWidget);
@@ -112,17 +112,15 @@ void main() {
       reason: 'filter/sort row renders in STORE + POWERUPS',
     );
 
-    final abovePills = _gap(tester, segment, pills);
-    final aboveControls = _gap(tester, pills, controls);
-
-    expect(abovePills, closeTo(8.0, 0.01));
+    expect(_gap(tester, segment, controls), closeTo(8.0, 0.01));
     expect(
-      aboveControls,
-      closeTo(8.0, 0.01),
-      reason:
-          'gap above the filter/sort row must equal the gap above the pills',
+      tester.getTopLeft(pills).dy,
+      greaterThan(tester.getBottomLeft(controls).dy),
     );
-    expect(aboveControls, closeTo(abovePills, 0.01));
+    expect(
+      tester.getBottomRight(pills).dy,
+      lessThanOrEqualTo(tester.getSize(find.byType(ShopTab)).height),
+    );
   });
 
   testWidgets('STORE+CHARACTERS: no filter row and no stray void below pills', (
@@ -137,11 +135,8 @@ void main() {
     expect(find.byKey(const Key('shop-filter-sort-button')), findsNothing);
     expect(find.byKey(const Key('shop-filter-sort-label')), findsNothing);
 
-    // The pills are still the last thing in the header column: nothing was
-    // left behind where the conditional filter row used to be.
-    final pills = find.byKey(const Key('shop-category-pills'));
-    final segment = find.byKey(const Key('shop-segment-control'));
-    expect(_gap(tester, segment, pills), closeTo(8.0, 0.01));
+    expect(find.byKey(const Key('shop-segment-control')), findsNothing);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
   });
 
   testWidgets('INVENTORY: filter row absent, pill gap unchanged', (
@@ -149,18 +144,18 @@ void main() {
   ) async {
     await _pump(tester);
 
-    await tester.tap(find.text('INVENTORY'));
+    await tester.tap(find.text('OWNED'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byKey(const Key('shop-filter-sort-button')), findsNothing);
+    expect(find.byKey(const Key('shop-segment-control')), findsOneWidget);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
     expect(
-      _gap(
-        tester,
-        find.byKey(const Key('shop-segment-control')),
-        find.byKey(const Key('shop-category-pills')),
+      tester.getTopLeft(find.byKey(const Key('shop-bottom-navigation'))).dy,
+      greaterThan(
+        tester.getBottomLeft(find.byKey(const Key('shop-segment-control'))).dy,
       ),
-      closeTo(8.0, 0.01),
     );
   });
 

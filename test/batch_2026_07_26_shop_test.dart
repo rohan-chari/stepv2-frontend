@@ -1,3 +1,4 @@
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +13,7 @@ import 'package:step_tracker/widgets/pill_button.dart';
 /// Batch 2026-07-26 — shop items 1 (one filter/sort dropdown), 2 (price always
 /// visible), 6 (synthetic Capybara inventory tile) and 7 (the "weird rectangle"
 /// under the tile art).
-class _FakeShopApi extends BackendApiService {
+class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   _FakeShopApi({
     required this.powerupCatalog,
     this.cosmetics = const [],
@@ -180,14 +181,14 @@ void main() {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
 
       final preview = find.byKey(const Key('shop-character-preview'));
-      expect(tester.getSize(preview).height, greaterThanOrEqualTo(88));
+      expect(preview, findsNothing);
 
       final grid = tester.widget<GridView>(
         find.byKey(const Key('shop-product-grid')),
       );
       final delegate =
           grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 3);
+      expect(delegate.crossAxisCount, 4);
       expect(delegate.childAspectRatio, greaterThan(0.78));
 
       final artScale = tester.widget<Transform>(
@@ -231,29 +232,22 @@ void main() {
           _FakeShopApi(powerupCatalog: _powerupCatalog()),
           surface: const Size(700, 900),
         );
-        final livePreviewHeight = tester
-            .getSize(find.byKey(const Key('shop-character-preview')))
-            .height;
+        expect(find.byKey(const Key('shop-character-preview')), findsNothing);
         final live = tester.widget<GridView>(
           find.byKey(const Key('shop-product-grid')),
         );
         final liveDelegate =
             live.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(liveDelegate.crossAxisCount, 4);
+        expect(liveDelegate.crossAxisCount, 6);
 
         await _pump(tester, _StalledApi(), surface: const Size(700, 900));
-        expect(
-          tester
-              .getSize(find.byKey(const Key('shop-character-preview')))
-              .height,
-          livePreviewHeight,
-        );
+        expect(find.byKey(const Key('shop-character-preview')), findsNothing);
         final loading = tester.widget<GridView>(
           find.byKey(const Key('shop-loading-grid')).first,
         );
         final loadingDelegate =
             loading.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(loadingDelegate.crossAxisCount, 4);
+        expect(loadingDelegate.crossAxisCount, 6);
         expect(loadingDelegate.childAspectRatio, 0.82);
       },
     );
@@ -286,7 +280,7 @@ void main() {
         );
         final strip = find.ancestor(
           of: label,
-          matching: find.byType(Container),
+          matching: find.byType(GestureDetector),
         );
         expect(tester.getSize(strip.first).height, greaterThanOrEqualTo(48));
       },
@@ -357,26 +351,13 @@ void main() {
       );
 
       final preview = find.byKey(const Key('shop-character-preview'));
-      expect(preview, findsOneWidget);
+      expect(preview, findsNothing);
       await selectShopCategory(tester, 'CHARACTERS');
-      await tester.pump();
-      await tester.scrollUntilVisible(
-        find.text('Corgi Puppy'),
-        180,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(
-        tester.getTopLeft(preview).dy,
-        lessThan(tester.getTopLeft(find.text('Corgi Puppy')).dy),
-      );
-      await tester.tap(find.text('Corgi Puppy'));
-      await tester.pump();
-
-      expect(find.text('Previewing Corgi Puppy'), findsOneWidget);
-      expect(
-        find.byKey(const Key('shop-preview-corgi_puppy-')),
-        findsOneWidget,
-      );
+      await tester.tap(find.byKey(const Key('shop-character-item-corgi')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('shop-item-sheet')), findsOneWidget);
+      expect(find.text('BUY · 300'), findsOneWidget);
+      expect(find.text('Zoom'), findsOneWidget);
     });
   });
 
@@ -436,8 +417,18 @@ void main() {
     ) async {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
       bool appearsBefore(String first, String second) {
-        final a = tester.getTopLeft(find.text(first));
-        final b = tester.getTopLeft(find.text(second));
+        final a = tester.getTopLeft(
+          find.ancestor(
+            of: find.text(first),
+            matching: find.byKey(const Key('shop-product-card')),
+          ),
+        );
+        final b = tester.getTopLeft(
+          find.ancestor(
+            of: find.text(second),
+            matching: find.byKey(const Key('shop-product-card')),
+          ),
+        );
         return a.dy < b.dy || ((a.dy - b.dy).abs() < 1 && a.dx < b.dx);
       }
 
@@ -515,8 +506,6 @@ void main() {
 
   group('item 6 — a Capybara tile always exists in Inventory → CHARACTERS', () {
     Future<void> openCharacterInventory(WidgetTester tester) async {
-      await tester.tap(find.text('INVENTORY'));
-      await tester.pump(const Duration(milliseconds: 300));
       await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump(const Duration(milliseconds: 300));
     }
@@ -532,8 +521,8 @@ void main() {
     ) async {
       await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
       await openCharacterInventory(tester);
-      expect(find.byKey(const Key('shop-capybara-tile')), findsOneWidget);
-      expect(find.text('EQUIPPED'), findsWidgets);
+      expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
+      expect(find.text('ACTIVE'), findsOneWidget);
       expect(find.text('CLEAR'), findsNothing);
     });
 
@@ -558,17 +547,14 @@ void main() {
       await _pump(tester, api);
       await openCharacterInventory(tester);
       expect(find.text('Capybara'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('shop-capybara-tile')));
-      await tester.pump(const Duration(milliseconds: 180));
-      await tester.tap(
-        find.descendant(
-          of: find.byKey(const Key('shop-dressing-room-stage')),
-          matching: find.text('EQUIP'),
-        ),
-      );
+      await tester.tap(find.byKey(const Key('shop-character-default')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('Use character'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
+      expect(api.fixtureActivations, 1);
       expect(api.equipCalls, hasLength(1));
       expect(api.equipCalls.single.slot, 'CHARACTER');
       expect(api.equipCalls.single.itemId, isNull);
@@ -631,6 +617,14 @@ void main() {
 }
 
 class _StalledApi extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchShopCharacters({
+    required String identityToken,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) => Future.any([]);
+
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,

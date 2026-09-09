@@ -193,7 +193,7 @@ class PreviewBillingController extends BillingController {
     action();
     _operation = BillingOperationStatus.success;
     _message = 'Preview purchase completed. No payment was taken.';
-    notifyListeners();
+    publishPendingFeedback(BillingResult(success: true, message: _message!));
   }
 
   Future<BillingResult> _perform(void Function() apply, String message) async {
@@ -201,6 +201,7 @@ class PreviewBillingController extends BillingController {
       return const BillingResult(
         success: false,
         message: 'A purchase is already pending.',
+        disposition: BillingDisposition.pending,
       );
     }
     final generation = _generation;
@@ -209,7 +210,11 @@ class PreviewBillingController extends BillingController {
     notifyListeners();
     await Future<void>.delayed(const Duration(milliseconds: 180));
     if (generation != _generation) {
-      return const BillingResult(success: false, message: 'Preview reset.');
+      return const BillingResult(
+        success: false,
+        message: 'Preview reset.',
+        disposition: BillingDisposition.cancelled,
+      );
     }
     if (failNextPurchase) {
       failNextPurchase = false;
@@ -230,6 +235,7 @@ class PreviewBillingController extends BillingController {
       return BillingResult(
         success: false,
         message: _message ?? 'Purchase pending.',
+        disposition: BillingDisposition.pending,
       );
     }
     apply();

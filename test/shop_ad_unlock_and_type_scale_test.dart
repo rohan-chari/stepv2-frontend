@@ -1,3 +1,4 @@
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -13,7 +14,7 @@ import 'package:step_tracker/styles.dart';
 // (shop type scale) — all three live on the shop tab, so they share a harness
 // that pumps the REAL ShopTab against a fake catalog.
 
-class _FakeShopApi extends BackendApiService {
+class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   _FakeShopApi({
     required this.coins,
     required this.price,
@@ -360,7 +361,7 @@ void main() {
       await tester.tap(find.text('CHARACTERS').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      final selector = find.byKey(const Key('shop-cosmetic-selector-c1'));
+      final selector = find.byKey(const Key('shop-character-c1'));
       await tester.scrollUntilVisible(
         selector,
         180,
@@ -369,12 +370,6 @@ void main() {
       await tester.pump();
       await tester.tap(selector);
       await tester.pump(const Duration(milliseconds: 180));
-      final stage = find.byKey(const Key('shop-dressing-room-stage'));
-      await tester.ensureVisible(stage);
-      await tester.pump();
-      await tester.tap(
-        find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
-      );
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
     });
@@ -408,7 +403,7 @@ void main() {
       await tester.tap(find.text('CHARACTERS').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      final selector = find.byKey(const Key('shop-cosmetic-selector-c1'));
+      final selector = find.byKey(const Key('shop-character-c1'));
       await tester.scrollUntilVisible(
         selector,
         180,
@@ -417,12 +412,6 @@ void main() {
       await tester.pump();
       await tester.tap(selector);
       await tester.pump(const Duration(milliseconds: 180));
-      final stage = find.byKey(const Key('shop-dressing-room-stage'));
-      await tester.ensureVisible(stage);
-      await tester.pump();
-      await tester.tap(
-        find.descendant(of: stage, matching: find.text('DETAILS & BUY')),
-      );
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Watch'), findsNothing);
       expect(find.text('GET MORE COINS'), findsOneWidget);
@@ -437,7 +426,7 @@ void main() {
       expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
       await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();
-      expect(find.text('DETAILS & BUY'), findsOneWidget);
+      expect(find.byKey(const Key('shop-character-c1')), findsOneWidget);
       expect(find.text('Corgi Puppy'), findsWidgets);
     });
   });

@@ -23,7 +23,16 @@ class GameToastPalette {
   final Color messageColor;
 }
 
-void showGameToast(
+/// Route content can anchor feedback below its header without changing other
+/// screens. [top] is measured in logical pixels from the root overlay top.
+class GameToastAnchor extends InheritedWidget {
+  const GameToastAnchor({super.key, required this.top, required super.child});
+  final double top;
+  @override
+  bool updateShouldNotify(GameToastAnchor oldWidget) => top != oldWidget.top;
+}
+
+VoidCallback showGameToast(
   BuildContext context,
   String message, {
   required Key shellKey,
@@ -33,15 +42,17 @@ void showGameToast(
   VoidCallback? onDismissed,
 }) {
   final overlay = Overlay.of(context, rootOverlay: true);
+  final top = context
+      .dependOnInheritedWidgetOfExactType<GameToastAnchor>()
+      ?.top;
   late final OverlayEntry entry;
   var removed = false;
 
   void removeEntry() {
     if (removed) return;
     removed = true;
-    if (entry.mounted) {
-      entry.remove();
-    }
+    entry.remove();
+    entry.dispose();
     onDismissed?.call();
   }
 
@@ -53,10 +64,12 @@ void showGameToast(
       palette: palette,
       duration: duration,
       onDismissed: removeEntry,
+      top: top,
     ),
   );
 
   overlay.insert(entry);
+  return removeEntry;
 }
 
 class _GameToastOverlay extends StatefulWidget {
@@ -67,6 +80,7 @@ class _GameToastOverlay extends StatefulWidget {
     required this.palette,
     required this.duration,
     required this.onDismissed,
+    this.top,
   });
 
   final Key shellKey;
@@ -75,6 +89,7 @@ class _GameToastOverlay extends StatefulWidget {
   final GameToastPalette palette;
   final Duration duration;
   final VoidCallback onDismissed;
+  final double? top;
 
   @override
   State<_GameToastOverlay> createState() => _GameToastOverlayState();
@@ -182,117 +197,109 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: 18,
-      right: 18,
-      top: MediaQuery.of(context).padding.top + 42,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: GestureDetector(
-          onVerticalDragUpdate: _handleVerticalDragUpdate,
-          onVerticalDragEnd: _handleVerticalDragEnd,
-          onVerticalDragCancel: _handleVerticalDragCancel,
-          onTap: _dismiss,
-          child: AnimatedSlide(
-            offset: Offset(0, _dragOffset / 120),
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            child: Container(
-              key: widget.shellKey,
-              decoration: BoxDecoration(
-                color: widget.palette.shadow,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
-                  width: 2,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x66000000),
-                    offset: Offset(0, 4),
-                    blurRadius: 0,
-                  ),
-                ],
+    final toast = SlideTransition(
+      position: _slideAnimation,
+      child: GestureDetector(
+        onVerticalDragUpdate: _handleVerticalDragUpdate,
+        onVerticalDragEnd: _handleVerticalDragEnd,
+        onVerticalDragCancel: _handleVerticalDragCancel,
+        onTap: _dismiss,
+        child: AnimatedSlide(
+          offset: Offset(0, _dragOffset / 120),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            key: widget.shellKey,
+            decoration: BoxDecoration(
+              color: widget.palette.shadow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
+                width: 2,
               ),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(11),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).parchment,
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // A couple of decaying wiggles as the toast lands —
-                          // driven by the entrance controller, so no extra
-                          // timers and it renders static under
-                          // disableAnimations (controller pinned at 1).
-                          AnimatedBuilder(
-                            animation: _controller,
-                            builder: (context, child) {
-                              final t = _controller.value;
-                              final angle = t >= 1
-                                  ? 0.0
-                                  : math.sin(t * math.pi * 4) * 0.16 * (1 - t);
-                              return Transform.rotate(
-                                angle: angle,
-                                child: child,
-                              );
-                            },
-                            child: _ToastBadge(
-                              key: widget.badgeKey,
-                              palette: widget.palette,
-                            ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  offset: Offset(0, 4),
+                  blurRadius: 0,
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).parchment,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // A couple of decaying wiggles as the toast lands —
+                        // driven by the entrance controller, so no extra
+                        // timers and it renders static under
+                        // disableAnimations (controller pinned at 1).
+                        AnimatedBuilder(
+                          animation: _controller,
+                          builder: (context, child) {
+                            final t = _controller.value;
+                            final angle = t >= 1
+                                ? 0.0
+                                : math.sin(t * math.pi * 4) * 0.16 * (1 - t);
+                            return Transform.rotate(angle: angle, child: child);
+                          },
+                          child: _ToastBadge(
+                            key: widget.badgeKey,
+                            palette: widget.palette,
                           ),
-                          const SizedBox(width: 11),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.palette.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: PixelText.pill(
-                                    size: 11,
-                                    // The palette's `dark` shade is tuned to sit
-                                    // on light parchment; at night the toast
-                                    // surface is nearly as dark as it is, so the
-                                    // label is lifted toward the light text.
-                                    color: AppColors.of(context).isDark
-                                        ? Color.lerp(
-                                            widget.palette.face,
-                                            AppColors.of(context).textLight,
-                                            0.5,
-                                          )!
-                                        : widget.palette.dark,
-                                  ).copyWith(decoration: TextDecoration.none),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  widget.message,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style:
-                                      PixelText.body(
-                                        size: 14.5,
-                                        color: widget.palette.messageColor,
-                                      ).copyWith(
-                                        height: 1.18,
-                                        decoration: TextDecoration.none,
-                                      ),
-                                ),
-                              ],
-                            ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.palette.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: PixelText.pill(
+                                  size: 11,
+                                  // The palette's `dark` shade is tuned to sit
+                                  // on light parchment; at night the toast
+                                  // surface is nearly as dark as it is, so the
+                                  // label is lifted toward the light text.
+                                  color: AppColors.of(context).isDark
+                                      ? Color.lerp(
+                                          widget.palette.face,
+                                          AppColors.of(context).textLight,
+                                          0.5,
+                                        )!
+                                      : widget.palette.dark,
+                                ).copyWith(decoration: TextDecoration.none),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.message,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    PixelText.body(
+                                      size: 14.5,
+                                      color: widget.palette.messageColor,
+                                    ).copyWith(
+                                      height: 1.18,
+                                      decoration: TextDecoration.none,
+                                    ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -301,6 +308,19 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
           ),
         ),
       ),
+    );
+    return Positioned(
+      left: 18,
+      right: 18,
+      top: widget.top ?? MediaQuery.of(context).padding.top + 42,
+      bottom: widget.top == null ? null : 0,
+      // Anchored feedback must never paint or hit-test above its header, even
+      // while entering or being dragged away. Align keeps the rest pass-through.
+      child: widget.top == null
+          ? toast
+          : ClipRect(
+              child: Align(alignment: Alignment.topCenter, child: toast),
+            ),
     );
   }
 }

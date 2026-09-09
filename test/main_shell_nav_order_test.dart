@@ -50,6 +50,97 @@ class _EquipmentRouteApi extends _FakeBackendApiService {
     'owned': true,
     'equipped': equipped,
   };
+  Map<String, dynamic> get envelope => {
+    'contract': 'character-wardrobes-v1',
+    'appearanceRevision': equipWrites,
+    'activeCharacterKey': 'default',
+    'activeCharacterVisible': true,
+    'coins': 1000,
+  };
+  Map<String, dynamic> get outfit => {
+    'revision': equipWrites,
+    'editable': true,
+    'hasHiddenItems': false,
+    'slots': {
+      'HEAD': equipped ? 'wizard' : null,
+      'FACE': null,
+      'NECK': null,
+      'BACK': null,
+      'FEET': null,
+    },
+    'items': [if (equipped) hat],
+    'unavailableItemIds': [],
+  };
+  @override
+  Future<Map<String, dynamic>> fetchShopCharacters({
+    required String identityToken,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    ...envelope,
+    'characters': [
+      {
+        'characterKey': 'default',
+        'name': 'Capybara',
+        'item': null,
+        'owned': true,
+        'active': true,
+        'canPurchase': false,
+        'canActivate': true,
+        'canEdit': true,
+        'availability': 'available',
+        'outfit': outfit,
+      },
+    ],
+    'nextCursor': null,
+  };
+  @override
+  Future<Map<String, dynamic>> fetchCharacterWardrobe({
+    required String identityToken,
+    required String characterKey,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    ...envelope,
+    'characterKey': characterKey,
+    'name': 'Capybara',
+    'active': true,
+    'canActivate': true,
+    'outfit': outfit,
+    'accessories': [
+      {
+        'item': hat,
+        'owned': true,
+        'canPurchase': false,
+        'canPreview': true,
+        'canSelect': true,
+        'fit': 'approved',
+        'unavailableReason': null,
+      },
+    ],
+    'nextCursor': null,
+  };
+  @override
+  Future<Map<String, dynamic>> saveCharacterOutfit({
+    required String identityToken,
+    required String characterKey,
+    required int expectedOutfitRevision,
+    required Map<String, String?> slots,
+  }) async {
+    expect(expectedOutfitRevision, equipWrites);
+    equipWrites++;
+    equipped = slots['HEAD'] == 'wizard';
+    return {
+      ...envelope,
+      'characterKey': characterKey,
+      'outfit': outfit,
+      'appearanceChanged': true,
+      'equipped': {if (equipped) 'HEAD': hat},
+    };
+  }
+
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
@@ -1511,7 +1602,7 @@ void main() {
 
   for (final viaProfile in [false, true]) {
     testWidgets(
-      'equipment from ${viaProfile ? "Profile Membership" : "Home plus"} refreshes Home avatar immediately',
+      'equipment from ${viaProfile ? "Home Shop after Profile" : "Home plus"} refreshes Home avatar immediately',
       (tester) async {
         tester.view.physicalSize = const Size(390, 844);
         tester.view.devicePixelRatio = 1;
@@ -1546,38 +1637,46 @@ void main() {
           await tester.tap(find.text('Profile'));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 400));
-          await tester.tap(find.text('Membership'));
+          expect(find.text('Membership'), findsNothing);
+          await tester.tap(find.text('Home'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          await Scrollable.ensureVisible(
+            tester.element(find.byKey(const Key('home-shop-button'))),
+            alignment: 0.5,
+          );
+          await tester.pump(const Duration(milliseconds: 600));
+          await tester.pump();
+          await tester.tap(find.byKey(const Key('home-shop-button')));
         } else {
           await tester.tap(find.byIcon(Icons.add_rounded));
         }
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        await selectShopCategory(tester, 'POWERUPS');
+        await selectShopCategory(tester, 'CHARACTERS');
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byKey(const Key('shop-character-default')));
         await tester.pump();
-        await tester.tap(find.text('INVENTORY'));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('Edit outfit'));
         await tester.pump();
-        await tester.tap(find.text('ACCESSORIES'));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byKey(const Key('wardrobe-item-wizard')));
         await tester.pump();
-        final hat = find.byKey(const Key('shop-cosmetic-selector-wizard'));
-        await tester.ensureVisible(hat);
-        await tester.pump();
-        await tester.tap(hat);
-        await tester.pump();
-        final equip = find.byKey(const Key('shop-stage-primary-action'));
-        await tester.ensureVisible(equip);
-        await tester.pump();
-        await tester.tap(equip);
+        await tester.tap(find.text('Save outfit'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         expect(api.equipWrites, 1);
-        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.tap(find.text('Back to Characters'));
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-        if (viaProfile) {
-          await tester.tap(find.text('Home'));
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 400));
-        }
+        // The editor enables PopScope at endOfFrame before starting the
+        // platform route's reverse transition.
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.tap(find.byIcon(Icons.arrow_back).hitTestable());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
         final avatar = tester.widget<CapybaraCustomizationPreview>(
           find.byType(CapybaraCustomizationPreview),
         );

@@ -1,3 +1,7 @@
+import 'support/legacy_shop_wardrobe_fixture.dart';
+import 'package:step_tracker/widgets/race_ui.dart';
+import 'package:step_tracker/widgets/home_course_track.dart'
+    show CapybaraSpriteWithAccessories;
 import 'support/shop_navigation.dart';
 import 'dart:async';
 
@@ -11,7 +15,64 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/app_refresh_indicator.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 
-class _DressingRoomApi extends BackendApiService {
+class _DressingRoomApi extends BackendApiService
+    with LegacyShopWardrobeFixture {
+  @override
+  Future<Map<String, dynamic>> wardrobeFixtureCatalog(String token) async {
+    if (failLegacyRefresh && equipWrites > 0) {
+      throw const ApiException('Refresh failed.');
+    }
+    return catalog;
+  }
+
+  Completer<Map<String, dynamic>>? nextWardrobe;
+  @override
+  Future<Map<String, dynamic>> fetchCharacterWardrobe({
+    required String identityToken,
+    required String characterKey,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async {
+    final pending = nextWardrobe;
+    nextWardrobe = null;
+    if (pending != null) {
+      fixtureWardrobeReads++;
+      return pending.future;
+    }
+    return super.fetchCharacterWardrobe(
+      identityToken: identityToken,
+      characterKey: characterKey,
+      limit: limit,
+      cursor: cursor,
+      localDate: localDate,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> saveCharacterOutfit({
+    required String identityToken,
+    required String characterKey,
+    required int expectedOutfitRevision,
+    required Map<String, String?> slots,
+  }) async {
+    final result = await super.saveCharacterOutfit(
+      identityToken: identityToken,
+      characterKey: characterKey,
+      expectedOutfitRevision: expectedOutfitRevision,
+      slots: slots,
+    );
+    final equipment = equipResult?['equipped'];
+    if (equipment is Map &&
+        equipment.entries.any(
+          (entry) => entry.value is! Map || entry.value['slot'] != entry.key,
+        )) {
+      fixtureEquipment = null;
+      fixtureOutfits.clear();
+    }
+    return result;
+  }
+
   _DressingRoomApi({Map<String, dynamic>? catalog})
     : catalog = catalog ?? _catalog();
 
@@ -84,13 +145,26 @@ class _DressingRoomApi extends BackendApiService {
   }) async {
     purchaseWrites += 1;
     final pending = nextPurchase;
-    if (pending != null) {
-      nextPurchase = null;
-      return pending.future;
-    }
+    nextPurchase = null;
     final error = purchaseError;
     if (error != null) throw error;
-    return {'coins': 900};
+    final initialCatalog = catalog;
+    final result = pending == null
+        ? _ownedMoonPurchase(coins: 900)
+        : await pending.future;
+    if (identical(initialCatalog, catalog) && result['item'] is Map) {
+      final item = Map<String, dynamic>.from(result['item'] as Map);
+      catalog = {
+        ...catalog,
+        'coins': result['coins'],
+        'ownedItemIds': [...(catalog['ownedItemIds'] as List), item['id']],
+        'items': [
+          for (final row in catalog['items'] as List)
+            if (row is Map && row['id'] == item['id']) item else row,
+        ],
+      };
+    }
+    return result;
   }
 }
 
@@ -307,9 +381,7 @@ Future<void> _startMoonPackPurchase(
   await _open(tester, section: 'STORE', category: 'ACCESSORIES');
   await tester.tap(_selector('moon-pack'));
   await tester.pump(const Duration(milliseconds: 180));
-  await tester.tap(
-    find.descendant(of: _stage(), matching: find.text('DETAILS & BUY')),
-  );
+  await tester.tap(find.text('Buy · 425'));
   await tester.pump(const Duration(milliseconds: 300));
   final buy = tester.widget<PillButton>(
     find.ancestor(
@@ -327,16 +399,56 @@ Future<void> _open(
   required String section,
   required String category,
 }) async {
-  await tester.ensureVisible(find.text(section).last);
-  await tester.pump();
-  await tester.tap(find.text(section).last);
-  await tester.pump(const Duration(milliseconds: 180));
   await selectShopCategory(tester, category);
-  await tester.pump(const Duration(milliseconds: 180));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
-Finder _selector(String id) => find.byKey(Key('shop-cosmetic-selector-$id'));
-Finder _stage() => find.byKey(const Key('shop-dressing-room-stage'));
+Finder _selector(String id) => find.byKey(
+  Key(
+    id == '__default_capybara__'
+        ? 'shop-character-default'
+        : id == 'corgi'
+        ? 'shop-character-corgi'
+        : 'wardrobe-item-$id',
+  ),
+);
+Finder _stage() => find.byKey(const Key('wardrobe-preview'));
+
+Iterable<String> _previewIds(WidgetTester tester) => tester
+    .widget<RacerAvatar>(
+      find.descendant(of: _stage(), matching: find.byType(RacerAvatar)),
+    )
+    .accessories
+    .map((row) => row['id'] as String);
+Future<void> _dismissToasts(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 4));
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+Future<void> _save(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Save outfit'));
+  await tester.pump();
+  await tester.tap(find.text('Save outfit'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
+Future<void> _leaveWardrobe(WidgetTester tester, {bool discard = false}) async {
+  await _dismissToasts(tester);
+  await tester.tap(find.text('Back to Characters'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  if (discard) {
+    expect(find.text('Discard outfit changes?'), findsOneWidget);
+    await tester.tap(find.text('Discard changes'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+  await tester.pump();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -359,33 +471,21 @@ void main() {
     await _open(tester, section: 'INVENTORY', category: 'ACCESSORIES');
 
     expect(
-      find.descendant(
-        of: _selector('cowboy'),
-        matching: find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
-      ),
+      find.descendant(of: _selector('cowboy'), matching: find.text('Selected')),
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: _selector('bunny'),
-        matching: find.byKey(const Key('shop-cosmetic-equipped-bunny')),
-      ),
+      find.descendant(of: _selector('bunny'), matching: find.text('Selected')),
       findsNothing,
     );
 
     await tester.tap(_selector('cowboy'));
     await tester.pump(const Duration(milliseconds: 180));
-    expect(
-      find.descendant(of: _stage(), matching: find.text('CLEAR')),
-      findsOneWidget,
-    );
+    expect(find.text('Save outfit'), findsOneWidget);
 
     await tester.tap(_selector('bunny'));
     await tester.pump(const Duration(milliseconds: 180));
-    expect(
-      find.descendant(of: _stage(), matching: find.text('EQUIP')),
-      findsOneWidget,
-    );
+    expect(find.text('Save outfit'), findsOneWidget);
   });
 
   testWidgets('accepted equip map moves the badge without a catalog refetch', (
@@ -408,20 +508,21 @@ void main() {
 
     await tester.tap(_selector('cowboy'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(
-      find.descendant(of: _stage(), matching: find.text('EQUIP')),
-    );
+    await tester.tap(find.text('Save outfit'));
     await tester.pump(const Duration(milliseconds: 220));
 
     expect(api.equipWrites, 1);
     expect(api.bootstrapReads, 1);
     expect(api.legacyCatalogReads, 0);
     expect(
-      find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
+      find.descendant(of: _selector('cowboy'), matching: find.text('Selected')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('shop-cosmetic-equipped-bunny')), findsNothing);
-    expect(find.text('Your equipped look'), findsOneWidget);
+    expect(
+      find.descendant(of: _selector('bunny'), matching: find.text('Selected')),
+      findsNothing,
+    );
+    expect(find.text('Saved outfit'), findsOneWidget);
   });
 
   testWidgets(
@@ -439,22 +540,20 @@ void main() {
 
       await tester.tap(_selector('bunny'));
       await tester.pump(const Duration(milliseconds: 180));
-      await tester.tap(
-        find.descendant(of: _stage(), matching: find.text('EQUIP')),
-      );
+      await tester.tap(find.text('Save outfit'));
       await tester.pump(const Duration(milliseconds: 220));
 
-      expect(api.legacyCatalogReads, 1);
+      expect(api.fixtureWardrobeReads, greaterThanOrEqualTo(2));
+      expect(_previewIds(tester), contains('bunny'));
       expect(
-        find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
+        api.catalog['equipped'],
+        containsPair('HEAD', containsPair('id', 'cowboy')),
+      );
+      expect(find.text('Trying on'), findsOneWidget);
+      expect(
+        find.text('Could not verify the save. Your draft is kept.'),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('shop-cosmetic-equipped-bunny')),
-        findsNothing,
-      );
-      expect(find.text('Previewing Bunny Ears'), findsOneWidget);
-      expect(find.text('Refresh failed.'), findsOneWidget);
     },
   );
 
@@ -468,71 +567,74 @@ void main() {
 
     await tester.tap(_selector('cowboy'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(
-      find.descendant(of: _stage(), matching: find.text('CLEAR')),
-    );
+    await tester.tap(find.text('Save outfit'));
     await tester.pump(const Duration(milliseconds: 220));
 
     expect(api.legacyCatalogReads, 0);
     expect(
-      find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
+      find.descendant(of: _selector('cowboy'), matching: find.text('Selected')),
       findsNothing,
     );
-    expect(find.byKey(const Key('shop-cosmetic-equipped-bunny')), findsNothing);
-    expect(find.text('Your equipped look'), findsOneWidget);
+    expect(
+      find.descendant(of: _selector('bunny'), matching: find.text('Selected')),
+      findsNothing,
+    );
+    expect(find.text('Saved outfit'), findsOneWidget);
   });
 
-  testWidgets('selecting default Capybara previews then clears CHARACTER', (
-    tester,
-  ) async {
-    final catalog = _catalog();
-    final items = (catalog['items'] as List).cast<Map<String, dynamic>>();
-    final corgiIndex = items.indexWhere((item) => item['id'] == 'corgi');
-    items[corgiIndex] = {...items[corgiIndex], 'owned': true};
-    catalog['ownedItemIds'] = ['cowboy', 'bunny', 'corgi'];
-    (catalog['equipped'] as Map<String, dynamic>)['CHARACTER'] = _row(
-      id: 'corgi',
-      sku: 'CORGI',
-      name: 'Corgi Puppy',
-      slot: 'CHARACTER',
-      assetKey: 'corgi_puppy',
-    );
-    final api = _DressingRoomApi(catalog: catalog)
-      ..equipResult = {
-        'equipped': {
-          'HEAD': _row(
-            id: 'cowboy',
-            sku: 'COWBOY_HAT',
-            name: 'Cowboy Hat',
-            slot: 'HEAD',
-            assetKey: 'cowboy_hat',
-          ),
-        },
-      };
-    await _pumpShop(tester, api);
-    await _open(tester, section: 'INVENTORY', category: 'CHARACTERS');
-
-    final capybara = _selector('__default_capybara__');
-    await tester.tap(capybara);
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Previewing Capybara'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('shop-preview-capybara-cowboy_hat')),
-      findsOneWidget,
-    );
-    await tester.tap(
-      find.descendant(of: _stage(), matching: find.text('EQUIP')),
-    );
-    await tester.pump(const Duration(milliseconds: 220));
-
-    expect(api.lastEquipSlot, 'CHARACTER');
-    expect(api.lastEquipItemId, isNull);
-    expect(find.text('Your equipped look'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('shop-preview-capybara-cowboy_hat')),
-      findsOneWidget,
-    );
-  });
+  testWidgets(
+    'selecting default Capybara opens its own saved look then clears CHARACTER',
+    (tester) async {
+      final catalog = _catalog();
+      final items = (catalog['items'] as List).cast<Map<String, dynamic>>();
+      final index = items.indexWhere((item) => item['id'] == 'corgi');
+      items[index] = {...items[index], 'owned': true};
+      catalog['ownedItemIds'] = ['cowboy', 'bunny', 'corgi'];
+      (catalog['equipped'] as Map<String, dynamic>)['CHARACTER'] = _row(
+        id: 'corgi',
+        sku: 'CORGI',
+        name: 'Corgi Puppy',
+        slot: 'CHARACTER',
+        assetKey: 'corgi_puppy',
+      );
+      final api = _DressingRoomApi(catalog: catalog)
+        ..equipResult = {'equipped': <String, dynamic>{}};
+      await _pumpShop(tester, api);
+      await _open(tester, section: 'INVENTORY', category: 'CHARACTERS');
+      final capybara = _selector('__default_capybara__');
+      expect(
+        tester
+            .widget<RacerAvatar>(
+              find.descendant(of: capybara, matching: find.byType(RacerAvatar)),
+            )
+            .accessories,
+        isEmpty,
+      );
+      await tester.tap(capybara);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Use character'), findsOneWidget);
+      expect(api.equipWrites, 0);
+      await tester.tap(find.text('Use character'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(api.fixtureActivations, 1);
+      expect(api.lastEquipSlot, 'CHARACTER');
+      expect(api.lastEquipItemId, isNull);
+      expect(
+        find.descendant(of: capybara, matching: find.text('ACTIVE')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<RacerAvatar>(
+              find.descendant(of: capybara, matching: find.byType(RacerAvatar)),
+            )
+            .accessories,
+        isEmpty,
+      );
+    },
+  );
 
   testWidgets('Store selection is a zero-write local try-on', (tester) async {
     final api = _DressingRoomApi();
@@ -543,41 +645,38 @@ void main() {
     await tester.pump(const Duration(milliseconds: 180));
 
     expect(
-      find.descendant(
-        of: _stage(),
-        matching: find.text('Previewing Moon Pack'),
-      ),
+      find.descendant(of: _stage(), matching: find.text('Trying on')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(of: _stage(), matching: find.text('DETAILS & BUY')),
-      findsOneWidget,
-    );
+    expect(find.text('Buy · 425'), findsOneWidget);
     expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
     expect(api.bootstrapReads, 1);
     expect(api.equipWrites, 0);
     expect(api.purchaseWrites, 0);
   });
 
-  testWidgets('Store character try-on preserves equipped accessories locally', (
-    tester,
-  ) async {
-    final api = _DressingRoomApi();
-    await _pumpShop(tester, api);
-    await _open(tester, section: 'STORE', category: 'CHARACTERS');
-
-    await tester.tap(_selector('corgi'));
-    await tester.pump(const Duration(milliseconds: 180));
-
-    expect(find.text('Previewing Corgi Puppy'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('shop-preview-corgi_puppy-cowboy_hat')),
-      findsOneWidget,
-    );
-    expect(api.bootstrapReads, 1);
-    expect(api.equipWrites, 0);
-    expect(api.purchaseWrites, 0);
-  });
+  testWidgets(
+    'locked character inspection uses its base art without another character outfit',
+    (tester) async {
+      final api = _DressingRoomApi();
+      await _pumpShop(tester, api);
+      await _open(tester, section: 'STORE', category: 'CHARACTERS');
+      final card = _selector('corgi');
+      final art = tester.widget<RacerAvatar>(
+        find.descendant(of: card, matching: find.byType(RacerAvatar)),
+      );
+      expect(art.animal, 'corgi_puppy');
+      expect(art.accessories, isEmpty);
+      await tester.tap(card);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('shop-item-sheet')), findsOneWidget);
+      expect(find.text('BUY · 350'), findsOneWidget);
+      expect(api.bootstrapReads, 1);
+      expect(api.equipWrites, 0);
+      expect(api.purchaseWrites, 0);
+    },
+  );
 
   testWidgets('failed Store purchase keeps the local preview selected', (
     tester,
@@ -589,9 +688,7 @@ void main() {
 
     await tester.tap(_selector('moon-pack'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(
-      find.descendant(of: _stage(), matching: find.text('DETAILS & BUY')),
-    );
+    await tester.tap(find.text('Buy · 425'));
     await tester.pump(const Duration(milliseconds: 300));
     final buy = tester.widget<PillButton>(
       find.ancestor(
@@ -603,30 +700,37 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
 
     expect(api.purchaseWrites, 1);
-    expect(find.text('Previewing Moon Pack'), findsOneWidget);
+    expect(find.text('Trying on'), findsOneWidget);
     expect(find.text('Purchase failed.'), findsOneWidget);
     expect(api.equipWrites, 0);
   });
 
-  testWidgets('section and category changes clear local try-on state', (
-    tester,
-  ) async {
-    final api = _DressingRoomApi();
-    await _pumpShop(tester, api);
-    await _open(tester, section: 'STORE', category: 'ACCESSORIES');
-    await tester.tap(_selector('moon-pack'));
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Previewing Moon Pack'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Your equipped look'), findsOneWidget);
-    expect(find.text('Previewing Moon Pack'), findsNothing);
-
-    await tester.tap(find.text('INVENTORY').last);
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Your equipped look'), findsOneWidget);
-  });
+  testWidgets(
+    'category changes require discard before clearing a local try-on',
+    (tester) async {
+      final api = _DressingRoomApi();
+      await _pumpShop(tester, api);
+      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
+      await tester.tap(_selector('moon-pack'));
+      await tester.pump();
+      expect(find.text('Trying on'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Discard outfit changes?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(_previewIds(tester), contains('moon-pack'));
+      await _leaveWardrobe(tester, discard: true);
+      expect(_stage(), findsNothing);
+      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
+      expect(find.text('Saved outfit'), findsOneWidget);
+      expect(_previewIds(tester), isNot(contains('moon-pack')));
+      expect(api.equipWrites, 0);
+      expect(api.purchaseWrites, 0);
+    },
+  );
 
   testWidgets('cosmetic stage and grid use 3, 4, and 6 column breakpoints', (
     tester,
@@ -636,12 +740,18 @@ void main() {
       await _open(tester, section: 'INVENTORY', category: 'ACCESSORIES');
 
       final grid = tester.widget<GridView>(
-        find.byKey(const Key('shop-cosmetic-grid')),
+        find.byKey(const Key('wardrobe-accessory-grid')),
       );
       final delegate =
           grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
       expect(delegate.crossAxisCount, entry.$2);
-      expect(tester.getSize(_stage()).height, inInclusiveRange(210, 250));
+      expect(tester.getSize(_stage()).height, greaterThanOrEqualTo(160));
+      expect(
+        tester.getTopLeft(_stage()).dy,
+        greaterThan(
+          tester.getBottomLeft(find.byKey(const Key('wardrobe-controls'))).dy,
+        ),
+      );
       expect(
         tester.getSize(_selector('cowboy')).height,
         greaterThanOrEqualTo(48),
@@ -670,14 +780,41 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('DETAILS & BUY'), findsOneWidget);
-    final switcher = tester.widget<AnimatedSwitcher>(
-      find.byKey(const Key('shop-stage-avatar-transition')),
+    tester.widget<ListView>(find.byType(ListView).last).controller!.jumpTo(0);
+    await tester.pump();
+    expect(_previewIds(tester), contains('moon-pack'));
+    expect(
+      find.descendant(of: _stage(), matching: find.byType(AnimatedSwitcher)),
+      findsNothing,
     );
-    expect(switcher.duration, Duration.zero);
+    expect(
+      tester
+          .widget<CapybaraSpriteWithAccessories>(
+            find.descendant(
+              of: _stage(),
+              matching: find.byType(CapybaraSpriteWithAccessories),
+            ),
+          )
+          .frameIndex,
+      0,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Buy · 425'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Buy · 425').hitTestable(), findsOneWidget);
+    expect(api.equipWrites, 0);
+    expect(api.purchaseWrites, 0);
   });
 
-  testWidgets('stale refresh cannot overwrite an accepted equip map', (
+  testWidgets('stale refresh cannot overwrite an accepted saved outfit', (
     tester,
   ) async {
     final api = _DressingRoomApi(catalog: _catalog(equippedHead: 'bunny'))
@@ -694,106 +831,72 @@ void main() {
       };
     await _pumpShop(tester, api);
     await _open(tester, section: 'INVENTORY', category: 'ACCESSORIES');
-
-    final staleRefresh = Completer<ShopBootstrapResult>();
-    api.nextBootstrap = staleRefresh;
+    final old = await api.fetchCharacterWardrobe(
+      identityToken: 'session-token',
+      characterKey: 'default',
+    );
+    final pending = Completer<Map<String, dynamic>>();
+    api.nextWardrobe = pending;
     final refresh = tester
-        .widget<AppRefreshIndicator>(find.byType(AppRefreshIndicator))
+        .widget<AppRefreshIndicator>(find.byType(AppRefreshIndicator).last)
         .onRefresh();
     await tester.pump();
-
     await tester.tap(_selector('cowboy'));
-    await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(
-      find.descendant(of: _stage(), matching: find.text('EQUIP')),
-    );
-    await tester.pump(const Duration(milliseconds: 220));
-    expect(
-      find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
-      findsOneWidget,
-    );
-
-    staleRefresh.complete(
-      ShopBootstrapResult(
-        supported: true,
-        cosmetics: _catalog(equippedHead: 'bunny'),
-        powerups: const {'coins': 1000, 'items': <Map<String, dynamic>>[]},
-        inventory: const {'items': <Map<String, dynamic>>[]},
-      ),
-    );
+    await tester.pump();
+    await _save(tester);
+    expect(api.fixtureSaves, 1);
+    expect(_previewIds(tester), contains('cowboy'));
+    pending.complete(old);
     await refresh;
-    await tester.pump(const Duration(milliseconds: 220));
-
-    expect(
-      find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('shop-cosmetic-equipped-bunny')), findsNothing);
+    await tester.pump();
+    expect(_previewIds(tester), contains('cowboy'));
+    expect(_previewIds(tester), isNot(contains('bunny')));
+    expect(find.text('Saved outfit'), findsOneWidget);
   });
 
-  testWidgets(
-    'stale bootstrap cannot overwrite malformed-equip recovery state',
-    (tester) async {
-      final api = _DressingRoomApi()
-        ..equipResult = {
-          'equipped': {
-            'HEAD': {'id': 'bunny', 'slot': 'FACE'},
-          },
-        };
-      await _pumpShop(tester, api);
-      await _open(tester, section: 'INVENTORY', category: 'ACCESSORIES');
-
-      final staleBootstrap = Completer<ShopBootstrapResult>();
-      api.nextBootstrap = staleBootstrap;
-      final refresh = tester
-          .widget<AppRefreshIndicator>(find.byType(AppRefreshIndicator))
-          .onRefresh();
-      await tester.pump();
-
-      // The mutation commits on the server, but the 2xx response's equipped
-      // map is malformed. The legacy recovery read returns the authoritative
-      // post-commit state while the older bootstrap remains in flight.
-      api.catalog = _catalog(equippedHead: 'bunny');
-      await tester.tap(_selector('bunny'));
-      await tester.pump(const Duration(milliseconds: 180));
-      await tester.tap(
-        find.descendant(of: _stage(), matching: find.text('EQUIP')),
-      );
-      await tester.pump(const Duration(milliseconds: 220));
-
-      expect(api.equipWrites, 1);
-      expect(api.legacyCatalogReads, 1);
-      expect(
-        find.byKey(const Key('shop-cosmetic-equipped-bunny')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
-        findsNothing,
-      );
-
-      staleBootstrap.complete(
-        ShopBootstrapResult(
-          supported: true,
-          cosmetics: _catalog(equippedHead: 'cowboy'),
-          powerups: const {'coins': 1000, 'items': <Map<String, dynamic>>[]},
-          inventory: const {'items': <Map<String, dynamic>>[]},
-        ),
-      );
-      await refresh;
-      await tester.pump(const Duration(milliseconds: 220));
-
-      expect(
-        find.byKey(const Key('shop-cosmetic-equipped-bunny')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('shop-cosmetic-equipped-cowboy')),
-        findsNothing,
-      );
-      expect(find.text('Previewing Bunny Ears'), findsOneWidget);
-    },
-  );
+  testWidgets('stale refresh cannot overwrite malformed-save recovery state', (
+    tester,
+  ) async {
+    final api = _DressingRoomApi()
+      ..equipResult = {
+        'equipped': {
+          'HEAD': {'id': 'bunny', 'slot': 'FACE'},
+        },
+      };
+    await _pumpShop(tester, api);
+    await _open(tester, section: 'INVENTORY', category: 'ACCESSORIES');
+    final old = await api.fetchCharacterWardrobe(
+      identityToken: 'session-token',
+      characterKey: 'default',
+    );
+    final pending = Completer<Map<String, dynamic>>();
+    api.nextWardrobe = pending;
+    final refresh = tester
+        .widget<AppRefreshIndicator>(find.byType(AppRefreshIndicator).last)
+        .onRefresh();
+    await tester.pump();
+    api.fixtureOutfits['default'] = {
+      'HEAD': 'cowboy',
+      'FACE': null,
+      'NECK': null,
+      'BACK': null,
+      'FEET': null,
+    };
+    api.catalog = _catalog(equippedHead: 'bunny');
+    await tester.tap(_selector('bunny'));
+    await tester.pump();
+    await _save(tester);
+    expect(api.equipWrites, 1);
+    expect(api.fixtureWardrobeReads, greaterThanOrEqualTo(3));
+    expect(_previewIds(tester), contains('bunny'));
+    expect(_previewIds(tester), isNot(contains('cowboy')));
+    pending.complete(old);
+    await refresh;
+    await tester.pump();
+    expect(_previewIds(tester), contains('bunny'));
+    expect(_previewIds(tester), isNot(contains('cowboy')));
+    expect(find.text('Saved outfit'), findsOneWidget);
+  });
 
   testWidgets(
     'bootstrap refresh begun around purchase cannot overwrite accepted state',
@@ -818,6 +921,7 @@ void main() {
       await tester.pump();
 
       await _startMoonPackPurchase(tester, api);
+      final callbacksBeforeCommit = changed.length;
       purchase.complete(_ownedMoonPurchase(coins: 900));
       await tester.pump(const Duration(milliseconds: 220));
       expect(auth.coins, 900);
@@ -826,11 +930,13 @@ void main() {
       await refresh;
       await tester.pump(const Duration(milliseconds: 220));
 
-      await tester.tap(find.text('INVENTORY').last);
-      await tester.pump(const Duration(milliseconds: 180));
+      await _dismissToasts(tester);
       expect(_selector('moon-pack'), findsOneWidget);
       expect(auth.coins, 900);
-      expect(changed, hasLength(2));
+      expect(changed, hasLength(callbacksBeforeCommit + 1));
+      expect(changed.last['ownedItemIds'], contains('moon-pack'));
+      expect(api.purchaseWrites, 1);
+      expect(api.equipWrites, 0);
     },
   );
 
@@ -864,23 +970,23 @@ void main() {
 
       expect(auth.userId, 'user-2');
       expect(auth.coins, 222);
-      expect(changed, hasLength(2));
+      final callbackCount = changed.length;
+      expect(callbackCount, greaterThanOrEqualTo(2));
       expect(
-        find.byKey(const ValueKey('shop-preview-capybara-bunny_ears')),
+        find.text('Please reopen the shop for this account.'),
         findsOneWidget,
       );
-
+      expect(_selector('moon-pack'), findsNothing);
       purchase.complete(_ownedMoonPurchase(coins: 111));
-      await tester.pump(const Duration(milliseconds: 220));
-
+      await tester.pump(const Duration(milliseconds: 400));
       expect(auth.coins, 222);
-      expect(changed, hasLength(2));
-      expect(_selector('moon-pack'), findsOneWidget);
+      expect(changed, hasLength(callbackCount));
       expect(find.text('Moon Pack unlocked.'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('shop-preview-capybara-bunny_ears')),
-        findsOneWidget,
-      );
+      expect(_selector('moon-pack'), findsNothing);
+      await _leaveWardrobe(tester);
+      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
+      expect(_previewIds(tester), contains('bunny'));
+      expect(_previewIds(tester), isNot(contains('cowboy')));
     },
   );
 
@@ -899,7 +1005,8 @@ void main() {
         onShopChanged: changed.add,
       );
       await _startMoonPackPurchase(tester, api);
-      expect(changed, hasLength(1));
+      final callbackCount = changed.length;
+      expect(callbackCount, greaterThanOrEqualTo(1));
       expect(auth.coins, 1000);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -907,42 +1014,47 @@ void main() {
       purchase.complete(_ownedMoonPurchase(coins: 111));
       await tester.pump(const Duration(milliseconds: 220));
 
-      expect(changed, hasLength(1));
+      expect(changed, hasLength(callbackCount));
       expect(auth.coins, 1000);
       expect(find.text('Moon Pack unlocked.'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('accepted refresh clears a selected item that disappeared', (
-    tester,
-  ) async {
-    final api = _DressingRoomApi();
-    await _pumpShop(tester, api);
-    await _open(tester, section: 'STORE', category: 'ACCESSORIES');
-    await tester.tap(_selector('moon-pack'));
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Previewing Moon Pack'), findsOneWidget);
-
-    final refreshedCatalog = _catalog();
-    refreshedCatalog['items'] = (refreshedCatalog['items'] as List)
-        .where((item) => item is! Map || item['id'] != 'moon-pack')
-        .toList();
-    final acceptedRefresh = Completer<ShopBootstrapResult>();
-    api.nextBootstrap = acceptedRefresh;
-    final refresh = tester
-        .widget<AppRefreshIndicator>(find.byType(AppRefreshIndicator))
-        .onRefresh();
-    await tester.pump();
-    acceptedRefresh.complete(_bootstrap(refreshedCatalog, powerupCoins: 1000));
-    await refresh;
-    await tester.pump(const Duration(milliseconds: 220));
-
-    expect(_selector('moon-pack'), findsNothing);
-    expect(find.text('Previewing Moon Pack'), findsNothing);
-    expect(find.text('Your equipped look'), findsOneWidget);
-    expect(find.text('DETAILS & BUY'), findsNothing);
-  });
+  testWidgets(
+    'accepted refresh removes disappeared item controls and preserves draft for review',
+    (tester) async {
+      final api = _DressingRoomApi();
+      await _pumpShop(tester, api);
+      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
+      await tester.tap(_selector('moon-pack'));
+      await tester.pump();
+      expect(find.text('Trying on'), findsOneWidget);
+      final refreshed = _catalog();
+      refreshed['items'] = (refreshed['items'] as List)
+          .where((item) => item is! Map || item['id'] != 'moon-pack')
+          .toList();
+      api.catalog = refreshed;
+      await tester
+          .widget<AppRefreshIndicator>(find.byType(AppRefreshIndicator).last)
+          .onRefresh();
+      await tester.pump();
+      expect(_selector('moon-pack'), findsNothing);
+      expect(find.text('Buy · 425'), findsNothing);
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'Save outfit'))
+            .onPressed,
+        isNull,
+      );
+      expect(api.equipWrites, 0);
+      await tester.tap(find.text('Reset'));
+      await tester.pump();
+      expect(find.text('Saved outfit'), findsOneWidget);
+      expect(_previewIds(tester), contains('cowboy'));
+      expect(_previewIds(tester), isNot(contains('moon-pack')));
+    },
+  );
 
   testWidgets(
     '60-item compact grid scrolls and selects without backend churn',
@@ -952,19 +1064,24 @@ void main() {
       await _open(tester, section: 'STORE', category: 'ACCESSORIES');
 
       final grid = tester.widget<GridView>(
-        find.byKey(const Key('shop-cosmetic-grid')),
+        find.byKey(const Key('wardrobe-accessory-grid')),
       );
-      final delegate = grid.childrenDelegate as SliverChildBuilderDelegate;
-      expect(delegate.childCount, greaterThanOrEqualTo(60));
+      final delegate = grid.childrenDelegate;
+      expect(delegate.estimatedChildCount, 24);
+      expect(api.fixtureWardrobeReads, 1);
 
       final lateSelector = _selector('performance-59');
       final shopScrollable = find.byType(Scrollable).first;
       final scrollState = tester.state<ScrollableState>(shopScrollable);
-      await tester.scrollUntilVisible(
-        lateSelector,
-        600,
-        scrollable: shopScrollable,
-      );
+      for (var page = 0; page < 12 && lateSelector.evaluate().isEmpty; page++) {
+        await tester.drag(shopScrollable, const Offset(0, -500));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+      await tester.ensureVisible(lateSelector);
+      await tester.pump();
+      expect(api.fixtureWardrobeReads, 3);
+      final readsBeforeSelection = api.fixtureWardrobeReads;
       await tester.pump();
       expect(scrollState.position.pixels, greaterThan(0));
       await tester.tap(lateSelector);
@@ -977,6 +1094,7 @@ void main() {
         tester.widget<Semantics>(selectedSemantics).properties.selected,
         isTrue,
       );
+      expect(api.fixtureWardrobeReads, readsBeforeSelection);
       expect(api.bootstrapReads, 1);
       expect(api.legacyCatalogReads, 0);
       expect(api.equipWrites, 0);

@@ -13,9 +13,20 @@ Future<void> closeShopMembership(WidgetTester tester) async {
 
 Future<void> selectShopCategory(WidgetTester tester, String category) async {
   await closeShopMembership(tester);
-  final target = find.byKey(Key('shop-category-$category'));
+  final target = find.byKey(
+    Key('shop-category-${category == 'ACCESSORIES' ? 'CHARACTERS' : category}'),
+  );
   await tester.ensureVisible(target);
   await tester.pump();
   await tester.tap(target);
   await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  if (category == 'ACCESSORIES') {
+    await tester.tap(find.byKey(const Key('shop-character-default')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Edit outfit'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
 }

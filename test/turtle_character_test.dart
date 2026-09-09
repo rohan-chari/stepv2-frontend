@@ -1,3 +1,4 @@
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -87,7 +88,7 @@ Future<void> _pumpModal(
 
 // -- Shop harness (mirrors the shape the real catalog endpoint returns) ------
 
-class _FakeShopApi extends BackendApiService {
+class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   _FakeShopApi(this.catalog);
 
   final Map<String, dynamic> catalog;
@@ -291,6 +292,9 @@ void main() {
     }
 
     expect(find.text('Turtle'), findsWidgets);
+    await tester.tap(find.text('Turtle').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('1000'), findsWidgets);
 
     final thumbs = tester

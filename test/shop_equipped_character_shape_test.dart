@@ -1,3 +1,4 @@
+import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,7 +36,7 @@ Map<String, dynamic> serializedEquippedAccessory({
   'bobble': false,
 };
 
-class _FakeShopApi extends BackendApiService {
+class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   _FakeShopApi({this.equipped = const <String, dynamic>{}, this.cosmetics});
 
   final Map<String, dynamic> equipped;
@@ -101,8 +102,6 @@ Future<void> _pumpCharacterInventory(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
-  await tester.tap(find.text('INVENTORY'));
-  await tester.pump(const Duration(milliseconds: 300));
   await tester.tap(find.text('CHARACTERS'));
   await tester.pump(const Duration(milliseconds: 300));
 }
@@ -136,32 +135,26 @@ void main() {
 
       // The crash manifested as a build-time TypeError.
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const Key('shop-capybara-tile')), findsOneWidget);
+      expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
       expect(find.text('Capybara'), findsOneWidget);
       // A turtle is equipped, so the capybara tile must NOT claim EQUIPPED.
       expect(
         find.descendant(
-          of: find.byKey(const Key('shop-capybara-tile')),
-          matching: find.text('EQUIPPED'),
+          of: find.byKey(const Key('shop-character-default')),
+          matching: find.text('ACTIVE'),
         ),
         findsNothing,
       );
       expect(
         find.descendant(
-          of: find.byKey(const Key('shop-capybara-tile')),
-          matching: find.text('EQUIP'),
+          of: find.byKey(const Key('shop-character-default')),
+          matching: find.text('Use character'),
         ),
         findsNothing,
       );
-      await tester.tap(find.byKey(const Key('shop-capybara-tile')));
+      await tester.tap(find.byKey(const Key('shop-character-default')));
       await tester.pump(const Duration(milliseconds: 180));
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('shop-dressing-room-stage')),
-          matching: find.text('EQUIP'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Use character'), findsOneWidget);
     },
   );
 
@@ -173,8 +166,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       find.descendant(
-        of: find.byKey(const Key('shop-capybara-tile')),
-        matching: find.text('EQUIPPED'),
+        of: find.byKey(const Key('shop-character-default')),
+        matching: find.text('ACTIVE'),
       ),
       findsWidgets,
     );
@@ -191,8 +184,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       find.descendant(
-        of: find.byKey(const Key('shop-capybara-tile')),
-        matching: find.text('EQUIPPED'),
+        of: find.byKey(const Key('shop-character-default')),
+        matching: find.text('ACTIVE'),
       ),
       findsWidgets,
     );
@@ -207,7 +200,7 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('shop-capybara-tile')), findsOneWidget);
+    expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
   });
 
   test('the fixture matches serializeEquippedAccessory\'s real keys', () {
