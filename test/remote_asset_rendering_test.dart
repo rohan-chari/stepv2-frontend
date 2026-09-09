@@ -523,6 +523,91 @@ void main() {
   });
 
   group('remote characters', () {
+    testWidgets(
+      'CDN corgi with omitted baseline retains its ground correction',
+      (tester) async {
+        RemoteAssetCache.instance.debugApplyManifest({
+          'characters': {
+            'corgi_puppy': {
+              'url': 'https://cdn/characters/corgi_puppy@abc123.png',
+            },
+          },
+        });
+        await _seedCachedFile(
+          RemoteAssetKind.characters,
+          'corgi_puppy',
+          'abc123',
+        );
+        await pumpSprite(tester, accessories: const [], animal: 'corgi_puppy');
+        final sheet = _fileImages(tester, 'corgi_puppy@abc123').single;
+        expect(sheet.width, 64 * 6);
+        final remoteTop = tester.getTopLeft(find.byWidget(sheet)).dy;
+        RemoteAssetCache.instance.debugApplyManifest({});
+        await pumpSprite(tester, accessories: const [], animal: 'corgi_puppy');
+        final bundled = _images(
+          tester,
+        ).singleWhere((image) => image.image is AssetImage);
+        expect(tester.getTopLeft(find.byWidget(bundled)).dy, remoteTop);
+      },
+    );
+
+    testWidgets('CDN turtle with omitted geometry keeps its eight-frame crop', (
+      tester,
+    ) async {
+      RemoteAssetCache.instance.debugApplyManifest({
+        'characters': {
+          'turtle': {'url': 'https://cdn/characters/turtle@abc123.png'},
+        },
+      });
+      await _seedCachedFile(RemoteAssetKind.characters, 'turtle', 'abc123');
+      await pumpSprite(tester, accessories: const [], animal: 'turtle');
+      expect(_fileImages(tester, 'turtle@abc123').single.width, 64 * 8);
+    });
+
+    testWidgets('cached CDN turtle overrides its bundle at eight frames', (
+      tester,
+    ) async {
+      RemoteAssetCache.instance.debugApplyManifest({
+        'characters': {
+          'turtle': {
+            'url': 'https://cdn/characters/turtle@abc123.png',
+            'animationFrames': 8,
+            'baselineOffset': 0,
+          },
+        },
+      });
+      await _seedCachedFile(RemoteAssetKind.characters, 'turtle', 'abc123');
+      await pumpSprite(tester, accessories: const [], animal: 'turtle');
+      final sheet = _fileImages(tester, 'turtle@abc123').single;
+      expect(sheet.width, 64 * 8);
+      expect(sheet.height, 64);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('uncached or stale CDN turtle keeps its bundled fallback', (
+      tester,
+    ) async {
+      await _seedCachedFile(RemoteAssetKind.characters, 'turtle', 'old123');
+      RemoteAssetCache.instance.debugApplyManifest({
+        'characters': {
+          'turtle': {
+            'url': 'https://cdn/characters/turtle@abc123.png',
+            'animationFrames': 8,
+          },
+        },
+      });
+      await pumpSprite(tester, accessories: const [], animal: 'turtle');
+      expect(_fileImages(tester, 'turtle@'), isEmpty);
+      final sheet = _images(tester).singleWhere(
+        (image) =>
+            image.image is AssetImage &&
+            (image.image as AssetImage).assetName ==
+                'assets/images/turtle_walk_right.png',
+      );
+      expect(sheet.width, 64 * 8);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('an uncached remote animal still renders the capybara', (
       tester,
     ) async {

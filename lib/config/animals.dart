@@ -66,20 +66,19 @@ const Map<String, AnimalSprite> kAnimalSprites = {
 
 /// Resolves a base character to the sheet that should be drawn.
 ///
-/// Bundled animals win outright (unchanged behavior). A character this binary
-/// doesn't bundle is looked up in the CDN registry: once its sheet is cached
-/// on disk it renders with the manifest's own `animationFrames` /
-/// `baselineOffset`. Until then — and for anything the manifest doesn't know —
-/// the capybara stands in, exactly as before; the difference is that the
-/// fallback is now transient rather than permanent.
+/// Current, cached CDN art wins on remote-preferred builds. Until it is ready,
+/// the bundled animal remains the offline fallback; unknown animals use the
+/// capybara. Frozen older builds retain their compiled bundled-first behavior.
 AnimalSprite animalSpriteFor(String? animal) {
   final bundled = kAnimalSprites[animal];
-  if (bundled != null) return bundled;
+  if (bundled != null && !RemoteAssetCache.instance.remoteAssetPreferred) {
+    return bundled;
+  }
   if (animal != null && animal.isNotEmpty) {
     final remote = remoteAnimalSprite(animal);
     if (remote != null) return remote;
   }
-  return kAnimalSprites[kDefaultAnimal]!;
+  return bundled ?? kAnimalSprites[kDefaultAnimal]!;
 }
 
 /// The CDN-served sprite for [animal], or null when the manifest doesn't list
@@ -91,13 +90,15 @@ AnimalSprite? remoteAnimalSprite(String animal) {
   final file = cache.cachedFile(RemoteAssetKind.characters, animal);
   if (file == null) return null;
   final frames = entry.animationFrames;
+  final bundled = kAnimalSprites[animal];
   return AnimalSprite(
     asset: entry.url,
     file: file,
-    // A wiped/absent frame count must not render the whole sheet squashed into
-    // one frame box — fall back to the capybara's six.
-    frameCount: frames == null || frames < 1 ? 6 : frames,
-    baselineOffset: entry.baselineOffset ?? 0,
+    // Older or incomplete manifests retain known species geometry.
+    frameCount: frames == null || frames < 1
+        ? (bundled?.frameCount ?? 6)
+        : frames,
+    baselineOffset: entry.baselineOffset ?? bundled?.baselineOffset ?? 0,
   );
 }
 
