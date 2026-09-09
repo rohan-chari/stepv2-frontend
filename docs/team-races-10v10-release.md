@@ -1,6 +1,6 @@
 # Team races up to 10v10 — 2.3.13 release candidate
 
-Status: ready for backend production deployment followed by TestFlight upload. Independent code review, analyzer, relevant tests and both signed release artifacts are verified. No deployment or upload performed. Production must receive the compatible backend before the new app is distributed. Staging remains stopped; production worker capacity remains two.
+Status: backend deployed and iOS build 9 uploaded on September 9, 2026, with explicit user authorization. Apple reports VALID / IN_BETA_TESTING; build 9 is confirmed in the internal “bara testers” group. Independent code review, analyzer, relevant tests and both signed release artifacts are verified. Staging remains stopped; production HTTP worker capacity remains two.
 
 ## Behavior and compatibility
 
@@ -8,7 +8,7 @@ Team capacity is 1–10 per side. Full accepted rosters are bounded at twenty an
 
 The permanent binary capability `team_races_10v10_v1` protects frozen clients. Existing durable authenticated client-feature unions prove support for deferred approvals and populated-race resizing. Direct operations check the current request. Older clients retain accepted-member cards, rewards and safe exit actions; incompatible discovery/invitation rows are filtered. Active progress failures cannot expose identities from raw details. No team schema migration, runtime rollout flag or capacity increase.
 
-Backend candidate is based on `c65798e`; production runtime was verified read-only at `442b749cd29f50efc0be3028e129193bc624882e`. The intervening base commit changes documentation only. All runtime changes remain local pending deployment.
+Backend candidate is based on `c65798e`; production runtime was verified read-only at `442b749cd29f50efc0be3028e129193bc624882e`. The intervening base commit changes documentation only. Runtime `20e3909` was subsequently deployed; backend audit-only commit `53d9893` and frontend runtime `54b882c` were pushed to origin/main.
 
 ## Automated verification
 
@@ -44,6 +44,10 @@ Both signed artifacts verified, version 2.3.13, retained in `build/release-candi
 
 IPA: signature valid, correct bundle/team, production APNs, no debug entitlement, all ten required public define values and large-team capability verified in compiled code. AAB: signature and trusted upload certificate valid, compiled manifest has correct package/version and Billing 8.3.0. All three packaged native libraries match independently stripped fresh compiler outputs, differ from build 8, and contain production configuration and large-team support.
 
-README release values were checked before each build. All seven iOS AdMob units plus RevenueCat/Google/backend values retained; inline native units omitted on both platforms. Build logs retain existing nonfatal plugin migration/default launch-image warnings. Reports and logs accompany artifacts. No backend deployment, App Store Connect upload, App Review submission or customer release has occurred.
+README release values were checked before each build. All seven iOS AdMob units plus RevenueCat/Google/backend values retained; inline native units omitted on both platforms. Build logs retain existing nonfatal plugin migration/default launch-image warnings. Reports and logs accompany artifacts. Backend runtime `20e3909` is deployed and healthy. Xcode confirmed `Upload succeeded` and `EXPORT SUCCEEDED` at 16:32:18 UTC for build 9. The existing AppLovinSDK/FBAudienceNetwork missing-dSYM warnings remain nonblocking. No App Review submission, customer release or Play upload occurred.
 
-Next operations: deploy the compatible backend first, confirm the live contract with a current-capability client, then upload the verified IPA for TestFlight. Perform the manual device checklist before customer release.
+Production post-deploy verification: public API/Redis healthy, two HTTP plus one cron/one resolution online, pool ceiling 32, PM2 saved, staging stopped. Referral audit/apply/final audit all zero. No migration/dependency/environment changes; existing powerup copy and balance drift preserved. Rollback/deployment tags are pushed; see backend `docs/team-races-10v10-production-deploy.md`.
+
+Perform the manual device checklist in TestFlight before customer release. The signed matching Android artifact remains available locally.
+
+Apple build ID: `3adc7522-5708-4d4e-b273-59434818ce44`. Existing exempt-encryption declaration is retained. Frontend runtime tag `testflight/2.3.13-9` points to `54b882c`; release audit documentation is pushed separately.
