@@ -35,14 +35,15 @@ the existing capybara fallback. No new feature flag or API requirement.
 Frozen binaries retain their compiled walking renderer and therefore still
 use their old bundled turtle. CDN-backed shop thumbnails can update separately.
 The walking-animation change requires a carrying app update. Shared Dart and
-bundled assets cover both iOS and Android; no app build or upload was performed.
+bundled assets cover both iOS and Android. The owner subsequently authorized
+TestFlight build 2.3.13 (10); release source is `a22d435`.
 
 Two new regressions were observed failing before their corresponding fixes:
 cached turtle art ignored, and omitted geometry incorrectly cropping six frames.
-Final verification: 31 tests passed across `remote_asset_rendering_test.dart`
-and `turtle_character_test.dart`; `flutter analyze --no-pub` clean. Independent
-code review approved the final fix. Full Flutter suite and device checks were
-not run for this asset/resolver update.
+Initial verification: 31 targeted tests passed. Release verification then ran
+the full Flutter suite: all 3,139 tests passed, and `flutter analyze --no-pub`
+was clean. Independent implementation and release reviews approved the change.
+Physical device checks remain outstanding for TestFlight testing.
 
 ## Manual placement checklist (iOS and Android)
 
@@ -70,3 +71,38 @@ Repeat key checks online after a fresh launch and offline after download.
 
 Matching sheet geometry does not prove accessory fit: the supplied poses have
 different head/leg positions, so the manual accessory check remains necessary.
+
+## TestFlight release artifacts
+
+Xcode confirmed `Upload succeeded` and `EXPORT SUCCEEDED` for 2.3.13 (10) on
+September 9, 2026 at 17:58 UTC. The existing AppLovinSDK/FBAudienceNetwork dSYM
+warnings remain nonblocking. Apple reports VALID / IN_BETA_TESTING, and build 10 is confirmed in the
+internal “bara testers” group.
+
+Artifacts and logs are retained in `build/release-candidates/2.3.13-10/`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `Bara-2.3.13-10.ipa` | `bb3dc5092c638bb607ac3ac107295326c6775e856c2683d5b68808dfe38b0c79` |
+| `Bara-2.3.13-203140.aab` | `1386ea6000fc8dac5d94fa59dcbcd5f1fb52e303dc4d73d788777a8931ced6bf` |
+
+Both signed packages contain the exact new turtle sheet. iOS signature, bundle,
+team, production APNs, ten required public define values, and non-debuggable
+entitlements verified. Android signature and trusted upload certificate verified;
+compiled manifest reports version 2.3.13, code 203140 and Billing 8.3.0. All three
+packaged native libraries match independently stripped fresh compiler output and
+differ from build 9. README ad/backend values are present; inline native units
+remain absent. Android code 203140 is the next monotonic code after 203139;
+future Android releases must exceed it, including any 2.3.14 release.
+
+The public Liftoff seller declaration and pinned iOS mediation SDKs were checked.
+Consent dashboards, privacy labels and physical-device ad flows were not
+re-audited for this artwork-only TestFlight update. The device checklist above
+remains outstanding. No App Review/customer release or Play upload was performed.
+
+
+Apple build ID: `1976208a-a1a5-4c39-80c7-873094b0e781`. The exempt-encryption
+declaration matches build 9 (`usesNonExemptEncryption: false`). The internal
+group acquired the build between checks; an explicit assignment attempt returned
+422, and the subsequent group-membership GET confirmed it was already present.
+Source commit/tag `a22d435` / `testflight/2.3.13-10` are pushed to origin.
