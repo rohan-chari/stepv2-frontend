@@ -30,9 +30,13 @@ class FeaturedRaceCard extends StatelessWidget {
     this.canJoin = true,
     this.showParticipantCount = true,
     this.startsAt,
+    this.statusLabel,
+    this.onUnavailable,
     this.width = 250,
   });
 
+  final String? statusLabel;
+  final VoidCallback? onUnavailable;
   final String name;
   final String? seedKind;
   final DateTime? endsAt;
@@ -183,7 +187,7 @@ class FeaturedRaceCard extends StatelessWidget {
                   ),
                 const SizedBox(height: 6),
                 Text(
-                  _countdownLabel(),
+                  statusLabel ?? _countdownLabel(),
                   textAlign: TextAlign.center,
                   style: PixelText.body(
                     size: 12,
@@ -221,13 +225,18 @@ class FeaturedRaceCard extends StatelessWidget {
   Widget _buildCta(BuildContext context) {
     const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 11);
     if (isElected) {
-      return PillButton(
-        label: "YOU'RE IN",
-        variant: PillButtonVariant.secondary,
-        fontSize: 13,
-        fullWidth: true,
-        padding: padding,
-        onPressed: null,
+      return Semantics(
+        label: statusLabel == null
+            ? null
+            : 'Upcoming challenge enrollment. Current challenge unavailable. Pull to refresh.',
+        child: PillButton(
+          label: "YOU'RE IN",
+          variant: PillButtonVariant.secondary,
+          fontSize: 13,
+          fullWidth: true,
+          padding: padding,
+          onPressed: null,
+        ),
       );
     }
     if (isJoined) {
@@ -258,7 +267,7 @@ class FeaturedRaceCard extends StatelessWidget {
         fontSize: 13,
         fullWidth: true,
         padding: padding,
-        onPressed: null,
+        onPressed: onUnavailable,
       );
     }
     // Upcoming: "OPT IN" (pre-register for the next race); live: "JOIN".

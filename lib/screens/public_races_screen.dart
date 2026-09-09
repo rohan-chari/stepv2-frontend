@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../models/loadable.dart';
+import '../models/seeded_challenge_join.dart';
 import '../models/race_handoff_result.dart';
 import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
@@ -50,7 +51,8 @@ class PublicRacesScreen extends StatefulWidget {
 /// single group (FEATURED is the default). Same convention as the races-tab pill.
 enum _PublicFilter { featured, tournaments, races }
 
-class _PublicRacesScreenState extends State<PublicRacesScreen> {
+class _PublicRacesScreenState extends State<PublicRacesScreen>
+    with WidgetsBindingObserver {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
@@ -76,7 +78,13 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   // without the endpoint simply yields no strip.
   List<Map<String, dynamic>> _featuredRaces = const [];
   String? _joiningFeaturedRaceKey;
-  final Set<String> _locallyElectedBucketKeys = <String>{};
+  final Map<String, String> _joinAttemptIds = {};
+  final Map<String, String> _joiningCurrent = {};
+  final Map<String, SeededChallengeJoin> _committedCurrent = {};
+  int _accountGeneration = 0;
+  int _loadGeneration = 0;
+  String? _accountId;
+  String? _accountToken;
   late final PageController _featuredPageController;
 
   DiscoveryJoinCoordinator get _joinCoordinator => DiscoveryJoinCoordinator(
@@ -88,16 +96,126 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   void initState() {
     super.initState();
     _featuredPageController = PageController(viewportFraction: 0.88);
+    _accountId = widget.authService.userId;
+    _accountToken = widget.authService.authToken;
+    widget.authService.addListener(_authChanged);
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
   @override
   void dispose() {
+    widget.authService.removeListener(_authChanged);
+    WidgetsBinding.instance.removeObserver(this);
     _featuredPageController.dispose();
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant PublicRacesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authService != widget.authService) {
+      oldWidget.authService.removeListener(_authChanged);
+      widget.authService.addListener(_authChanged);
+    }
+    if (oldWidget.authService != widget.authService ||
+        oldWidget.backendApiService != widget.backendApiService) {
+      _authChanged(force: true);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_load());
+  }
+
+  void _authChanged({bool force = false}) {
+    final user = widget.authService.userId;
+    final token = widget.authService.authToken;
+    if (!force && user == _accountId && token == _accountToken) return;
+    _accountId = user;
+    _accountToken = token;
+    _accountGeneration++;
+    _loadGeneration++;
+    _joinAttemptIds.clear();
+    _joiningCurrent.clear();
+    _committedCurrent.clear();
+    _joiningFeaturedRaceKey = null;
+    _featuredRaces = const [];
+    _races = const [];
+    _featuredTournaments = const [];
+    _userTournaments = const [];
+    _myTournaments = const [];
+    if (mounted) unawaited(_load());
+  }
+
+  bool _validLoad(int generation, int account, String token) =>
+      mounted &&
+      generation == _loadGeneration &&
+      account == _accountGeneration &&
+      token == widget.authService.authToken;
+
+  void _acceptFeatured(List<Map<String, dynamic>> cards) {
+    final previousCards = <String, Map<String, dynamic>>{
+      for (final card in _featuredRaces)
+        if (SeededChallengeJoin.text(card['seedKind']) case final String seed)
+          seed: card,
+    };
+    final accepted = <Map<String, dynamic>>[];
+    for (final card in cards) {
+      final seed = SeededChallengeJoin.text(card['seedKind']);
+      final next = SeededChallengeJoin.parse(card['currentJoin']);
+      final previous = seed == null ? null : _currentFor(seed);
+      if (seed != null &&
+          next != null &&
+          previous != null &&
+          next.windowStart.isBefore(previous.windowStart)) {
+        // A newer HTTP request can still receive an older cached window.
+        final previousCard = previousCards[seed];
+        if (previousCard != null) accepted.add(previousCard);
+        continue;
+      }
+      accepted.add(card);
+      if (seed == null || next == null) continue;
+      if (previous != null && previous.windowKey != next.windowKey) {
+        _committedCurrent.remove(seed);
+        _joiningCurrent.remove(seed);
+        _joinAttemptIds.removeWhere((key, _) => key.startsWith('$seed/'));
+      }
+      // Authoritative terminal state wins over a local successful receipt.
+      if (next.state == 'FORFEITED' || next.state == 'UNAVAILABLE') {
+        _joiningCurrent.remove(seed);
+        _committedCurrent.remove(seed);
+      }
+    }
+    _committedCurrent.removeWhere(
+      (_, state) => !state.windowEnd.isAfter(DateTime.now().toUtc()),
+    );
+    // Empty/partial cached discovery is not proof a committed entry vanished.
+    // Keep its existing card until the window ends or a terminal state arrives.
+    for (final seed in _committedCurrent.keys) {
+      if (!accepted.any((card) => card['seedKind'] == seed)) {
+        final previousCard = previousCards[seed];
+        if (previousCard != null) accepted.add(previousCard);
+      }
+    }
+    _featuredRaces = accepted;
+  }
+
+  SeededChallengeJoin? _currentFor(String seed) {
+    final committed = _committedCurrent[seed];
+    if (committed != null) return committed;
+    for (final card in _featuredRaces) {
+      if (card['seedKind'] == seed) {
+        return SeededChallengeJoin.parse(card['currentJoin']);
+      }
+    }
+    return null;
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final account = _accountGeneration;
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
       setState(() {
@@ -116,6 +234,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       final browser = await widget.backendApiService.fetchPublicRaceBrowser(
         identityToken: token,
       );
+      if (!mounted || !_validLoad(generation, account, token)) return;
       final races = _safeMapList(browser['races']);
       final resolved = browser['contract'] == 'public-race-browser-v1'
           ? browser['resolved']
@@ -124,9 +243,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
 
       if (resolvedMap['featuredRaces'] == true &&
           _isMapList(browser['featuredRaces'])) {
-        _featuredRaces = _safeMapList(browser['featuredRaces']);
+        _acceptFeatured(_safeMapList(browser['featuredRaces']));
       } else {
-        unawaited(_loadFeaturedRaces(token));
+        unawaited(_loadFeaturedRaces(token, generation, account));
       }
 
       final tournaments = browser['tournaments'];
@@ -137,23 +256,23 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         _featuredTournaments = _safeMapList(tournaments['featured']);
         _userTournaments = _safeMapList(tournaments['public']);
       } else {
-        unawaited(_loadPublicTournamentBuckets(token));
+        unawaited(_loadPublicTournamentBuckets(token, generation, account));
       }
       if (resolvedMap['mine'] == true &&
           tournaments is Map &&
           _isMapList(tournaments['mine'])) {
         _myTournaments = _safeMapList(tournaments['mine']);
       } else {
-        unawaited(_loadMyTournamentBucket(token));
+        unawaited(_loadMyTournamentBucket(token, generation, account));
       }
-      if (!mounted) return;
+      if (!mounted || !_validLoad(generation, account, token)) return;
       setState(() {
         _races = races;
         _loading = false;
         _racesState = Loadable.success(races);
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || !_validLoad(generation, account, token)) return;
       setState(() {
         _loading = false;
         _racesState = Loadable.error(
@@ -219,12 +338,16 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     }
   }
 
-  Future<void> _loadPublicTournamentBuckets(String token) async {
+  Future<void> _loadPublicTournamentBuckets(
+    String token,
+    int generation,
+    int account,
+  ) async {
     try {
       final res = await widget.backendApiService.fetchPublicTournaments(
         identityToken: token,
       );
-      if (!mounted) return;
+      if (!mounted || !_validLoad(generation, account, token)) return;
       setState(() {
         _featuredTournaments = _safeMapList(res['featured']);
         _userTournaments = _safeMapList(res['tournaments']);
@@ -234,74 +357,168 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     }
   }
 
-  Future<void> _loadMyTournamentBucket(String token) async {
+  Future<void> _loadMyTournamentBucket(
+    String token,
+    int generation,
+    int account,
+  ) async {
     try {
       final racesRes = await widget.backendApiService.fetchRaces(
         identityToken: token,
       );
-      if (!mounted) return;
+      if (!mounted || !_validLoad(generation, account, token)) return;
       setState(() {
         _myTournaments = _safeMapList(racesRes['tournaments']);
       });
     } catch (_) {}
   }
 
-  Future<void> _loadFeaturedRaces(String token) async {
+  Future<void> _loadFeaturedRaces(
+    String token,
+    int generation,
+    int account,
+  ) async {
     try {
       final featured = await widget.backendApiService.fetchFeaturedRaces(
         identityToken: token,
       );
-      if (!mounted) return;
-      setState(() => _featuredRaces = featured);
+      if (!mounted || !_validLoad(generation, account, token)) return;
+      setState(() => _acceptFeatured(featured));
     } catch (_) {
       // Older backend / offline → no featured strip.
     }
   }
 
-  /// One-tap join for a featured (seeded) race — always free, no confirm.
+  bool _usesCurrentAdmission(Map<String, dynamic> race) {
+    final seed = SeededChallengeJoin.text(race['seedKind']);
+    return race['bucketPrivate'] == true ||
+        race.containsKey('currentJoin') ||
+        (seed != null && _committedCurrent.containsKey(seed));
+  }
+
+  /// Current admission is separate from the retained legacy public join.
   Future<void> _joinFeaturedRace(Map<String, dynamic> race) async {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
-    final raceId = race['raceId'];
-    final bucketPrivate = race['bucketPrivate'] == true;
-    final seedKind = race['seedKind'];
-    final joinKey = bucketPrivate
-        ? (seedKind is String && seedKind.isNotEmpty ? 'bucket:$seedKind' : '')
-        : (raceId is String ? raceId : '');
-    if (joinKey.isEmpty || _joiningFeaturedRaceKey != null) return;
-    setState(() => _joiningFeaturedRaceKey = joinKey);
+    if (_usesCurrentAdmission(race)) {
+      await _joinCurrentChallenge(race, token);
+      return;
+    }
+    final raceId = SeededChallengeJoin.text(race['raceId']);
+    if (raceId == null || _joiningFeaturedRaceKey != null) return;
+    final account = _accountGeneration;
+    setState(() => _joiningFeaturedRaceKey = raceId);
     try {
-      if (bucketPrivate && raceId == null) {
-        final assignment = await widget.backendApiService
-            .assignSeededRaceBucket(
-              identityToken: token,
-              seedKind: seedKind as String,
-            );
-        if (assignment['elected'] == true) {
-          _locallyElectedBucketKeys.add(joinKey);
-        }
-      } else if (raceId is String && raceId.isNotEmpty) {
-        await widget.backendApiService.joinPublicRace(
-          identityToken: token,
-          raceId: raceId,
+      await widget.backendApiService.joinPublicRace(
+        identityToken: token,
+        raceId: raceId,
+      );
+      if (!mounted || account != _accountGeneration) return;
+      setState(() => _joiningFeaturedRaceKey = null);
+      showInfoToast(context, "You're in!");
+      await _load();
+    } catch (error) {
+      if (!mounted || account != _accountGeneration) return;
+      setState(() => _joiningFeaturedRaceKey = null);
+      showErrorToast(
+        context,
+        error is ApiException
+            ? fundedExposureErrorCopy(error)
+            : 'Could not join. Give it another try!',
+      );
+    }
+  }
+
+  Future<void> _joinCurrentChallenge(
+    Map<String, dynamic> race,
+    String token,
+  ) async {
+    final seed = SeededChallengeJoin.text(race['seedKind']);
+    if (seed == null ||
+        !const ['DAILY_10K', 'WEEKLY_50K'].contains(seed) ||
+        _joiningCurrent.containsKey(seed)) {
+      return;
+    }
+    final current = _currentFor(seed);
+    if (current == null || current.state != 'JOINABLE') return;
+    final account = _accountGeneration;
+    final key = '$seed/${current.windowKey}';
+    final requestId = _joinAttemptIds.putIfAbsent(
+      key,
+      newSeededChallengeRequestId,
+    );
+    setState(() => _joiningCurrent[seed] = requestId);
+    bool stillCurrent() =>
+        mounted &&
+        account == _accountGeneration &&
+        token == widget.authService.authToken &&
+        _joiningCurrent[seed] == requestId &&
+        _currentFor(seed)?.windowKey == current.windowKey;
+    try {
+      final response = await widget.backendApiService
+          .joinCurrentSeededChallenge(
+            identityToken: token,
+            seedKind: seed,
+            requestId: requestId,
+          );
+      if (!mounted || !stillCurrent()) return;
+      final result = SeededChallengeJoinResult.parse(response);
+      if (result == null || result.seedKind != seed) {
+        showErrorToast(
+          context,
+          'Checking your challenge entry. Refresh or try again.',
         );
-      } else {
+        await _load();
         return;
       }
-      if (!mounted) return;
-      setState(() => _joiningFeaturedRaceKey = null);
-      showInfoToast(context, bucketPrivate ? "You're in!" : "You're in!");
-      // Refresh so the card flips to VIEW.
+      if (result.raceStatus != 'ACTIVE' ||
+          !result.windowEnd.isAfter(DateTime.now().toUtc()) ||
+          result.projection.windowKey != current.windowKey) {
+        _joinAttemptIds.remove(key);
+        showInfoToast(
+          context,
+          result.raceStatus == 'CANCELLED'
+              ? 'That challenge was cancelled. Current challenges refreshed.'
+              : result.raceStatus == 'COMPLETED' ||
+                    !result.windowEnd.isAfter(DateTime.now().toUtc())
+              ? 'That challenge has ended. Current challenges refreshed.'
+              : 'Challenge timing changed. Refreshing your entry.',
+        );
+        await _load();
+        return;
+      }
+      setState(() => _committedCurrent[seed] = result.projection);
+      showInfoToast(context, "You're in!");
+      // A failed or lagging discovery read must not erase a committed receipt.
       await _load();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _joiningFeaturedRaceKey = null);
-      showErrorToast(context, fundedExposureErrorCopy(e));
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _joiningFeaturedRaceKey = null);
-      showErrorToast(context, 'Could not join. Give it another try!');
+    } catch (error) {
+      if (!mounted || !stillCurrent()) return;
+      showErrorToast(
+        context,
+        error is ApiException
+            ? fundedExposureErrorCopy(error)
+            : 'Could not join. Give it another try!',
+      );
+      if (error is ApiException &&
+          (error.code == 'CHALLENGE_FORFEITED' ||
+              error.code == 'CHALLENGE_NOT_ELIGIBLE')) {
+        await _load();
+      }
+    } finally {
+      if (mounted &&
+          account == _accountGeneration &&
+          _joiningCurrent[seed] == requestId) {
+        setState(() => _joiningCurrent.remove(seed));
+      }
     }
+  }
+
+  void _refreshUnavailableChallenge() {
+    showInfoToast(
+      context,
+      'Current challenge unavailable. Refreshing to check again.',
+    );
+    unawaited(_load());
   }
 
   /// Opens the race screen for [raceId], refreshing on return. Used both for a
@@ -431,14 +648,15 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final state = _racesState;
     final races = state.data ?? _races;
 
-    if (state.shouldShowInitialLoading || _loading && races.isEmpty) {
+    if (!_hasAnyContent &&
+        (state.shouldShowInitialLoading || _loading && races.isEmpty)) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: ListSkeleton(itemCount: 4),
       );
     }
 
-    if (state.isError && !state.hasData) {
+    if (state.isError && !state.hasData && !_hasAnyContent) {
       return LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -605,10 +823,6 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   bool get _hasAnyContent {
     final state = _racesState;
     final races = state.data ?? _races;
-    if (state.shouldShowInitialLoading || (_loading && races.isEmpty)) {
-      return false;
-    }
-    if (state.isError && !state.hasData) return false;
     return races.isNotEmpty ||
         _featuredRaces.isNotEmpty ||
         _featuredTournaments.isNotEmpty ||
@@ -621,7 +835,13 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   }
 
   int get _featuredAvailableCount =>
-      _featuredRaces.where((race) => !_raceIsJoined(race)).length +
+      _featuredRaces.where((race) {
+        if (_usesCurrentAdmission(race)) {
+          final seed = SeededChallengeJoin.text(race['seedKind']);
+          return seed != null && _currentFor(seed)?.state == 'JOINABLE';
+        }
+        return !_raceIsJoined(race);
+      }).length +
       _featuredTournaments.where((t) => !Tournament.amIn(t)).length;
 
   int get _tournamentsAvailableCount =>
@@ -885,57 +1105,75 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     Map<String, dynamic> race, {
     double width = 250,
   }) {
-    final raceId = race['raceId'];
-    final safeRaceId = raceId is String && raceId.isNotEmpty ? raceId : null;
-    final seedKind = race['seedKind'] as String?;
-    final bucketPrivate = race['bucketPrivate'] == true;
-    final rewardRaw = race['finishReward'];
-    final reward = rewardRaw is Map
-        ? Map<String, dynamic>.from(rewardRaw)
-        : const <String, dynamic>{};
-    final key = bucketPrivate
-        ? (seedKind == null || seedKind.isEmpty ? '' : 'bucket:$seedKind')
-        : (safeRaceId ?? '');
-    final privateAssigned =
-        bucketPrivate && safeRaceId != null && race['myStatus'] == 'ACCEPTED';
-    final serverElected = race['myStatus'] == 'ELECTED';
-    final locallyElected =
-        race['myStatus'] == null &&
-        key.isNotEmpty &&
-        _locallyElectedBucketKeys.contains(key);
+    final safeRaceId = SeededChallengeJoin.text(race['raceId']);
+    final seedKind = SeededChallengeJoin.text(race['seedKind']);
+    final currentAdmission = _usesCurrentAdmission(race);
+    final reward = race['finishReward'] is Map
+        ? race['finishReward'] as Map
+        : const {};
+    final parsed = SeededChallengeJoin.parse(race['currentJoin']);
+    final committed = seedKind == null ? null : _committedCurrent[seedKind];
+    final current =
+        committed != null &&
+            committed.windowEnd.isAfter(DateTime.now().toUtc()) &&
+            (parsed == null || parsed.windowKey == committed.windowKey)
+        ? (parsed?.state == 'JOINED' ? parsed : committed)
+        : parsed;
+    final legacyAccepted =
+        current == null &&
+        !race.containsKey('currentJoin') &&
+        safeRaceId != null &&
+        race['myStatus'] == 'ACCEPTED';
+    final assignedCurrent =
+        currentAdmission && (current?.state == 'JOINED' || legacyAccepted);
+    final destination = currentAdmission
+        ? (current?.raceId ?? (legacyAccepted ? safeRaceId : null))
+        : safeRaceId;
     final elected =
-        bucketPrivate && !privateAssigned && (serverElected || locallyElected);
-    // Only a literal null status is an unassigned virtual card. A malformed or
-    // future server status must remain inert: never turn unknown private state
-    // into an /assign write.
-    final privateVirtual =
-        bucketPrivate &&
-        safeRaceId == null &&
-        race['myStatus'] == null &&
-        !elected;
+        currentAdmission &&
+        !race.containsKey('currentJoin') &&
+        !legacyAccepted &&
+        race['myStatus'] == 'ELECTED';
+    final count =
+        current?.participantCount ??
+        (legacyAccepted
+            ? SeededChallengeJoin.nonnegativeInt(race['participantCount'])
+            : null);
     return FeaturedRaceCard(
-      name: race['name'] as String? ?? 'Race',
+      name: SeededChallengeJoin.text(race['name']) ?? 'Race',
       seedKind: seedKind,
-      endsAt: DateTime.tryParse(race['endsAt'] as String? ?? ''),
-      participantCount: privateAssigned
-          ? (race['participantCount'] as num?)?.toInt() ?? 0
-          : 0,
-      finishRewardPool: (reward['pool'] as num?)?.toInt() ?? 0,
-      finishRewardPlaces: (reward['paidPlaces'] as num?)?.toInt() ?? 0,
-      isJoined: bucketPrivate
-          ? privateAssigned
+      endsAt: current?.windowEnd ?? SeededChallengeJoin.date(race['endsAt']),
+      participantCount: currentAdmission
+          ? count ?? 0
+          : SeededChallengeJoin.nonnegativeInt(race['participantCount']) ?? 0,
+      finishRewardPool: SeededChallengeJoin.nonnegativeInt(reward['pool']) ?? 0,
+      finishRewardPlaces:
+          SeededChallengeJoin.nonnegativeInt(reward['paidPlaces']) ?? 0,
+      isJoined: currentAdmission
+          ? assignedCurrent ||
+                (current?.state == 'FORFEITED' && destination != null)
           : safeRaceId != null && race['myStatus'] != null,
-      isFull: race['isFull'] as bool? ?? false,
-      isJoining: _joiningFeaturedRaceKey == key,
+      isFull: !currentAdmission && race['isFull'] == true,
+      isJoining: currentAdmission
+          ? _joiningCurrent.containsKey(seedKind)
+          : _joiningFeaturedRaceKey == safeRaceId,
       isElected: elected,
-      canJoin: bucketPrivate
-          ? privateVirtual && seedKind != null && seedKind.isNotEmpty
+      canJoin: currentAdmission
+          ? current?.state == 'JOINABLE' &&
+                const ['DAILY_10K', 'WEEKLY_50K'].contains(seedKind)
           : safeRaceId != null,
-      showParticipantCount: !bucketPrivate || privateAssigned,
+      showParticipantCount:
+          !currentAdmission || (assignedCurrent && count != null),
+      statusLabel: elected
+          ? 'Upcoming challenge'
+          : current?.state == 'FORFEITED'
+          ? 'Challenge forfeited'
+          : null,
+      onUnavailable: currentAdmission ? _refreshUnavailableChallenge : null,
       width: width,
       onJoin: () => _joinFeaturedRace(race),
       onView: () {
-        if (safeRaceId != null) _viewFeaturedRace(safeRaceId);
+        if (destination != null) _viewFeaturedRace(destination);
       },
     );
   }

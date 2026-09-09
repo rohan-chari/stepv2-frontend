@@ -3797,6 +3797,26 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Immediately admits the viewer to the current server-selected ET window.
+  /// Reuse requestId when retrying an uncertain response; never send a race ID.
+  Future<Map<String, dynamic>> joinCurrentSeededChallenge({
+    required String identityToken,
+    required String seedKind,
+    required String requestId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/seeded/${Uri.encodeComponent(seedKind)}/join-current',
+      body: {'requestId': requestId},
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode != 200) _throwRawResponseError(raw);
+    // A malformed success can follow a committed write. The caller reconciles
+    // it with discovery and retains the same receipt ID for a safe retry.
+    return raw.json ?? const <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> joinPublicRace({
     required String identityToken,
     required String raceId,
