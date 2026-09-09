@@ -188,7 +188,11 @@ Future<void> _pumpShop(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: auth, backendApiService: api),
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: api,
+      ),
     ),
   );
   await tester.pump();
@@ -228,6 +232,8 @@ void main() {
       powerupPurchaseCompleter: pending,
     );
     await _pumpShop(tester, auth, api);
+    await tester.ensureVisible(find.text('300'));
+    await tester.pump();
     await tester.tap(find.text('300'));
     await tester.pump(const Duration(milliseconds: 300));
     final buy = find.text('BUY · 300');
@@ -275,6 +281,8 @@ void main() {
       // The tile's price strip shows the bare price.
       expect(find.text('300'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('300'));
+      await tester.pump();
       await tester.tap(find.text('300'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -299,6 +307,8 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
 
+    await tester.ensureVisible(find.text('300'));
+    await tester.pump();
     await tester.tap(find.text('300'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -328,6 +338,8 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
     await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -427,6 +439,8 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
     await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -435,6 +449,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -476,6 +492,7 @@ void main() {
       180,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.pump();
     await tester.tap(hatSelector);
     await tester.pump(const Duration(milliseconds: 180));
     final stage = find.byKey(const Key('shop-dressing-room-stage'));
@@ -500,6 +517,8 @@ void main() {
     await tester.pump();
     await tester.tap(powerupsCategory);
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -624,6 +643,7 @@ void main() {
         180,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pump();
       await tester.tap(hatSelector);
       await tester.pump(const Duration(milliseconds: 180));
       expect(api.cosmeticPurchases, 0);

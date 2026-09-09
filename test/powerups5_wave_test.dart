@@ -122,7 +122,11 @@ Future<void> _pumpShop(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: auth, backendApiService: api),
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: api,
+      ),
     ),
   );
   await tester.pump();

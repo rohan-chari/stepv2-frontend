@@ -272,6 +272,7 @@ Future<void> _pumpShop(
         child: child!,
       ),
       home: ShopTab(
+        initialFocus: ShopFocus.items,
         authService: auth,
         backendApiService: api,
         onShopChanged: onShopChanged,
@@ -966,10 +967,9 @@ void main() {
       await tester.tap(lateSelector);
       await tester.pump(const Duration(milliseconds: 180));
 
-      final selectedSemantics = find.descendant(
-        of: lateSelector,
-        matching: find.byType(Semantics),
-      ).first;
+      final selectedSemantics = find
+          .descendant(of: lateSelector, matching: find.byType(Semantics))
+          .first;
       expect(
         tester.widget<Semantics>(selectedSemantics).properties.selected,
         isTrue,

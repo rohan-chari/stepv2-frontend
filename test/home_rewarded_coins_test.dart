@@ -10,6 +10,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
+import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/widgets/step_milestones_section.dart';
 import 'package:step_tracker/services/rewarded_coins_controller.dart';
@@ -344,21 +345,27 @@ void main() {
     });
   }
   testWidgets(
-    'Home plus preserves Get Coins and shares the claimed allowance on return',
+    'Home plus opens Shop and preserves Home claimed allowance on return',
     (tester) async {
       final api = _FakeBackendApiService(
         status: _status(adCoinReward: _liveOffer),
       );
       final ads = _FakeAdController();
       await _pumpHome(tester, api, ads);
+      await tester.tap(find.text('WATCH AD'));
+      await tester.pump();
+      expect(
+        find.text('Random 25–50 coins · 4 ads left today'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.byIcon(Icons.add_rounded));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byType(GetCoinsScreen), findsOneWidget);
-      expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
-      await tester.tap(find.text('WATCH AD · RANDOM COINS'));
-      await tester.pump();
-      expect(find.textContaining('4 of 5'), findsOneWidget);
+      expect(find.byType(GetCoinsScreen), findsNothing);
+      expect(find.byType(ShopTab), findsOneWidget);
+      expect(find.text('WATCH AD · RANDOM COINS'), findsNothing);
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));

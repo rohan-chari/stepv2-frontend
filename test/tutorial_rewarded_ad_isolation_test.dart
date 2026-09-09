@@ -33,7 +33,7 @@ void main() {
   });
 
   testWidgets(
-    'tutorial real Home opens only the offline unsupported Get Coins path',
+    'tutorial real Home disables purchase navigation and ad requests',
     (tester) async {
       final auth = TutorialPreviewAuthService();
       addTearDown(auth.dispose);
@@ -52,12 +52,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      expect(find.byIcon(Icons.add_rounded), findsNothing);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byType(GetCoinsScreen), findsOneWidget);
-      expect(api.getCoinsStatusCalls, 1);
+      expect(find.byType(GetCoinsScreen), findsNothing);
+      expect(api.getCoinsStatusCalls, 0);
       expect(find.textContaining('WATCH AD'), findsNothing);
       expect(tester.takeException(), isNull);
     },

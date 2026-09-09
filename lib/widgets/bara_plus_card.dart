@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../screens/bara_plus_screen.dart';
 import '../services/billing_controller.dart';
+import '../models/billing.dart';
 import '../styles.dart';
 import 'billing_scope.dart';
 
@@ -15,7 +15,10 @@ class BaraPlusCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: billing,
       builder: (context, _) {
-        if (!billing.canShowMembership) return const SizedBox.shrink();
+        if (!billing.canShowMembership &&
+            billing.snapshot.status == BillingStatus.free) {
+          return const SizedBox.shrink();
+        }
         final colors = AppColors.of(context);
         final member = billing.snapshot.isMember;
         return Semantics(
@@ -26,13 +29,7 @@ class BaraPlusCard extends StatelessWidget {
             child: InkWell(
               key: const Key('bara-plus-card'),
               borderRadius: BorderRadius.circular(18),
-              onTap:
-                  onTap ??
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => BaraPlusScreen(controller: billing),
-                    ),
-                  ),
+              onTap: onTap,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(

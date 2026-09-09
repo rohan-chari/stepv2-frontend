@@ -198,7 +198,11 @@ Future<void> _pumpShop(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: auth, backendApiService: api),
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: api,
+      ),
     ),
   );
   await tester.pump();
@@ -244,6 +248,7 @@ void main() {
         home: Padding(
           padding: const EdgeInsets.only(left: 40, top: 60),
           child: ShopTab(
+            initialFocus: ShopFocus.items,
             authService: auth,
             backendApiService: api,
             forceTutorialReplay: true,
@@ -304,6 +309,7 @@ void main() {
                       transitionDuration: const Duration(milliseconds: 700),
                       pageBuilder: (_, animation, secondaryAnimation) =>
                           ShopTab(
+                            initialFocus: ShopFocus.items,
                             authService: auth,
                             backendApiService: api,
                             forceTutorialReplay: replay,
@@ -405,7 +411,11 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ShopTab(authService: auth, backendApiService: api),
+          home: ShopTab(
+            initialFocus: ShopFocus.items,
+            authService: auth,
+            backendApiService: api,
+          ),
         ),
       );
       await tester.pump();
@@ -480,6 +490,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopTab(
+          initialFocus: ShopFocus.items,
           authService: auth,
           backendApiService: api,
           forceTutorialReplay: true,
@@ -535,6 +546,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopTab(
+          initialFocus: ShopFocus.items,
           authService: auth,
           backendApiService: api,
           isTutorialPreview: true,
@@ -560,7 +572,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppThemeData.night(),
-        home: ShopTab(authService: auth, backendApiService: api),
+        home: ShopTab(
+          initialFocus: ShopFocus.items,
+          authService: auth,
+          backendApiService: api,
+        ),
       ),
     );
     await tester.pump();
@@ -679,8 +695,14 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'INVENTORY');
     await _selectCategory(tester, 'CHARACTERS');
+    await tester.ensureVisible(find.byKey(const Key('shop-capybara-tile')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('shop-capybara-tile')));
     await tester.pump(const Duration(milliseconds: 180));
+    await tester.ensureVisible(
+      find.byKey(const Key('shop-dressing-room-stage')),
+    );
+    await tester.pump();
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('shop-dressing-room-stage')),

@@ -1,5 +1,5 @@
 import '../../widgets/billing_scope.dart';
-import '../../widgets/bara_plus_card.dart';
+import 'shop_tab.dart';
 import 'package:flutter/material.dart';
 import '../../models/loadable.dart';
 import '../../models/step_data.dart';
@@ -39,6 +39,7 @@ class ProfileTab extends StatefulWidget {
   final Future<void> Function()? onAddProfilePhoto;
   final Future<void> Function()? onRemoveProfilePhoto;
   final bool showBackButton;
+  final ValueChanged<Map<String, dynamic>>? onShopChanged;
 
   const ProfileTab({
     super.key,
@@ -54,6 +55,7 @@ class ProfileTab extends StatefulWidget {
     this.onAddProfilePhoto,
     this.onRemoveProfilePhoto,
     this.showBackButton = true,
+    this.onShopChanged,
   });
 
   @override
@@ -268,12 +270,44 @@ class _ProfileTabState extends State<ProfileTab> {
                   SliverToBoxAdapter(
                     child: _buildProfileHeader(showBackButton: showBackButton),
                   ),
-                  if (BillingScope.maybeOf(context)?.canShowMembership == true)
-                    const SliverToBoxAdapter(
+                  if (BillingScope.maybeOf(context) != null)
+                    SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        child: BaraPlusCard(
-                          key: Key('billing-profile-membership'),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            key: const Key('billing-profile-membership'),
+                            icon: Icon(
+                              Icons.card_membership_rounded,
+                              size: 18,
+                              color: AppColors.of(context).textLight,
+                            ),
+                            label: Text(
+                              'Membership',
+                              style: PixelText.body(
+                                size: 13,
+                                color: AppColors.of(context).textLight,
+                              ),
+                            ),
+                            onPressed: () {
+                              final billing = BillingScope.read(context);
+                              if (billing == null) return;
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => BillingScope(
+                                    controller: billing,
+                                    child: ShopTab(
+                                      authService: widget.authService,
+                                      backendApiService: _api,
+                                      initialFocus: ShopFocus.membership,
+                                      onShopChanged: widget.onShopChanged,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),

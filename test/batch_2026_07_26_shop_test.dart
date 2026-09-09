@@ -151,6 +151,7 @@ Future<void> _pump(
         child: child!,
       ),
       home: ShopTab(
+        initialFocus: ShopFocus.items,
         key: ValueKey(api),
         authService: auth,
         backendApiService: api,
@@ -305,6 +306,8 @@ void main() {
       await tester.pump();
       await tester.tap(powerups);
       await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(find.text('Zap'));
+      await tester.pump();
       await tester.tap(find.text('Zap'));
       await tester.pump(const Duration(milliseconds: 400));
       final cta = find.text('BUY · 10');
@@ -607,7 +610,11 @@ void main() {
       // A never-completing catalog keeps the skeleton on screen.
       await tester.pumpWidget(
         MaterialApp(
-          home: ShopTab(authService: auth, backendApiService: _StalledApi()),
+          home: ShopTab(
+            initialFocus: ShopFocus.items,
+            authService: auth,
+            backendApiService: _StalledApi(),
+          ),
         ),
       );
       await tester.pump();

@@ -91,6 +91,7 @@ void main() {
       await _openRoute(
         tester,
         builder: (_) => ShopTab(
+          initialFocus: ShopFocus.items,
           authService: authService,
           backendApiService: _FakeShopApi(),
         ),

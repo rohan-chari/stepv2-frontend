@@ -495,7 +495,7 @@ void main() {
     expect(find.byType(ReferralScreen), findsOneWidget);
   });
 
-  testWidgets('the shop "+" opens the Get Coins hub, not the referral screen', (
+  testWidgets('the shop "+" focuses Coins in the same storefront', (
     tester,
   ) async {
     final auth = await _createAuthService();
@@ -504,7 +504,11 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: ShopTab(authService: auth, backendApiService: api),
+        home: ShopTab(
+          initialFocus: ShopFocus.items,
+          authService: auth,
+          backendApiService: api,
+        ),
       ),
     );
     await tester.pump();
@@ -514,7 +518,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.byType(GetCoinsScreen), findsOneWidget);
+    expect(find.byType(GetCoinsScreen), findsNothing);
+    expect(find.byType(ShopTab), findsOneWidget);
+    expect(find.text("COINS"), findsOneWidget);
     expect(find.byType(ReferralScreen), findsNothing);
   });
 }

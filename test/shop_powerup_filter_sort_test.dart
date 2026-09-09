@@ -96,7 +96,13 @@ Map<String, dynamic> _catalog() => {
 Future<void> _pump(WidgetTester tester, BackendApiService api) async {
   final auth = await _auth();
   await tester.pumpWidget(
-    MaterialApp(home: ShopTab(authService: auth, backendApiService: api)),
+    MaterialApp(
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: api,
+      ),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
@@ -212,6 +218,10 @@ void main() {
     expect(find.text('Utility · Price ↑'), findsOneWidget);
     expect(find.text('Zap'), findsNothing); // filter still applied
     expect(find.text('Guard'), findsNothing);
-    _expectOrder(tester, 'Mystery', 'Anchor'); // Mystery (20) before Anchor (90)
+    _expectOrder(
+      tester,
+      'Mystery',
+      'Anchor',
+    ); // Mystery (20) before Anchor (90)
   });
 }

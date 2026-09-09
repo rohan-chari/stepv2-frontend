@@ -140,6 +140,7 @@ Future<AuthService> _pump(
   await tester.pumpWidget(
     MaterialApp(
       home: ShopTab(
+        initialFocus: ShopFocus.items,
         authService: auth,
         backendApiService: api ?? _FakeShopApi(coins: coins, price: price),
         adControllerBuilder:
@@ -152,6 +153,8 @@ Future<AuthService> _pump(
   await tester.pump(const Duration(milliseconds: 200));
   // Unlock affordances live in the item sheet; the grid intentionally keeps
   // only the compact price strip.
+  await tester.ensureVisible(find.text('Big Bang'));
+  await tester.pump();
   await tester.tap(find.text('Big Bang'));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));

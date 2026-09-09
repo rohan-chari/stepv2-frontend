@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../screens/bara_plus_screen.dart';
 import '../screens/case_opening_screen.dart';
-import '../screens/get_coins_screen.dart';
 import '../screens/multi_case_opening_screen.dart';
 import '../screens/race_detail_screen.dart';
 import '../screens/tabs/profile_tab.dart';
@@ -212,12 +210,20 @@ class _PreviewHomeState extends State<_PreviewHome> {
       adControllerBuilder: () => PreviewUnsupportedAds(),
       getCoinsAdController: ads,
     ),
-    1 => GetCoinsScreen(
+    1 => ShopTab(
+      key: const ValueKey('preview-coins'),
       authService: widget.controller.auth,
       backendApiService: widget.api,
-      adController: ads,
+      initialFocus: ShopFocus.coins,
+      adControllerBuilder: () => PreviewUnsupportedAds(),
     ),
-    2 => const BaraPlusScreen(),
+    2 => ShopTab(
+      key: const ValueKey('preview-membership'),
+      authService: widget.controller.auth,
+      backendApiService: widget.api,
+      initialFocus: ShopFocus.membership,
+      adControllerBuilder: () => PreviewUnsupportedAds(),
+    ),
     3 => ProfileTab(
       authService: widget.controller.auth,
       displayName: 'Rohan',

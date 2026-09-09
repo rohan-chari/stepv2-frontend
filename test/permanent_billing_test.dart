@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/billing.dart';
-import 'package:step_tracker/widgets/bara_plus_card.dart';
+import 'package:step_tracker/screens/tabs/shop_tab.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
+import 'unified_shop_test.dart' show ShopApi;
 import 'package:step_tracker/screens/bara_plus_screen.dart';
 import 'package:step_tracker/services/live_billing_controller.dart';
 import 'package:step_tracker/services/store_billing_client.dart';
@@ -384,7 +386,7 @@ void main() {
     );
   }
   testWidgets(
-    'known permanent owner can reach management through existing card without checkout',
+    'known permanent owner can reach Shop management without checkout',
     (tester) async {
       final api = PermanentApi()
         ..available = false
@@ -411,19 +413,29 @@ void main() {
       addTearDown(billing.dispose);
       await billing.refresh();
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: BaraPlusCard(controller: billing)),
+        BillingScope(
+          controller: billing,
+          child: MaterialApp(
+            home: ShopTab(
+              authService: TestAuth(),
+              backendApiService: ShopApi(),
+              initialFocus: ShopFocus.membership,
+            ),
+          ),
         ),
       );
       expect(find.byKey(const Key('bara-plus-card')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('bara-plus-card')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.scrollUntilVisible(
         find.byKey(const Key('manage-bara')),
         300,
       );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.byKey(const Key('manage-bara')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(store.manages, 1);
       expect(find.byKey(const Key('buy-permanent-bara')), findsNothing);
     },

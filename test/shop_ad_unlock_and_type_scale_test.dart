@@ -109,6 +109,7 @@ Future<void> _pump(
     MaterialApp(
       theme: theme ?? AppThemeData.light(),
       home: ShopTab(
+        initialFocus: ShopFocus.items,
         // A fresh key per pump: without it Flutter reuses the previous
         // ShopTab's State and never reloads the fake catalog.
         key: UniqueKey(),
@@ -213,6 +214,8 @@ void main() {
 
     testWidgets('sheet chip and description are raised', (tester) async {
       await _pump(tester, coins: 1000, price: 150, ownedQuantity: 2);
+      await tester.ensureVisible(find.text('Big Bang').first);
+      await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -227,6 +230,8 @@ void main() {
       tester,
     ) async {
       await _pump(tester, coins: 30, price: 150);
+      await tester.ensureVisible(find.text('Big Bang').first);
+      await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
       expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
@@ -248,6 +253,8 @@ void main() {
           'remainingToday': 1,
         },
       );
+      await tester.ensureVisible(find.text('Big Bang').first);
+      await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
       expect(find.text('GET MORE COINS'), findsOneWidget);
@@ -269,6 +276,8 @@ void main() {
           'remainingToday': 1,
         },
       );
+      await tester.ensureVisible(find.text('Big Bang').first);
+      await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
@@ -289,6 +298,8 @@ void main() {
             'remainingToday': 0,
           },
         );
+        await tester.ensureVisible(find.text('Big Bang').first);
+        await tester.pump();
         await tester.tap(find.text('Big Bang').first);
         await tester.pump();
         expect(find.textContaining('WATCH'), findsNothing);
@@ -313,6 +324,8 @@ void main() {
         price: 150,
         adUnlock: {'maxShortfall': 'nonsense'},
       );
+      await tester.ensureVisible(find.text('Big Bang').first);
+      await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
       expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
@@ -352,6 +365,7 @@ void main() {
         180,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pump();
       await tester.tap(selector);
       await tester.pump(const Duration(milliseconds: 180));
       final stage = find.byKey(const Key('shop-dressing-room-stage'));
@@ -399,6 +413,7 @@ void main() {
         180,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pump();
       await tester.tap(selector);
       await tester.pump(const Duration(milliseconds: 180));
       final stage = find.byKey(const Key('shop-dressing-room-stage'));
@@ -410,6 +425,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Watch'), findsNothing);
       expect(find.text('GET MORE COINS'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.ensureVisible(find.text('GET MORE COINS'));
+      await tester.pump();
+      await tester.tap(find.text('GET MORE COINS'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(ShopTab), findsOneWidget);
+      expect(find.text('COINS'), findsOneWidget);
+      expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
+      await tester.tap(find.text('ITEMS'));
+      await tester.pump();
+      expect(find.text('DETAILS & BUY'), findsOneWidget);
+      expect(find.text('Corgi Puppy'), findsWidgets);
     });
   });
 }

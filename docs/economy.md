@@ -2318,6 +2318,18 @@ otherwise cost coins**; replacing an ad saves time rather than wallet coins.
 A 15% discount gives approximately 17.65% more eligible buying power before
 integer rounding. Exact rounding is still an implementation policy to record.
 
+### Shop redesign catalog verification — 2026-09-08 (local code only)
+
+Backend `src/modules/billing/catalog.js:1-10` currently defines coin packs of
+500, 2,800 and 6,000 coins; no 28,000-coin product exists in that code catalog.
+Its public catalog excludes annual membership while retaining its historical
+product definition. Frontend `lib/services/live_billing_controller.dart:276-290`
+intersects backend products with store metadata and displays the backend coin
+quantity and store-localized price. The US prices above are reference inputs,
+not prices freshly verified against a live store. The unified-shop proposal
+(`docs/unified-shop-requirements.md`) preserves these products, grants and
+purchase handlers; no production query was performed for this UI review.
+
 ### 13.1 Local-default reroll calculation — verified 2026-09-07
 
 Local code defaults are COMMON/UNCOMMON/RARE discard payouts 2/5/10, leader

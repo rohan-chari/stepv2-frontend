@@ -92,7 +92,11 @@ Future<void> _pumpCharacterInventory(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: await _auth(), backendApiService: api),
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: await _auth(),
+        backendApiService: api,
+      ),
     ),
   );
   await tester.pump();

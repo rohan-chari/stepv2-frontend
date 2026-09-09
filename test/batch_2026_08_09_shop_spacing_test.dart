@@ -67,7 +67,11 @@ Future<void> _pump(WidgetTester tester) async {
   final auth = await _auth();
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: auth, backendApiService: _FakeShopApi()),
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: _FakeShopApi(),
+      ),
     ),
   );
   await tester.pump();

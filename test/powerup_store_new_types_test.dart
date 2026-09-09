@@ -61,42 +61,42 @@ Future<AuthService> _auth() async {
 }
 
 Map<String, dynamic> _catalogWithNewTypes() => {
-      'coins': 1000,
-      'items': [
-        {
-          'sku': 'POWERUP_HITCHHIKE',
-          'name': 'Hitchhike',
-          'description': "Copy a rival's steps into your score",
-          'priceCoins': 150,
-          'powerupType': 'HITCHHIKE',
-          'ownedQuantity': 1,
-        },
-        {
-          'sku': 'POWERUP_QUICK_RINSE',
-          'name': 'Quick Rinse',
-          'description': 'Halve every opponent effect on you',
-          'priceCoins': 75,
-          'powerupType': 'QUICK_RINSE',
-          'ownedQuantity': 0,
-        },
-      ],
-    };
+  'coins': 1000,
+  'items': [
+    {
+      'sku': 'POWERUP_HITCHHIKE',
+      'name': 'Hitchhike',
+      'description': "Copy a rival's steps into your score",
+      'priceCoins': 150,
+      'powerupType': 'HITCHHIKE',
+      'ownedQuantity': 1,
+    },
+    {
+      'sku': 'POWERUP_QUICK_RINSE',
+      'name': 'Quick Rinse',
+      'description': 'Halve every opponent effect on you',
+      'priceCoins': 75,
+      'powerupType': 'QUICK_RINSE',
+      'ownedQuantity': 0,
+    },
+  ],
+};
 
 /// What a client WITHOUT `powerups3` visibility sees — i.e. what an older
 /// backend, or the gated catalog, returns.
 Map<String, dynamic> _catalogWithoutNewTypes() => {
-      'coins': 1000,
-      'items': [
-        {
-          'sku': 'POWERUP_SIGNAL_JAMMER',
-          'name': 'Signal Jammer',
-          'description': 'Jam a rival',
-          'priceCoins': 75,
-          'powerupType': 'SIGNAL_JAMMER',
-          'ownedQuantity': 0,
-        },
-      ],
-    };
+  'coins': 1000,
+  'items': [
+    {
+      'sku': 'POWERUP_SIGNAL_JAMMER',
+      'name': 'Signal Jammer',
+      'description': 'Jam a rival',
+      'priceCoins': 75,
+      'powerupType': 'SIGNAL_JAMMER',
+      'ownedQuantity': 0,
+    },
+  ],
+};
 
 Future<void> _pumpShop(
   WidgetTester tester,
@@ -104,7 +104,13 @@ Future<void> _pumpShop(
   BackendApiService api,
 ) async {
   await tester.pumpWidget(
-    MaterialApp(home: ShopTab(authService: auth, backendApiService: api)),
+    MaterialApp(
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: api,
+      ),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
@@ -128,8 +134,9 @@ void main() {
 
   setUp(() => PowerupCopy.resetForTest());
 
-  testWidgets('both new powerups render in the store with real names',
-      (tester) async {
+  testWidgets('both new powerups render in the store with real names', (
+    tester,
+  ) async {
     final auth = await _auth();
     await _pumpShop(
       tester,
@@ -185,8 +192,9 @@ void main() {
     expect(find.text('Hitchhike'), findsWidgets);
   });
 
-  testWidgets('a gated catalog without the new types renders normally',
-      (tester) async {
+  testWidgets('a gated catalog without the new types renders normally', (
+    tester,
+  ) async {
     // Old backend / no powerups3 visibility: the shop must simply not show
     // them, never render an empty or broken tile.
     final auth = await _auth();

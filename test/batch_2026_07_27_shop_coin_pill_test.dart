@@ -130,7 +130,11 @@ Future<void> _pump(
   final auth = await _auth(coins: coins);
   await tester.pumpWidget(
     MaterialApp(
-      home: ShopTab(authService: auth, backendApiService: api),
+      home: ShopTab(
+        initialFocus: ShopFocus.items,
+        authService: auth,
+        backendApiService: api,
+      ),
     ),
   );
   await tester.pump();
@@ -665,6 +669,7 @@ void main() {
           home: MediaQuery(
             data: const MediaQueryData(platformBrightness: Brightness.dark),
             child: ShopTab(
+              initialFocus: ShopFocus.items,
               authService: auth,
               backendApiService: _FakeShopApi(
                 powerupCatalog: _powerupCatalog(),

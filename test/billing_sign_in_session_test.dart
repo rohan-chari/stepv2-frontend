@@ -74,7 +74,8 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
-    expect(find.text('Fill your coin pouch'), findsOneWidget);
+    expect(find.text('COINS'), findsWidgets);
+    expect(find.byKey(const Key('buy-coins-coins_500')), findsOneWidget);
     expect(api.syncTokens, contains('token-a'));
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();

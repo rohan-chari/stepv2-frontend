@@ -1,6 +1,9 @@
 import '../../services/billing_controller.dart';
+import '../../models/billing.dart';
 import '../../widgets/billing_scope.dart';
 import '../../widgets/bara_plus_card.dart';
+import '../../widgets/coin_pack_offers.dart';
+import '../bara_plus_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -28,7 +31,6 @@ import '../../widgets/powerup_icon.dart';
 import '../../widgets/race_ui.dart';
 import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
-import '../get_coins_screen.dart';
 
 // Powerup types retired from Store and Inventory. Old-backend residue is
 // filtered defensively; historical race Activity remains readable elsewhere.
@@ -174,6 +176,8 @@ extension on _PowerupSort {
   };
 }
 
+enum ShopFocus { featured, coins, membership, items }
+
 class ShopTab extends StatefulWidget {
   const ShopTab({
     super.key,
@@ -186,6 +190,7 @@ class ShopTab extends StatefulWidget {
     this.now,
     this.forceTutorialReplay = false,
     this.isTutorialPreview = false,
+    this.initialFocus = ShopFocus.featured,
   });
 
   final AuthService authService;
@@ -201,12 +206,20 @@ class ShopTab extends StatefulWidget {
   final DateTime Function()? now;
   final bool forceTutorialReplay;
   final bool isTutorialPreview;
+  final ShopFocus initialFocus;
 
   @override
   State<ShopTab> createState() => _ShopTabState();
 }
 
 class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
+  final _storeScrollController = ScrollController();
+  final _coinsKey = GlobalKey();
+  final _membershipKey = GlobalKey();
+  bool _showItems = false;
+  bool _membershipExpanded = false;
+  bool _deferTutorial = false;
+
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
@@ -320,12 +333,21 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     _shopSessionToken = widget.authService.authToken;
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleShopAuthChanged);
+    _deferTutorial =
+        widget.initialFocus == ShopFocus.coins ||
+        widget.initialFocus == ShopFocus.membership;
+    _showItems =
+        widget.initialFocus == ShopFocus.items ||
+        (!_deferTutorial && _shouldShowTutorial);
+    _membershipExpanded = widget.initialFocus == ShopFocus.membership;
     _loadCatalog();
     _maybeScheduleTutorial();
+    if (_deferTutorial) _focusFeatured(widget.initialFocus, rebuild: false);
   }
 
   @override
   void dispose() {
+    _storeScrollController.dispose();
     _billing?.removeListener(_billingChanged);
     _shopSessionGeneration++;
     _shopStateEpoch++;
@@ -401,7 +423,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   void _maybeScheduleTutorial() {
-    if (_tutorialDecisionScheduled ||
+    if (_deferTutorial ||
+        _tutorialDecisionScheduled ||
         !_tutorialCatalogReady ||
         widget.isTutorialPreview) {
       return;
@@ -411,6 +434,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         (widget.authService.hasShopTutorialServerState &&
             widget.authService.shopTutorialCompletedAt == null);
     if (!shouldShow) return;
+    if (!_showItems) setState(() => _showItems = true);
     _tutorialDecisionScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_launchTutorialWhenReady());
@@ -529,7 +553,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (target == null || !target.mounted) return null;
     await Scrollable.ensureVisible(
       target,
-      duration: const Duration(milliseconds: 240),
+      duration: step == 0 ? Duration.zero : const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
       alignment: .35,
     );
@@ -1536,27 +1560,26 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 top: topInset + 14,
                 bottom: tabBarHeight,
               ),
-              child: AppRefreshIndicator(
-                onRefresh: _loadCatalog,
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: _buildHeader(showBackButton: showBackButton),
-                    ),
-                    if (BillingScope.maybeOf(context)?.canShowMembership ==
-                        true)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
-                          child: BaraPlusCard(
-                            key: Key('billing-shop-membership'),
+              child: Column(
+                children: [
+                  _buildHeader(showBackButton: showBackButton),
+                  Expanded(
+                    child: AppRefreshIndicator(
+                      onRefresh: _loadCatalog,
+                      child: CustomScrollView(
+                        controller: _storeScrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          if (_showItems)
+                            SliverToBoxAdapter(child: _buildItemsHeader()),
+                          SliverToBoxAdapter(
+                            child: _showItems ? _buildBody() : _buildFeatured(),
                           ),
-                        ),
+                        ],
                       ),
-                    SliverToBoxAdapter(child: _buildBody()),
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (_purchaseOverlayItem == null)
@@ -1662,42 +1685,62 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     const SizedBox(width: 8),
                   ],
                   Expanded(
-                    child: Text(
-                      'SHOP',
-                      style: PixelText.title(
-                        size: 30,
-                        color: AppColors.of(context).textLight,
-                      ).copyWith(shadows: _textShadows),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'SHOP',
+                        style: PixelText.title(
+                          size: 30,
+                          color: AppColors.of(context).textLight,
+                        ).copyWith(shadows: _textShadows),
+                      ),
                     ),
                   ),
-                  CoinBalanceBadge(
-                    coins: widget.authService.coins,
-                    // "+" = earn more coins -> the Get Coins hub (watch an
-                    // ad, invite friends, daily box).
-                    onAddTap: _openGetCoins,
+                  SizedBox(
+                    width: 132,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: CoinBalanceBadge(
+                        coins: widget.authService.coins,
+                        onAddTap: _openGetCoins,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              _buildCharacterPreview(),
-              const SizedBox(height: 6),
-              _buildSegmentControl(),
-              const SizedBox(height: 8),
-              _buildCategoryPills(),
-              // Powerup-store filter + sort live in the (fixed) header so they
-              // don't disturb the body's stagger-in tile list.
-              if (_section == _ShopSection.store &&
-                  _activeCategory == _ShopCategory.powerups) ...[
-                // Batch 2026-08-09 item 3: was 2px — visibly cramped against
-                // the 8px gap above the pills. The two header gaps now match.
-                const SizedBox(height: 8),
-                _buildPowerupControls(),
-              ],
+              const SizedBox(height: 14),
+              _buildStorefrontSelector(),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _buildItemsHeader() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildCharacterPreview(),
+        const SizedBox(height: 6),
+        _buildSegmentControl(),
+        const SizedBox(height: 8),
+        _buildCategoryPills(),
+        // Powerup-store filter + sort live in the (fixed) header so they
+        // don't disturb the body's stagger-in tile list.
+        if (_section == _ShopSection.store &&
+            _activeCategory == _ShopCategory.powerups) ...[
+          // Batch 2026-08-09 item 3: was 2px — visibly cramped against
+          // the 8px gap above the pills. The two header gaps now match.
+          const SizedBox(height: 8),
+          _buildPowerupControls(),
+        ],
+      ],
+    ),
+  );
 
   Widget _buildSegmentControl() {
     Widget segment(String label, _ShopSection section) {
@@ -3001,26 +3044,204 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     );
   }
 
-  void _openGetCoins() {
-    final inheritedBilling = BillingScope.read(context);
-    final disabledBilling =
-        widget.forceTutorialReplay ||
-        widget.isTutorialPreview ||
-        inheritedBilling == null;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) {
-          final screen = GetCoinsScreen(
-            authService: widget.authService,
-            backendApiService: _backendApiService,
-            adController: widget.getCoinsAdController,
-            rewardedCoinsController: widget.rewardedCoinsController,
-          );
-          if (disabledBilling) {
-            return BillingScope.disabled(child: screen);
-          }
-          return BillingScope(controller: inheritedBilling, child: screen);
-        },
+  void _openGetCoins() => _focusFeatured(ShopFocus.coins);
+
+  void _focusFeatured(ShopFocus focus, {bool rebuild = true}) {
+    void update() {
+      _showItems = false;
+      _tutorialStep = null;
+      _tutorialTarget = null;
+      _membershipExpanded = focus == ShopFocus.membership;
+    }
+
+    if (rebuild) {
+      setState(update);
+    } else {
+      update();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target =
+          (focus == ShopFocus.membership ? _membershipKey : _coinsKey)
+              .currentContext;
+      if (target != null) {
+        unawaited(
+          Scrollable.ensureVisible(
+            target,
+            alignment: 0,
+            duration: const Duration(milliseconds: 240),
+          ),
+        );
+      }
+    });
+  }
+
+  Widget _buildStorefrontSelector() {
+    final colors = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: colors.roofDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.coinDark, width: 2),
+      ),
+      child: Row(
+        children: [
+          for (final items in [false, true])
+            Expanded(
+              child: Semantics(
+                selected: _showItems == items,
+                child: Material(
+                  color: _showItems == items
+                      ? colors.parchment
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      setState(() {
+                        _showItems = items;
+                        if (items) {
+                          _deferTutorial = false;
+                        }
+                      });
+                      if (_storeScrollController.hasClients) {
+                        _storeScrollController.jumpTo(0);
+                      }
+                      if (items) {
+                        _maybeScheduleTutorial();
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          items ? 'ITEMS' : 'FEATURED',
+                          textAlign: TextAlign.center,
+                          style: PixelText.title(
+                            size: 16,
+                            color: _showItems == items
+                                ? colors.textDark
+                                : colors.textLight,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatured() {
+    final colors = AppColors.of(context);
+    final billing = BillingScope.maybeOf(context);
+    final membershipAvailable =
+        billing != null &&
+        (billing.plans.isNotEmpty ||
+            billing.snapshot.status != BillingStatus.free ||
+            billing.canManageSubscription);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            key: _membershipKey,
+            decoration: BoxDecoration(
+              color: colors.roofMid,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.coinDark, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.roofDark.withValues(alpha: .5),
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (membershipAvailable)
+                  BaraPlusCard(
+                    key: const Key('billing-shop-membership'),
+                    onTap: () => setState(
+                      () => _membershipExpanded = !_membershipExpanded,
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bara+',
+                          style: PixelText.title(
+                            size: 29,
+                            color: colors.textLight,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Membership is currently unavailable.',
+                          style: PixelText.body(
+                            size: 13,
+                            color: colors.textLight,
+                          ),
+                        ),
+                        if (billing != null)
+                          TextButton(
+                            onPressed: billing.snapshot.busy
+                                ? null
+                                : billing.refresh,
+                            child: Text(
+                              'Try again',
+                              style: PixelText.body(
+                                size: 13,
+                                color: colors.textLight,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (membershipAvailable)
+                  TextButton(
+                    key: const Key('shop-membership-toggle'),
+                    onPressed: () => setState(
+                      () => _membershipExpanded = !_membershipExpanded,
+                    ),
+                    child: Text(
+                      _membershipExpanded
+                          ? 'HIDE MEMBERSHIP DETAILS'
+                          : billing.snapshot.isMember
+                          ? 'VIEW MEMBERSHIP'
+                          : 'EXPLORE BARA+',
+                      style: PixelText.title(size: 13, color: colors.textLight),
+                    ),
+                  ),
+                if (_membershipExpanded && membershipAvailable)
+                  BaraPlusBody(
+                    key: ValueKey('membership-${billing.userId}'),
+                    controller: billing,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+          Container(
+            key: _coinsKey,
+            child: CoinPackOffers(
+              key: ValueKey('coins-${billing?.userId}'),
+              onGreenSurface: true,
+            ),
+          ),
+        ],
       ),
     );
   }

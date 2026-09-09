@@ -289,6 +289,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopTab(
+          initialFocus: ShopFocus.items,
           authService: await _auth(),
           backendApiService: _ConflictShopApi(),
         ),

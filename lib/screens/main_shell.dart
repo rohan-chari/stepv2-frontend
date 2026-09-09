@@ -245,6 +245,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _homeFriendsResolved = false;
   bool _skipNextMeRefresh = false;
   final HomeSuggestedRacesStore _homeSuggestions = HomeSuggestedRacesStore();
+  final _homeSuggestionDeadlines =
+      <Timer, Completer<HomeSuggestedRacesRefresh>>{};
+  static const _homeSuggestionFailure = HomeSuggestedRacesRefresh(
+    error: 'Could not load suggested races. Please try again.',
+  );
   String? _homeSuggestionsUserId;
   final Set<String> _joiningHomeSuggestionKeys = {};
   bool _homeSuggestionsImpressionRecorded = false;
@@ -1040,6 +1045,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onNotificationAction,
     );
     _foregroundPollTimer?.cancel();
+    for (final entry in _homeSuggestionDeadlines.entries) {
+      entry.key.cancel();
+      if (!entry.value.isCompleted) {
+        entry.value.complete(_homeSuggestionFailure);
+      }
+    }
+    _homeSuggestionDeadlines.clear();
     _jobPollToken += 1; // invalidate any in-flight job polling loop
     _globalSummaryWorkPollToken += 1;
     _globalSummaryExpiryTimer?.cancel();
@@ -1988,6 +2000,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
       await _checkNotificationState();
       _fetchRaceCard();
+      // Cold start stops at the health gate. Granting access takes this path
+      // instead of _loadHomeAndShowResults, so it must also resolve discovery
+      // before the newly visible Home is left on its initial skeleton.
+      if (mounted) unawaited(_refreshHomeSuggestions());
       await _fetchSteps();
     } catch (e) {
       unawaited(
@@ -2557,9 +2573,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } else {
       return;
     }
-    final refresh = await _backendApiService.fetchHomeSuggestedRaces(
-      identityToken: token,
-    );
+    // Bound the entire response, including its body stream. Own the deadline
+    // so disposing the shell also cancels and settles outstanding UI work.
+    final deadline = Completer<HomeSuggestedRacesRefresh>();
+    final timer = Timer(const Duration(seconds: 20), () {
+      if (!deadline.isCompleted) deadline.complete(_homeSuggestionFailure);
+    });
+    _homeSuggestionDeadlines[timer] = deadline;
+    HomeSuggestedRacesRefresh refresh;
+    try {
+      refresh = await Future.any([
+        _backendApiService.fetchHomeSuggestedRaces(identityToken: token),
+        deadline.future,
+      ]);
+    } catch (_) {
+      // Keep cached cards or expose the existing retry action on first load.
+      refresh = _homeSuggestionFailure;
+    } finally {
+      timer.cancel();
+      _homeSuggestionDeadlines.remove(timer);
+    }
     if (!mounted) return;
     var applied = false;
     setState(() {
@@ -4775,6 +4808,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ProfileTab(
+          onShopChanged: _onShopCatalogChanged,
           authService: widget.authService,
           backendApiService: _backendApiService,
           displayName: _displayName,
@@ -5046,6 +5080,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           },
                           onOpenFriendsTab: _openFriendsTab,
                           onOpenShop: _openShop,
+                          onShopChanged: _onShopCatalogChanged,
                           onAddProfilePhoto: _addOrChangeProfilePhoto,
                           onDismissProfilePhotoPrompt:
                               _dismissProfilePhotoPrompt,
@@ -5139,6 +5174,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onOpenProfile: _openProfile,
                         ),
                         ProfileTab(
+                          onShopChanged: _onShopCatalogChanged,
                           authService: widget.authService,
                           backendApiService: _backendApiService,
                           displayName: _displayName,

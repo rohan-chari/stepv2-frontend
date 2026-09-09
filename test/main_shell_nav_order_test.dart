@@ -11,6 +11,7 @@ import 'package:step_tracker/models/interstitial_ad.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
+import 'package:step_tracker/screens/onboarding_flow.dart';
 import 'package:step_tracker/screens/get_coins_screen.dart';
 import 'package:step_tracker/screens/inbox_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
@@ -30,6 +31,54 @@ import 'package:step_tracker/services/race_results_ack_queue.dart';
 import 'package:step_tracker/services/review_prompt_service.dart';
 import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/wooden_tab_bar.dart';
+import 'package:step_tracker/widgets/home_course_track.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
+import 'billing_components_test.dart' show FakeBilling;
+
+class _EquipmentRouteApi extends _FakeBackendApiService {
+  bool equipped = false;
+  int equipWrites = 0;
+  Map<String, dynamic> get hat => {
+    'id': 'wizard',
+    'sku': 'WIZARD',
+    'name': 'Wizard Hat',
+    'description': 'A cozy hat',
+    'slot': 'HEAD',
+    'assetKey': 'wizard_hat',
+    'priceCoins': 100,
+    'owned': true,
+    'equipped': equipped,
+  };
+  @override
+  Future<Map<String, dynamic>> fetchShopCatalog({
+    required String identityToken,
+  }) async => {
+    'coins': 1000,
+    'ownedItemIds': ['wizard'],
+    'equipped': equipped ? {'HEAD': hat} : <String, dynamic>{},
+    'items': [hat],
+  };
+  @override
+  Future<Map<String, dynamic>> fetchPowerupShopCatalog({
+    required String identityToken,
+  }) async => {'coins': 1000, 'items': []};
+  @override
+  Future<Map<String, dynamic>> fetchPowerupInventory({
+    required String identityToken,
+  }) async => {'items': []};
+  @override
+  Future<Map<String, dynamic>> equipAccessory({
+    required String identityToken,
+    required String slot,
+    required String? itemId,
+  }) async {
+    equipWrites++;
+    equipped = itemId == 'wizard';
+    return {
+      'equipped': equipped ? {'HEAD': hat} : <String, dynamic>{},
+    };
+  }
+}
 
 class _FakeHealthService extends HealthService {
   @override
@@ -52,6 +101,55 @@ class _FakeHealthService extends HealthService {
 class _FailingHealthService extends _FakeHealthService {
   @override
   Future<StepData> getStepsToday() async => throw StateError('health failed');
+}
+
+class _GrantHealthOnRequest extends _FakeHealthService {
+  @override
+  Future<bool> restoreHealthAuthState() async => false;
+  @override
+  Future<HealthSetupResult> setUpHealthAccess() async =>
+      HealthSetupResult.authorized;
+}
+
+class _RecoveringHomeSuggestionsApi extends _FakeBackendApiService {
+  _RecoveringHomeSuggestionsApi({
+    this.failFirst = false,
+    this.hangFirst = false,
+  });
+  final bool failFirst;
+  final bool hangFirst;
+  final stalled = Completer<HomeSuggestedRacesRefresh>();
+
+  @override
+  Future<HomeSuggestedRacesRefresh> fetchHomeSuggestedRaces({
+    required String identityToken,
+  }) async {
+    homeSuggestionCalls++;
+    if (homeSuggestionCalls == 1) {
+      if (failFirst) throw StateError('Response stream interrupted');
+      if (hangFirst) return stalled.future;
+    }
+    final suggestion = HomeRaceSuggestion.tryParse(const {
+      'kind': 'FEATURED_RACE',
+      'id': 'recovered-daily',
+      'seedKind': 'DAILY_10K',
+      'name': 'Recovered Daily Race',
+      'status': 'ACTIVE',
+      'endsAt': '2036-09-10T00:00:00Z',
+      'participantCount': 12,
+      'maxParticipants': 100,
+      'isFull': false,
+      'powerupsEnabled': true,
+      'prizePool': null,
+      'finishReward': null,
+      'joinAction': 'JOIN',
+    });
+    return HomeSuggestedRacesRefresh(
+      featuredRaces: [?suggestion],
+      publicRaces: const [],
+      tournaments: const [],
+    );
+  }
 }
 
 class _AndroidPermissionHealth extends _FakeHealthService {
@@ -1410,8 +1508,89 @@ void main() {
     },
   );
 
+  for (final viaProfile in [false, true]) {
+    testWidgets(
+      'equipment from ${viaProfile ? "Profile Membership" : "Home plus"} refreshes Home avatar immediately',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final auth = await _authService();
+        final api = _EquipmentRouteApi();
+        await tester.pumpWidget(
+          BillingScope(
+            controller: FakeBilling(),
+            child: MaterialApp(
+              home: MainShell(
+                authService: auth,
+                healthService: _FakeHealthService(),
+                backendApiService: api,
+                backgroundSyncBootstrapService:
+                    _FakeBackgroundSyncBootstrapService(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(
+          tester
+              .widget<CapybaraCustomizationPreview>(
+                find.byType(CapybaraCustomizationPreview),
+              )
+              .accessories,
+          isEmpty,
+        );
+        if (viaProfile) {
+          await tester.tap(find.text('Profile'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.tap(find.text('Membership'));
+        } else {
+          await tester.tap(find.byIcon(Icons.add_rounded));
+        }
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('ITEMS'));
+        await tester.pump();
+        await tester.tap(find.text('INVENTORY'));
+        await tester.pump();
+        await tester.tap(find.text('ACCESSORIES'));
+        await tester.pump();
+        final hat = find.byKey(const Key('shop-cosmetic-selector-wizard'));
+        await tester.ensureVisible(hat);
+        await tester.pump();
+        await tester.tap(hat);
+        await tester.pump();
+        final equip = find.byKey(const Key('shop-stage-primary-action'));
+        await tester.ensureVisible(equip);
+        await tester.pump();
+        await tester.tap(equip);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(api.equipWrites, 1);
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        if (viaProfile) {
+          await tester.tap(find.text('Home'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        final avatar = tester.widget<CapybaraCustomizationPreview>(
+          find.byType(CapybaraCustomizationPreview),
+        );
+        expect(
+          avatar.accessories.map((row) => row['assetKey']),
+          contains('wizard_hat'),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
-    'open Get Coins survives shell token refresh and claims on new token',
+    'Shop visit survives shell token refresh and Home claims on new token',
     (tester) async {
       final auth = await _authService();
       final api = _RewardedCoinsApi();
@@ -1432,14 +1611,21 @@ void main() {
       await tester.tap(find.byIcon(Icons.add_rounded).first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byType(GetCoinsScreen), findsOneWidget);
+      expect(find.byType(GetCoinsScreen), findsNothing);
+      expect(find.text('FEATURED'), findsOneWidget);
       await auth.updateSessionToken('refreshed-token');
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.text('WATCH AD · RANDOM COINS'));
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.ensureVisible(find.text('WATCH AD'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('WATCH AD'));
       await tester.pump();
       expect(api.claimedToken, 'refreshed-token');
-      expect(find.textContaining('4 of 5'), findsOneWidget);
+      expect(find.textContaining('4 ads left today'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -2534,6 +2720,114 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(api.racesDiscoveryCalls, 1);
   });
+
+  testWidgets('Home suggestions load after granting health without a pull', (
+    tester,
+  ) async {
+    final auth = await _authService();
+    final api = _RecoveringHomeSuggestionsApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: auth,
+          healthService: _GrantHealthOnRequest(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(OnboardingFlow), findsOneWidget);
+    expect(api.homeSuggestionCalls, 0);
+    tester.widget<OnboardingFlow>(find.byType(OnboardingFlow)).onEnableHealth();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(HomeTab), findsOneWidget);
+    expect(api.homeSuggestionCalls, 1);
+    expect(
+      tester
+          .widget<HomeTab>(find.byType(HomeTab))
+          .suggestedRacesState
+          .isSuccess,
+      isTrue,
+    );
+    expect(
+      find.byKey(const Key('home-suggestion-FEATURED_RACE-recovered-daily')),
+      findsOneWidget,
+    );
+    expect(api.racesDiscoveryCalls, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final hanging in [false, true]) {
+    testWidgets(
+      'Home suggestions ${hanging ? 'timeout' : 'exception'} ends skeleton and retry recovers',
+      (tester) async {
+        final auth = await _authService();
+        final api = _RecoveringHomeSuggestionsApi(
+          failFirst: !hanging,
+          hangFirst: hanging,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MainShell(
+              authService: auth,
+              healthService: _FakeHealthService(),
+              backendApiService: api,
+              backgroundSyncBootstrapService:
+                  _FakeBackgroundSyncBootstrapService(),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        if (hanging) await tester.pump(const Duration(seconds: 21));
+        expect(
+          tester
+              .widget<HomeTab>(find.byType(HomeTab))
+              .suggestedRacesState
+              .isError,
+          isTrue,
+        );
+        expect(find.byKey(const Key('home-suggestions-error')), findsOneWidget);
+        tester
+            .widget<HomeTab>(find.byType(HomeTab))
+            .onRetrySuggestedRaces
+            ?.call();
+        await tester.pump();
+        expect(api.homeSuggestionCalls, 2);
+        expect(
+          tester
+              .widget<HomeTab>(find.byType(HomeTab))
+              .suggestedRacesState
+              .isSuccess,
+          isTrue,
+        );
+        expect(
+          find.byKey(
+            const Key('home-suggestion-FEATURED_RACE-recovered-daily'),
+          ),
+          findsOneWidget,
+        );
+        if (hanging) {
+          api.stalled.complete(
+            const HomeSuggestedRacesRefresh(error: 'Late stale response'),
+          );
+          await tester.pump();
+          expect(
+            tester
+                .widget<HomeTab>(find.byType(HomeTab))
+                .suggestedRacesState
+                .isSuccess,
+            isTrue,
+          );
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   testWidgets(
     'Races reveal retains cached races and starts discovery plus zero-friends '

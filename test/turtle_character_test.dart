@@ -71,7 +71,10 @@ Future<void> _pumpTrack(WidgetTester tester, {String? animal}) async {
   await tester.pump();
 }
 
-Future<void> _pumpModal(WidgetTester tester, Map<String, dynamic> result) async {
+Future<void> _pumpModal(
+  WidgetTester tester,
+  Map<String, dynamic> result,
+) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
@@ -201,26 +204,24 @@ void main() {
     expect(find.text('BLOCKED!'), findsOneWidget);
     expect(find.text('Shell'), findsOneWidget);
     expect(find.text('SHELL'), findsNothing);
-    expect(
-      tester.widget<PowerupIcon>(find.byType(PowerupIcon)).type,
-      'SHELL',
-    );
+    expect(tester.widget<PowerupIcon>(find.byType(PowerupIcon)).type, 'SHELL');
     expect(tester.takeException(), isNull);
   });
 
   // §10.4 — degradation: an older backend never sends blockedBy ---------------
-  testWidgets('AttackOutcomeModal without blockedBy still renders the default', (
-    tester,
-  ) async {
-    await _pumpModal(tester, const {'blocked': true, 'outcome': 'BLOCKED'});
+  testWidgets(
+    'AttackOutcomeModal without blockedBy still renders the default',
+    (tester) async {
+      await _pumpModal(tester, const {'blocked': true, 'outcome': 'BLOCKED'});
 
-    expect(find.text('BLOCKED!'), findsOneWidget);
-    expect(find.text('Compression Socks'), findsOneWidget);
-    expect(
-      tester.widget<PowerupIcon>(find.byType(PowerupIcon)).type,
-      'COMPRESSION_SOCKS',
-    );
-  });
+      expect(find.text('BLOCKED!'), findsOneWidget);
+      expect(find.text('Compression Socks'), findsOneWidget);
+      expect(
+        tester.widget<PowerupIcon>(find.byType(PowerupIcon)).type,
+        'COMPRESSION_SOCKS',
+      );
+    },
+  );
 
   // §8.3 — the race feed treats Shell as a beneficial defense ----------------
   testWidgets('FeedBubble gives a SHELL use the positive accent', (
@@ -272,6 +273,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopTab(
+          initialFocus: ShopFocus.items,
           authService: auth,
           backendApiService: _FakeShopApi(_turtleCatalog()),
         ),

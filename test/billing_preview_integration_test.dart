@@ -20,7 +20,7 @@ void main() {
   }
 
   testWidgets(
-    'root Coins back keeps preview navigation and wallet metadata isolated',
+    'root Coins return keeps preview navigation and wallet metadata isolated',
     (tester) async {
       SharedPreferences.setMockInitialValues({'auth_held_coins': 73});
       final controller = PreviewBillingController();
@@ -29,7 +29,7 @@ void main() {
       await tester.tap(find.byKey(const Key('preview-nav-coins')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.tap(find.byKey(const Key('preview-nav-shop')));
       await tester.pump();
       expect(find.byKey(const Key('preview-nav-shop')), findsOneWidget);
       await controller.auth.updateHeldCoins(0);
@@ -49,6 +49,8 @@ void main() {
     addTearDown(controller.dispose);
     await launch(tester, controller);
     expect(find.byKey(const Key('billing-shop-membership')), findsOneWidget);
+    await tester.tap(find.text('ITEMS'));
+    await tester.pump();
     await tester.tap(find.text('Ghost Pepper').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -66,7 +68,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('all coin offers render in the real get coins route', (
+  testWidgets('all coin offers render in the real Shop coins section', (
     tester,
   ) async {
     final controller = PreviewBillingController();
@@ -89,6 +91,8 @@ void main() {
       controller.setScenario(PreviewBillingScenario.monthly);
       addTearDown(controller.dispose);
       await launch(tester, controller);
+      await tester.tap(find.text('ITEMS'));
+      await tester.pump();
       await tester.tap(find.text('Ghost Pepper').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));

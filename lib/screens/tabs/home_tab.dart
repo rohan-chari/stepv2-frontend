@@ -39,7 +39,8 @@ import '../../widgets/team_scoreline.dart';
 import '../display_name_screen.dart';
 import '../discoverable_identity_flow.dart';
 import '../public_races_screen.dart';
-import '../get_coins_screen.dart';
+import 'shop_tab.dart';
+import '../../widgets/billing_scope.dart';
 import '../referral_screen.dart';
 import '../giveaway_screen.dart';
 
@@ -87,6 +88,7 @@ class HomeTab extends StatelessWidget {
   /// Jumps to the Friends tab — the SETUP board's "add your first friend" row.
   final VoidCallback? onOpenFriendsTab;
   final VoidCallback? onOpenShop;
+  final ValueChanged<Map<String, dynamic>>? onShopChanged;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
   final Map<String, dynamic>? raceCard;
@@ -163,6 +165,7 @@ class HomeTab extends StatelessWidget {
     this.onOpenNotifications,
     this.onOpenFriendsTab,
     this.onOpenShop,
+    this.onShopChanged,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
     this.raceCard,
@@ -1423,20 +1426,38 @@ class HomeTab extends StatelessWidget {
                             child: CoinBalanceBadge(
                               coins: authService.coins,
                               coinSize: 16,
-                              // "+" = earn more coins -> the Get Coins hub
-                              // (watch an ad, invite friends, daily box).
-                              onAddTap: () => Navigator.of(context)
-                                  .push(
-                                    MaterialPageRoute(
-                                      builder: (_) => GetCoinsScreen(
-                                        authService: authService,
-                                        backendApiService: backendApiService,
-                                        adController: getCoinsAdController,
-                                        rewardedCoinsController: rewards,
-                                      ),
-                                    ),
-                                  )
-                                  .then((_) => rewards?.refresh()),
+                              onAddTap: isTutorialPreview
+                                  ? null
+                                  : () {
+                                      final billing = BillingScope.read(
+                                        context,
+                                      );
+                                      Navigator.of(context)
+                                          .push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) {
+                                                final shop = ShopTab(
+                                                  authService: authService,
+                                                  backendApiService:
+                                                      backendApiService,
+                                                  initialFocus: ShopFocus.coins,
+                                                  onShopChanged: onShopChanged,
+                                                  rewardedCoinsController:
+                                                      rewards,
+                                                );
+                                                return billing == null
+                                                    ? BillingScope.disabled(
+                                                        child: shop,
+                                                      )
+                                                    : BillingScope(
+                                                        controller: billing,
+                                                        child: shop,
+                                                      );
+                                              },
+                                            ),
+                                          )
+                                          .then((_) => rewards?.refresh());
+                                    },
                             ),
                           ),
                         ),
