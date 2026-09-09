@@ -39,6 +39,37 @@ Three built-in-imagegen coin sacks installed with transparent alpha; visual whit
 
 ## Platform release verification
 
-Signed platform builds and TestFlight processing verification are in progress. This document is not a release-success claim until evidence is recorded below.
+Both signed platform artifacts verified. iOS build 5 is VALID / IN_BETA_TESTING and appears in the existing bara testers group.
 
 Manual UI-placement checklist: [approved plan](unified-shop-requirements.md#manual-ui-placement-test-plan). Also check suggested races immediately after granting health access and after an ordinary app reopen, without pulling to refresh.
+
+### Android candidate
+
+- Signed prod AAB built successfully: version 2.3.13, versionCode 203135, package `com.rohanchari.steptracker`.
+- Actual merged bundle manifest contains BILLING permission and Billing Client 8.3.0. JAR signature verified with no unsigned entries; upload certificate matches the trusted existing key.
+- All three compiled architectures contain the production backend URL. Bundled coin PNGs match source byte-for-byte.
+- SHA-256: `751e9f1ff3c2e68a057c88f7c8c91a7e23d80f42c189cc562795e42685b047dd`.
+- Saved under `build/release-candidates/2.3.13-5/`. Android billing retains its existing unavailable behavior where store configuration is absent. AAB verified locally; no Play upload was requested or performed.
+
+### iOS candidate
+
+- Signed App Store IPA built successfully: version 2.3.13, build 5, package `com.rohanchari.steptracker`, team `4NRKZL9H5J`.
+- Exported IPA signature verified with `codesign --verify --deep --strict`; production APNs, no debugger entitlement. Verified all 11 expected public production configuration values in the compiled executable and coin assets byte-for-byte inside the IPA.
+- SHA-256: `83832eb683f14a462d9264cf1a4cd08f119c9319531d5df82a7847716d75f4af`.
+- Saved under `build/release-candidates/2.3.13-5/`. Source commit `ec100d6` on `release/unified-shop-20260908`.
+- Build succeeded with existing migration notices for UIScene/plugin Swift Package Manager support and a launch-image placeholder warning. No dependency or launch-screen change was part of this release.
+
+### App Store Connect upload
+
+- Xcode account upload completed September 8, 2026 at 20:37:55 EDT: both `Upload succeeded` and `** EXPORT SUCCEEDED **` confirmed.
+- Non-blocking upload warnings: missing third-party dSYMs for AppLovinSDK and FBAudienceNetwork (same SDK warnings as the prior build). These limit symbolication inside those SDKs.
+- No App Review submission or customer release performed. TestFlight processing confirmed below.
+
+### TestFlight availability confirmed
+
+- Apple build ID: `f5d2ee36-0956-492e-b1b2-e1d2d6b502a8`.
+- Version **2.3.13 (5)**: processing `VALID`; internal state `IN_BETA_TESTING`.
+- Confirmed this exact build in internal group **bara testers** (`944d87b7-f952-438f-9703-173504ca4f1d`).
+- Recorded `usesNonExemptEncryption: false`, matching build 4; this frontend change introduces no cryptography.
+- Final state captured in `build/release-candidates/2.3.13-5/testflight-status.json`.
+- Manual checklist handed to the user through the approved requirements document; physical-device purchase/ad smoke checks remain for TestFlight testing.
