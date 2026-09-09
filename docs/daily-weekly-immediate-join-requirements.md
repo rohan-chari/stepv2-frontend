@@ -1,7 +1,8 @@
 # Immediate daily/weekly Join and earlier cohort preparation
 
 Status: IMPLEMENTED AND LOCALLY VALIDATED on 2026-09-09, following user approval
-and integration tests first. Production deployment is not authorized. The architect addendum
+and integration tests first. Backend deployed with user authorization on 2026-09-09;
+app release builds remain separate. The architect addendum
 below resolves the required preimplementation review corrections and supersedes
 conflicting draft mechanics.
 
@@ -963,7 +964,19 @@ around midnight, not a general CPU reduction. Preparation completed within the
 scheduled pre-23:50 budget. See backend `docs/seeded-immediate-join-readiness.md`
 and `docs/seeded-immediate-join-load-results.json` for evidence and limitations.
 
-Production remains untouched. Deploy the backend first using the documented
-worker/coordinator handoff; verify the additive contract before separately
-authorized iOS and Android builds. Native release builds and manual device QA
+Backend production deployment completed on 2026-09-09 at runtime commit
+`1bcf874`. The additive contract was verified in production; iOS and Android
+builds remain separately authorized work. Native release builds and manual device QA
 have not been performed. The manual UI-placement checklist is section 13 above.
+
+
+## 18. Production handoff clarification
+
+The deployed wrapper replaces HTTP, stops and proves the old cron owner exited,
+waits its delivery lease, stops and proves the old resolution owner exited, and
+starts new resolution before new cron. This supersedes earlier wording that
+left the old resolution process running through publication. Exactly two HTTP
+workers remain; staging stays stopped. All 25 wrapper/guard tests passed and
+an independent review cleared the handoff. All five migrations applied, and
+production checks confirmed the 23:30 daily and Sunday 23:15 ET schedules.
+Backend deployment audit: `docs/seeded-immediate-join-deployment-2026-09-09.md`.
