@@ -424,6 +424,7 @@ class BackendApiService {
 
   final HttpClient _httpClient;
   String? _cachedTimeZone;
+  Future<String?>? _timeZoneLookup;
   String? _cachedReleaseChannel;
   String? _cachedAppVersion;
 
@@ -563,18 +564,19 @@ class BackendApiService {
     return _cachedAppVersion!;
   }
 
-  Future<String> _getTimeZone() async {
-    _cachedTimeZone ??= await FlutterTimezone.getLocalTimezone();
-    return _cachedTimeZone!;
-  }
-
-  /// Returns the timezone that subsequent transport requests will send.
+  /// Reads the device timezone for each request, including the first request
+  /// after resume and changes while the app remains foregrounded. Concurrent
+  /// requests/advisory callers share only the in-flight native lookup; a saved
+  /// timezone is a fallback, never a reason to skip refreshing it.
   /// Refresh failures retain a previously usable value and otherwise return
   /// null so optional advisory caches can fail closed without leaking plugin
   /// errors into app flows.
-  Future<String?> getEffectiveTimeZone() async {
+  Future<String?> getEffectiveTimeZone() => _timeZoneLookup ??=
+      _refreshTimeZone().whenComplete(() => _timeZoneLookup = null);
+
+  Future<String?> _refreshTimeZone() async {
     try {
-      final current = await FlutterTimezone.getLocalTimezone();
+      final current = (await FlutterTimezone.getLocalTimezone()).trim();
       if (current.isEmpty) return _cachedTimeZone;
       _cachedTimeZone = current;
       return current;
@@ -6292,7 +6294,8 @@ class BackendApiService {
           'Bearer $identityToken',
         );
       }
-      request.headers.set('X-Timezone', await _getTimeZone());
+      final timeZone = await getEffectiveTimeZone();
+      if (timeZone != null) request.headers.set('X-Timezone', timeZone);
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
       _setPlatformHeader(request.headers);
@@ -6333,7 +6336,8 @@ class BackendApiService {
           'Bearer $identityToken',
         );
       }
-      request.headers.set('X-Timezone', await _getTimeZone());
+      final timeZone = await getEffectiveTimeZone();
+      if (timeZone != null) request.headers.set('X-Timezone', timeZone);
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
       _setPlatformHeader(request.headers);
