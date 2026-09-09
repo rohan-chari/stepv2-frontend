@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -144,7 +145,7 @@ Future<void> _pump(
 Future<void> _openInventoryCharacters(WidgetTester tester) async {
   await tester.tap(find.text('INVENTORY'));
   await tester.pump(const Duration(milliseconds: 300));
-  await tester.tap(find.text('CHARACTERS'));
+  await selectShopCategory(tester, 'CHARACTERS');
   await tester.pump(const Duration(milliseconds: 300));
 }
 
@@ -478,7 +479,7 @@ void main() {
       );
       await tester.tap(find.text('INVENTORY'));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('POWERUPS'));
+      await selectShopCategory(tester, 'POWERUPS');
       await tester.pump(const Duration(milliseconds: 300));
 
       final badge = find.byKey(const Key('shop-tile-badge'));
@@ -535,7 +536,7 @@ void main() {
         ),
         coins: 0,
       );
-      await tester.tap(find.text('ACCESSORIES'));
+      await selectShopCategory(tester, 'ACCESSORIES');
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('60'), findsOneWidget);
     });

@@ -5,16 +5,21 @@ import '../styles.dart';
 import 'billing_scope.dart';
 import 'pill_button.dart';
 import 'loading_skeleton.dart';
+import 'shop_product_grid.dart';
 
 /// Product quantities and localized prices always come from the shared store
 /// controller. Artwork identifies a tier; it never determines a grant.
 class CoinPackOffers extends StatefulWidget {
   final BillingController? controller;
   final bool onGreenSurface;
+  final Widget? leadingTile;
+  final bool showHeading;
   const CoinPackOffers({
     super.key,
     this.controller,
     this.onGreenSurface = false,
+    this.leadingTile,
+    this.showHeading = true,
   });
   @override
   State<CoinPackOffers> createState() => _CoinPackOffersState();
@@ -87,13 +92,10 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('COINS', style: PixelText.title(size: 25, color: headingColor)),
-        const SizedBox(height: 5),
-        Text(
-          'A little more for your next adventure.',
-          style: PixelText.body(size: 12, color: headingColor),
-        ),
-        const SizedBox(height: 16),
+        if (widget.showHeading) ...[
+          Text('COINS', style: PixelText.title(size: 25, color: headingColor)),
+          const SizedBox(height: 8),
+        ],
         if (loading) ...[
           Semantics(
             label: 'Loading store products',
@@ -124,14 +126,17 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
             ),
           const SizedBox(height: 12),
         ],
+        ShopProductGrid(
+          gridKey: const Key('shop-featured-grid'),
+          children: [
+            ?widget.leadingTile,
+            if (controller != null && controller.isAvailable)
+              for (final offer in offers) _tile(context, controller, offer),
+          ],
+        ),
         if (offers.isEmpty || controller?.isAvailable != true)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: colors.parchment,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: colors.parchmentBorder, width: 2),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 Text(
@@ -139,99 +144,18 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
                       ? 'Finding your coin packs…'
                       : 'Coin packs are currently unavailable.',
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 14, color: colors.textDark),
+                  style: PixelText.body(size: 13, color: headingColor),
                 ),
                 if (controller != null && !loading)
                   TextButton(
                     onPressed: state?.busy == true ? null : controller.refresh,
                     child: Text(
                       'Try again',
-                      style: PixelText.body(size: 13, color: colors.textDark),
+                      style: PixelText.body(size: 13, color: headingColor),
                     ),
                   ),
               ],
             ),
-          )
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns =
-                  constraints.maxWidth < 340 ||
-                      MediaQuery.textScalerOf(context).scale(14) > 19
-                  ? 1
-                  : 2;
-              final width =
-                  (constraints.maxWidth - (columns - 1) * 12) / columns;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 14,
-                children: [
-                  for (final offer in offers)
-                    SizedBox(
-                      width: width,
-                      child: Container(
-                        key: Key('coin-tile-${offer.id}'),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colors.parchment,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: colors.coinDark, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colors.roofDark.withValues(alpha: .55),
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              billingCoinLabel(offer.coins),
-                              textAlign: TextAlign.center,
-                              style: PixelText.title(
-                                size: 29,
-                                color: colors.textDark,
-                              ),
-                            ),
-                            Text(
-                              'COINS',
-                              textAlign: TextAlign.center,
-                              style: PixelText.body(
-                                size: 10,
-                                color: colors.textMid,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Image.asset(
-                              'assets/images/shop/coin_sack_${_art(offer)}.png',
-                              height: 120,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.none,
-                              excludeFromSemantics: true,
-                            ),
-                            const SizedBox(height: 8),
-                            PillButton(
-                              key: Key('buy-coins-${offer.id}'),
-                              label: offer.price,
-                              fontSize: 15,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 12,
-                              ),
-                              fullWidth: true,
-                              variant: PillButtonVariant.secondary,
-                              onPressed: _busy || state?.busy == true
-                                  ? null
-                                  : () => _buy(controller!, offer),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
           ),
         if (state?.message != null || _message != null)
           Padding(
@@ -258,6 +182,81 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _tile(
+    BuildContext context,
+    BillingController controller,
+    CoinPackOffer offer,
+  ) {
+    final colors = AppColors.of(context);
+    return Container(
+      key: Key('coin-tile-${offer.id}'),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.parchmentBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 25,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  billingCoinLabel(offer.coins),
+                  style: PixelText.title(size: 19, color: colors.textDark),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Image.asset(
+                'assets/images/shop/coin_sack_${_art(offer)}.png',
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.none,
+                excludeFromSemantics: true,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 16,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'COINS',
+                  style: PixelText.body(size: 9, color: colors.textMid),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 40,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: PillButton(
+                key: Key('buy-coins-${offer.id}'),
+                label: offer.price,
+                fontSize: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                fullWidth: true,
+                variant: PillButtonVariant.secondary,
+                onPressed: _busy || controller.snapshot.busy
+                    ? null
+                    : () => _buy(controller, offer),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

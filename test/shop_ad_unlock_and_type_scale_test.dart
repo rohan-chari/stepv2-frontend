@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -432,9 +433,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(ShopTab), findsOneWidget);
-      expect(find.text('COINS'), findsOneWidget);
+      expect(find.text('FEATURED'), findsOneWidget);
       expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
-      await tester.tap(find.text('ITEMS'));
+      await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();
       expect(find.text('DETAILS & BUY'), findsOneWidget);
       expect(find.text('Corgi Puppy'), findsWidgets);

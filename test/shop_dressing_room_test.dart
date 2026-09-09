@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -326,9 +327,11 @@ Future<void> _open(
   required String section,
   required String category,
 }) async {
+  await tester.ensureVisible(find.text(section).last);
+  await tester.pump();
   await tester.tap(find.text(section).last);
   await tester.pump(const Duration(milliseconds: 180));
-  await tester.tap(find.byKey(Key('shop-category-$category')));
+  await selectShopCategory(tester, category);
   await tester.pump(const Duration(milliseconds: 180));
 }
 

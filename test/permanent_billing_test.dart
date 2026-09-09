@@ -234,10 +234,7 @@ void main() {
         300,
       );
       expect(find.text('Bara+ permanently owned'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('manage-bara')),
-        300,
-      );
+      await tester.ensureVisible(find.byKey(const Key('manage-bara')));
       expect(find.byKey(const Key('manage-bara')), findsOneWidget);
       expect(find.byKey(const Key('subscribe-bara')), findsNothing);
       billing.setScenario(
@@ -338,10 +335,7 @@ void main() {
           home: BaraPlusScreen(controller: billing),
         ),
       );
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('manage-bara')),
-        300,
-      );
+      await tester.ensureVisible(find.byKey(const Key('manage-bara')));
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('manage-bara')), findsOneWidget);
     },
@@ -424,13 +418,10 @@ void main() {
           ),
         ),
       );
-      expect(find.byKey(const Key('bara-plus-card')), findsOneWidget);
+      expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('manage-bara')),
-        300,
-      );
+      await tester.ensureVisible(find.byKey(const Key('manage-bara')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.byKey(const Key('manage-bara')));

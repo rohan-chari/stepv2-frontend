@@ -1,7 +1,7 @@
 import '../../services/billing_controller.dart';
 import '../../models/billing.dart';
 import '../../widgets/billing_scope.dart';
-import '../../widgets/bara_plus_card.dart';
+import '../../widgets/shop_product_grid.dart';
 import '../../widgets/coin_pack_offers.dart';
 import '../bara_plus_screen.dart';
 import 'dart:async';
@@ -94,7 +94,7 @@ enum _AffordRoute { affordable, watchAds, getCoins }
 
 enum _ShopSection { store, inventory }
 
-enum _ShopCategory { powerups, characters, accessories }
+enum _ShopCategory { featured, powerups, characters, accessories }
 
 const _knownEquipmentSlots = <String>{
   'HEAD',
@@ -109,12 +109,14 @@ const _defaultCharacterSelectionId = '__default_capybara__';
 
 extension on _ShopCategory {
   String get label => switch (this) {
+    _ShopCategory.featured => 'FEATURED',
     _ShopCategory.powerups => 'POWERUPS',
     _ShopCategory.characters => 'CHARACTERS',
     _ShopCategory.accessories => 'ACCESSORIES',
   };
 
   IconData get icon => switch (this) {
+    _ShopCategory.featured => Icons.auto_awesome,
     _ShopCategory.powerups => Icons.bolt_rounded,
     _ShopCategory.characters => Icons.pets_rounded,
     _ShopCategory.accessories => Icons.checkroom_rounded,
@@ -215,9 +217,11 @@ class ShopTab extends StatefulWidget {
 class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   final _storeScrollController = ScrollController();
   final _coinsKey = GlobalKey();
-  final _membershipKey = GlobalKey();
-  bool _showItems = false;
-  bool _membershipExpanded = false;
+  bool _membershipOpen = false;
+  BuildContext? _membershipSheetContext;
+  String? _membershipUserId;
+  _ShopCategory _lastItemCategory = _ShopCategory.powerups;
+  bool _storeFeatured = true;
   bool _deferTutorial = false;
 
   static const _textShadows = [
@@ -282,6 +286,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     super.didChangeDependencies();
     final billing = BillingScope.maybeOf(context);
     if (identical(billing, _billing)) return;
+    if (_membershipOpen) _closeMembershipForIdentityChange();
     _billing?.removeListener(_billingChanged);
     _billing = billing;
     _billingDiscount = billing?.snapshot.effectiveDiscountPercent ?? 0;
@@ -289,6 +294,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   void _billingChanged() {
+    if (_membershipOpen && _billing?.userId != _membershipUserId) {
+      _closeMembershipForIdentityChange();
+    }
     final discount = _billing?.snapshot.effectiveDiscountPercent ?? 0;
     if (discount == _billingDiscount) return;
     _billingDiscount = discount;
@@ -336,10 +344,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     _deferTutorial =
         widget.initialFocus == ShopFocus.coins ||
         widget.initialFocus == ShopFocus.membership;
-    _showItems =
-        widget.initialFocus == ShopFocus.items ||
-        (!_deferTutorial && _shouldShowTutorial);
-    _membershipExpanded = widget.initialFocus == ShopFocus.membership;
+    _storeFeatured =
+        widget.initialFocus != ShopFocus.items &&
+        (_deferTutorial || !_shouldShowTutorial);
+    _category = _storeFeatured
+        ? _ShopCategory.featured
+        : _ShopCategory.powerups;
     _loadCatalog();
     _maybeScheduleTutorial();
     if (_deferTutorial) _focusFeatured(widget.initialFocus, rebuild: false);
@@ -383,6 +393,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       return;
     }
 
+    if (nextUserId != _shopSessionUserId) _closeMembershipForIdentityChange();
     _shopSessionUserId = nextUserId;
     _shopSessionToken = nextToken;
     _shopSessionGeneration++;
@@ -434,7 +445,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         (widget.authService.hasShopTutorialServerState &&
             widget.authService.shopTutorialCompletedAt == null);
     if (!shouldShow) return;
-    if (!_showItems) setState(() => _showItems = true);
+    if (_category == _ShopCategory.featured) {
+      setState(() {
+        _category = _lastItemCategory;
+        _storeFeatured = false;
+      });
+    }
     _tutorialDecisionScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_launchTutorialWhenReady());
@@ -1570,10 +1586,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                         controller: _storeScrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
-                          if (_showItems)
-                            SliverToBoxAdapter(child: _buildItemsHeader()),
+                          SliverToBoxAdapter(child: _buildItemsHeader()),
                           SliverToBoxAdapter(
-                            child: _showItems ? _buildBody() : _buildFeatured(),
+                            child: _activeCategory == _ShopCategory.featured
+                                ? _buildFeatured()
+                                : _buildBody(),
                           ),
                         ],
                       ),
@@ -1710,8 +1727,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              _buildStorefrontSelector(),
             ],
           ),
         ),
@@ -1752,8 +1767,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             _disposeShopAdTarget();
             setState(() {
               _section = section;
+              _category = section == _ShopSection.store && _storeFeatured
+                  ? _ShopCategory.featured
+                  : _lastItemCategory;
               _selectedCosmeticItem = null;
+              if (section == _ShopSection.inventory) _deferTutorial = false;
             });
+            _maybeScheduleTutorial();
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9),
@@ -1799,6 +1819,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// powerup endpoints are missing (older backend) — the same condition that
   /// hides the powerup section today, so those users never see a dead pill.
   List<_ShopCategory> get _visibleCategories => [
+    if (_section == _ShopSection.store) _ShopCategory.featured,
     if (_powerupsAvailable || !_powerupsAvailabilityResolved)
       _ShopCategory.powerups,
     _ShopCategory.characters,
@@ -1809,21 +1830,56 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// powerups vanish after a refresh while POWERUPS is selected.
   _ShopCategory get _activeCategory {
     final visible = _visibleCategories;
-    return visible.contains(_category) ? _category : visible.first;
+    return visible.contains(_category)
+        ? _category
+        : visible.firstWhere(
+            (category) => category != _ShopCategory.featured,
+            orElse: () => _ShopCategory.featured,
+          );
   }
 
   Widget _buildCategoryPills() {
     final visible = _visibleCategories;
     final active = _activeCategory;
-
-    return Row(
-      key: const Key('shop-category-pills'),
-      children: [
-        for (var i = 0; i < visible.length; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          Expanded(child: _categoryPill(visible[i], visible[i] == active)),
-        ],
-      ],
+    final showIcons = _section == _ShopSection.inventory;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var minWidth = 76.0;
+        for (final category in visible) {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: category.label,
+              style: PixelText.title(
+                size: 10.5,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout();
+          minWidth = math.max(minWidth, painter.width + (showIcons ? 32 : 12));
+          painter.dispose();
+        }
+        final width = math.max(
+          minWidth,
+          (constraints.maxWidth - (visible.length - 1) * 6) / visible.length,
+        );
+        return SingleChildScrollView(
+          key: const Key('shop-category-pills'),
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < visible.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                SizedBox(
+                  width: width,
+                  child: _categoryPill(visible[i], visible[i] == active),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1840,9 +1896,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           if (_activeCategory == category) return;
           _disposeShopAdTarget();
           setState(() {
+            if (category != _ShopCategory.featured) {
+              if (_lastItemCategory != category) _selectedCosmeticItem = null;
+              _lastItemCategory = category;
+              _deferTutorial = false;
+            }
             _category = category;
-            _selectedCosmeticItem = null;
+            if (_section == _ShopSection.store) {
+              _storeFeatured = category == _ShopCategory.featured;
+            }
           });
+          if (category != _ShopCategory.featured) _maybeScheduleTutorial();
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
@@ -1866,14 +1930,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                category.icon,
-                size: 15,
-                color: selected
-                    ? AppColors.of(context).coinDark
-                    : AppColors.of(context).textLight.withValues(alpha: 0.82),
-              ),
-              const SizedBox(width: 5),
+              if (_section == _ShopSection.inventory) ...[
+                Icon(
+                  category.icon,
+                  size: 15,
+                  color: selected
+                      ? AppColors.of(context).coinDark
+                      : AppColors.of(context).textLight.withValues(alpha: 0.82),
+                ),
+                const SizedBox(width: 5),
+              ],
               Flexible(
                 child: Text(
                   category.label,
@@ -1950,7 +2016,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   Widget _buildCharacterPreview() {
-    if (_activeCategory == _ShopCategory.powerups) {
+    if (_activeCategory == _ShopCategory.powerups ||
+        _activeCategory == _ShopCategory.featured) {
       return _buildCompactCharacterPreview();
     }
     return _buildDressingRoomStage();
@@ -2347,30 +2414,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   /// An art-led grid of item tiles for the active category. The category
   /// name lives in the pill row now, so the grid carries no header of its own.
-  Widget _buildSectionGroup(List<Widget> tiles, {required int staggerIndex}) {
-    return StaggerIn(
-      index: staggerIndex,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 600;
-          final tileAspectRatio = !wide && constraints.maxWidth < 350
-              ? 0.70
-              : 0.82;
-          return GridView.count(
-            key: const Key('shop-product-grid'),
-            crossAxisCount: wide ? 4 : 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 12,
-            childAspectRatio: tileAspectRatio,
-            children: tiles,
-          );
-        },
-      ),
-    );
-  }
+  Widget _buildSectionGroup(List<Widget> tiles, {required int staggerIndex}) =>
+      StaggerIn(
+        index: staggerIndex,
+        child: ShopProductGrid(
+          gridKey: const Key('shop-product-grid'),
+          children: tiles,
+        ),
+      );
 
   /// Full-detail bottom sheet for a tile: big art, the COMPLETE description
   /// (tiles are too small for it), and the primary action.
@@ -3048,10 +3099,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   void _focusFeatured(ShopFocus focus, {bool rebuild = true}) {
     void update() {
-      _showItems = false;
+      if (_category != _ShopCategory.featured) _lastItemCategory = _category;
+      _section = _ShopSection.store;
+      _category = _ShopCategory.featured;
+      _storeFeatured = true;
       _tutorialStep = null;
       _tutorialTarget = null;
-      _membershipExpanded = focus == ShopFocus.membership;
     }
 
     if (rebuild) {
@@ -3061,80 +3114,112 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final target =
-          (focus == ShopFocus.membership ? _membershipKey : _coinsKey)
-              .currentContext;
-      if (target != null) {
-        unawaited(
-          Scrollable.ensureVisible(
-            target,
-            alignment: 0,
-            duration: const Duration(milliseconds: 240),
-          ),
-        );
+      if (focus == ShopFocus.membership) {
+        _openMembershipDetails();
+      } else {
+        final target = _coinsKey.currentContext;
+        if (target != null) {
+          unawaited(
+            Scrollable.ensureVisible(
+              target,
+              alignment: 0,
+              duration: const Duration(milliseconds: 240),
+            ),
+          );
+        }
       }
     });
   }
 
-  Widget _buildStorefrontSelector() {
-    final colors = AppColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: colors.roofDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.coinDark, width: 2),
-      ),
-      child: Row(
-        children: [
-          for (final items in [false, true])
-            Expanded(
-              child: Semantics(
-                selected: _showItems == items,
-                child: Material(
-                  color: _showItems == items
-                      ? colors.parchment
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      setState(() {
-                        _showItems = items;
-                        if (items) {
-                          _deferTutorial = false;
-                        }
-                      });
-                      if (_storeScrollController.hasClients) {
-                        _storeScrollController.jumpTo(0);
-                      }
-                      if (items) {
-                        _maybeScheduleTutorial();
-                      }
-                    },
+  Future<void> _openMembershipDetails() async {
+    if (_membershipOpen) return;
+    final billing = BillingScope.read(context);
+    _membershipOpen = true;
+    _membershipUserId = billing?.userId;
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: AppColors.of(context).parchmentLight,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .90,
+        ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (sheetContext) {
+          _membershipSheetContext = sheetContext;
+          Widget body() => Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          items ? 'ITEMS' : 'FEATURED',
-                          textAlign: TextAlign.center,
-                          style: PixelText.title(
-                            size: 16,
-                            color: _showItems == items
-                                ? colors.textDark
-                                : colors.textLight,
-                          ),
+                      padding: const EdgeInsets.only(left: 20),
+                      child: Text(
+                        'Bara+',
+                        style: PixelText.title(
+                          size: 24,
+                          color: AppColors.of(sheetContext).textDark,
                         ),
                       ),
                     ),
                   ),
+                  IconButton(
+                    key: const Key('shop-membership-close'),
+                    tooltip: 'Close membership',
+                    onPressed: () => Navigator.pop(sheetContext),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              if (billing != null &&
+                  billing.plans.isEmpty &&
+                  !billing.snapshot.isMember)
+                TextButton(
+                  key: const Key('shop-membership-retry'),
+                  onPressed: billing.snapshot.busy ? null : billing.refresh,
+                  child: const Text('Retry store connection'),
+                ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: BaraPlusBody(
+                    key: ValueKey('membership-${billing?.userId}'),
+                    controller: billing,
+                  ),
                 ),
               ),
-            ),
-        ],
-      ),
-    );
+            ],
+          );
+          return billing == null
+              ? BillingScope.disabled(child: body())
+              : BillingScope(
+                  controller: billing,
+                  child: ListenableBuilder(
+                    listenable: billing,
+                    builder: (context, _) => body(),
+                  ),
+                );
+        },
+      );
+    } finally {
+      _membershipOpen = false;
+      _membershipSheetContext = null;
+      _membershipUserId = null;
+    }
+  }
+
+  void _closeMembershipForIdentityChange() {
+    final sheet = _membershipSheetContext;
+    if (sheet == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !sheet.mounted) return;
+      final sheetRoute = ModalRoute.of(sheet);
+      if (sheetRoute == null || !sheetRoute.isActive) return;
+      final navigator = Navigator.of(sheet);
+      navigator.removeRoute(sheetRoute);
+    });
   }
 
   Widget _buildFeatured() {
@@ -3145,104 +3230,125 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         (billing.plans.isNotEmpty ||
             billing.snapshot.status != BillingStatus.free ||
             billing.canManageSubscription);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            key: _membershipKey,
-            decoration: BoxDecoration(
-              color: colors.roofMid,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: colors.coinDark, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.roofDark.withValues(alpha: .5),
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (membershipAvailable)
-                  BaraPlusCard(
-                    key: const Key('billing-shop-membership'),
-                    onTap: () => setState(
-                      () => _membershipExpanded = !_membershipExpanded,
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.all(18),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          key: _coinsKey,
+          child: CoinPackOffers(
+            key: ValueKey('coins-${billing?.userId}'),
+            onGreenSurface: true,
+            showHeading: false,
+            leadingTile: KeyedSubtree(
+              key: const Key('billing-shop-membership'),
+              child: Semantics(
+                button: true,
+                label: 'Bara+ membership details',
+                child: Material(
+                  key: const Key('shop-membership-toggle'),
+                  color: colors.parchment,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: _openMembershipDetails,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'Bara+',
-                          style: PixelText.title(
-                            size: 29,
-                            color: colors.textLight,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Membership is currently unavailable.',
-                          style: PixelText.body(
-                            size: 13,
-                            color: colors.textLight,
-                          ),
-                        ),
-                        if (billing != null)
-                          TextButton(
-                            onPressed: billing.snapshot.busy
-                                ? null
-                                : billing.refresh,
-                            child: Text(
-                              'Try again',
-                              style: PixelText.body(
-                                size: 13,
-                                color: colors.textLight,
+                        SizedBox(
+                          height: 25,
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Bara+',
+                                style: PixelText.title(
+                                  size: 19,
+                                  color: colors.textDark,
+                                ),
                               ),
                             ),
                           ),
+                        ),
+                        Expanded(
+                          child: Icon(
+                            Icons.auto_awesome,
+                            color: colors.coinDark,
+                            size: 34,
+                          ),
+                        ),
+                        SizedBox(
+                          height: 16,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  billing?.snapshot.isPermanent == true
+                                      ? 'PERMANENT'
+                                      : billing?.snapshot.isMember == true
+                                      ? 'MEMBER'
+                                      : 'MEMBERSHIP',
+                                  style: PixelText.body(
+                                    size: 9,
+                                    color: colors.textMid,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          height: 40,
+                          alignment: Alignment.center,
+                          color: colors.pillGold.withValues(alpha: .25),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'DETAILS',
+                                style: PixelText.title(
+                                  size: 12,
+                                  color: colors.textDark,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                if (membershipAvailable)
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (!membershipAvailable)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  'Membership is currently unavailable.',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 13, color: colors.textLight),
+                ),
+                if (billing != null)
                   TextButton(
-                    key: const Key('shop-membership-toggle'),
-                    onPressed: () => setState(
-                      () => _membershipExpanded = !_membershipExpanded,
-                    ),
+                    onPressed: billing.snapshot.busy ? null : billing.refresh,
                     child: Text(
-                      _membershipExpanded
-                          ? 'HIDE MEMBERSHIP DETAILS'
-                          : billing.snapshot.isMember
-                          ? 'VIEW MEMBERSHIP'
-                          : 'EXPLORE BARA+',
-                      style: PixelText.title(size: 13, color: colors.textLight),
+                      'Try again',
+                      style: PixelText.body(size: 13, color: colors.textLight),
                     ),
-                  ),
-                if (_membershipExpanded && membershipAvailable)
-                  BaraPlusBody(
-                    key: ValueKey('membership-${billing.userId}'),
-                    controller: billing,
                   ),
               ],
             ),
           ),
-          const SizedBox(height: 28),
-          Container(
-            key: _coinsKey,
-            child: CoinPackOffers(
-              key: ValueKey('coins-${billing?.userId}'),
-              onGreenSurface: true,
-            ),
-          ),
-        ],
-      ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
@@ -3835,6 +3941,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final unowned = items.where((i) => !_isCosmeticOwned(i)).toList();
 
     return switch (_activeCategory) {
+      _ShopCategory.featured => [_buildFeatured()],
       _ShopCategory.powerups => _buildCategoryBody(
         [
           for (final item in _visiblePowerupStoreItems())
@@ -3869,6 +3976,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final owned = items.where(_isCosmeticOwned).toList();
 
     return switch (_activeCategory) {
+      _ShopCategory.featured => [_buildFeatured()],
       _ShopCategory.powerups => _buildCategoryBody(
         [
           for (final entry

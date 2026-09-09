@@ -1,5 +1,6 @@
 # Unified Bara shop
 
+> Navigation revision for build 6: the user replaced the separate Featured/Items selector with Featured in the existing Store category row. See [the approved revision](shop-featured-category-revision.md); this document records the original build 5 design.
 Status: approved by user; architect required changes incorporated; implementation and TestFlight upload authorized.
 
 ## Summary and user story

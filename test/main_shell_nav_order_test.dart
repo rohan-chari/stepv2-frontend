@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -1551,7 +1552,7 @@ void main() {
         }
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        await tester.tap(find.text('ITEMS'));
+        await selectShopCategory(tester, 'POWERUPS');
         await tester.pump();
         await tester.tap(find.text('INVENTORY'));
         await tester.pump();

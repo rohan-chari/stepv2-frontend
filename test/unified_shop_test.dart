@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:step_tracker/models/billing.dart';
 import 'package:step_tracker/screens/tabs/profile_tab.dart';
@@ -146,8 +147,8 @@ void main() {
     expect(find.text('FEATURED'), findsOneWidget);
     expect(find.byType(CoinPackOffers), findsOneWidget);
     expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
-    expect(find.text('INVENTORY'), findsNothing);
-    await tester.tap(find.text('ITEMS'));
+    expect(find.text('INVENTORY'), findsOneWidget);
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
     expect(find.text('INVENTORY'), findsOneWidget);
     expect(find.byType(CoinPackOffers), findsNothing);
@@ -186,7 +187,7 @@ void main() {
           find.byType(BaraPlusBody),
           focus == ShopFocus.membership ? findsOneWidget : findsNothing,
         );
-        await tester.tap(find.text('ITEMS'));
+        await selectShopCategory(tester, 'POWERUPS');
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump();
@@ -207,7 +208,7 @@ void main() {
     await pumpShop(tester);
     expect(find.text('Coin packs are currently unavailable.'), findsOneWidget);
     expect(find.byKey(const Key('buy-coins-coins_500')), findsNothing);
-    await tester.tap(find.text('ITEMS'));
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
     expect(find.text('INVENTORY'), findsOneWidget);
   });
@@ -393,17 +394,17 @@ void main() {
             focus: ShopFocus.membership,
           );
           expect(tester.takeException(), isNull);
-          await tester.scrollUntilVisible(
+          await closeShopMembership(tester);
+          await tester.ensureVisible(
             find.byKey(const Key('buy-coins-coins_6000')),
-            300,
-            maxScrolls: 40,
           );
+          await tester.pump();
           expect(tester.takeException(), isNull);
           expect(
             tester.getSize(find.byKey(const Key('coin-tile-coins_500'))).width,
             tester.getSize(find.byKey(const Key('coin-tile-coins_6000'))).width,
           );
-          await tester.tap(find.text('ITEMS'));
+          await selectShopCategory(tester, 'POWERUPS');
           await tester.pump();
           expect(tester.takeException(), isNull);
         },

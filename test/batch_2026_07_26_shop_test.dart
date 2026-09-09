@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -357,7 +358,7 @@ void main() {
 
       final preview = find.byKey(const Key('shop-character-preview'));
       expect(preview, findsOneWidget);
-      await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+      await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();
       await tester.scrollUntilVisible(
         find.text('Corgi Puppy'),
@@ -516,7 +517,7 @@ void main() {
     Future<void> openCharacterInventory(WidgetTester tester) async {
       await tester.tap(find.text('INVENTORY'));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('CHARACTERS'));
+      await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump(const Duration(milliseconds: 300));
     }
 
@@ -618,7 +619,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+      await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();
 
       final band = tester.widget<Container>(

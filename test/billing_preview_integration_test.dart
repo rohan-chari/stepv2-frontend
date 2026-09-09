@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,7 +50,7 @@ void main() {
     addTearDown(controller.dispose);
     await launch(tester, controller);
     expect(find.byKey(const Key('billing-shop-membership')), findsOneWidget);
-    await tester.tap(find.text('ITEMS'));
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
     await tester.tap(find.text('Ghost Pepper').first);
     await tester.pump();
@@ -91,7 +92,7 @@ void main() {
       controller.setScenario(PreviewBillingScenario.monthly);
       addTearDown(controller.dispose);
       await launch(tester, controller);
-      await tester.tap(find.text('ITEMS'));
+      await selectShopCategory(tester, 'POWERUPS');
       await tester.pump();
       await tester.tap(find.text('Ghost Pepper').first);
       await tester.pump();
