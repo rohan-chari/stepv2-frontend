@@ -77,9 +77,61 @@ abstract final class TeamRace {
   static bool isTeamRace(Map<String, dynamic> race) =>
       race['isTeamRace'] == true;
 
-  /// Configured per-side cap (1–5), or null if absent/individual.
-  static int? teamSize(Map<String, dynamic> race) =>
-      (race['teamSize'] as num?)?.toInt();
+  static const int maxTeamSize = 10;
+
+  /// Configured per-side cap, or null for absent/malformed server data.
+  static int? teamSize(Map<String, dynamic> race) {
+    final value = race['teamSize'];
+    if (value is! num ||
+        !value.isFinite ||
+        value != value.roundToDouble() ||
+        value < 1 ||
+        value > maxTeamSize) {
+      return null;
+    }
+    return value.toInt();
+  }
+
+  /// Accepted membership truth is independent of the invitation/history page.
+  /// Older small-team responses remain usable when paging proves completeness.
+  static List<Map<String, dynamic>>? acceptedRoster(Map<String, dynamic> race) {
+    final marked = race['teamRosterComplete'] == true;
+    final raw = marked
+        ? race['teamAcceptedParticipants']
+        : race['participants'];
+    if (raw is! List || raw.any((row) => row is! Map<String, dynamic>)) {
+      return null;
+    }
+    final rows = raw.cast<Map<String, dynamic>>();
+    final accepted = rows.where((p) => p['status'] == 'ACCEPTED').toList();
+    if (accepted.length > maxTeamSize * 2) return null;
+    final ids = accepted.map((p) => p['userId']).toSet();
+    if (ids.length != accepted.length ||
+        ids.any((id) => id is! String || id.isEmpty)) {
+      return null;
+    }
+    if (accepted.any((p) => participantTeam(p) == null)) return null;
+    final count = race['acceptedCount'];
+    if (count is num && count != accepted.length) return null;
+    if (marked) return accepted.length == rows.length ? accepted : null;
+    if ((teamSize(race) ?? 0) > 5 || race['participantsHasMore'] == true) {
+      return null;
+    }
+    // Older small-team endpoints can attach paging metadata even when the
+    // first page contains the entire roster. Require every supplied paging
+    // envelope to prove that no preceding or following rows were omitted.
+    for (final key in ['participantsPagination', 'pagination']) {
+      final page = race[key];
+      if (page == null) continue;
+      if (page is! Map ||
+          page['offset'] != 0 ||
+          page['hasMore'] != false ||
+          page['total'] != rows.length) {
+        return null;
+      }
+    }
+    return accepted;
+  }
 
   /// The recorded winner side, or null (individual race, tie, or not settled).
   static RaceTeam? winnerTeam(Map<String, dynamic> race) =>

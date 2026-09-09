@@ -11,35 +11,35 @@ import 'package:step_tracker/widgets/team_lobby_board.dart';
 // the join/switch affordance. A side at cap shows no empty slots (TR-202).
 
 Map<String, dynamic> _race({int teamSize = 2}) => {
-      'isTeamRace': true,
-      'teamSize': teamSize,
-      'teamAName': 'Swift Capys',
-      'teamBName': 'Turbo Beavers',
-    };
+  'isTeamRace': true,
+  'teamSize': teamSize,
+  'teamAName': 'Swift Capys',
+  'teamBName': 'Turbo Beavers',
+};
 
 List<Map<String, dynamic>> _members() => [
-      {
-        'userId': 'u1',
-        'displayName': 'Trail Walker',
-        'status': 'ACCEPTED',
-        'team': 'TEAM_A',
-        'accessories': const [],
-      },
-      {
-        'userId': 'u2',
-        'displayName': 'Hill Climber',
-        'status': 'ACCEPTED',
-        'team': 'TEAM_B',
-        'accessories': const [],
-      },
-      // INVITED rows haven't picked a side and must not occupy slots (TR-303).
-      {
-        'userId': 'u3',
-        'displayName': 'Fence Sitter',
-        'status': 'INVITED',
-        'team': null,
-      },
-    ];
+  {
+    'userId': 'u1',
+    'displayName': 'Trail Walker',
+    'status': 'ACCEPTED',
+    'team': 'TEAM_A',
+    'accessories': const [],
+  },
+  {
+    'userId': 'u2',
+    'displayName': 'Hill Climber',
+    'status': 'ACCEPTED',
+    'team': 'TEAM_B',
+    'accessories': const [],
+  },
+  // INVITED rows haven't picked a side and must not occupy slots (TR-303).
+  {
+    'userId': 'u3',
+    'displayName': 'Fence Sitter',
+    'status': 'INVITED',
+    'team': null,
+  },
+];
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -70,8 +70,198 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('TR-802: two plaques, VS medallion, teamSize slots per side',
-      (tester) async {
+  testWidgets(
+    '10v10 keeps five rows visible and independently scrolls both sides',
+    (tester) async {
+      final participants = <Map<String, dynamic>>[
+        for (final side in ['A', 'B'])
+          for (var i = 0; i < 10; i++)
+            {
+              'userId': '$side$i',
+              'displayName': '$side racer $i',
+              'status': 'ACCEPTED',
+              'team': 'TEAM_$side',
+            },
+      ];
+      await _pump(
+        tester,
+        race: _race(teamSize: 10),
+        participants: participants,
+        myUserId: 'A9',
+      );
+      final left = find.byKey(const Key('lobby-scroll-A'));
+      final right = find.byKey(const Key('lobby-scroll-B'));
+      expect(tester.getSize(left).height, 360);
+      expect(
+        find.byKey(const Key('lobby-slot-A-4')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('lobby-slot-A-5')).hitTestable(),
+        findsNothing,
+      );
+      await tester.drag(left, const Offset(0, -450));
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.byKey(const Key('lobby-slot-A-9')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.text('YOU').hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const Key('lobby-slot-B-0')).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.drag(right, const Offset(0, -450));
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.byKey(const Key('lobby-slot-B-9')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.text('10/10'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '10v10 skips offscreen hops and preserves each scroll offset on refresh',
+    (tester) async {
+      final members = <Map<String, dynamic>>[
+        for (var i = 0; i < 10; i++)
+          {
+            'userId': 'A$i',
+            'displayName': 'A$i',
+            'status': 'ACCEPTED',
+            'team': 'TEAM_A',
+          },
+        for (var i = 0; i < 9; i++)
+          {
+            'userId': 'B$i',
+            'displayName': 'B$i',
+            'status': 'ACCEPTED',
+            'team': 'TEAM_B',
+          },
+      ];
+      await _pump(
+        tester,
+        race: _race(teamSize: 10),
+        participants: members,
+        myUserId: 'A9',
+      );
+      final moved = [
+        for (final member in members)
+          {...member, if (member['userId'] == 'A9') 'team': 'TEAM_B'},
+      ];
+      await _pump(
+        tester,
+        race: _race(teamSize: 10),
+        participants: moved,
+        myUserId: 'A9',
+      );
+      expect(find.byKey(const Key('lobby-hop-overlay')), findsNothing);
+      final right = find.byKey(const Key('lobby-scroll-B'));
+      await tester.drag(right, const Offset(0, -450));
+      await tester.pump(const Duration(seconds: 1));
+      final scroll = tester.widget<SingleChildScrollView>(right).controller;
+      final offset = scroll!.offset;
+      await _pump(
+        tester,
+        race: _race(teamSize: 10),
+        participants: moved,
+        myUserId: 'A9',
+      );
+      expect(
+        tester.widget<SingleChildScrollView>(right).controller!.offset,
+        offset,
+      );
+      expect(
+        find.byKey(const Key('lobby-slot-B-9')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('lobby-slot-A-0')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'visible hop uses unequal scroll offsets and resize10 to5 detaches safely',
+    (tester) async {
+      final members = <Map<String, dynamic>>[
+        for (var i = 0; i < 10; i++)
+          {
+            'userId': 'A$i',
+            'displayName': 'A$i',
+            'status': 'ACCEPTED',
+            'team': 'TEAM_A',
+          },
+        for (var i = 0; i < 9; i++)
+          {
+            'userId': 'B$i',
+            'displayName': 'B$i',
+            'status': 'ACCEPTED',
+            'team': 'TEAM_B',
+          },
+      ];
+      await _pump(
+        tester,
+        race: _race(teamSize: 10),
+        participants: members,
+        myUserId: 'A9',
+      );
+      final left = find.byKey(const Key('lobby-scroll-A'));
+      await tester.drag(left, const Offset(0, -450));
+      await tester.pump(const Duration(seconds: 1));
+      final leftOffset = tester
+          .widget<SingleChildScrollView>(left)
+          .controller!
+          .offset;
+      expect(leftOffset, greaterThan(0));
+      final moved = [
+        for (final member in members)
+          {...member, if (member['userId'] == 'A9') 'team': 'TEAM_B'},
+      ];
+      await _pump(
+        tester,
+        race: _race(teamSize: 10),
+        participants: moved,
+        myUserId: 'A9',
+      );
+      final overlay = find.byKey(const Key('lobby-hop-overlay'));
+      expect(overlay, findsOneWidget);
+      final positioned = tester.widget<Positioned>(
+        find.descendant(of: overlay, matching: find.byType(Positioned)).first,
+      );
+      expect(positioned.top, closeTo(9 * 74 + 32 - leftOffset - 23, 0.01));
+      await tester.pump(const Duration(milliseconds: 700));
+      final small = [
+        ...moved.where((row) => row['team'] == 'TEAM_A').take(5),
+        ...moved.where((row) => row['team'] == 'TEAM_B').take(5),
+      ];
+      await _pump(
+        tester,
+        race: _race(teamSize: 5),
+        participants: small,
+        myUserId: 'A9',
+      );
+      expect(find.byKey(const Key('lobby-scroll-A')), findsNothing);
+      expect(find.byKey(const Key('lobby-scroll-B')), findsNothing);
+      expect(
+        find.byKey(const Key('lobby-slot-A-0')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('lobby-slot-A-4')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('TR-802: two plaques, VS medallion, teamSize slots per side', (
+    tester,
+  ) async {
     await _pump(tester);
 
     expect(find.text('SWIFT CAPYS'), findsOneWidget);
@@ -143,8 +333,7 @@ void main() {
     );
   });
 
-  testWidgets(
-      'TR-810: 5v5 on a narrow screen keeps the two-column face-off '
+  testWidgets('TR-810: 5v5 on a narrow screen keeps the two-column face-off '
       'without overflow', (tester) async {
     await _pump(
       tester,
@@ -179,8 +368,9 @@ void main() {
     expect(find.byKey(const Key('lobby-empty-B-4')), findsOneWidget);
   });
 
-  testWidgets('TR-802: switching sides plays the hop animation overlay',
-      (tester) async {
+  testWidgets('TR-802: switching sides plays the hop animation overlay', (
+    tester,
+  ) async {
     final participants = _members();
     await _pump(tester, participants: participants, myUserId: 'u1');
 

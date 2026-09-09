@@ -231,9 +231,16 @@ class DemoRaceApiService extends BackendApiService {
     int offset = 0,
     int limit = 10,
   }) async {
+    final progress = engine.raceProgress(_now);
+    if (engine.raceDetails(_now)['isTeamRace'] == true) {
+      return RaceProgressResult(
+        progress: progress,
+        globalPowerupInventory: const {'items': []},
+        hasCompactInventory: true,
+      );
+    }
     final full =
-        (engine.raceProgress(_now)['participants'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
+        (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];
     final start = offset < 0 ? 0 : offset;
     final take = limit <= 0 ? 10 : (limit > 50 ? 50 : limit);

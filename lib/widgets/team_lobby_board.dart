@@ -113,6 +113,28 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   // its landing slot (cross-fade handoff — no single-frame pop).
   static const double _landFadeStart = 0.80;
 
+  final _scrollA = ScrollController();
+  final _scrollB = ScrollController();
+  ScrollController _scrollFor(RaceTeam team) =>
+      team == RaceTeam.teamA ? _scrollA : _scrollB;
+  double _offset(RaceTeam team) =>
+      _scrollFor(team).hasClients ? _scrollFor(team).offset : 0;
+  bool _slotVisible(({RaceTeam team, int index}) slot) {
+    final top = slot.index * (_slotHeight + _slotGap) - _offset(slot.team);
+    final rows = math.min(_teamSize, 5);
+    return top >= 0 &&
+        top + _slotHeight <= rows * (_slotHeight + _slotGap) - _slotGap;
+  }
+
+  void _cancelHopOnScroll() {
+    if (_hopFrom == null) return;
+    _hopController.stop();
+    setState(() {
+      _hopFrom = null;
+      _hopTo = null;
+    });
+  }
+
   late final AnimationController _hopController;
   ({RaceTeam team, int index})? _hopFrom;
   ({RaceTeam team, int index})? _hopTo;
@@ -122,6 +144,8 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   @override
   void initState() {
     super.initState();
+    _scrollA.addListener(_cancelHopOnScroll);
+    _scrollB.addListener(_cancelHopOnScroll);
     _hopController =
         AnimationController(
           vsync: this,
@@ -147,6 +171,12 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     final from = _locateSlot(oldWidget.participants);
     final to = _locateSlot(widget.participants);
     if (from != null && to != null && from.team != to.team) {
+      if (!_slotVisible(from) || !_slotVisible(to)) {
+        _hopController.stop();
+        _hopFrom = null;
+        _hopTo = null;
+        return;
+      }
       _hopFrom = from;
       _hopTo = to;
       final me = _findMe();
@@ -161,6 +191,8 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
 
   @override
   void dispose() {
+    _scrollA.dispose();
+    _scrollB.dispose();
     _hopController.dispose();
     super.dispose();
   }
@@ -214,13 +246,15 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
         1,
       );
     }
-    return size.clamp(1, 5);
+    return size.clamp(1, TeamRace.maxTeamSize);
   }
 
   @override
   Widget build(BuildContext context) {
     final teamSize = _teamSize;
-    final columnsHeight = teamSize * _slotHeight + (teamSize - 1) * _slotGap;
+    final visibleRows = math.min(teamSize, 5);
+    final columnsHeight =
+        visibleRows * _slotHeight + (visibleRows - 1) * _slotGap;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -247,13 +281,15 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
                     left: 0,
                     top: 0,
                     width: columnWidth,
-                    child: _teamColumn(RaceTeam.teamA, teamSize),
+                    height: columnsHeight,
+                    child: _scrollingColumn(RaceTeam.teamA, teamSize),
                   ),
                   Positioned(
                     right: 0,
                     top: 0,
                     width: columnWidth,
-                    child: _teamColumn(RaceTeam.teamB, teamSize),
+                    height: columnsHeight,
+                    child: _scrollingColumn(RaceTeam.teamB, teamSize),
                   ),
                   if (_hopFrom != null && _hopTo != null)
                     _hopOverlay(columnWidth),
@@ -376,6 +412,21 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   }
 
   // --- slot columns ----------------------------------------------------------
+
+  Widget _scrollingColumn(RaceTeam team, int teamSize) {
+    if (teamSize <= 5) return _teamColumn(team, teamSize);
+    final controller = _scrollFor(team);
+    return Scrollbar(
+      controller: controller,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        key: Key('lobby-scroll-${team == RaceTeam.teamA ? 'A' : 'B'}'),
+        controller: controller,
+        primary: false,
+        child: _teamColumn(team, teamSize),
+      ),
+    );
+  }
 
   Widget _teamColumn(RaceTeam team, int teamSize) {
     final members = _sideMembers(team);
@@ -599,13 +650,14 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
 
   Offset _slotCenter(({RaceTeam team, int index}) slot, double columnWidth) {
     return lobbySlotCenter(
-      team: slot.team,
-      index: slot.index,
-      columnWidth: columnWidth,
-      slotHeight: _slotHeight,
-      slotGap: _slotGap,
-      columnGap: _columnGap,
-    );
+          team: slot.team,
+          index: slot.index,
+          columnWidth: columnWidth,
+          slotHeight: _slotHeight,
+          slotGap: _slotGap,
+          columnGap: _columnGap,
+        ) -
+        Offset(0, _offset(slot.team));
   }
 
   Widget _hopOverlay(double columnWidth) {

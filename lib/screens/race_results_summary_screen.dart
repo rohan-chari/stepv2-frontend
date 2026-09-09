@@ -12,6 +12,7 @@ import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
 import '../utils/team_race.dart';
+import '../widgets/team_roster_viewport.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/celebration_confetti.dart';
 import '../widgets/game_container.dart';
@@ -1195,29 +1196,73 @@ class _ResultCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    [
-                      TeamRace.teamName(race, winnerTeam).toUpperCase(),
-                      if (winnerMembers.isNotEmpty)
-                        winnerMembers
-                            .map(
-                              (m) => atName(
-                                m['displayName'] is String
-                                    ? m['displayName'] as String
-                                    : '???',
+                  child: winnerMembers.length > 5
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              TeamRace.teamName(race, winnerTeam).toUpperCase(),
+                              textAlign: TextAlign.right,
+                              style: PixelText.title(
+                                size: 12,
+                                color: TeamRace.textColorOn(
+                                  winnerTeam,
+                                  context,
+                                ),
                               ),
-                            )
-                            .join(', '),
-                    ].join(': '),
-                    textAlign: TextAlign.right,
-                    style: PixelText.title(
-                      size: 12,
-                      // P3 (item 3): team chrome colour used as text.
-                      color: TeamRace.textColorOn(winnerTeam, context),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            TeamRosterViewport(
+                              key: const Key('summary-team-winners-scroll'),
+                              rows: [
+                                for (final member in winnerMembers)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 6,
+                                    ),
+                                    child: Text(
+                                      atName(
+                                        member['displayName'] is String
+                                            ? member['displayName'] as String
+                                            : '???',
+                                      ),
+                                      textAlign: TextAlign.right,
+                                      style: PixelText.title(
+                                        size: 12,
+                                        color: TeamRace.textColorOn(
+                                          winnerTeam,
+                                          context,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : Text(
+                          [
+                            TeamRace.teamName(race, winnerTeam).toUpperCase(),
+                            if (winnerMembers.isNotEmpty)
+                              winnerMembers
+                                  .map(
+                                    (m) => atName(
+                                      m['displayName'] is String
+                                          ? m['displayName'] as String
+                                          : '???',
+                                    ),
+                                  )
+                                  .join(', '),
+                          ].join(': '),
+                          textAlign: TextAlign.right,
+                          style: PixelText.title(
+                            size: 12,
+                            // P3 (item 3): team chrome colour used as text.
+                            color: TeamRace.textColorOn(winnerTeam, context),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                 ),
               ],
             ),

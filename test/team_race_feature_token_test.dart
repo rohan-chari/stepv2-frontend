@@ -8,12 +8,16 @@ void main() {
   test('TR-701: clientFeaturesHeader advertises the team_races token', () {
     final tokens = BackendApiService.clientFeaturesHeader.split(',');
     expect(tokens, contains('team_races'));
+    expect(tokens, contains('team_races_10v10_v1'));
   });
 
-  test('TR-701: existing feature tokens are preserved alongside team_races', () {
-    final tokens = BackendApiService.clientFeaturesHeader.split(',');
-    expect(tokens, contains('characters'));
-    expect(tokens, contains('jammer'));
-    expect(tokens, contains('spinpowerups'));
-  });
+  test(
+    'TR-701: existing feature tokens are preserved alongside team_races',
+    () {
+      final tokens = BackendApiService.clientFeaturesHeader.split(',');
+      expect(tokens, contains('characters'));
+      expect(tokens, contains('jammer'));
+      expect(tokens, contains('spinpowerups'));
+    },
+  );
 }

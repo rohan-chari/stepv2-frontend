@@ -1122,8 +1122,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             key: const Key('team-size-minus'),
             icon: Icons.remove_rounded,
             enabled: _teamSize > 1,
-            onTap: () =>
-                setState(() => _teamSize = (_teamSize - 1).clamp(1, 5)),
+            onTap: () => setState(
+              () => _teamSize = (_teamSize - 1).clamp(1, TeamRace.maxTeamSize),
+            ),
           ),
           Expanded(
             child: Column(
@@ -1149,9 +1150,10 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           _stepperButton(
             key: const Key('team-size-plus'),
             icon: Icons.add_rounded,
-            enabled: _teamSize < 5,
-            onTap: () =>
-                setState(() => _teamSize = (_teamSize + 1).clamp(1, 5)),
+            enabled: _teamSize < TeamRace.maxTeamSize,
+            onTap: () => setState(
+              () => _teamSize = (_teamSize + 1).clamp(1, TeamRace.maxTeamSize),
+            ),
           ),
         ],
       ),

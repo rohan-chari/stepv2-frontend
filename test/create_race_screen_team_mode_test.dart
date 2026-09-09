@@ -189,7 +189,7 @@ void main() {
     },
   );
 
-  testWidgets('TR-101: stepper clamps team size to 1..5', (tester) async {
+  testWidgets('TR-101: stepper clamps team size to 1..10', (tester) async {
     final authService = await _createAuthService();
     await _pump(tester, authService, _RecordingApi());
     await _switchToTeams(tester);
@@ -197,14 +197,14 @@ void main() {
     final plus = find.byKey(const Key('team-size-plus'));
     final minus = find.byKey(const Key('team-size-minus'));
 
-    // 2 -> 5, then clamp.
-    for (var i = 0; i < 5; i++) {
+    // 2 -> 10, then clamp.
+    for (var i = 0; i < 12; i++) {
       await tester.tap(plus);
       await tester.pump();
     }
-    expect(find.text('5v5'), findsOneWidget);
+    expect(find.text('10v10'), findsOneWidget);
 
-    for (var i = 0; i < 7; i++) {
+    for (var i = 0; i < 12; i++) {
       await tester.tap(minus);
       await tester.pump();
     }

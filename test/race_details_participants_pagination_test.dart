@@ -285,6 +285,29 @@ class _PagedTeamApi extends BackendApiService {
       const {'coins': 320, 'heldCoins': 0};
 }
 
+class _CompletePagedTeamApi extends _PagedTeamApi {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async => {
+    ...await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+      participantsLimit: participantsLimit,
+    ),
+    'teamSize': 3,
+    'teamRosterComplete': true,
+    'teamAcceptedParticipants': [
+      _participant('u9', team: 'TEAM_A'),
+      _participant('u8', team: 'TEAM_A'),
+      _participant('user-1', team: 'TEAM_B'),
+      _participant('u7', team: 'TEAM_B'),
+    ],
+  };
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -532,14 +555,14 @@ void main() {
     testWidgets('_myLobbyTeam seats the viewer from myTeam, not the page', (
       tester,
     ) async {
-      final api = _PagedTeamApi();
+      final api = _CompletePagedTeamApi();
       await _pump(tester, api);
 
       expect(find.byType(TeamLobbyBoard), findsOneWidget);
       // The viewer is already on TEAM_B per `myTeam`; tapping an empty TEAM_B
-      // peg must be a no-op. Scanning the (1-row) page would report "no team"
+      // peg (slot 3, after both accepted members) must be a no-op. Scanning the (1-row) page would report "no team"
       // and fire a pointless side-switch.
-      final peg = find.byKey(const Key('lobby-empty-B-0'));
+      final peg = find.byKey(const Key('lobby-empty-B-2'));
       await tester.ensureVisible(peg);
       await tester.tap(peg);
       // Not pumpAndSettle: the lobby's idle capy animation never settles.

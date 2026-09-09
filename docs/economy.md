@@ -1246,6 +1246,34 @@ an eligibility rule: `buildTeamPayoutPlan` does not test activity. Sources:
 `CODE races/services/teamWinnerReward.js`, `teamPayoutPlan.js`,
 `races/commands/completeRace.js`; `DB races × race_participants`.
 
+### 4.3a.1 Team-size expansion inputs — code verified 2026-09-09
+
+The current validator admits per-side sizes 1–5 (`CODE backend
+src/modules/races/services/validateRaceConfig.js:182`). Scoring sums accepted
+members' effective totals, including forfeited members' frozen totals
+(`CODE backend src/modules/races/teamRaces.js:78`). Fixed V1 awards remain
+per-recipient: for balanced teams of size `n`, no forfeits, and stamped winner
+reward `R`, total issuance is `n × R` for a win or a tie; a symmetric player's
+expected award is `R / 2`. At hypothetical size 10, this is 1,000 / 2,000 /
+5,000 / 10,000 coins per full race across the existing 100 / 200 / 500 / 1,000
+reward bands, compared with 500 / 1,000 / 2,500 / 5,000 at size 5. These figures
+exclude optional rewarded-ad bonuses and assume the fixed-V1 stamp; legacy
+null-stamp races retain their pool-based behavior. Sources: `CODE backend
+src/modules/races/services/teamWinnerReward.js:8`, `teamPayoutPlan.js:13,67`,
+and `commands/completeRace.js:450`. Live configuration was not reverified in
+this code research pass; no size expansion has been implemented.
+
+At an identical per-member walking rate and effect window, a team-wide Rally
+Flag or Uprising at size 10 affects twice as many beneficiaries as at size 5;
+Rainstorm similarly has twice as many potential opposing victims. Their
+per-victim multipliers remain unchanged. Rally Flag admits one active team
+window, Uprising merges repeated beneficiary windows, and overlapping
+Rainstorms do not compound identical reductions. Sources: `CODE backend
+src/modules/powerups/commands/usePowerup.js:2073,2107,2208,3939` and
+`src/modules/races/services/effectiveStepScoring.js`; catalog availability and
+prices were not reverified. The existing per-recipient settlement eligibility
+still excludes forfeits but imposes no raw-step minimum, including exact ties.
+
 ### 4.3b Active forfeit (current team-only behaviour, verified 2026-08-12)
 
 `forfeitRace.js` rejects individual races. For an accepted active team member,

@@ -46,24 +46,24 @@ class _RecordingApi extends BackendApiService {
 }
 
 Map<String, dynamic> _teamRace({int teamSize = 3}) => {
-      'id': 'race-1',
-      'name': 'Team Clash',
-      'status': 'PENDING',
-      'isTeamRace': true,
-      'teamSize': teamSize,
-      'teamAName': 'Swift Capys',
-      'teamBName': 'Turbo Beavers',
-      'maxDurationDays': 7,
-      'buyInAmount': 0,
-      'payoutPreset': 'WINNER_TAKES_ALL',
-      'isPublic': false,
-      'maxParticipants': teamSize * 2,
-      'participants': const [
-        {'userId': 'u1', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-        {'userId': 'u2', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-        {'userId': 'u3', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
-      ],
-    };
+  'id': 'race-1',
+  'name': 'Team Clash',
+  'status': 'PENDING',
+  'isTeamRace': true,
+  'teamSize': teamSize,
+  'teamAName': 'Swift Capys',
+  'teamBName': 'Turbo Beavers',
+  'maxDurationDays': 7,
+  'buyInAmount': 0,
+  'payoutPreset': 'WINNER_TAKES_ALL',
+  'isPublic': false,
+  'maxParticipants': teamSize * 2,
+  'participants': const [
+    {'userId': 'u1', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
+    {'userId': 'u2', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
+    {'userId': 'u3', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
+  ],
+};
 
 Future<AuthService> _authService() async {
   SharedPreferences.setMockInitialValues({
@@ -100,8 +100,15 @@ Future<void> _pump(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-105: team plaques and size stepper show for a team race',
-      (tester) async {
+  testWidgets('10v10 edit preserves the configured size', (tester) async {
+    await _pump(tester, _RecordingApi(), race: _teamRace(teamSize: 10));
+    expect(find.text('10v10'), findsOneWidget);
+    expect(find.text('20 RACERS MAX'), findsOneWidget);
+  });
+
+  testWidgets('TR-105: team plaques and size stepper show for a team race', (
+    tester,
+  ) async {
     await _pump(tester, _RecordingApi());
 
     expect(find.byKey(const Key('edit-team-plaque-a')), findsOneWidget);
@@ -145,8 +152,9 @@ void main() {
     expect(api.lastUpdate!['teamBName'], isNull); // unchanged -> omitted
   });
 
-  testWidgets('TR-105: shrinking below a filled side is rejected client-side',
-      (tester) async {
+  testWidgets('TR-105: shrinking below a filled side is rejected client-side', (
+    tester,
+  ) async {
     final api = _RecordingApi();
     await _pump(tester, api); // Team A has 2 members, size 3
 
@@ -168,6 +176,32 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 4));
   });
+
+  testWidgets(
+    'resize floor uses all20 accepted members beyond the history page',
+    (tester) async {
+      final api = _RecordingApi();
+      final race = _teamRace(teamSize: 10)
+        ..['teamRosterComplete'] = true
+        ..['teamAcceptedParticipants'] = [
+          for (final side in ['A', 'B'])
+            for (var i = 0; i < 10; i++)
+              {'userId': '$side$i', 'status': 'ACCEPTED', 'team': 'TEAM_$side'},
+        ];
+      await _pump(tester, api, race: race);
+      await tester.tap(find.byKey(const Key('edit-team-size-minus')));
+      await tester.pump();
+      await tester.ensureVisible(find.text('SAVE CHANGES'));
+      await tester.tap(find.text('SAVE CHANGES'));
+      await tester.pump();
+      expect(api.lastUpdate, isNull);
+      expect(
+        find.text("Can't shrink below a side that's already filled."),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
 
   testWidgets('TR-105: growing the team size PATCHes it', (tester) async {
     final api = _RecordingApi();

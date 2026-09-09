@@ -2,6 +2,50 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/utils/team_race.dart';
 
 void main() {
+  group('legacy team roster completeness', () {
+    final participants = [
+      {'userId': 'a', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
+      {'userId': 'b', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
+    ];
+    Map<String, dynamic> race(
+      Map<String, dynamic> pagination, {
+      int size = 2,
+    }) => {
+      'isTeamRace': true,
+      'teamSize': size,
+      'participants': participants,
+      'participantsPagination': pagination,
+    };
+    test('legacy small team accepts a proven complete first page', () {
+      expect(
+        TeamRace.acceptedRoster(
+          race({'offset': 0, 'hasMore': false, 'total': 2}),
+        ),
+        participants,
+      );
+    });
+    test('legacy paging rejects incomplete or ambiguous metadata', () {
+      for (final pagination in [
+        {'offset': 1, 'hasMore': false, 'total': 2},
+        {'offset': 0, 'hasMore': true, 'total': 2},
+        {'offset': 0, 'hasMore': false, 'total': 3},
+        {'offset': 0, 'total': 2},
+        {'hasMore': false, 'total': 2},
+        {'offset': 0, 'hasMore': false},
+      ]) {
+        expect(TeamRace.acceptedRoster(race(pagination)), isNull);
+      }
+    });
+    test('large teams still require the independent roster contract', () {
+      expect(
+        TeamRace.acceptedRoster(
+          race({'offset': 0, 'hasMore': false, 'total': 2}, size: 10),
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('TR-705 defensive parsing', () {
     test('a race without isTeamRace renders as an individual race', () {
       expect(TeamRace.isTeamRace(const {}), isFalse);
@@ -21,6 +65,27 @@ void main() {
       expect(TeamRace.teamSize(const {'teamSize': 3}), 3);
       expect(TeamRace.teamSize(const {'teamSize': 3.0}), 3);
       expect(TeamRace.teamSize(const {'teamSize': null}), isNull);
+    });
+
+    test('teamSize rejects malformed and out-of-range server values', () {
+      for (final value in [
+        null,
+        '10',
+        true,
+        {},
+        [],
+        -1,
+        0,
+        11,
+        1.5,
+        double.nan,
+        double.infinity,
+      ]) {
+        expect(TeamRace.teamSize({'teamSize': value}), isNull);
+      }
+      for (var size = 1; size <= 10; size++) {
+        expect(TeamRace.teamSize({'teamSize': size}), size);
+      }
     });
 
     test('parseRaceTeam maps wire strings and rejects junk', () {

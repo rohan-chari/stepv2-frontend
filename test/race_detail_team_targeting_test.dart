@@ -7,6 +7,7 @@ import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/item_slot.dart';
+import 'support/large_team_fixture.dart';
 
 // TR-651/657: in a team race, offensive single-target powerups may aim only
 // at ENEMY-team members, and forfeited members are excluded from the pool.
@@ -161,6 +162,39 @@ class _TeamPowerupApi extends BackendApiService {
       const {'coins': 320, 'heldCoins': 0};
 }
 
+class _LargeTeamPowerupApi extends _TeamPowerupApi {
+  final fixture = LargeTeamFixtureApi(status: 'ACTIVE');
+  _LargeTeamPowerupApi() {
+    fixture.roster.first['userId'] = 'user-1';
+  }
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async => {
+    ...await fixture.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+    ),
+    'powerupsEnabled': true,
+  };
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async => {
+    ...await fixture.fetchRaceProgress(
+      identityToken: identityToken,
+      raceId: raceId,
+    ),
+    'powerupData': (await super.fetchRaceProgress(
+      identityToken: identityToken,
+      raceId: raceId,
+    ))['powerupData'],
+  };
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -210,6 +244,36 @@ Future<void> _openPicker(WidgetTester tester, _TeamPowerupApi api) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('10v10 target picker reaches the tenth opponent beyond page15', (
+    tester,
+  ) async {
+    final api = _LargeTeamPowerupApi();
+    await _openPicker(tester, api);
+    final picker = find.byKey(const Key('powerup-target-list'));
+    final last = find.descendant(
+      of: picker,
+      matching: find.textContaining('B racer 9'),
+    );
+    await tester.scrollUntilVisible(
+      last,
+      250,
+      scrollable: find.descendant(
+        of: picker,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(last.hitTestable(), findsOneWidget);
+    expect(
+      find.descendant(of: picker, matching: find.textContaining('A racer')),
+      findsNothing,
+    );
+    await tester.tap(last);
+    await tester.pump();
+    await tester.pump();
+    expect(api.lastTargetUserId, 'B9');
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('TR-651: the picker lists enemies only — no teammates', (
     tester,

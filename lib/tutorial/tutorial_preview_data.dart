@@ -496,8 +496,15 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   }) async {
     return RaceBootstrapResult(
       supported: true,
-      race: tutorialPreviewRaceDetail(),
-      progress: tutorialPreviewRaceProgress(),
+      race: await fetchRaceDetails(
+        identityToken: identityToken,
+        raceId: raceId,
+        participantsLimit: participantsLimit,
+      ),
+      progress: await fetchRaceProgress(
+        identityToken: identityToken,
+        raceId: raceId,
+      ),
       globalPowerupInventory: const {'items': []},
     );
   }
@@ -508,7 +515,10 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     required String raceId,
   }) async {
     return RaceProgressResult(
-      progress: tutorialPreviewRaceProgress(),
+      progress: await fetchRaceProgress(
+        identityToken: identityToken,
+        raceId: raceId,
+      ),
       globalPowerupInventory: const {'items': []},
       hasCompactInventory: true,
     );
@@ -521,7 +531,21 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     int offset = 0,
     int limit = 10,
   }) async {
-    final progress = tutorialPreviewRaceProgress();
+    final progress = await fetchRaceProgress(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    final details = await fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    if (details['isTeamRace'] == true) {
+      return RaceProgressResult(
+        progress: progress,
+        globalPowerupInventory: const {'items': []},
+        hasCompactInventory: true,
+      );
+    }
     final full =
         (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];

@@ -66,6 +66,7 @@ import '../widgets/multiplier_chip.dart';
 import '../widgets/race_podium.dart';
 import '../widgets/race_payout_scorecard.dart';
 import '../widgets/team_lobby_board.dart';
+import '../widgets/team_roster_viewport.dart';
 import '../widgets/team_scoreboard_cards.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/race_ui.dart';
@@ -1407,7 +1408,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       final previousRaceStatus = _race?['status'];
       setState(() {
-        _race = details;
+        final roster = TeamRace.isTeamRace(details)
+            ? TeamRace.acceptedRoster(details)
+            : null;
+        _race = roster == null
+            ? details
+            : {
+                ...details,
+                'participants': [
+                  ...roster,
+                  if (details['participants'] is List)
+                    for (final row in details['participants'] as List)
+                      if (row is Map<String, dynamic> &&
+                          row['status'] != 'ACCEPTED')
+                        row,
+                ],
+              };
         _isLoading = false;
         _detailsError = null;
         // One mute covers both placement and chat; treat the race as muted if
@@ -1416,6 +1432,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             details['myPlacementAlertsMuted'] == true ||
             details['myChatMuted'] == true;
       });
+      if (details['status'] == 'PENDING' &&
+          TeamRace.isTeamRace(details) &&
+          TeamRace.acceptedRoster(details) == null) {
+        unawaited(_loadPendingTeamRoster(details, token, progressPrefetch));
+      }
       if (_chatAudience == 'TEAM' && !_teamChatAvailable) {
         setState(() {
           _chatAudience = 'ALL';
@@ -1735,6 +1756,119 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     });
   }
 
+  Future<void> _loadPendingTeamRoster(
+    Map<String, dynamic> details,
+    String token,
+    Future<Map<String, dynamic>?>? prefetch,
+  ) async {
+    try {
+      // This endpoint returns full accepted team membership on old servers.
+      // Loading it must not block the already-authoritative counts/actions.
+      final progress =
+          await prefetch ??
+          await _api.fetchRaceProgress(
+            identityToken: token,
+            raceId: widget.raceId,
+          );
+      final rawRows = progress['participants'];
+      final expected = details['acceptedCount'];
+      if (!mounted ||
+          !identical(_race, details) ||
+          token != widget.authService.authToken) {
+        return;
+      }
+      if (rawRows is! List ||
+          expected is! num ||
+          rawRows.length != expected ||
+          progress['pagination'] != null) {
+        return;
+      }
+      final candidate = {
+        ...details,
+        'teamRosterComplete': true,
+        'teamAcceptedParticipants': [
+          for (final row in rawRows)
+            if (row is Map<String, dynamic>) {...row, 'status': 'ACCEPTED'},
+        ],
+      };
+      final accepted = TeamRace.acceptedRoster(candidate);
+      if (accepted == null) return;
+      setState(
+        () => _race = {
+          ...candidate,
+          'participants': [
+            ...accepted,
+            if (details['participants'] is List)
+              for (final row in details['participants'] as List)
+                if (row is Map<String, dynamic> && row['status'] != 'ACCEPTED')
+                  row,
+          ],
+        },
+      );
+    } catch (_) {
+      // The retryable unavailable panel stays visible; partial is never empty.
+    }
+  }
+
+  List<Map<String, dynamic>> _completeTeamProgress(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final race = _race ?? const <String, dynamic>{};
+    final roster = race['teamRosterComplete'] == true
+        ? TeamRace.acceptedRoster(race)
+        : null;
+    final ids = rows.map((p) => p['userId']).toSet();
+    final expected = roster?.length ?? race['acceptedCount'];
+    if (ids.length != rows.length ||
+        ids.any((id) => id is! String || id.isEmpty) ||
+        (expected is num && rows.length != expected) ||
+        (roster != null && roster.any((p) => !ids.contains(p['userId']))) ||
+        (roster == null &&
+            (TeamRace.teamSize(race) ?? 0) > 5 &&
+            expected is! num)) {
+      throw const ApiException(
+        'Couldn’t load the complete team progress. Please try again.',
+      );
+    }
+    // Progress owns every display/privacy field. Never restore a real name,
+    // cosmetics or steps that a current privacy projection deliberately omits.
+    return rows;
+  }
+
+  Widget _teamRosterUnavailable() => LoadErrorPanel(
+    key: const Key('team-roster-unavailable'),
+    title: 'Couldn’t load the full team roster',
+    message: 'Refresh to see every racer and available place.',
+    onRetry: _loadDetails,
+  );
+
+  Widget _teamRosterFallback() {
+    final race = _race ?? const <String, dynamic>{};
+    final roster = TeamRace.acceptedRoster(race);
+    if (roster == null) return _teamRosterUnavailable();
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: TeamLobbyBoard(
+        race: race,
+        // Details proves membership, not current stealth/privacy. Until active
+        // progress succeeds, show anonymous positions with no cosmetics.
+        participants: race['status'] == 'ACTIVE'
+            ? [
+                for (final member in roster)
+                  {
+                    'userId': member['userId'],
+                    'team': member['team'],
+                    'status': 'ACCEPTED',
+                    'displayName': '???',
+                    'stealthed': true,
+                  },
+              ]
+            : roster,
+        myUserId: _myUserId,
+      ),
+    );
+  }
+
   Future<void> _loadProgress({
     Future<Map<String, dynamic>?>? prefetched,
     bool refetchOnNullPrefetch = true,
@@ -1813,12 +1947,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final requestedLimit = _kParticipantsPageSize;
       final progress =
           prefetchedProgress ??
-          (compactResult = await _api.fetchRaceProgressParticipants(
-            identityToken: token,
-            raceId: widget.raceId,
-            offset: requestedOffset,
-            limit: requestedLimit,
-          )).progress;
+          (compactResult = TeamRace.isTeamRace(_race ?? const {})
+                  ? await _api.fetchRaceProgressCompact(
+                      identityToken: token,
+                      raceId: widget.raceId,
+                    )
+                  : await _api.fetchRaceProgressParticipants(
+                      identityToken: token,
+                      raceId: widget.raceId,
+                      offset: requestedOffset,
+                      limit: requestedLimit,
+                    ))
+              .progress;
 
       if (!mounted ||
           fetchSeq != _progressFetchSeq ||
@@ -1882,7 +2022,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // UNPAGED response (older backend, or a race served whole) keeps the
       // old union behaviour, where dropping a row the server omitted this
       // tick would make racers flicker in and out.
-      final mergedParticipants = pagination != null
+      final mergedParticipants = TeamRace.isTeamRace(_race ?? const {})
+          ? _completeTeamProgress(participants)
+          : pagination != null
           ? participants
           : () {
               final merged = [...participants];
@@ -2409,7 +2551,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // `myTeam` is served top-level exactly because my own row may be off-page.
     final myTeam = parseRaceTeam(_race?['myTeam']);
     if (myTeam != null) return myTeam;
-    if (_serverHonouredParticipantsPaging) return null;
+    if (_serverHonouredParticipantsPaging &&
+        TeamRace.acceptedRoster(_race ?? const {}) == null) {
+      return null;
+    }
     final participants =
         (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];
@@ -6020,19 +6165,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TeamLobbyBoard(
-                  race: _race!,
-                  participants: participants,
-                  myUserId: _myUserId,
-                  // A spectator/preview viewer sees the team split read-only:
-                  // picking a side happens inside the JOIN flow's team-side
-                  // picker, never by tapping a peg they have no row for.
-                  onTapEmptySlot:
-                      (_isActing || _isSpectator || myStatus == 'DECLINED')
-                      ? null
-                      : _onLobbySlotTap,
-                  onMemberProfileTap: _openRaceProfileForParticipant,
-                ),
+                if (TeamRace.acceptedRoster(_race!) == null)
+                  _teamRosterUnavailable()
+                else
+                  TeamLobbyBoard(
+                    race: _race!,
+                    participants: participants,
+                    myUserId: _myUserId,
+                    // A spectator/preview viewer sees the team split read-only:
+                    // picking a side happens inside the JOIN flow's team-side
+                    // picker, never by tapping a peg they have no row for.
+                    onTapEmptySlot:
+                        (_isActing || _isSpectator || myStatus == 'DECLINED')
+                        ? null
+                        : _onLobbySlotTap,
+                    onMemberProfileTap: _openRaceProfileForParticipant,
+                  ),
                 if (myStatus == 'INVITED' && _bothSidesFull()) ...[
                   // TR-207: over-inviting is allowed and the first to accept
                   // get in. A surplus invitee keeps their invite — it just
@@ -6076,7 +6224,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       ],
                     ),
                   ),
-                ] else if (myStatus == 'ACCEPTED') ...[
+                ] else if (myStatus == 'ACCEPTED' &&
+                    TeamRace.acceptedRoster(_race!) != null) ...[
                   const SizedBox(height: 12),
                   Text(
                     'Tap an empty peg on the other side to switch teams',
@@ -6537,6 +6686,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
             ),
           ),
+          if (TeamRace.isTeamRace(_race ?? const {})) _teamRosterFallback(),
         ],
       );
     }
@@ -9369,6 +9519,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
             ),
           ),
+          if (TeamRace.isTeamRace(_race ?? const {})) _teamRosterFallback(),
         ],
       );
     }
@@ -10481,14 +10632,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
         if (members.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 14,
-            runSpacing: 10,
-            children: [
-              for (final m in members) _buildTeamWinnerMember(m, color),
-            ],
-          ),
+          if (members.length > 5)
+            TeamRosterViewport(
+              key: const Key('team-winners-scroll'),
+              gap: 10,
+              rows: [for (final m in members) _buildTeamWinnerMember(m, color)],
+            )
+          else
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 14,
+              runSpacing: 10,
+              children: [
+                for (final m in members) _buildTeamWinnerMember(m, color),
+              ],
+            ),
         ],
         const SizedBox(height: 8),
         const PlacementPill(placement: 1),
@@ -10574,11 +10732,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
       );
       rows.add(const SizedBox(height: 8));
-      for (var i = 0; i < participants.length; i++) {
-        if (TeamRace.participantTeam(participants[i]) == team) {
-          rows.add(_buildLeaderboardPlank(participants[i], i, large: true));
-        }
-      }
+      rows.add(
+        TeamRosterViewport(
+          key: Key('team-final-scroll-${team.wireValue}'),
+          gap: 0,
+          rows: [
+            for (var i = 0; i < participants.length; i++)
+              if (TeamRace.participantTeam(participants[i]) == team)
+                KeyedSubtree(
+                  key: ValueKey('team-final-${participants[i]['userId']}'),
+                  child: _buildLeaderboardPlank(
+                    participants[i],
+                    i,
+                    large: true,
+                  ),
+                ),
+          ],
+        ),
+      );
     }
     // Defensive: a mismatched payload may carry team-less participants —
     // never drop anyone from the standings.
@@ -10710,7 +10881,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final cells = <Widget>[];
     for (var i = 0; i < participants.length; i++) {
       if (TeamRace.participantTeam(participants[i]) != team) continue;
-      if (cells.isNotEmpty) cells.add(const SizedBox(height: 4));
       cells.add(_teamColumnCell(participants[i], team, laneState));
     }
     if (cells.isEmpty) {
@@ -10730,9 +10900,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: cells,
+    return TeamRosterViewport(
+      key: Key('team-roster-scroll-${team.wireValue}'),
+      rows: cells,
     );
   }
 

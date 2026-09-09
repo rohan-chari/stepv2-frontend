@@ -63,8 +63,33 @@ Future<void> _pump(WidgetTester tester, Map<String, dynamic> race) async {
 
 void main() {
   group('results screen (TR-807)', () {
-    testWidgets('team win shows the winning team + members and confetti',
-        (tester) async {
+    testWidgets('10v10 results scroll through all ten winners', (tester) async {
+      final race = _teamRace()
+        ..['teamSize'] = 10
+        ..['participants'] = [
+          for (var i = 0; i < 10; i++)
+            {
+              'userId': 'winner$i',
+              'displayName': 'Winner $i',
+              'team': 'TEAM_A',
+            },
+        ];
+      await _pump(tester, race);
+      final viewport = find.byKey(const Key('summary-team-winners-scroll'));
+      expect(viewport, findsOneWidget);
+      await tester.ensureVisible(viewport);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('@Winner 9').hitTestable(), findsNothing);
+      await tester.drag(viewport, const Offset(0, -300));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('@Winner 9').hitTestable(), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('team win shows the winning team + members and confetti', (
+      tester,
+    ) async {
       await _pump(tester, _teamRace());
 
       expect(find.textContaining('SWIFT CAPYS'), findsWidgets);
@@ -79,20 +104,26 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
     });
 
-    testWidgets('team loss shows defeat framing without confetti',
-        (tester) async {
+    testWidgets('team loss shows defeat framing without confetti', (
+      tester,
+    ) async {
       await _pump(
         tester,
-        _teamRace(winnerTeam: 'TEAM_B', myTeam: 'TEAM_A', myPlacement: 2,
-            myPayoutCoins: 0),
+        _teamRace(
+          winnerTeam: 'TEAM_B',
+          myTeam: 'TEAM_A',
+          myPlacement: 2,
+          myPayoutCoins: 0,
+        ),
       );
 
       expect(find.text('DEFEAT'), findsOneWidget);
       expect(find.byType(CelebrationConfetti), findsNothing);
     });
 
-    testWidgets('tie shows the dedicated refund copy and no confetti',
-        (tester) async {
+    testWidgets('tie shows the dedicated refund copy and no confetti', (
+      tester,
+    ) async {
       await _pump(
         tester,
         _teamRace(winnerTeam: null, myPlacement: 1, myPayoutCoins: 0),
@@ -137,14 +168,8 @@ void main() {
     });
 
     test('individual races keep the top-3 rule', () {
-      expect(
-        raceCountsAsReviewHappyMoment(const {'myPlacement': 3}),
-        isTrue,
-      );
-      expect(
-        raceCountsAsReviewHappyMoment(const {'myPlacement': 4}),
-        isFalse,
-      );
+      expect(raceCountsAsReviewHappyMoment(const {'myPlacement': 3}), isTrue);
+      expect(raceCountsAsReviewHappyMoment(const {'myPlacement': 4}), isFalse);
       expect(raceCountsAsReviewHappyMoment(const {}), isFalse);
     });
   });

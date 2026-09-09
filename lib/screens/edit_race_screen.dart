@@ -136,8 +136,15 @@ class EditRaceScreenState extends State<EditRaceScreen> {
     _initialIsPublic = race['isPublic'] == true;
     _initialMaxParticipants = _readNullableMax(race['maxParticipants']);
 
+    final completeTeamRoster = TeamRace.isTeamRace(race)
+        ? TeamRace.acceptedRoster(race)
+        : null;
     final participants =
-        (race['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        completeTeamRoster ??
+        (race['participants'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        [];
     // Prefer the counts handed down by the parent (or, failing that, the
     // additive summary fields on the payload itself). The array is only a page
     // once the backend pages this route, so scanning it is the last resort.
@@ -148,30 +155,37 @@ class EditRaceScreenState extends State<EditRaceScreen> {
     _isTeamRace = TeamRace.isTeamRace(race);
     _initialTeamAName = TeamRace.teamName(race, RaceTeam.teamA);
     _initialTeamBName = TeamRace.teamName(race, RaceTeam.teamB);
-    _initialTeamSize = (TeamRace.teamSize(race) ?? 1).clamp(1, 5);
+    _initialTeamSize = (TeamRace.teamSize(race) ?? 1).clamp(
+      1,
+      TeamRace.maxTeamSize,
+    );
     _teamSize = _initialTeamSize;
     _teamANameController = TextEditingController(text: _initialTeamAName);
     _teamBNameController = TextEditingController(text: _initialTeamBName);
     _teamACount =
         widget.teamAAcceptedCount ??
         _readNullableCount(race['teamAAcceptedCount']) ??
-        participants
-            .where(
-              (p) =>
-                  p['status'] == 'ACCEPTED' &&
-                  TeamRace.participantTeam(p) == RaceTeam.teamA,
-            )
-            .length;
+        (_isTeamRace && completeTeamRoster == null
+            ? _initialTeamSize
+            : participants
+                  .where(
+                    (p) =>
+                        p['status'] == 'ACCEPTED' &&
+                        TeamRace.participantTeam(p) == RaceTeam.teamA,
+                  )
+                  .length);
     _teamBCount =
         widget.teamBAcceptedCount ??
         _readNullableCount(race['teamBAcceptedCount']) ??
-        participants
-            .where(
-              (p) =>
-                  p['status'] == 'ACCEPTED' &&
-                  TeamRace.participantTeam(p) == RaceTeam.teamB,
-            )
-            .length;
+        (_isTeamRace && completeTeamRoster == null
+            ? _initialTeamSize
+            : participants
+                  .where(
+                    (p) =>
+                        p['status'] == 'ACCEPTED' &&
+                        TeamRace.participantTeam(p) == RaceTeam.teamB,
+                  )
+                  .length);
 
     _nameController = TextEditingController(text: _initialName);
 
@@ -440,8 +454,9 @@ class EditRaceScreenState extends State<EditRaceScreen> {
             key: const Key('edit-team-size-minus'),
             icon: Icons.remove_rounded,
             enabled: _teamSize > 1,
-            onTap: () =>
-                setState(() => _teamSize = (_teamSize - 1).clamp(1, 5)),
+            onTap: () => setState(
+              () => _teamSize = (_teamSize - 1).clamp(1, TeamRace.maxTeamSize),
+            ),
           ),
           Expanded(
             child: Column(
@@ -471,9 +486,10 @@ class EditRaceScreenState extends State<EditRaceScreen> {
           _teamStepperButton(
             key: const Key('edit-team-size-plus'),
             icon: Icons.add_rounded,
-            enabled: _teamSize < 5,
-            onTap: () =>
-                setState(() => _teamSize = (_teamSize + 1).clamp(1, 5)),
+            enabled: _teamSize < TeamRace.maxTeamSize,
+            onTap: () => setState(
+              () => _teamSize = (_teamSize + 1).clamp(1, TeamRace.maxTeamSize),
+            ),
           ),
         ],
       ),
