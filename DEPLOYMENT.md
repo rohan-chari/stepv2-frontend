@@ -1,5 +1,9 @@
 # Frontend Deployment
 
+The run/build commands in [README.md](README.md#flutter-commands) are the
+source of truth for release configuration. Keep the examples here and saved
+local build settings aligned with them.
+
 Two iOS app listings in App Store Connect, each pointed at a different backend. Both built from this same repo with different `--dart-define` and `--flavor` flags.
 
 | App           | Bundle ID                                  | Distribution | Backend                                |
@@ -202,10 +206,9 @@ For most releases, you can deploy backend first because the old App Store binary
 # ADMOB_BOX_TOP_BANNER_AD_UNIT_ID is the dedicated box-screen top placement.
 # Its presence enables the permanent top placement; omitting it safely
 # preserves the footer-only layout with no reserved top space.
-# ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad (styled
-# template, enabled whenever the footer-banner build unit is present). A prod
-# build WITHOUT it falls back to Google's TEST native ad in that slot — always
-# carry the define.
+# Inline-row native ads are removed from releases. Omit ADMOB_NATIVE_AD_UNIT_ID
+# and ADMOB_NATIVE_AD_UNIT_ID_ANDROID; the slot collapses with no ad request.
+# Keep all seven iOS ad units below.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
 # (PROD iOS OAuth client, registered for com.rohanchari.steptracker). The
 # backend's GOOGLE_AUTH_CLIENT_ID allowlist must already include this client
@@ -226,7 +229,6 @@ flutter build ipa --release \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
-  --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
   --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
@@ -236,10 +238,9 @@ flutter build ipa --release \
 
 > The banner unit (`/5308967309`) lives under the iOS AdMob app (`~5288861983`).
 > Omit the define on dev/staging to fall back to Google's public test banner;
-> new units can take up to an hour to start filling live ads. The native unit
-> for the races-tab in-feed slot (`/9892856363`, created 2026-07-13) and the
-> box-reroll rewarded unit (`/9184830227`, created 2026-08-09) live under the
-> same iOS AdMob app.
+> new units can take up to an hour to start filling live ads. The box-reroll
+> rewarded unit (`/9184830227`, created 2026-08-09) lives under the same iOS
+> AdMob app.
 
 ### Liftoff Monetize mediation and UMP release gate
 
@@ -400,14 +401,19 @@ flutter build appbundle --release --flavor staging \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --build-number=<versionCode>
 
-# Prod (Android production ad units are not provisioned yet, so ads stay off)
+# Prod (retain the provisioned rewarded-spin and footer-banner units)
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
-  --dart-define="REVENUECAT_ANDROID_API_KEY=${REVENUECAT_ANDROID_API_KEY:?Set the RevenueCat Android public SDK key}" \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
   --build-number=<versionCode>
 ```
 
-Do not add any `_ANDROID` ad-unit define until that unit has been created under
+The two provisioned Android units above match README.md. Billing remains
+unavailable until its public Android SDK key is configured; then add
+`--dart-define="REVENUECAT_ANDROID_API_KEY=${REVENUECAT_ANDROID_API_KEY:?Set the RevenueCat Android public SDK key}"`.
+
+Do not add any additional `_ANDROID` ad-unit define until that unit has been created under
 the Android Bara app in AdMob and its ID has been copied from AdMob. Never
 reuse an iOS ad-unit ID. After Android units are provisioned, append the
 applicable defines from the list below; omission safely disables that surface.
@@ -436,7 +442,7 @@ Release signing needs `android/key.properties` (gitignored; template in
 debug signing and Play rejects the bundle — check the signature if unsure:
 `keytool -printcert -jarfile <aab>`.
 
-Android ads (full parity with iOS: footer banners, native in-feed card, and the
+Android ads (full parity with iOS: footer banners and the
 rewarded extra-spin / get-coins flow) turn on ONLY when the build supplies the
 Android ad units — the ids are per-platform in AdMob, so Android uses its own
 `_ANDROID` defines, separate from the iOS `ADMOB_*` ones:
@@ -450,8 +456,8 @@ Android ad units — the ids are per-platform in AdMob, so Android uses its own
 - `ADMOB_BOX_TOP_BANNER_AD_UNIT_ID_ANDROID` — dedicated top placement on box
   routes. Its presence enables the permanent placement; omit it to retain the
   footer-only layout with zero reserved top space.
-- `ADMOB_NATIVE_AD_UNIT_ID_ANDROID` — races-tab in-feed native ad (gated by the
-  footer-banner build unit, with no backend switch).
+- Omit `ADMOB_NATIVE_AD_UNIT_ID_ANDROID`; inline-row native ads are removed
+  from releases on both platforms.
 - `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID` — dedicated Rewarded unit for
   the combined race-results bonus. There is no test/live-placement fallback;
   omission keeps the capability token and offer out of the build.

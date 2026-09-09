@@ -3,6 +3,16 @@
 Machine-specific paths (backend repo, Aseprite, etc.) live in `CLAUDE.local.md`
 (gitignored). Do not hardcode `/Users/...` paths in committed files.
 
+## Release configuration source of truth
+
+The Flutter run/build commands in `README.md` are the source of truth for
+release configuration. Read them before every build/upload. Keep
+`DEPLOYMENT.md` and saved local define files aligned with the README when
+configuration changes; do not silently omit its required values. Production
+iOS commands require the RevenueCat public iOS SDK key, production backend
+and Google OAuth values, and the seven retained AdMob units. Inline-row native
+ad-unit defines must remain omitted on both platforms.
+
 ## Release flags are prohibited by default
 
 Ship permanent, version-compatible behavior by default. Do **not** add a

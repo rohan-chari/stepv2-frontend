@@ -110,6 +110,27 @@ Open `ios/Runner.xcworkspace` in Xcode and verify the **HealthKit**, **Sign in w
 
 ## Flutter commands
 
+These commands are the source of truth for build and release configuration.
+Keep `DEPLOYMENT.md` and saved local build settings aligned with them.
+
+Before running a production iOS command below, load the app's RevenueCat
+**public iOS SDK key** into your shell (local setup: `CLAUDE.local.md`):
+
+```bash
+set -a
+source .secrets/revenuecat-ios.env
+set +a
+```
+
+The commands require `REVENUECAT_IOS_API_KEY` so purchases are not silently
+omitted. Never substitute a RevenueCat secret API key. Staging/local examples
+do not enable production billing; their billing setup requires matching store
+configuration. Android billing remains pending its own public SDK key.
+
+Inline-row native ads are removed on both platforms. Keep the native ad-unit
+defines out of these commands; the missing unit collapses the slot without
+requesting a test ad. All seven other iOS ad units remain enabled.
+
 ### First-time setup
 ```bash
 flutter doctor
@@ -154,9 +175,6 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # the display banners at the bottom of the shop and the race mystery-box overlay
 # (iOS only, display-only). Omit either and that ad simply doesn't exist in the
 # build (dev/staging fall back to Google's test banner for the banner slot).
-# ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad unit; omit
-# it and the slot uses Google's test native ad (gated by the same banner
-# switch, so it still requires ADMOB_BANNER_AD_UNIT_ID to render at all).
 # ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is the dedicated rewarded unit for the
 # combined race-results bonus. It has NO fallback; omission removes the offer.
 # The two interstitial defines are placement-specific so AdMob reports Race
@@ -166,10 +184,10 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
-  --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
   --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
@@ -186,10 +204,10 @@ flutter run -d <device-id> --dart-define=BACKEND_BASE_URL=http://<your-mac-lan-i
 ```bash
 flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
     --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+    --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
     --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
     --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
-    --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
     --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
     --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
     --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
@@ -204,8 +222,6 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
 # rewarded-ad extra spin and the display banners are compiled out (safe, but
 # missing). GOOGLE_IOS_CLIENT_ID (prod iOS OAuth client) is likewise REQUIRED
 # or the release ships without the Google sign-in button. See DEPLOYMENT.md.
-# ADMOB_NATIVE_AD_UNIT_ID is the races-tab in-feed NATIVE ad unit — omitting
-# it serves Google's TEST native ad in that slot (do not ship that).
 # ADMOB_BOX_REROLL_AD_UNIT_ID is the rewarded box-reroll unit (batch 08-08
 # item 11) — it has NO test-ad fallback: omit it and the reroll button is
 # compiled out of the release entirely.
@@ -215,10 +231,10 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
 # release; each placement is disabled independently if its define is omitted.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
-  --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
   --dart-define=ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/9584444570 \
@@ -236,11 +252,12 @@ flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
-  --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
-  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
-  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
   --build-number=<versionCode>
 ```
+
+Android box reroll (`ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID`) and race-payout
+double (`ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID`) remain omitted until
+their units are provisioned.
 
 When the Android interstitial units are created, append both real values:
 
