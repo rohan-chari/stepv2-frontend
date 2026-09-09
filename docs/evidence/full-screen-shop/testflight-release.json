@@ -1,0 +1,31 @@
+{
+  "found": true,
+  "id": "272b6c23-8f47-4cc1-af1e-bff27a8de550",
+  "version": "2.3.13",
+  "build": "11",
+  "processing": "VALID",
+  "beta": "IN_BETA_TESTING",
+  "uploadedDate": "2026-09-09T16:25:59-07:00",
+  "usesNonExemptEncryption": false,
+  "checkedAt": "2026-09-09T23:31:50.451Z",
+  "internalGroup": {
+    "id": "944d87b7-f952-438f-9703-173504ca4f1d",
+    "name": "bara testers",
+    "buildPresent": true,
+    "isInternalGroup": true,
+    "verifiedBy": "GET /v1/betaGroups/944d87b7-f952-438f-9703-173504ca4f1d/builds?limit=200"
+  },
+  "exportCompliance": {
+    "usesNonExemptEncryption": false,
+    "matchesPreviousBuild": "2.3.13 (10)",
+    "declarationUpdated": true
+  },
+  "assignmentAttempt": {
+    "httpStatus": 422,
+    "subsequentAuthoritativeMembershipConfirmed": true
+  },
+  "scope": {
+    "appReviewSubmitted": false,
+    "customerReleasePerformed": false
+  }
+}

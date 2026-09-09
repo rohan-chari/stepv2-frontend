@@ -1,0 +1,44 @@
+{
+  "verifiedAtUtc": "2026-09-09T23:22:33.070614+00:00",
+  "sourceCommit": "ed8cd03b0eef01132bd11dfb4a57edc0e63c79e9",
+  "artifacts": [
+    {
+      "platform": "iOS",
+      "path": "build/ios/ipa/Bara.ipa",
+      "version": "2.3.13",
+      "build": 11,
+      "sha256": "c76cf8f67e645921ad9a8899ed966d52b36692642dc6559cf1a45a01c58c4425",
+      "sizeBytes": 75746007
+    },
+    {
+      "platform": "Android",
+      "path": "build/app/outputs/bundle/prodRelease/app-prod-release.aab",
+      "version": "2.3.13",
+      "build": 203141,
+      "sha256": "e09b6b38c1c4f1f3630ce776fbc923652b0505cb9cf5d2c15773adeed76cee42",
+      "sizeBytes": 106252230
+    }
+  ],
+  "checks": [
+    "Actual IPA and AAB versions verified",
+    "All README production configuration values verified in compiled binaries",
+    "Android bundletool validate passed",
+    "All three Android architectures match independently stripped fresh compiler output",
+    "Android jarsigner verified",
+    "No secret files packaged",
+    "iOS archive codesign --verify --deep --strict passed",
+    "Uploaded archive contains wardrobe v1 contract and build 11"
+  ],
+  "limits": [
+    "No physical-device or live store transaction testing"
+  ],
+  "upload": {
+    "completedAtUtc": "2026-09-09T23:24:46Z",
+    "tool": "signed-in Xcode xcodebuild -exportArchive",
+    "result": "Upload succeeded; EXPORT SUCCEEDED",
+    "warnings": [
+      "AppLovinSDK.framework missing dSYM",
+      "FBAudienceNetwork.framework missing dSYM"
+    ]
+  }
+}
