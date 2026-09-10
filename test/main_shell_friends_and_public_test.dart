@@ -456,6 +456,89 @@ void main() {
   });
 
   testWidgets(
+    'Home shell preload renders accepted and pending friends without a second read',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _FakeBackendApiService(
+        compactSession: true,
+        homeRaceCard: const {
+          'contract': 'home-shell-v1',
+          'state': 'EMPTY',
+          'resolved': {'presentation': true, 'friends': true},
+          'presentation': {'coins': 77, 'equipped': {}, 'cape': null},
+          'friends': {
+            // Older summaries may omit the explicit count and optional photo.
+            'friends': [
+              {'id': 'friend-1', 'displayName': 'CachedWalker'},
+            ],
+            'pending': {
+              'incoming': [
+                {
+                  'friendshipId': 'request-1',
+                  'user': {'id': 'friend-2', 'displayName': 'PendingWalker'},
+                },
+              ],
+              'outgoing': [],
+            },
+          },
+        },
+      );
+      await _pumpShell(tester, api);
+      final home = tester.widget<HomeTab>(find.byType(HomeTab));
+      expect(home.authService.coins, 77);
+      expect(home.friendsSteps.single['displayName'], 'CachedWalker');
+      final tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+      expect(tabBar.items[2].badgeCount, 1);
+      expect(api.fetchShopCalls, 0);
+      expect(api.fetchFriendsCalls, 0);
+
+      await _tapTab(tester, 2);
+
+      expect(find.text('@CachedWalker'), findsOneWidget);
+      expect(find.text('@PendingWalker'), findsOneWidget);
+      expect(api.fetchFriendsCalls, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.iOS,
+      TargetPlatform.android,
+    }),
+  );
+
+  testWidgets(
+    'null Home shell optional sections keep standalone Friends and catalog reads',
+    (tester) async {
+      final api = _FakeBackendApiService(
+        compactSession: true,
+        homeRaceCard: const {
+          'contract': 'home-shell-v1',
+          'state': 'EMPTY',
+          'resolved': {'presentation': true, 'friends': true},
+          'presentation': null,
+          'friends': null,
+        },
+      );
+      await _pumpShell(tester, api);
+      expect(find.byType(HomeTab), findsOneWidget);
+      expect(api.fetchShopCalls, 1);
+      expect(api.fetchFriendsCalls, 1);
+
+      await _tapTab(tester, 2);
+
+      expect(find.byType(FriendsTab), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Search friends'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.iOS,
+      TargetPlatform.android,
+    }),
+  );
+
+  testWidgets(
     'PUBLIC RACES count falls back to (0) when the fetch fails (no throw)',
     (WidgetTester tester) async {
       await _pumpShell(tester, _FakeBackendApiService(publicRacesError: true));

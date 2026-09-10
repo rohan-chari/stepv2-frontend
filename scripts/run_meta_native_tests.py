@@ -14,6 +14,12 @@ with tempfile.TemporaryDirectory(prefix="bara-meta-native-tests-") as directory:
                     "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
 
+    subprocess.run(["swiftc", "-warnings-as-errors",
+                    str(ROOT / "ios/Runner/MetaAppEventsPolicy.swift"),
+                    str(ROOT / "scripts/meta_gpp_tests.swift"),
+                    "-o", str(executable)], check=True)
+    subprocess.run([str(executable), str(ROOT / "scripts/fixtures/meta_gpp.json")], check=True)
+
 # Structural version guard: only iOS26 simulator is installed locally, so
 # executing the real legacy setter on iOS14-16 requires a device/older runtime.
 adapter = (ROOT / "ios/Runner/MetaCoreKitAdapter.swift").read_text()

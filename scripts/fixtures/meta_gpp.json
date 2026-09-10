@@ -1,0 +1,596 @@
+[
+  {
+    "label": "usnat: allowed",
+    "sid": "7",
+    "gpp": "DBABLA~CAAqAAAAAABA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usnat: SaleOptOut",
+    "sid": "7",
+    "gpp": "DBABLA~CAAaAAAAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnat: SharingOptOut",
+    "sid": "7",
+    "gpp": "DBABLA~CAAmAAAAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnat: TargetedAdvertisingOptOut",
+    "sid": "7",
+    "gpp": "DBABLA~CAApAAAAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnat: GPC",
+    "sid": "7",
+    "gpp": "DBABLA~CAAqAAAAAABA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usnat: absent optional GPC",
+    "sid": "7",
+    "gpp": "DBABLA~CAAqAAAAAABA",
+    "allowed": true
+  },
+  {
+    "label": "usca: allowed",
+    "sid": "8",
+    "gpp": "DBABBg~BAoAAABA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usca: SaleOptOut",
+    "sid": "8",
+    "gpp": "DBABBg~BAYAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usca: SharingOptOut",
+    "sid": "8",
+    "gpp": "DBABBg~BAkAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usca: GPC",
+    "sid": "8",
+    "gpp": "DBABBg~BAoAAABA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usca: absent optional GPC",
+    "sid": "8",
+    "gpp": "DBABBg~BAoAAABA",
+    "allowed": true
+  },
+  {
+    "label": "usva: allowed",
+    "sid": "9",
+    "gpp": "DBABRg~BAoAABA",
+    "allowed": true
+  },
+  {
+    "label": "usva: SaleOptOut",
+    "sid": "9",
+    "gpp": "DBABRg~BAYAABA",
+    "allowed": false
+  },
+  {
+    "label": "usva: TargetedAdvertisingOptOut",
+    "sid": "9",
+    "gpp": "DBABRg~BAkAABA",
+    "allowed": false
+  },
+  {
+    "label": "usco: allowed",
+    "sid": "10",
+    "gpp": "DBABJg~BAoAAEA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usco: SaleOptOut",
+    "sid": "10",
+    "gpp": "DBABJg~BAYAAEA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usco: TargetedAdvertisingOptOut",
+    "sid": "10",
+    "gpp": "DBABJg~BAkAAEA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usco: GPC",
+    "sid": "10",
+    "gpp": "DBABJg~BAoAAEA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usco: absent optional GPC",
+    "sid": "10",
+    "gpp": "DBABJg~BAoAAEA",
+    "allowed": true
+  },
+  {
+    "label": "usut: allowed",
+    "sid": "11",
+    "gpp": "DBABFg~BAKAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "usut: SaleOptOut",
+    "sid": "11",
+    "gpp": "DBABFg~BAGAAAQA",
+    "allowed": false
+  },
+  {
+    "label": "usut: TargetedAdvertisingOptOut",
+    "sid": "11",
+    "gpp": "DBABFg~BAJAAAQA",
+    "allowed": false
+  },
+  {
+    "label": "usct: allowed",
+    "sid": "12",
+    "gpp": "DBABVg~BAoAAAEA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usct: SaleOptOut",
+    "sid": "12",
+    "gpp": "DBABVg~BAYAAAEA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usct: TargetedAdvertisingOptOut",
+    "sid": "12",
+    "gpp": "DBABVg~BAkAAAEA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usct: GPC",
+    "sid": "12",
+    "gpp": "DBABVg~BAoAAAEA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usct: absent optional GPC",
+    "sid": "12",
+    "gpp": "DBABVg~BAoAAAEA",
+    "allowed": true
+  },
+  {
+    "label": "usfl: allowed",
+    "sid": "13",
+    "gpp": "DBABAw~BAoAAABA",
+    "allowed": true
+  },
+  {
+    "label": "usfl: SaleOptOut",
+    "sid": "13",
+    "gpp": "DBABAw~BAYAAABA",
+    "allowed": false
+  },
+  {
+    "label": "usfl: TargetedAdvertisingOptOut",
+    "sid": "13",
+    "gpp": "DBABAw~BAkAAABA",
+    "allowed": false
+  },
+  {
+    "label": "usmt: allowed",
+    "sid": "14",
+    "gpp": "DBABQw~BAoAAABA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usmt: SaleOptOut",
+    "sid": "14",
+    "gpp": "DBABQw~BAYAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usmt: TargetedAdvertisingOptOut",
+    "sid": "14",
+    "gpp": "DBABQw~BAkAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usmt: GPC",
+    "sid": "14",
+    "gpp": "DBABQw~BAoAAABA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usmt: absent optional GPC",
+    "sid": "14",
+    "gpp": "DBABQw~BAoAAABA",
+    "allowed": true
+  },
+  {
+    "label": "usor: allowed",
+    "sid": "15",
+    "gpp": "DBABIw~BAoAAAABAA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usor: SaleOptOut",
+    "sid": "15",
+    "gpp": "DBABIw~BAYAAAABAA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usor: TargetedAdvertisingOptOut",
+    "sid": "15",
+    "gpp": "DBABIw~BAkAAAABAA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usor: GPC",
+    "sid": "15",
+    "gpp": "DBABIw~BAoAAAABAA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usor: absent optional GPC",
+    "sid": "15",
+    "gpp": "DBABIw~BAoAAAABAA",
+    "allowed": true
+  },
+  {
+    "label": "ustx: allowed",
+    "sid": "16",
+    "gpp": "DBABEw~BAoAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "ustx: SaleOptOut",
+    "sid": "16",
+    "gpp": "DBABEw~BAYAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "ustx: TargetedAdvertisingOptOut",
+    "sid": "16",
+    "gpp": "DBABEw~BAkAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "ustx: GPC",
+    "sid": "16",
+    "gpp": "DBABEw~BAoAAAQA.YA",
+    "allowed": false
+  },
+  {
+    "label": "ustx: absent optional GPC",
+    "sid": "16",
+    "gpp": "DBABEw~BAoAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "usde: allowed",
+    "sid": "17",
+    "gpp": "DBABUw~BAoAAAABAA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usde: SaleOptOut",
+    "sid": "17",
+    "gpp": "DBABUw~BAYAAAABAA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usde: TargetedAdvertisingOptOut",
+    "sid": "17",
+    "gpp": "DBABUw~BAkAAAABAA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usde: GPC",
+    "sid": "17",
+    "gpp": "DBABUw~BAoAAAABAA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usde: absent optional GPC",
+    "sid": "17",
+    "gpp": "DBABUw~BAoAAAABAA",
+    "allowed": true
+  },
+  {
+    "label": "usia: allowed",
+    "sid": "18",
+    "gpp": "DBABCw~BAKAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usia: SaleOptOut",
+    "sid": "18",
+    "gpp": "DBABCw~BAGAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usia: TargetedAdvertisingOptOut",
+    "sid": "18",
+    "gpp": "DBABCw~BAJAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usia: GPC",
+    "sid": "18",
+    "gpp": "DBABCw~BAKAAAQA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usia: absent optional GPC",
+    "sid": "18",
+    "gpp": "DBABCw~BAKAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "usne: allowed",
+    "sid": "19",
+    "gpp": "DBABSw~BAoAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usne: SaleOptOut",
+    "sid": "19",
+    "gpp": "DBABSw~BAYAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usne: TargetedAdvertisingOptOut",
+    "sid": "19",
+    "gpp": "DBABSw~BAkAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usne: GPC",
+    "sid": "19",
+    "gpp": "DBABSw~BAoAAAQA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usne: absent optional GPC",
+    "sid": "19",
+    "gpp": "DBABSw~BAoAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "usnh: allowed",
+    "sid": "20",
+    "gpp": "DBABKw~BAoAAABA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usnh: SaleOptOut",
+    "sid": "20",
+    "gpp": "DBABKw~BAYAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnh: TargetedAdvertisingOptOut",
+    "sid": "20",
+    "gpp": "DBABKw~BAkAAABA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnh: GPC",
+    "sid": "20",
+    "gpp": "DBABKw~BAoAAABA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usnh: absent optional GPC",
+    "sid": "20",
+    "gpp": "DBABKw~BAoAAABA",
+    "allowed": true
+  },
+  {
+    "label": "usnj: allowed",
+    "sid": "21",
+    "gpp": "DBABAYA~BAoAAAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usnj: SaleOptOut",
+    "sid": "21",
+    "gpp": "DBABAYA~BAYAAAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnj: TargetedAdvertisingOptOut",
+    "sid": "21",
+    "gpp": "DBABAYA~BAkAAAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usnj: GPC",
+    "sid": "21",
+    "gpp": "DBABAYA~BAoAAAAAQA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usnj: absent optional GPC",
+    "sid": "21",
+    "gpp": "DBABAYA~BAoAAAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "ustn: allowed",
+    "sid": "22",
+    "gpp": "DBABQYA~BAoAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "ustn: SaleOptOut",
+    "sid": "22",
+    "gpp": "DBABQYA~BAYAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "ustn: TargetedAdvertisingOptOut",
+    "sid": "22",
+    "gpp": "DBABQYA~BAkAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "ustn: GPC",
+    "sid": "22",
+    "gpp": "DBABQYA~BAoAAAQA.YA",
+    "allowed": false
+  },
+  {
+    "label": "ustn: absent optional GPC",
+    "sid": "22",
+    "gpp": "DBABQYA~BAoAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "usmn: allowed",
+    "sid": "23",
+    "gpp": "DBABIYA~BAoAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "usmn: SaleOptOut",
+    "sid": "23",
+    "gpp": "DBABIYA~BAYAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usmn: TargetedAdvertisingOptOut",
+    "sid": "23",
+    "gpp": "DBABIYA~BAkAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "usmn: GPC",
+    "sid": "23",
+    "gpp": "DBABIYA~BAoAAAQA.YA",
+    "allowed": false
+  },
+  {
+    "label": "usmn: absent optional GPC",
+    "sid": "23",
+    "gpp": "DBABIYA~BAoAAAQA",
+    "allowed": true
+  },
+  {
+    "label": "usmd: allowed",
+    "sid": "24",
+    "gpp": "DBABEYA~BQCg.QA",
+    "allowed": true
+  },
+  {
+    "label": "usmd: SaleOptOut",
+    "sid": "24",
+    "gpp": "DBABEYA~BQBg.QA",
+    "allowed": false
+  },
+  {
+    "label": "usmd: TargetedAdvertisingOptOut",
+    "sid": "24",
+    "gpp": "DBABEYA~BQCQ.QA",
+    "allowed": false
+  },
+  {
+    "label": "usmd: GPC",
+    "sid": "24",
+    "gpp": "DBABEYA~BQCg.YA",
+    "allowed": false
+  },
+  {
+    "label": "usmd: absent optional GPC",
+    "sid": "24",
+    "gpp": "DBABEYA~BQCg",
+    "allowed": true
+  },
+  {
+    "label": "usin: allowed",
+    "sid": "25",
+    "gpp": "DBABUYA~BQCg.AAA",
+    "allowed": true
+  },
+  {
+    "label": "usin: SaleOptOut",
+    "sid": "25",
+    "gpp": "DBABUYA~BQBg.AAA",
+    "allowed": false
+  },
+  {
+    "label": "usin: TargetedAdvertisingOptOut",
+    "sid": "25",
+    "gpp": "DBABUYA~BQCQ.AAA",
+    "allowed": false
+  },
+  {
+    "label": "usky: allowed",
+    "sid": "26",
+    "gpp": "DBABCYA~BQCg.AAA",
+    "allowed": true
+  },
+  {
+    "label": "usky: SaleOptOut",
+    "sid": "26",
+    "gpp": "DBABCYA~BQBg.AAA",
+    "allowed": false
+  },
+  {
+    "label": "usky: TargetedAdvertisingOptOut",
+    "sid": "26",
+    "gpp": "DBABCYA~BQCQ.AAA",
+    "allowed": false
+  },
+  {
+    "label": "usri: allowed",
+    "sid": "27",
+    "gpp": "DBABSYA~BQCg.AAA",
+    "allowed": true
+  },
+  {
+    "label": "usri: SaleOptOut",
+    "sid": "27",
+    "gpp": "DBABSYA~BQBg.AAA",
+    "allowed": false
+  },
+  {
+    "label": "usri: TargetedAdvertisingOptOut",
+    "sid": "27",
+    "gpp": "DBABSYA~BQCQ.AAA",
+    "allowed": false
+  },
+  {
+    "label": "US national v1",
+    "sid": "7",
+    "gpp": "DBABLA~BAAqAAAAAQA.QA",
+    "allowed": true
+  },
+  {
+    "label": "US national v1 opt-out",
+    "sid": "7",
+    "gpp": "DBABLA~BAAmAAAAAQA.QA",
+    "allowed": false
+  },
+  {
+    "label": "contiguous header range",
+    "sid": "7_8_9",
+    "gpp": "DBABrYA~CAAqAAAAAABA.QA~BAoAAABA.QA~BAoAABA",
+    "allowed": true
+  },
+  {
+    "label": "one section denies",
+    "sid": "7_8_9",
+    "gpp": "DBABrYA~CAAqAAAAAABA.QA~BAkAAABA.QA~BAoAABA",
+    "allowed": false
+  },
+  {
+    "label": "noncontiguous header offsets",
+    "sid": "7_12_24",
+    "gpp": "DBADLDVg~CAAqAAAAAABA.QA~BAoAAAEA.QA~BQCg.QA",
+    "allowed": true
+  }
+]
