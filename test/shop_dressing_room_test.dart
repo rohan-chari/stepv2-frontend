@@ -1054,7 +1054,9 @@ void main() {
         isNull,
       );
       expect(api.equipWrites, 0);
-      await tester.tap(find.text('Reset'));
+      expect(find.text('Reset'), findsNothing);
+      await _leaveWardrobe(tester, discard: true);
+      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
       await tester.pump();
       expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
       expect(_previewIds(tester), contains('cowboy'));

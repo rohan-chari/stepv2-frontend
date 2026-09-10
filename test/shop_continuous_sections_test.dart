@@ -26,7 +26,7 @@ void main() {
     });
   });
   testWidgets(
-    'Shop contains ordered sections and local inventory preserves surrounding content',
+    'Shop contains ordered sections and unified Powerups preserve surrounding content',
     (tester) async {
       addTearDown(tester.view.reset);
       await pumpShop(tester, billing: FakeBilling());
@@ -47,12 +47,11 @@ void main() {
         tester.getBottomLeft(featured).dy,
         lessThanOrEqualTo(tester.getTopLeft(find.byType(CoinPackOffers)).dy),
       );
-      await tester.ensureVisible(find.text('OWNED'));
-      await tester.tap(find.text('OWNED'));
-      await tester.pump();
+      expect(find.text('OWNED'), findsNothing);
+      expect(find.text('BUY'), findsNothing);
       expect(find.byType(CoinPackOffers), findsOneWidget);
       expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
-      expect(find.byKey(const Key('shop-product-card')), findsNothing);
+      expect(find.byKey(const Key('shop-product-card')), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

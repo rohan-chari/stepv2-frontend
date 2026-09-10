@@ -100,8 +100,6 @@ class _AdUnlockConfig {
 /// How the tile should offer an unaffordable item.
 enum _AffordRoute { affordable, watchAds, getCoins }
 
-enum _ShopSection { store, inventory }
-
 enum _ShopCategory { featured, powerups, characters, accessories }
 
 const _knownEquipmentSlots = <String>{
@@ -255,8 +253,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   bool _tutorialDecisionScheduled = false;
   bool _tutorialCatalogReady = false;
   bool _tutorialTransitioning = false;
-  _ShopSection _section = _ShopSection.store;
-  _ShopCategory _category = _ShopCategory.powerups;
+  final _ShopCategory _category = _ShopCategory.powerups;
 
   // Powerup store sub-filter + sort (item 9). Persisted in screen state.
   _PowerupFilter _powerupFilter = _PowerupFilter.all;
@@ -566,7 +563,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   ];
   static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
-    'Scroll from Featured coins to Powerups, then Characters & Accessories. Buy and Owned live inside Powerups.',
+    'Scroll from Featured coins to Powerups, then Characters & Accessories. Powerup badges show how many you own.',
     'Owned and locked characters share one collection. Open an owned character to edit its saved outfit or make it active.',
   ];
 
@@ -831,8 +828,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       }
 
       setState(() {
-        if (powerups != null && inventory != null) {
-          _applyPowerupComponents(powerups, inventory);
+        if (powerups != null || inventory != null) {
+          _applyPowerupComponents(
+            powerups ?? const {'items': <Map<String, dynamic>>[]},
+            inventory ?? const {'items': <Map<String, dynamic>>[]},
+          );
+          _powerupsAvailable = powerups != null;
         } else {
           _powerupStoreItems = const [];
           _powerupInventory = const {};
@@ -911,8 +912,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }) async {
     try {
       final results = await Future.wait([
-        _backendApiService.fetchPowerupShopCatalog(identityToken: token),
-        _backendApiService.fetchPowerupInventory(identityToken: token),
+        _backendApiService
+            .fetchPowerupShopCatalog(identityToken: token)
+            .catchError((_) => <String, dynamic>{}),
+        _backendApiService
+            .fetchPowerupInventory(identityToken: token)
+            .catchError((_) => <String, dynamic>{}),
       ]);
       if (!_sessionIsCurrent(
         generation: generation,
@@ -923,6 +928,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         return false;
       }
       _applyPowerupComponents(results[0], results[1]);
+      _powerupsAvailable = _isValidPowerupCatalog(
+        results[0],
+        requireOwnedQuantity: false,
+      );
       if (_catalog case final catalog?) {
         _loading = false;
         _catalogState = Loadable.success(catalog);
@@ -937,7 +946,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           )) {
         await widget.authService.updateCoins(coins.toInt());
       }
-      return true;
+      return _powerupsAvailable || _isValidPowerupInventory(results[1]);
     } catch (_) {
       if (!_sessionIsCurrent(
         generation: generation,
@@ -1136,10 +1145,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       return null;
     }
     if (selected['id'] == _defaultCharacterSelectionId) {
-      return _section == _ShopSection.inventory &&
-              _activeCategory == _ShopCategory.characters
-          ? selected
-          : null;
+      return _activeCategory == _ShopCategory.characters ? selected : null;
     }
     final id = selected['id'];
     if (id is! String || id.isEmpty) return null;
@@ -1149,8 +1155,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       if ((_activeCategory == _ShopCategory.characters) != character) {
         return null;
       }
-      final owned = _isCosmeticOwned(item, catalog: catalog);
-      if ((_section == _ShopSection.inventory) != owned) return null;
       return item;
     }
     return null;
@@ -1759,77 +1763,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   Widget _buildItemsHeader() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSegmentControl(),
-        // Powerup-store filter + sort live in the (fixed) header so they
-        // don't disturb the body's stagger-in tile list.
-        if (_section == _ShopSection.store) ...[
-          // Batch 2026-08-09 item 3: was 2px — visibly cramped against
-          // the 8px gap above the pills. The two header gaps now match.
-          const SizedBox(height: 8),
-          _buildPowerupControls(),
-        ],
-      ],
-    ),
+    child: _buildPowerupControls(),
   );
-
-  Widget _buildSegmentControl() {
-    Widget segment(String label, _ShopSection section) {
-      final selected = _section == section;
-      return Expanded(
-        child: GestureDetector(
-          onTap: () {
-            if (_section == section) return;
-            _disposeShopAdTarget();
-            setState(() {
-              _section = section;
-              _category = _ShopCategory.powerups;
-              _selectedCosmeticItem = null;
-              if (section == _ShopSection.inventory) _deferTutorial = false;
-            });
-            _maybeScheduleTutorial();
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 9),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.of(context).parchment
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: PixelText.title(
-                size: 13,
-                color: selected
-                    ? AppColors.of(context).textDark
-                    : AppColors.of(context).textLight,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      key: const Key('shop-segment-control'),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          segment('BUY', _ShopSection.store),
-          const SizedBox(width: 3),
-          segment('OWNED', _ShopSection.inventory),
-        ],
-      ),
-    );
-  }
 
   /// Categories offered as pills. POWERUPS drops out entirely when the
   /// powerup endpoints are missing (older backend) — the same condition that
@@ -1887,7 +1822,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final colors = AppColors.of(context);
     final description = switch (id) {
       'featured' => 'Stock up on coins for powerups and accessories.',
-      'powerups' => 'Buy powerups to use in races, or view the ones you own.',
+      'powerups' => 'Buy powerups for races. The badge shows how many you own.',
       _ => 'Tap a character to customize its outfit or unlock a new one.',
     };
     return Padding(
@@ -2184,8 +2119,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       );
     }
 
-    final items = _safeShopItems(state.data?['items'] ?? _catalog?['items']);
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
@@ -2200,10 +2133,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 backgroundColor: Colors.transparent,
               ),
             ),
-          if (_section == _ShopSection.store)
-            ..._buildStore(items)
-          else
-            ..._buildInventory(items),
+          ..._buildStore(),
         ],
       ),
     );
@@ -3582,31 +3512,57 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return [_buildSectionGroup(tiles, staggerIndex: 0)];
   }
 
-  List<Widget> _buildStore(
-    List<Map<String, dynamic>> items,
-  ) => _buildCategoryBody(
-    [for (final item in _visiblePowerupStoreItems()) _storePowerupTile(item)],
-    emptyIcon: Icons.bolt_rounded,
-    emptyMessage: !_powerupsAvailable && _powerupsAvailabilityResolved
-        ? 'Powerups are currently unavailable. Pull down to try again.'
-        : _powerupFilter == _PowerupFilter.all
-        ? 'No powerups for sale right now.'
-        : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
-  );
-
-  List<Widget> _buildInventory(List<Map<String, dynamic>> items) =>
-      _buildCategoryBody(
-        [
-          for (final entry
-              in _powerupInventory.entries
-                  .where((entry) => entry.value > 0)
-                  .toList()
-                ..sort((a, b) => a.key.compareTo(b.key)))
-            _ownedPowerupTile(entry.key, entry.value),
-        ],
-        emptyIcon: Icons.bolt_rounded,
-        emptyMessage: 'No powerups yet. Tap Buy to find your first one.',
+  List<Widget> _buildStore() {
+    final catalogTypes = _powerupStoreItems
+        .map((item) => item['powerupType'])
+        .toSet();
+    // Some rewards are owned without being sold. Keep their counts available
+    // when they have no purchasable catalog row, including catalog outages.
+    final ownedOnly =
+        _powerupInventory.entries
+            .where(
+              (entry) => entry.value > 0 && !catalogTypes.contains(entry.key),
+            )
+            .where(
+              (entry) =>
+                  _powerupFilter.category == null ||
+                  _powerupFilter.category == 'utility',
+            )
+            .toList()
+          ..sort(
+            (a, b) => PowerupCopy.nameFor(
+              a.key,
+            ).compareTo(PowerupCopy.nameFor(b.key)),
+          );
+    final tiles = <({String name, Widget child})>[
+      for (final item in _visiblePowerupStoreItems())
+        (
+          name: item['name'] as String? ?? 'Powerup',
+          child: _storePowerupTile(item),
+        ),
+      for (final entry in ownedOnly)
+        (
+          name: PowerupCopy.nameFor(entry.key),
+          child: _ownedPowerupTile(entry.key, entry.value),
+        ),
+    ];
+    if (_powerupSort == _PowerupSort.nameAsc) {
+      tiles.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
       );
+    }
+    // Price sorts retain the priced catalog order above, followed by
+    // informational owned items that do not have a current purchase price.
+    return _buildCategoryBody(
+      [for (final tile in tiles) tile.child],
+      emptyIcon: Icons.bolt_rounded,
+      emptyMessage: !_powerupsAvailable && _powerupsAvailabilityResolved
+          ? 'Powerups are currently unavailable. Pull down to try again.'
+          : _powerupFilter == _PowerupFilter.all
+          ? 'No powerups for sale right now.'
+          : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
+    );
+  }
 
   int _ownedQuantityFor(Map<String, dynamic> item) {
     final fromInventory = _powerupInventory[item['powerupType'] as String?];
@@ -3766,7 +3722,7 @@ class _ShopTile extends StatelessWidget {
 
   Widget _badgeChip(BuildContext context) => Container(
     key: const Key('shop-tile-badge'),
-    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
       color: AppColors.of(context).roofMid,
       borderRadius: BorderRadius.circular(999),
@@ -3779,7 +3735,7 @@ class _ShopTile extends StatelessWidget {
       // text color painted near-black on the dark-green `roofMid` pill.
       // `textLight` is cream in both palettes, which is what the day design
       // intended. The `highlighted` branch is already correct.
-      style: PixelText.title(size: 10, color: AppColors.of(context).textLight),
+      style: PixelText.title(size: 14, color: AppColors.of(context).textLight),
     ),
   );
 

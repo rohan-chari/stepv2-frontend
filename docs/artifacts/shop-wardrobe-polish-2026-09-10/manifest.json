@@ -1,0 +1,124 @@
+{
+  "kind": "Real Flutter widget fixture captures; sample billing only",
+  "images": {
+    "dark-1.0-bottom.png": {
+      "sha256": "a0ff1b31c3990d74d58fb76bc5a8f8b3edc232a0951d9397ea6db79d4bd4f7b6",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-discard.png": {
+      "sha256": "c9cedacdf78c538eead0b0c1962352c53d03708d4c5d26535324762c67c86b87",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-selected.png": {
+      "sha256": "895627f398aff0eb645f65d0ca191f3e7c752d3fb3475f34fef975728e2347f4",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-top.png": {
+      "sha256": "cfb7e83501432dc313acdb61cf6b9ed5478af808fc71f21dcce8d6ec5ac41d9e",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-bottom.png": {
+      "sha256": "392521ca1f1e69d6bf9f44df995e57e4c64b4cf6f5d8083f7b20badb997fc174",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-discard.png": {
+      "sha256": "914cba0884046706844b9a5c083ed75bb71ea616965c9c33478eef91131ffca9",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-selected.png": {
+      "sha256": "69001c1e72c90374d91ece36a5386df2c38c6e35f55506b291822cb07a67021e",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-top.png": {
+      "sha256": "0604c40b883b287b608fb6b75cbc9d3bd16568aeec49a44b7371db9e3ea8eeb2",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-bottom.png": {
+      "sha256": "7cbdbe68989c4366582cfac0c662f5d19e1bb8dca2f8df6fe7bba5c84399b559",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-discard.png": {
+      "sha256": "bdf724b7b660a17d2a321dd7687f7e045a5dce408892e8521cc6bd645fa8c8ea",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-selected.png": {
+      "sha256": "98dc8a6fc2cbe9b6dad4838d08a4ae0bafe8c62b4ad854f9ff655ff027a0e5a1",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-top.png": {
+      "sha256": "43ab1d89164c275a50ba3b63e209aaec6e9f396ed64d3b63c73873a893b95f95",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-bottom.png": {
+      "sha256": "420b6e2cf11079d75a0db59ca56fa8028225655dba76dba6d12cde169033e50a",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-discard.png": {
+      "sha256": "88373b6d7da59f5edaed91bb1572c656b1b68ba52d6eec25f3485da72c9e52bc",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-selected.png": {
+      "sha256": "557a86554daa91638ed6ffcba146cd93bb59582d090f9fe6e46b9d5d6e0e07c3",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-top.png": {
+      "sha256": "d701d9e007a4788ca99a01f1b38e99f4ebaefcc103229225a518ae00ddd14b51",
+      "size": [
+        780,
+        1688
+      ]
+    }
+  },
+  "sourceHashes": {
+    "lib/screens/tabs/shop_tab.dart": "840b58df4fe91cdf6450d4a57db683692cb241e35f8d8591376d5d5d1caccd2e",
+    "lib/screens/character_wardrobe_screen.dart": "832f0126b2c74d71f33d807329166cd13a8f415e9646d9b651b7bcea46007d50",
+    "lib/widgets/coin_pack_offers.dart": "db0f44371cfc71d3296b4c26780c8430611e68ab753109e66d412b7f17cfa51f",
+    "lib/widgets/locked_shop_art.dart": "24ec9279b28722e72d76d9037cc51790afbd9e90d119e871c123ebf90968b5c3",
+    "lib/widgets/shop_character_card.dart": "3e17c9b56afb7849eab9ab698a1aaffe2d8cb056d98edbe4f63c09d6f2b70e2e"
+  }
+}

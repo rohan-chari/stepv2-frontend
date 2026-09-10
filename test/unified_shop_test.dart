@@ -335,7 +335,7 @@ void main() {
       ];
     await pumpShop(tester, billing: billing);
     expect(find.text('777'), findsOneWidget);
-    expect(find.text('Buy · €2,49'), findsOneWidget);
+    expect(find.text('€2,49'), findsOneWidget);
     expect(
       find.image(const AssetImage('assets/images/shop/coin_sack_small.png')),
       findsOneWidget,
@@ -418,7 +418,14 @@ void main() {
       'buy-coins-coins_2800',
       'buy-coins-coins_6000',
     ]) {
-      expect(tester.widget<PillButton>(find.byKey(Key(key))).onPressed, isNull);
+      if (key == 'start-bara-trial') {
+        expect(
+          tester.widget<PillButton>(find.byKey(Key(key))).onPressed,
+          isNull,
+        );
+      } else {
+        expect(tester.widget<InkWell>(find.byKey(Key(key))).onTap, isNull);
+      }
     }
     expect(find.text('Check purchase status'), findsWidgets);
     billing.update(const BillingSnapshot());

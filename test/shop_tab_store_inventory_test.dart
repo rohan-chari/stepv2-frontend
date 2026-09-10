@@ -743,7 +743,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('wardrobe-section-owned')), findsOneWidget);
-      expect(find.byKey(const Key('wardrobe-section-unowned')), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-section-locked')), findsOneWidget);
     },
   );
 

@@ -19,7 +19,7 @@ void main() {
     ),
   );
   testWidgets(
-    'offline wardrobe examples retain earned and unavailable ownership through reset',
+    'offline wardrobe examples retain earned and unavailable ownership through draft toggling',
     (tester) async {
       final controller = PreviewBillingController();
       addTearDown(controller.dispose);
@@ -44,9 +44,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(const Key('wardrobe-item-sunglasses')));
       await tester.pump();
-      expect(find.text('Reset').hitTestable(), findsOneWidget);
+      expect(find.text('Reset'), findsNothing);
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('Reset'));
+      await tester.tap(find.byKey(const Key('wardrobe-item-sunglasses')));
       await tester.pump();
       await tester.scrollUntilVisible(
         find.byKey(const Key('wardrobe-saved-status')),

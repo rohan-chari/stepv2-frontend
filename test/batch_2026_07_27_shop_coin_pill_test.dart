@@ -471,8 +471,7 @@ void main() {
           ],
         ),
       );
-      await tester.tap(find.text('OWNED'));
-      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('OWNED'), findsNothing);
       await selectShopCategory(tester, 'POWERUPS');
       await tester.pump(const Duration(milliseconds: 300));
 

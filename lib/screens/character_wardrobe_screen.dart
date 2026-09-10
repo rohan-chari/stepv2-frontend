@@ -11,6 +11,8 @@ import '../widgets/accessory_thumbnail.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/game_container.dart';
+import '../widgets/locked_shop_art.dart';
 import '../widgets/home_hero_scene.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/shop_category_bar.dart';
@@ -226,25 +228,82 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
     if (!_dirty || widget.tutorial) return true;
     return await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: AppColors.of(context).parchment,
-            title: const Text('Discard outfit changes?'),
-            content: const Text(
-              'Your purchased items stay yours. This outfit has not been saved.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Keep editing'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Discard changes'),
-              ),
-            ],
+          builder: (context) => _decisionModal(
+            context,
+            title: 'Discard outfit changes?',
+            body:
+                'Your purchased items stay yours. This outfit has not been saved.',
+            confirmLabel: 'Discard changes',
           ),
         ) ??
         false;
+  }
+
+  Widget _decisionModal(
+    BuildContext dialogContext, {
+    required String title,
+    required String body,
+    required String confirmLabel,
+    bool canConfirm = true,
+  }) {
+    final colors = AppColors.of(dialogContext);
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: GameContainer(
+            key: const Key('wardrobe-decision-modal'),
+            frameColor: colors.pillGoldDark,
+            surfaceColor: colors.parchment,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.checkroom_rounded,
+                  size: 34,
+                  color: colors.pillGoldDark,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(size: 22, color: colors.textDark),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  body,
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 14, color: colors.textMid),
+                ),
+                const SizedBox(height: 22),
+                PillButton(
+                  label: 'Keep editing',
+                  variant: PillButtonVariant.secondary,
+                  fullWidth: true,
+                  scaleDownContent: false,
+                  labelMaxLines: 2,
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                ),
+                const SizedBox(height: 12),
+                PillButton(
+                  label: confirmLabel,
+                  variant: PillButtonVariant.primary,
+                  fullWidth: true,
+                  scaleDownContent: false,
+                  labelMaxLines: 2,
+                  onPressed: canConfirm
+                      ? () => Navigator.pop(dialogContext, true)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _leave([ShopCategory? category]) async {
@@ -347,24 +406,13 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
     if (!mounted || !_current) return;
     final reload = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.of(context).parchment,
-        title: const Text('Review changed outfit'),
-        content: const Text(
-          'Your saved outfit changed. Reload it to discard this draft, or keep editing and review before saving again.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep editing'),
-          ),
-          TextButton(
-            onPressed: fresh == null
-                ? null
-                : () => Navigator.pop(context, true),
-            child: const Text('Reload saved'),
-          ),
-        ],
+      builder: (context) => _decisionModal(
+        context,
+        title: 'Review changed outfit',
+        body:
+            'Your saved outfit changed. Reload it to discard this draft, or keep editing and review before saving again.',
+        confirmLabel: 'Reload saved',
+        canConfirm: fresh != null,
       ),
     );
     if (!_current || fresh == null) return;
@@ -469,6 +517,10 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                           IconButton(
                             key: const Key('wardrobe-back'),
                             tooltip: 'Back to Characters',
+                            constraints: const BoxConstraints.tightFor(
+                              width: 48,
+                              height: 48,
+                            ),
                             onPressed: _busy ? null : () => _leave(),
                             icon: Icon(
                               Icons.arrow_back,
@@ -476,16 +528,17 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                             ),
                           ),
                           Expanded(
-                            flex: 2,
                             child: Text(
                               widget.character.name,
-                              textAlign: TextAlign.right,
+                              key: const Key('wardrobe-title'),
+                              textAlign: TextAlign.center,
                               style: PixelText.title(
                                 size: 17,
                                 color: colors.textLight,
                               ),
                             ),
                           ),
+                          const SizedBox(width: 48),
                         ],
                       ),
                     ),
@@ -603,8 +656,8 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                             owned: true,
                                           ),
                                           _accessorySection(
-                                            'Unowned',
-                                            'unowned',
+                                            'Locked',
+                                            'locked',
                                             owned: false,
                                           ),
                                         ],
@@ -634,13 +687,13 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
               child: SpotlightOverlay(
                 targetRect: _tutorialRect,
                 title: const [
-                  'SAVE OR RESET',
+                  'SAVE YOUR OUTFIT',
                   'TRY IT ON',
                   'FIND YOUR FIT',
                   'BACK TO THE SHOP',
                 ][_tutorialIndex],
                 body: const [
-                  'Outfits save independently for each character. Reset returns to its saved look.',
+                  'Outfits save independently for each character. Save keeps your changes; Back lets you discard an unsaved look.',
                   'Preview accessories here before buying or saving. Editing does not switch your active character.',
                   'Only accessories made for this character can be selected. Items you already own remain yours.',
                   'Back returns to Characters. Scroll through the shop sections to browse more.',
@@ -698,7 +751,6 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
   }
 
   Widget _buildControls() {
-    final colors = AppColors.of(context);
     return KeyedSubtree(
       key: _controlsKey,
       child: Row(
@@ -706,6 +758,7 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
         children: [
           Expanded(
             child: PillButton(
+              variant: PillButtonVariant.secondary,
               fullWidth: true,
               scaleDownContent: false,
               labelMaxLines: 2,
@@ -719,30 +772,6 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                       !widget.tutorial
                   ? _save
                   : null,
-            ),
-          ),
-          const SizedBox(width: 10),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: colors.textLight,
-              disabledForegroundColor: colors.textLight.withValues(alpha: .45),
-              minimumSize: const Size(64, 48),
-            ),
-            onPressed: _dirty && !_busy
-                ? () => setState(() {
-                    _saved = _wardrobe?.outfit ?? _saved;
-                    _draft = {...?_saved?.slots};
-                    _selected = null;
-                  })
-                : null,
-            child: Text(
-              'Reset',
-              style: PixelText.body(
-                size: 14,
-                color: _dirty && !_busy
-                    ? colors.textLight
-                    : colors.textLight.withValues(alpha: .45),
-              ),
             ),
           ),
         ],
@@ -793,7 +822,7 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
             child: Text(
               owned
                   ? 'Your accessories will appear here.'
-                  : 'No unowned accessories for this character.',
+                  : 'No locked accessories for this character.',
               style: PixelText.body(size: 14, color: colors.textLight),
             ),
           ),
@@ -831,13 +860,18 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                   Column(
                     children: [
                       Expanded(
-                        child: AccessoryThumbnail(
-                          assetKey: wardrobeString(item.item['assetKey']) ?? '',
-                          animationFrames: AccessoryThumbnail.framesOf(
-                            item.item,
+                        child: LockedShopArt(
+                          key: Key('wardrobe-art-${item.id}'),
+                          locked: !item.owned,
+                          child: AccessoryThumbnail(
+                            assetKey:
+                                wardrobeString(item.item['assetKey']) ?? '',
+                            animationFrames: AccessoryThumbnail.framesOf(
+                              item.item,
+                            ),
+                            errorBuilder: (_, error, stack) =>
+                                const Icon(Icons.checkroom),
                           ),
-                          errorBuilder: (_, error, stack) =>
-                              const Icon(Icons.checkroom),
                         ),
                       ),
                       Text(

@@ -176,7 +176,7 @@ void main() {
   group('§8 shop type scale', () {
     testWidgets('badge, name and action strip are raised', (tester) async {
       await _pump(tester, coins: 1000, price: 150, ownedQuantity: 2);
-      expect(_styleOf(tester, 'x2').fontSize, 10);
+      expect(_styleOf(tester, 'x2').fontSize, 14);
       expect(_styleOf(tester, 'Big Bang').fontSize, 13);
       expect(_styleOf(tester, '150').fontSize, 13);
     });

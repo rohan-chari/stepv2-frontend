@@ -164,7 +164,7 @@ void main() {
       heldProducts = null;
       await tester.runAsync(() => pending);
       await tester.pump();
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
     },
   );
   testWidgets(
@@ -198,7 +198,7 @@ void main() {
       await tester.pump();
       expect(find.text('Loading membership…'), findsNothing);
       expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
     },
   );
   for (final code in ['channel-error', '-1']) {
@@ -215,7 +215,7 @@ void main() {
         try {
           await tester.runAsync(billing.refresh);
           await render(tester);
-          expect(find.text('Buy · €1,09'), findsOneWidget);
+          expect(find.text('€1,09'), findsOneWidget);
           expect(
             logs,
             contains('Store catalog: subscription_products (unknown)'),
@@ -234,7 +234,7 @@ void main() {
       failSubscriptions = true;
       await tester.runAsync(billing.refresh);
       await render(tester);
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
       expect(find.byKey(const Key('buy-coins-coins_500')), findsOneWidget);
       expect(billing.plans, isEmpty);
     },
@@ -298,7 +298,7 @@ void main() {
       failEligibility = true;
       await tester.runAsync(billing.refresh);
       await render(tester);
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
       expect(billing.plans.single.trialDays, 0);
       await render(tester, membership: true);
       expect(find.textContaining('€5,49'), findsWidgets);
@@ -333,7 +333,7 @@ void main() {
       for (var i = 0; i < 15; i++) {
         await tester.pump(const Duration(milliseconds: 20));
       }
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
     },
   );
   testWidgets(
@@ -373,7 +373,7 @@ void main() {
       });
       await render(tester);
       expect(billing.userId, 'b');
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
       final identities = calls
           .where((c) => c.method == 'logIn')
           .map((c) => (c.arguments as Map)['appUserID'])

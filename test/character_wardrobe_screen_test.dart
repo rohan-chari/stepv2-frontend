@@ -1,4 +1,5 @@
 import 'package:step_tracker/widgets/home_hero_scene.dart';
+import 'package:step_tracker/widgets/locked_shop_art.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
 import 'support/shop_navigation.dart';
 import 'package:flutter/foundation.dart';
@@ -560,12 +561,75 @@ void main() {
     });
   });
   testWidgets(
+    'wardrobe title is centered, gold Save stands alone, and Locked artwork has a lock overlay',
+    (tester) async {
+      final api = WardrobeApi()..hatOwned = false;
+      await pumpWardrobeShop(tester, api);
+      await openWardrobe(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        tester.getCenter(find.byKey(const Key('wardrobe-title'))).dx,
+        closeTo(195, .1),
+      );
+      expect(find.text('Reset'), findsNothing);
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'Save outfit'))
+            .variant,
+        PillButtonVariant.secondary,
+      );
+      expect(find.text('Locked'), findsOneWidget);
+      expect(find.text('Unowned'), findsNothing);
+      final tile = find.byKey(const Key('wardrobe-item-shop-baseball-cap'));
+      expect(
+        find.descendant(of: tile, matching: find.byIcon(Icons.lock_rounded)),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<LockedShopArt>(
+              find.byKey(const Key('wardrobe-art-shop-baseball-cap')),
+            )
+            .locked,
+        isTrue,
+      );
+      await tester.tap(tile);
+      await tester.pump();
+      expect(
+        find.byKey(const Key('wardrobe-selected-shop-baseball-cap')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'Save outfit'))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
+      await tester.pump();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const Key('wardrobe-decision-modal')), findsOneWidget);
+      expect(find.widgetWithText(PillButton, 'Keep editing'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
+    },
+  );
+  testWidgets(
     'walking Home scene exposes saved state and explains unsaved draft with selected badge',
     (tester) async {
       await pumpWardrobeShop(tester, WardrobeApi());
       await openWardrobe(tester);
       expect(find.text('Back to Characters'), findsNothing);
       expect(find.byKey(const Key('wardrobe-back')), findsOneWidget);
+      expect(
+        tester
+            .widget<LockedShopArt>(
+              find.byKey(const Key('wardrobe-art-shop-baseball-cap')),
+            )
+            .locked,
+        isFalse,
+      );
       final stage = find.byKey(const Key('wardrobe-preview'));
       expect(
         find.descendant(of: stage, matching: find.byType(HomeHeroScene)),
@@ -598,7 +662,10 @@ void main() {
       await tester.tap(find.byKey(const Key('wardrobe-unsaved-status')));
       await tester.pump();
       expect(find.textContaining('have not been saved'), findsOneWidget);
-      await tester.tap(find.text('Reset'));
+      expect(find.text('Reset'), findsNothing);
+      await tester.tap(
+        find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
+      );
       await tester.pump();
       expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
       expect(
@@ -608,13 +675,13 @@ void main() {
     },
   );
   testWidgets(
-    'Owned and Unowned sections keep Save outfit fixed while accessories scroll',
+    'Owned and Locked sections keep Save outfit fixed while accessories scroll',
     (tester) async {
       final api = SectionedAccessoriesApi();
       await pumpWardrobeShop(tester, api);
       await openWardrobe(tester);
       expect(find.byKey(const Key('wardrobe-section-owned')), findsOneWidget);
-      expect(find.byKey(const Key('wardrobe-section-unowned')), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-section-locked')), findsOneWidget);
       expect(find.byKey(const Key('wardrobe-item-preserved')), findsNothing);
       expect(find.text('Other owned items'), findsNothing);
       final controls = find.byKey(const Key('wardrobe-controls'));
@@ -969,7 +1036,7 @@ void main() {
     },
   );
   testWidgets(
-    'inactive outfit save persists without activation and reset restores saved draft',
+    'inactive outfit save persists without activation and toggling restores saved draft',
     (tester) async {
       final api = WardrobeApi();
       await pumpWardrobeShop(tester, api);
@@ -995,7 +1062,10 @@ void main() {
         find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
       );
       await tester.pump();
-      await tester.tap(find.text('Reset'));
+      expect(find.text('Reset'), findsNothing);
+      await tester.tap(
+        find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
+      );
       await tester.pump();
       expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
     },
@@ -1059,6 +1129,8 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Save outfit'));
     await tester.pump();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const Key('wardrobe-decision-modal')), findsOneWidget);
     expect(find.text('Reload saved'), findsOneWidget);
     expect(find.text('Keep editing'), findsOneWidget);
     expect(api.outfits['default']?['HEAD'], isNull);

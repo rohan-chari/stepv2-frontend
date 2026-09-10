@@ -62,7 +62,7 @@ void main() {
             );
             for (final description in [
               'Stock up on coins for powerups and accessories.',
-              'Buy powerups to use in races, or view the ones you own.',
+              'Buy powerups for races. The badge shows how many you own.',
               'Tap a character to customize its outfit or unlock a new one.',
             ]) {
               expect(find.text(description), findsOneWidget);
@@ -166,6 +166,14 @@ void main() {
         find.bySemanticsLabel(RegExp('Turtle, ${owned ? 'owned' : 'locked'}')),
         findsOneWidget,
       );
+      if (!owned) {
+        final lock = find.byIcon(Icons.lock_rounded);
+        final art = find.byKey(const Key('shop-character-art'));
+        expect(tester.getCenter(lock), tester.getCenter(art));
+        expect(find.byKey(const Key('locked-shop-art-shade')), findsOneWidget);
+      } else {
+        expect(find.byKey(const Key('locked-shop-art-shade')), findsNothing);
+      }
       await tester.tap(find.byType(ShopCharacterCard));
       expect(taps, 1);
       semantics.dispose();

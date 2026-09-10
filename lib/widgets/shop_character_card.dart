@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/character_wardrobe.dart';
 import '../styles.dart';
 import 'race_ui.dart';
+import 'locked_shop_art.dart';
 
 class ShopCharacterCard extends StatelessWidget {
   const ShopCharacterCard({
@@ -40,16 +41,23 @@ class ShopCharacterCard extends StatelessWidget {
               Column(
                 children: [
                   Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => Center(
-                        child: RacerAvatar(
-                          rank: 1,
-                          size: constraints.biggest.shortestSide.clamp(24, 240),
-                          showMedalRing: false,
-                          animal: character.animal,
-                          accessories: character.owned
-                              ? character.outfit?.items ?? []
-                              : [],
+                    child: LockedShopArt(
+                      key: const Key('shop-character-art'),
+                      locked: !character.owned,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Center(
+                          child: RacerAvatar(
+                            rank: 1,
+                            size: constraints.biggest.shortestSide.clamp(
+                              24,
+                              240,
+                            ),
+                            showMedalRing: false,
+                            animal: character.animal,
+                            accessories: character.owned
+                                ? character.outfit?.items ?? []
+                                : [],
+                          ),
                         ),
                       ),
                     ),
@@ -76,27 +84,6 @@ class ShopCharacterCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (!character.owned)
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: ExcludeSemantics(
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(
-                          color: colors.textDark,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          size: 15,
-                          color: colors.parchment,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

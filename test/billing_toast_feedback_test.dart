@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction;
+import 'package:step_tracker/styles.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +16,6 @@ import 'package:step_tracker/screens/get_coins_screen.dart';
 import 'package:step_tracker/services/billing_controller.dart';
 import 'package:step_tracker/widgets/billing_scope.dart';
 import 'package:step_tracker/widgets/coin_pack_offers.dart';
-import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/game_toast.dart';
 
 class ToastBilling extends BillingController {
@@ -89,13 +90,68 @@ void main() {
   );
 
   testWidgets(
-    'coin purchase uses primary Buy control and a transient success toast',
+    'coin card supports one accessible checkout action and disables it while pending',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      final pending = Completer<BillingResult>();
+      var calls = 0;
+      final billing = ToastBilling()
+        ..action = () {
+          calls++;
+          return pending.future;
+        };
+      await tester.pumpWidget(host(billing));
+      final target = find.bySemanticsLabel(r'Buy 500 coins for $0.99');
+      expect(target, findsOneWidget);
+      final node = tester.getSemantics(target);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      node.owner!.performAction(
+        node.id,
+        SemanticsAction.tap,
+      );
+      await tester.pump();
+      expect(calls, 1);
+      expect(
+        tester
+            .getSemantics(target)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isFalse,
+      );
+      await tester.tap(find.byKey(const Key('buy-coins-coins_500')));
+      expect(calls, 1);
+      pending.complete(
+        const BillingResult(success: true, message: 'Purchase verified'),
+      );
+      await tester.pump();
+      expect(
+        tester
+            .getSemantics(target)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox());
+      handle.dispose();
+      billing.dispose();
+    },
+  );
+
+  testWidgets(
+    'coin purchase uses a themed price strip and a transient success toast',
     (tester) async {
       final billing = ToastBilling();
       await tester.pumpWidget(host(billing));
       final buy = find.byKey(const Key('buy-coins-coins_500'));
-      expect(tester.widget<PillButton>(buy).variant, PillButtonVariant.primary);
-      expect(find.text(r'Buy · $0.99'), findsOneWidget);
+      expect(tester.widget<InkWell>(buy).onTap, isNotNull);
+      expect(find.text(r'$0.99'), findsOneWidget);
+      expect(find.text(r'Buy · $0.99'), findsNothing);
+      final strip = tester.widget<Container>(
+        find.byKey(const Key('coin-price-strip-coins_500')),
+      );
+      final decoration = strip.decoration! as BoxDecoration;
+      final colors = AppColors.of(tester.element(buy));
+      expect(decoration.color, colors.pillGold.withValues(alpha: .22));
       await tester.tap(buy);
       await tester.pump();
       expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
@@ -272,7 +328,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('error-toast-shell')), findsOneWidget);
     expect(find.text('Store unavailable'), findsOneWidget);
-    expect(tester.widget<PillButton>(buy).onPressed, isNotNull);
+    expect(tester.widget<InkWell>(buy).onTap, isNotNull);
     await tester.pumpWidget(const SizedBox());
     billing.dispose();
   });
@@ -359,7 +415,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const Key('error-toast-shell')), findsNothing);
       expect(find.text('Checkout closed'), findsNothing);
-      expect(tester.widget<PillButton>(buy).onPressed, isNotNull);
+      expect(tester.widget<InkWell>(buy).onTap, isNotNull);
       await tester.pumpWidget(const SizedBox());
       billing.dispose();
     },

@@ -255,7 +255,7 @@ void main() {
           home: Scaffold(body: CoinPackOffers(controller: billing)),
         ),
       );
-      expect(find.text('Buy · €1,09'), findsOneWidget);
+      expect(find.text('€1,09'), findsOneWidget);
       expect(find.textContaining(r'$0.99'), findsNothing);
       await tester.pumpWidget(
         MaterialApp(home: BaraPlusScreen(controller: billing)),

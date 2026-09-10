@@ -92,23 +92,21 @@ void main() {
       },
     );
   }
-  testWidgets('Powerups remembers local Owned selection across destinations', (
+  testWidgets('Powerups keeps its unified grid across section destinations', (
     tester,
   ) async {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling(), focus: ShopFocus.coins);
     await selectShopCategory(tester, 'POWERUPS');
-    await tester.tap(find.text('OWNED'));
-    await tester.pump();
-    expect(find.byKey(const Key('shop-product-card')), findsNothing);
+    expect(find.text('OWNED'), findsNothing);
+    expect(find.text('BUY'), findsNothing);
+    expect(find.byKey(const Key('shop-product-card')), findsOneWidget);
     await selectShopCategory(tester, 'CHARACTERS');
     expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
     await selectShopCategory(tester, 'FEATURED');
     expect(find.byType(CoinPackOffers), findsOneWidget);
     await selectShopCategory(tester, 'POWERUPS');
-    expect(find.byKey(const Key('shop-product-card')), findsNothing);
-    await tester.tap(find.text('BUY'));
-    await tester.pump();
+    expect(find.byKey(const Key('shop-filter-sort-button')), findsOneWidget);
     expect(find.byKey(const Key('shop-product-card')), findsOneWidget);
   });
   testWidgets(

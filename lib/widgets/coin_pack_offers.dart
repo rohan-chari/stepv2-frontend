@@ -6,7 +6,6 @@ import '../services/billing_controller.dart';
 import '../styles.dart';
 import 'billing_scope.dart';
 import 'billing_action_feedback.dart';
-import 'pill_button.dart';
 import 'loading_skeleton.dart';
 import 'shop_product_grid.dart';
 
@@ -209,6 +208,8 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
     CoinPackOffer offer,
   ) {
     final colors = AppColors.of(context);
+    final enabled = !_busy && !controller.snapshot.busy;
+    final purchasing = _busy && _busyOfferId == offer.id;
     return Container(
       key: Key('coin-tile-${offer.id}'),
       clipBehavior: Clip.antiAlias,
@@ -217,64 +218,89 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: colors.parchmentBorder),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: 25,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  billingCoinLabel(offer.coins),
-                  style: PixelText.title(size: 19, color: colors.textDark),
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        onTap: enabled ? () => _buy(controller, offer) : null,
+        excludeSemantics: true,
+        label: 'Buy ${billingCoinLabel(offer.coins)} coins for ${offer.price}',
+        value: purchasing ? 'Purchase in progress' : null,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: Key('buy-coins-${offer.id}'),
+            onTap: enabled ? () => _buy(controller, offer) : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 25,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 3,
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        billingCoinLabel(offer.coins),
+                        style: PixelText.title(
+                          size: 19,
+                          color: colors.textDark,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Image.asset(
-                'assets/images/shop/coin_sack_${_art(offer)}.png',
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
-                excludeFromSemantics: true,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 16,
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  'COINS',
-                  style: PixelText.body(size: 9, color: colors.textMid),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Image.asset(
+                      'assets/images/shop/coin_sack_${_art(offer)}.png',
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.none,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
                 ),
-              ),
+                SizedBox(
+                  height: 16,
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'COINS',
+                        style: PixelText.body(size: 9, color: colors.textMid),
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  key: Key('coin-price-strip-${offer.id}'),
+                  height: 32,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: colors.pillGold.withValues(
+                      alpha: enabled ? .22 : .10,
+                    ),
+                    border: Border(top: BorderSide(color: colors.pillGoldDark)),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      purchasing ? 'Processing…' : offer.price,
+                      style: PixelText.title(
+                        size: 13,
+                        color: enabled ? colors.textDark : colors.textMid,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          SizedBox(
-            height: 40,
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: PillButton(
-                key: Key('buy-coins-${offer.id}'),
-                label: 'Buy · ${offer.price}',
-                loading: _busy && _busyOfferId == offer.id,
-                fontSize: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-                fullWidth: true,
-                variant: PillButtonVariant.primary,
-                onPressed: _busy || controller.snapshot.busy
-                    ? null
-                    : () => _buy(controller, offer),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

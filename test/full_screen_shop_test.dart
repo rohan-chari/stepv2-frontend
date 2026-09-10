@@ -46,8 +46,8 @@ void main() {
     expect(find.byKey(const Key('shop-character-preview')), findsNothing);
     await tester.ensureVisible(powerups);
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('BUY'), findsOneWidget);
-    expect(find.text('OWNED'), findsOneWidget);
+    expect(find.text('BUY'), findsNothing);
+    expect(find.text('OWNED'), findsNothing);
     expect(find.text('Featured'), findsOneWidget);
   });
   testWidgets(

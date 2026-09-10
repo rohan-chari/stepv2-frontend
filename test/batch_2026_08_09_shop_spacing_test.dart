@@ -10,7 +10,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 /// Batch 2026-08-09 item 3 — shop header spacing.
 ///
-/// The section-local BUY/OWNED and filter/sort row retain an 8px gap.
+/// The section-local filter/sort row follows the description without a toggle.
 /// The continuous Shop has no category bar or category-sized blank viewport.
 class _FakeShopApi extends BackendApiService {
   @override
@@ -94,18 +94,25 @@ void main() {
     PowerupCopy.resetForTest();
   });
 
-  testWidgets('Powerups segment and filter retain an 8px local gap', (
+  testWidgets('Powerups description and filter retain a 12px local gap', (
     tester,
   ) async {
     await _pump(tester);
     final segment = find.byKey(const Key('shop-segment-control'));
     final controls = find.byKey(const Key('shop-filter-sort-button'));
-    expect(segment, findsOneWidget);
+    expect(segment, findsNothing);
     expect(controls, findsOneWidget);
     expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
-    expect(_gap(tester, segment, controls), closeTo(8.0, 0.01));
     expect(
-      tester.getTopLeft(segment).dy,
+      _gap(
+        tester,
+        find.byKey(const Key('shop-section-description-powerups')),
+        controls,
+      ),
+      closeTo(12.0, 0.01),
+    );
+    expect(
+      tester.getTopLeft(controls).dy,
       greaterThan(
         tester.getBottomLeft(find.byKey(const Key('shop-section-powerups'))).dy,
       ),
@@ -118,7 +125,7 @@ void main() {
       await _pump(tester);
       await selectShopCategory(tester, 'CHARACTERS');
       expect(find.byKey(const Key('shop-filter-sort-button')), findsOneWidget);
-      expect(find.byKey(const Key('shop-segment-control')), findsOneWidget);
+      expect(find.byKey(const Key('shop-segment-control')), findsNothing);
       expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
       final characters = find.byKey(const Key('shop-section-characters'));
       expect(
@@ -133,13 +140,14 @@ void main() {
     },
   );
 
-  testWidgets('OWNED removes only the Powerups filter row', (tester) async {
+  testWidgets('unified Powerups keeps filters and surrounding sections', (
+    tester,
+  ) async {
     await _pump(tester);
-    await tester.tap(find.text('OWNED'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byKey(const Key('shop-filter-sort-button')), findsNothing);
-    expect(find.byKey(const Key('shop-segment-control')), findsOneWidget);
+    expect(find.text('OWNED'), findsNothing);
+    expect(find.text('BUY'), findsNothing);
+    expect(find.byKey(const Key('shop-filter-sort-button')), findsOneWidget);
+    expect(find.byKey(const Key('shop-segment-control')), findsNothing);
     expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
     expect(find.byKey(const Key('shop-section-featured')), findsOneWidget);
     expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
