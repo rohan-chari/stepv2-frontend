@@ -236,8 +236,74 @@ class TestStore extends StoreBillingClient {
   Future<void> manage() async {}
 }
 
+class CoinPackTestStore extends TestStore {
+  @override
+  Future<List<StoreBillingProduct>> products(
+    List<String> coins,
+    List<String> subscriptions,
+  ) async => [
+    for (final id in coins) StoreBillingProduct(id: id, price: '€4,99'),
+  ];
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  for (final platform in ['ios', 'android']) {
+    testWidgets('existing $platform pack tiles refresh backend quantities', (
+      tester,
+    ) async {
+      final api = TestApi();
+      Map<String, dynamic> catalog(int medium, int large) => {
+        ...api.data(),
+        'products': [
+          for (final pack in [
+            ('coins_500', 500),
+            ('coins_2800', medium),
+            ('coins_6000', large),
+          ])
+            {
+              'id': pack.$1,
+              'storeProductId': 'bara_${pack.$1}_v1',
+              'kind': 'coins',
+              'coins': pack.$2,
+            },
+        ],
+      };
+      api.rawBootstrap = catalog(2800, 6000);
+      final billing = LiveBillingController(
+        auth: TestAuth(),
+        api: api,
+        store: CoinPackTestStore(),
+        platform: platform,
+      );
+      addTearDown(billing.dispose);
+      await billing.refresh();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CoinPackOffers(controller: billing),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('2,800'), findsOneWidget);
+      expect(find.text('6,000'), findsOneWidget);
+      api.rawBootstrap = catalog(3000, 7500);
+      await billing.refresh();
+      await tester.pump();
+      expect(find.text('500'), findsOneWidget);
+      expect(find.text('3,000'), findsOneWidget);
+      expect(find.text('7,500'), findsOneWidget);
+      expect(find.text('2,800'), findsNothing);
+      expect(find.text('6,000'), findsNothing);
+      expect(find.byKey(const Key('coin-tile-coins_2800')), findsOneWidget);
+      expect(find.byKey(const Key('coin-tile-coins_6000')), findsOneWidget);
+      expect(find.text('€4,99'), findsNWidgets(3));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'localized offers and noneligible subscribe CTA render on real screens',
     (tester) async {

@@ -1,0 +1,119 @@
+{
+  "verifiedAt": "2026-09-10T21:53:28.757Z",
+  "backendCommit": "b8a2969ff977734a0a4ffde18f23749bbb803fb6",
+  "submission": {
+    "id": "ec62661c-7eae-4d3f-902b-8bf841b4fbd9",
+    "platform": "IOS",
+    "submittedDate": "2026-09-10T21:52:38.54Z",
+    "state": "WAITING_FOR_REVIEW"
+  },
+  "appVersion": {
+    "version": "2.3.13",
+    "build": "19",
+    "buildId": "4aeba851-b067-45c6-a3d6-76837f109ea0",
+    "releaseType": "MANUAL",
+    "state": "WAITING_FOR_REVIEW"
+  },
+  "appleProducts": [
+    {
+      "id": "6809896890",
+      "name": "500 Coins",
+      "productId": "bara_coins_500_v1",
+      "state": "WAITING_FOR_REVIEW",
+      "localizations": [
+        {
+          "name": "500 Coins",
+          "locale": "en-US",
+          "description": "500 coins for powerups, cosmetics, and rerolls."
+        }
+      ],
+      "screenshotId": "6502553a-e2fb-4c5e-8b40-d62cfe1087d2"
+    },
+    {
+      "id": "6809901675",
+      "name": "3,000 Coins",
+      "productId": "bara_coins_2800_v1",
+      "state": "WAITING_FOR_REVIEW",
+      "localizations": [
+        {
+          "name": "3,000 Coins",
+          "locale": "en-US",
+          "description": "3,000 coins for powerups, cosmetics & rerolls"
+        }
+      ],
+      "screenshotId": "db45169b-37a6-48d3-9138-bfe152e47bea"
+    },
+    {
+      "id": "6809902519",
+      "name": "7,500 Coins",
+      "productId": "bara_coins_6000_v1",
+      "state": "WAITING_FOR_REVIEW",
+      "localizations": [
+        {
+          "name": "7,500 Coins",
+          "locale": "en-US",
+          "description": "7,500 coins for powerups, cosmetics & rerolls"
+        }
+      ],
+      "screenshotId": "1cc2e2d2-02e8-46ba-8d36-98e559091297"
+    }
+  ],
+  "revenueCatProducts": [
+    {
+      "id": "prod07d111f863",
+      "productId": "bara_coins_6000_v1",
+      "name": "7,500 Coins"
+    },
+    {
+      "id": "prod77c783d4a0",
+      "productId": "bara_coins_500_v1",
+      "name": "500 Coins"
+    },
+    {
+      "id": "prodb0a9a09a26",
+      "productId": "bara_coins_2800_v1",
+      "name": "3,000 Coins"
+    }
+  ],
+  "liveCatalog": [
+    {
+      "platform": "ios",
+      "status": 200,
+      "available": true,
+      "contract": "bara-billing-v1",
+      "packs": [
+        {
+          "id": "coins_500",
+          "kind": "coins",
+          "coins": 500,
+          "credits": 0,
+          "plan": null,
+          "storeProductId": "bara_coins_500_v1"
+        },
+        {
+          "id": "coins_2800",
+          "kind": "coins",
+          "coins": 3000,
+          "credits": 0,
+          "plan": null,
+          "storeProductId": "bara_coins_2800_v1"
+        },
+        {
+          "id": "coins_6000",
+          "kind": "coins",
+          "coins": 7500,
+          "credits": 0,
+          "plan": null,
+          "storeProductId": "bara_coins_6000_v1"
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "status": 200,
+      "available": false,
+      "contract": "bara-billing-v1",
+      "packs": []
+    }
+  ]
+}

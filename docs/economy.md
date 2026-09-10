@@ -2483,7 +2483,7 @@ integer rounding. Exact rounding is still an implementation policy to record.
 
 ### Shop redesign catalog verification — 2026-09-08 (local code only)
 
-Backend `src/modules/billing/catalog.js:1-10` currently defines coin packs of
+On September 8, backend `src/modules/billing/catalog.js:1-10` defined coin packs of
 500, 2,800 and 6,000 coins; no 28,000-coin product exists in that code catalog.
 Its public catalog excludes annual membership while retaining its historical
 product definition. Frontend `lib/services/live_billing_controller.dart:276-290`
@@ -2492,6 +2492,44 @@ quantity and store-localized price. The US prices above are reference inputs,
 not prices freshly verified against a live store. The unified-shop proposal
 (`docs/unified-shop-requirements.md`) preserves these products, grants and
 purchase handlers; no production query was performed for this UI review.
+
+### Coin-pack quantity update — verified 2026-09-10 (production API and code)
+
+The approved 500 / 3,000 / 7,500 quantities are implemented in backend
+`src/modules/billing/catalog.js:1-10` (change `0422190`, merged as `b8a2969`).
+This supersedes the earlier pack quantities in this section. Production
+deployment `b8a2969` was verified through authenticated
+`GET /billing/bootstrap?platform=ios`: HTTP 200 with `bara-billing-v1` and
+500 / 3,000 / 7,500 coins. Android bootstrap retained HTTP 200 with
+`available:false` and an empty catalog. Source: release agent's authenticated
+production verification on September 10. Internal IDs
+remain `coins_500`, `coins_2800`, and `coins_6000`; iOS and Android store IDs
+remain `bara_coins_500_v1`, `bara_coins_2800_v1`, and `bara_coins_6000_v1`.
+The numeric suffixes are stable historical identifiers, not grant amounts.
+RevenueCat product display names and Apple's names, localizations, and review
+screenshots were updated; Apple price schedules were preserved. Build 19 and
+all three packs were resubmitted at `2026-09-10T21:52:38.54Z` and verified
+`WAITING_FOR_REVIEW`, with manual release retained. This verifies backend
+activation and review submission, not App Store customer release.
+Assuming the reference prices above stay
+$0.99 / $4.99 / $9.99, medium issuance rises 7.14% and large issuance 25%;
+coins per US dollar become 505.05 / 601.20 / 750.75. At unchanged purchase
+counts, additional daily mint is `200M + 1500L`, before refunds or changed
+spending. No current store-price or production-income claim is made here.
+
+Frontend `lib/services/live_billing_controller.dart:263-300` obtains pack
+identifiers and quantities from the backend and localized prices from the
+store. Backend `src/modules/billing/models/billingState.js:95-110` uses the
+catalog quantity when a receipt is first fulfilled, then persists
+`grantedCoins`; already fulfilled purchases do not receive an automatic top-up.
+An old purchase first fulfilled after a same-product quantity increase
+therefore receives the increased quantity. Refund recovery uses the original
+receipt's `grantedCoins`, capped at the current wallet balance (lines 49-64).
+Already spent amounts are recorded as `absorbedCoins`, so the maximum exposure
+from a spent-and-successfully-refunded large pack rises from 6,000 to
+7,500 coins. This is an existing refund property, not a newly introduced loop.
+Historical product definitions remain required for verified history and refund
+matching even if replacement products are removed from the public catalog.
 
 ### 13.1 Local-default reroll calculation — verified 2026-09-07
 

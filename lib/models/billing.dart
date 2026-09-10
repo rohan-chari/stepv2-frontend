@@ -24,13 +24,13 @@ class CoinPackOffer {
     CoinPackOffer(id: 'coins_500', coins: 500, price: r'$0.99'),
     CoinPackOffer(
       id: 'coins_2800',
-      coins: 2800,
+      coins: 3000,
       price: r'$4.99',
       highlight: 'EXTRA COINS',
     ),
     CoinPackOffer(
       id: 'coins_6000',
-      coins: 6000,
+      coins: 7500,
       price: r'$9.99',
       highlight: 'BEST VALUE',
     ),

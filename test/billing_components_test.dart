@@ -111,7 +111,7 @@ void main() {
     await tester.pumpWidget(
       host(billing, const SingleChildScrollView(child: CoinPackOffers())),
     );
-    for (final quantity in ['500', '2,800', '6,000']) {
+    for (final quantity in ['500', '3,000', '7,500']) {
       expect(find.text(quantity), findsOneWidget);
     }
     await tester.tap(find.byKey(const Key('buy-coins-coins_500')));
