@@ -1,6 +1,6 @@
 # Event traffic efficiency — app release candidate
 
-Status: **backend deployed; TestFlight upload blocked by Xcode account authentication**. Implementation review remains **SHIP**. User authorized both operations; upload requires account reauthentication.
+Status: **backend deployed; Bara 2.3.13 (12) available in TestFlight**. Implementation review: **SHIP**. API-key upload succeeded; Apple processing and existing internal tester-group membership verified.
 
 App implementation commit: `5687c8f`. Candidate version: 2.3.13 (12), with matching Android versionCode 203142. Backend runtime candidate: `f264099`, on the production-derived `event-traffic-efficiency-release` branch. The backend's original local main is not the deployment base; the release branch preserves the already-deployed immediate-join and Shop changes.
 
@@ -36,14 +36,22 @@ The fixed 36-run backend comparison completed with identical durable outcomes, u
 
 The eventual deployment order is backend first, then the paired app release. Older apps retain their existing API behavior; new apps also work if the backend is rolled back. Production deployment and store uploads require separate authorization. The user's managed-database CPU objective must be measured after an authorized deployment under comparable real traffic; local SQL counts cannot establish that result.
 
-## Authorized deployment result
+## Initial deployment and account-authentication attempts (resolved)
 
 Production backend `9e99fcb` is deployed with healthy API/worker checks, authenticated old/new Home representations, two HTTP workers, and staging stopped. Server configuration and lockfile were preserved; no migration or dependency installation was necessary. Required referral convergence checks reported zero missing rows.
 
 Xcode attempted the verified2.3.13(12) archive upload but returned `Failed to Use Accounts` (`IDEDistributionErrorDomain`, code2; process exit70), requesting App Store Connect access for the configured team. Following DEPLOYMENT.md, upload stopped pending reauthentication in Xcode Settings → Accounts. No successful upload, TestFlight availability, App Review submission or customer release is claimed. See [upload status](evidence/event-traffic-efficiency/testflight-status.json). The matching Android203142 remains verified locally.
 
-## Rebuild and upload retry
+## Signed-in-account rebuild and retry (resolved)
 
 At the user's request, rebuilt both production artifacts from unchanged runtime on source commit `591340c`. iOS2.3.13(12) and Android203142 passed signature, configuration and fresh compiler-output verification again. The rebuilt IPA hash is recorded in `retry-artifact-verification.json`; the Android bundle is byte-identical to the original verified artifact. Original evidence is retained.
 
 The signed-in Xcode upload retry at2026-09-10T04:09:14UTC again exited70 with `IDEDistributionErrorDomain Code=2 Failed to Use Accounts`; no upload succeeded. Command-line and GUI use the same Xcode installation and local user. The detailed log supplies no account-specific cause beyond missing App Store Connect team access. User reports Xcode GUI working; this record does not claim the GUI account is broken. The runbook's stop-on-account-action rule remains applicable. No account settings or credentials were altered. Rebuilt artifacts are retained under `build/release-candidates/event-traffic-efficiency-2.3.13-12-retry/`.
+
+## Completed TestFlight release
+
+The existing App Store Connect API key authenticated the Xcode export successfully. Both `Upload succeeded` and `EXPORT SUCCEEDED` are retained in `testflight-api-upload.log.gz`. Apple build `f550e94a-c830-43ab-b5b8-6f7e011470a7` is version2.3.13(12), `VALID` / `IN_BETA_TESTING`, and present in the existing internal **bara testers** group at2026-09-10T04:20:45UTC. The unchanged exempt-encryption declaration was verified against build11 before applying it. An initial group-assignment request returned422; a subsequent authoritative read confirmed group membership and testing availability without another write.
+
+Uploaded source is `591340c` (runtime unchanged from `5687c8f`), using the rebuilt and verified artifacts described by `retry-artifact-verification.json`. Tag `testflight/2.3.13-12` identifies that source. Android2.3.13/203142 remains built, signed and verified locally; no Play upload. Existing AppLovinSDK and FBAudienceNetwork missing-dSYM warnings were nonblocking. No App Review submission or customer release occurred.
+
+DEPLOYMENT.md now prefers the existing configured API key; AGENTS.md and CLAUDE.md carry the same instruction. Signed-in Xcode account authentication is the fallback. The runbook command was checked with `bash -n`, and the actual API-authenticated upload succeeded. Earlier account failures are retained as history, not current blockers.

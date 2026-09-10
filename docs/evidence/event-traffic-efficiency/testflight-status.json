@@ -1,18 +1,29 @@
 {
-  "attemptedAt": "2026-09-10T04:09:14Z",
+  "found": true,
+  "id": "f550e94a-c830-43ab-b5b8-6f7e011470a7",
   "version": "2.3.13",
   "build": "12",
-  "uploadSucceeded": false,
-  "exitCode": 70,
-  "errorDomain": "IDEDistributionErrorDomain",
-  "errorCode": 2,
-  "error": "Failed to Use Accounts",
-  "requiredAction": "Restore App Store Connect team access to the signed-in Xcode command-line upload session; Xcode GUI is reported working by user.",
+  "processing": "VALID",
+  "beta": "IN_BETA_TESTING",
+  "uploadedDate": "2026-09-09T21:16:07-07:00",
+  "usesNonExemptEncryption": false,
+  "checkedAt": "2026-09-10T04:20:45.087Z",
+  "internalGroup": {
+    "id": "944d87b7-f952-438f-9703-173504ca4f1d",
+    "name": "bara testers",
+    "buildPresent": true
+  },
+  "uploadSucceeded": true,
+  "uploadAuthentication": "existing App Store Connect API key",
+  "sourceCommit": "591340ceeeb1fe2451c036eca92ea7b78040b43f",
   "backendDeployedCommit": "9e99fcbd6799cd944ddbbe7e0f0589c5016a4a38",
   "androidVersionCode": "203142",
   "androidVerified": true,
-  "previousAttemptedAt": "2026-09-10T03:58:54Z",
-  "attemptCount": 2,
-  "rebuiltBothPlatforms": true,
-  "retryArtifacts": "retry-artifact-verification.json"
+  "symbolWarnings": [
+    "AppLovinSDK.framework missing dSYM",
+    "FBAudienceNetwork.framework missing dSYM"
+  ],
+  "previousAttempts": "testflight-upload-history.json",
+  "exportCompliance": "Verified unchanged declaration against build11 before setting usesNonExemptEncryption=false",
+  "groupAssignmentObservation": "An initial explicit relationship request returned422; subsequent GET confirmed group membership and IN_BETA_TESTING. No further write required."
 }
