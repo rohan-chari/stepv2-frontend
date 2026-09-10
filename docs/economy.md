@@ -2908,3 +2908,30 @@ in §3.4c re-verified 2026-08-28 from current backend code
 (`effectMultiplier.js`, `powerupUpgrades.js`) plus a prod SELECT-only aggregate
 of the active team race used for the carousel visual check; no production data
 was changed by this verification.*
+
+### Server-authoritative reel metadata — verified 2026-09-10 (code)
+
+Backend `src/modules/races/queries/getRaceProgress.js:206-270` builds
+`powerupData.dropOdds.byType` using the shared ordinary-box roll helpers,
+current config snapshot, raw-step position and capability/team context.
+`src/modules/powerups/powerupOdds.js:354-384` explicitly defines this as
+ordinary steady-state odds: Lucky Horseshoe forced-rarity and self-exclusion
+contexts are not represented. Canonical `rarityByType` is independent of the
+drop tier; a server award's stamped rarity may additionally honor a guaranteed
+floor. Preview rarity must not overwrite the awarded rarity or discard value.
+
+Daily `getDailyRewardStatus.js` truncates both accessory preview items and
+conditional accessory probabilities to **10 entries**. Their displayed
+probability sum can therefore be below one. Unlisted probability mass is not
+redistributed among visible items. `itemOdds.rareMix` includes the COINS slice;
+the legacy `rarePrizeMix` deliberately omits it and is not an exact current
+sub-roll distribution. `dailyBoxOdds.js:coinAmountForTier` computes streak-based
+coin amounts, rounded to multiples of five; a configured minimum/maximum
+range is not a uniform payout distribution.
+
+Removing client product blacklists, fabricated prices, bundled rarity guesses
+and guessed reel pools does not alter server award probabilities, coin prices,
+discard rewards or mint rules. With the same server-authorized action,
+**the direct change to expected coins, steps and item quantities is zero**.
+Missing server price/policy metadata cannot substantiate a paid action quote;
+missing/incomplete preview metadata cannot substantiate fabricated odds.

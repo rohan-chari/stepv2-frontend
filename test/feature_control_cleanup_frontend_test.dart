@@ -229,7 +229,7 @@ void main() {
     },
   );
 
-  test('retired Imposter is removed from usable race inventory residue', () {
+  test('race inventory preserves server types and ignores malformed rows', () {
     final inventory = normalizePowerupInventory(const [
       {'id': 'retired', 'type': 'IMPOSTER', 'status': 'HELD'},
       {'id': 'box', 'status': 'MYSTERY_BOX'},
@@ -237,7 +237,7 @@ void main() {
       'malformed',
     ]);
 
-    expect(inventory.map((item) => item['id']), ['box', 'live']);
+    expect(inventory.map((item) => item['id']), ['retired', 'box', 'live']);
   });
 }
 

@@ -369,6 +369,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             onSpinRequested: _rollResult,
             onComplete: _onStripComplete,
             rarityByType: widget.rarityByType,
+            dropOdds: widget.dropOdds,
           ),
         ],
       ),

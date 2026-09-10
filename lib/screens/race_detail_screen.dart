@@ -190,7 +190,6 @@ const _rarityColors = {
 
 // Retired powerups stay readable in historical Activity but never render as a
 // usable inventory or stash action in this build.
-const _hiddenPowerupTypes = {'IMPOSTER'};
 
 /// Converts the versioned `powerupData.inventory` payload into a safe local
 /// projection. Older backends can omit it, and malformed entries must never
@@ -200,9 +199,7 @@ List<Map<String, dynamic>> normalizePowerupInventory(Object? rawInventory) {
 
   return [
     for (final rawEntry in rawInventory)
-      if (rawEntry is Map &&
-          rawEntry['type'] != 'IMPOSTER' &&
-          rawEntry['powerupType'] != 'IMPOSTER')
+      if (rawEntry is Map)
         <String, dynamic>{
           for (final MapEntry(:key, :value) in rawEntry.entries)
             if (key is String) key: value,
@@ -216,22 +213,6 @@ bool _isUnopenedMysteryBoxSlot(Map<String, dynamic> powerup) {
       id is String &&
       id.trim().isNotEmpty;
 }
-
-// Powerup upgrade price tables — FALLBACK ONLY. The backend is authoritative:
-// getRaceProgress powerupData.upgradeCosts carries the live ladders and wins
-// when present (see _upgradeCostFor). These bundled copies are used only
-// against an older backend that doesn't send them yet.
-const _upgradeCosts = {
-  'COMMON': [0, 5, 15, 45],
-  'UNCOMMON': [0, 10, 30, 90],
-  'RARE': [0, 15, 45, 135],
-};
-
-// Per-type overrides of the rarity ladder. Currently empty (Lucky Horseshoe's
-// premium ladder was retired — it now prices as plain RARE).
-const _upgradeCostsByType = <String, List<int>>{};
-
-// Per-tier effect labels for the use-modal. Index 0 = base.
 
 bool _isUpgradeable(String? type) => PowerupCopy.isUpgradeable(type);
 
@@ -406,24 +387,6 @@ _GhostPepperCountdown? _ghostPepperCountdown(
   );
 }
 
-// Defensively parse a {KEY: [int, int, int, int]} cost table from the backend.
-// Returns null when absent/malformed so callers can fall back to the bundled
-// tables (older backends don't send upgradeCosts at all).
-Map<String, List<int>>? _parseCostTable(dynamic raw) {
-  if (raw is! Map) return null;
-  final out = <String, List<int>>{};
-  raw.forEach((key, value) {
-    if (key is String && value is List) {
-      final tiers = value
-          .map((e) => e is num ? e.toInt() : null)
-          .whereType<int>()
-          .toList();
-      if (tiers.length >= 4) out[key] = tiers;
-    }
-  });
-  return out;
-}
-
 /// What the race-detail screen should do to its progress poll in response to an
 /// app-lifecycle change. Kept as a pure function (no State, no timers) so the
 /// pause/resume decision is unit-testable without standing up the whole screen
@@ -485,7 +448,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   /// Server-authoritative powerup rarity table. Absent on older backends, in
-  /// which case the reel keeps using its bundled fallback map.
+  /// which case decorative tiles use an unknown rarity.
   Map<String, String>? get _serverRarityByType {
     final raw = _powerupData?['rarityByType'];
     if (raw is! Map) return null;
@@ -3583,39 +3546,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// what the success toast reports. A stash-redeemed powerup has
   /// `rarity: null` and the backend floors it to the COMMON price, so we show
   /// the same floor here.
-  static const Map<String, int> _discardPrices = {
-    'COMMON': 2,
-    'UNCOMMON': 5,
-    'RARE': 10,
-  };
-
-  /// The server's live discard prices from `powerupData.discardPrices`
-  /// (same shape as `upgradeCosts`: rarity -> coins), or null on a backend
-  /// that doesn't send them. Parsed defensively: a non-map, or a map with no
-  /// usable numeric entries, reads as absent so we fall back to the bundled
-  /// table rather than quoting 0 coins.
-  Map<String, int>? get _serverDiscardPrices {
-    final raw = _powerupData?['discardPrices'];
-    if (raw is! Map) return null;
-    final parsed = <String, int>{};
-    raw.forEach((key, value) {
-      if (key is String && value is num) parsed[key] = value.toInt();
-    });
-    return parsed.isEmpty ? null : parsed;
-  }
-
-  /// Prefers the server's table so prices can be retuned in balance config
-  /// without an App Store release; falls back to the bundled 2/5/10 map for an
-  /// older backend. Either way this only WORDS the dialog — `coinsAwarded` in
-  /// the response is what actually gets credited.
-  int _discardPriceFor(Map<String, dynamic> powerup) {
-    final table = _serverDiscardPrices ?? _discardPrices;
-    // Stash-redeemed powerups have rarity null; the backend floors those to
-    // the COMMON price, so quote the same floor.
-    final fallback = table['COMMON'] ?? _discardPrices['COMMON']!;
+  int? _discardPriceFor(Map<String, dynamic> powerup) {
+    final table = _powerupData?['discardPrices'];
+    if (table is! Map) return null;
     final rarity = powerup['rarity'];
-    if (rarity is! String) return fallback;
-    return table[rarity] ?? fallback;
+    final value = table[rarity is String ? rarity : 'COMMON'];
+    return value is num &&
+            value.isFinite &&
+            value >= 0 &&
+            value == value.roundToDouble()
+        ? value.toInt()
+        : null;
   }
 
   /// The daily discard-bonus headroom last reported by a DISCARD RESPONSE, or
@@ -3652,9 +3593,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// What a discard of [powerup] will ACTUALLY pay: the backend awards
   /// `min(price, capRemaining)`. One rule, used by all three price surfaces
   /// (the DISCARD tag, the confirm dialog, and the Pocket Watch sheet).
-  int _discardPayoutFor(Map<String, dynamic> powerup) {
+  int? _discardPayoutFor(Map<String, dynamic> powerup) {
     final price = _discardPriceFor(powerup);
     final cap = _capRemaining;
+    if (price == null) return null;
     return cap == null ? price : math.min(price, cap);
   }
 
@@ -3664,7 +3606,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// out both cases, so the button must not promise coins it won't pay.
   Widget? _discardPriceTrailing(Map<String, dynamic> powerup) {
     final isUnopenedBox = (powerup['status'] as String?) == 'MYSTERY_BOX';
-    if (isUnopenedBox || _capRemaining == 0) return null;
+    if (isUnopenedBox ||
+        _capRemaining == 0 ||
+        _discardPayoutFor(powerup) == null) {
+      return null;
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -3697,6 +3643,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           "Discard this mystery box? You won't get coins for unopened boxes.";
     } else if (capReached) {
       body = "Daily discard bonus reached. You'll get 0 coins.";
+    } else if (price == null) {
+      body = 'Discard $name?';
     } else if (cap != null && cap < price) {
       // Batch 2026-08-10b item 2: the backend pays min(price, cap), so quoting
       // the full price here promised coins it would not pay.
@@ -4252,7 +4200,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 tierLabels:
                     tierLabels ??
                     PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH') ??
-                    const ['Extend', 'Extend', 'Extend', 'Extend'],
+                    const ['Extend'],
                 costForLevel: (level) =>
                     _upgradeCostFor('POCKET_WATCH', rarity, level),
                 participants:
@@ -4668,30 +4616,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  // Upgrade price for a powerup tier. Prefers the backend's live ladders
-  // (powerupData.upgradeCosts from getRaceProgress) so the label always shows
-  // what the server will actually charge; falls back to the bundled tables
-  // when talking to an older backend that doesn't send them.
-  int _upgradeCostFor(String? type, String rarity, int level) {
-    var byRarity = _upgradeCosts;
-    var byType = _upgradeCostsByType;
+  // Paid tiers require a valid current server quote; base use remains available.
+  int? _upgradeCostFor(String? type, String rarity, int level) {
+    if (level == 0) return 0; // Base activation is an unpriced use action.
     final serverCosts = _powerupData?['upgradeCosts'];
-    if (serverCosts is Map) {
-      final serverByRarity = _parseCostTable(serverCosts['byRarity']);
-      if (serverByRarity != null && serverByRarity.isNotEmpty) {
-        byRarity = serverByRarity;
-        // An empty byType from the server is meaningful ("no overrides"), so
-        // it replaces the bundled overrides rather than falling back to them.
-        byType = _parseCostTable(serverCosts['byType']) ?? const {};
-      }
-    }
-    final typeTiers = byType[type];
-    if (typeTiers != null && level >= 0 && level < typeTiers.length) {
-      return typeTiers[level];
-    }
-    final tiers = byRarity[rarity];
-    if (tiers == null || level < 0 || level >= tiers.length) return 0;
-    return tiers[level];
+    if (serverCosts is! Map) return null;
+    final byType = serverCosts['byType'];
+    final byRarity = serverCosts['byRarity'];
+    final raw = byType is Map && byType.containsKey(type)
+        ? byType[type]
+        : byRarity is Map
+        ? byRarity[rarity]
+        : null;
+    if (raw is! List || level >= raw.length) return null;
+    final value = raw[level];
+    return value is num &&
+            value.isFinite &&
+            value >= 0 &&
+            value == value.roundToDouble()
+        ? value.toInt()
+        : null;
   }
 
   List<Widget> _buildTierButtons(
@@ -4703,9 +4647,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     int myCoins,
   ) {
     final buttons = <Widget>[];
-    for (int level = 0; level <= 3; level++) {
+    for (int level = 0; level < tierLabels.length; level++) {
       final cost = _upgradeCostFor(type, rarity, level);
-      final affordable = myCoins >= cost;
+      final affordable = cost != null && myCoins >= cost;
       final isBase = level == 0;
       final label = isBase
           ? 'USE BASE: ${tierLabels[0]}'
@@ -4716,7 +4660,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         trailing = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$cost', style: PixelText.pill(size: 12, color: Colors.white)),
+            Text(
+              cost == null ? 'Unavailable' : '$cost',
+              style: PixelText.pill(size: 12, color: Colors.white),
+            ),
             const SizedBox(width: 4),
             const SpinningCoin(size: 14),
           ],
@@ -7990,8 +7937,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             // own, which F5's fix does not reach.
             demoMode: widget.demoMode,
             // Additive, read defensively: absent on an older backend, in which
-            // case the odds affordance hides and the reel keeps its bundled
-            // rarity table (spec §5.3 / §6.3.B.8-10).
+            // case the odds affordance hides and the reel uses neutral tiles.
             dropOdds: _serverDropOdds,
             rarityByType: _serverRarityByType,
             openMysteryBox: () => _api.openMysteryBox(
@@ -8435,7 +8381,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _globalPowerupInventory.entries
             // Retired types remain readable in history but never expose a dead
             // USE action if an old backend still returns inventory residue.
-            .where((e) => e.value > 0 && !_hiddenPowerupTypes.contains(e.key))
+            .where((e) => e.value > 0)
             .toList()
           ..sort((a, b) => a.key.compareTo(b.key));
     if (entries.isEmpty) return const [];

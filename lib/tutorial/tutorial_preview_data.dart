@@ -1177,6 +1177,7 @@ Map<String, dynamic> tutorialPreviewRaceProgress() {
     'myDisplayPlacement': 2,
     'placementPrivacyActive': true,
     'powerupData': {
+      'dropOdds': {'reelPreviewAvailable': false},
       'enabled': true,
       'powerupSlots': 3,
       'queuedBoxCount': 1,

@@ -43,8 +43,16 @@ class _PocketWatchBackendApiService extends BackendApiService {
       'powerupsEnabled': true,
       'endsAt': '2026-12-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
       ],
     };
   }
@@ -83,6 +91,7 @@ class _PocketWatchBackendApiService extends BackendApiService {
         },
       ],
       'powerupData': {
+        'discardPrices': {'COMMON': 2, 'UNCOMMON': 5, 'RARE': 10},
         'enabled': true,
         'inventory': inventory,
         'powerupSlots': 3,

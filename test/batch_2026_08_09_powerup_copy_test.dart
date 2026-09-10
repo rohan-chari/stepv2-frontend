@@ -1,3 +1,4 @@
+import 'support/server_powerup_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +28,14 @@ Future<void> _pumpStrip(WidgetTester tester, {int seed = 0}) async {
           key: ValueKey('reel-$seed'),
           resultType: '',
           resultRarity: 'COMMON',
+          dropOdds: const {
+            'reelPreviewAvailable': true,
+            'byType': {'POWER_OUTAGE': .5, 'LUCKY_HORSESHOE': .5},
+          },
+          rarityByType: const {
+            'POWER_OUTAGE': 'RARE',
+            'LUCKY_HORSESHOE': 'RARE',
+          },
           onComplete: () {},
         ),
       ),
@@ -57,7 +66,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    PowerupCopy.resetForTest();
+    await seedServerPowerupPolicy();
   });
 
   group('item 1 — Wrong Turn / Leg Cramp 15-minute upgrade ladder', () {
@@ -109,14 +118,17 @@ void main() {
     // 2026-08-15: Stealth Mode joined the 15-min upgrade ladder alongside
     // Leg Cramp / Wrong Turn, superseding the 1/2/3/4h values this test used
     // to pin.
-    test('STEALTH_MODE ladder matches the real 1h/1h15m/1h30m/1h45m backend values', () {
-      expect(PowerupCopy.upgradeTierLabelsFor('STEALTH_MODE'), [
-        'Hide 1h',
-        'Hide 1h 15m',
-        'Hide 1h 30m',
-        'Hide 1h 45m',
-      ]);
-    });
+    test(
+      'STEALTH_MODE ladder matches the real 1h/1h15m/1h30m/1h45m backend values',
+      () {
+        expect(PowerupCopy.upgradeTierLabelsFor('STEALTH_MODE'), [
+          'Hide 1h',
+          'Hide 1h 15m',
+          'Hide 1h 30m',
+          'Hide 1h 45m',
+        ]);
+      },
+    );
   });
 
   group('item 8 — Lucky Horseshoe', () {
@@ -148,7 +160,9 @@ void main() {
       expect(description, contains('horseshoe'));
     });
 
-    testWidgets('FANNY_PACK is gone from the decoy reel', (tester) async {
+    testWidgets('server-omitted FANNY_PACK stays out of the decoy reel', (
+      tester,
+    ) async {
       final seen = await _sampleDecoyTypes(tester, 40);
       expect(
         seen,
@@ -166,9 +180,7 @@ void main() {
       expect(seen, contains('POWER_OUTAGE'));
     });
 
-    testWidgets('POWER_OUTAGE decoys carry the RARE bundled rarity', (
-      tester,
-    ) async {
+    testWidgets('POWER_OUTAGE decoys carry the server rarity', (tester) async {
       // The bundled rarity table is the fallback when the backend sends no
       // rarityByType. A missing entry would silently paint the tile COMMON.
       var sawRareOutage = false;

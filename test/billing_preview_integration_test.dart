@@ -114,7 +114,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(controller.ownedCosmetics, contains('baseball_cap'));
       expect(accessory, findsNothing);
-      expect(find.byKey(const Key('shop-edit-outfit')), findsOneWidget);
+      expect(find.byKey(const Key('shop-edit-outfit')), findsNothing);
+      expect(find.byIcon(Icons.edit_rounded), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

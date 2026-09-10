@@ -1,3 +1,6 @@
+import 'support/server_powerup_policy.dart';
+import 'package:step_tracker/constants/powerup_copy.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,8 +41,16 @@ class _UpgradeCostsBackendApiService extends BackendApiService {
       'powerupsEnabled': true,
       'endsAt': '2026-12-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
       ],
     };
   }
@@ -152,51 +163,95 @@ Future<void> _openActionsSheet(WidgetTester tester, dynamic api) async {
 }
 
 void main() {
+  setUp(seedServerPowerupPolicy);
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'tier prices come from backend upgradeCosts when present',
-    (WidgetTester tester) async {
-      // Deliberately different from the bundled UNCOMMON [0, 10, 30, 90] so a
-      // pass proves the server table wins.
-      final api = _UpgradeCostsBackendApiService(
-        upgradeCosts: {
-          'byRarity': {
-            'COMMON': [0, 1, 2, 3],
-            'UNCOMMON': [0, 111, 222, 333],
-            'RARE': [0, 4, 5, 6],
-          },
-          'byType': {},
+  testWidgets('tier prices come from backend upgradeCosts when present', (
+    WidgetTester tester,
+  ) async {
+    // Deliberately different from the bundled UNCOMMON [0, 10, 30, 90] so a
+    // pass proves the server table wins.
+    final api = _UpgradeCostsBackendApiService(
+      upgradeCosts: {
+        'byRarity': {
+          'COMMON': [0, 1, 2, 3],
+          'UNCOMMON': [0, 111, 222, 333],
+          'RARE': [0, 4, 5, 6],
         },
-      );
+        'byType': {},
+      },
+    );
 
-      await _openActionsSheet(tester, api);
+    await _openActionsSheet(tester, api);
 
-      expect(find.textContaining('LVL 1'), findsOneWidget);
-      expect(find.text('111'), findsOneWidget);
-      expect(find.text('222'), findsOneWidget);
-      expect(find.text('333'), findsOneWidget);
+    expect(find.textContaining('LVL 1'), findsOneWidget);
+    expect(find.text('111'), findsOneWidget);
+    expect(find.text('222'), findsOneWidget);
+    expect(find.text('333'), findsOneWidget);
 
-      Navigator.of(tester.element(find.textContaining('LVL 1'))).pop();
-      await _pumpFrames(tester);
-    },
-  );
+    Navigator.of(tester.element(find.textContaining('LVL 1'))).pop();
+    await _pumpFrames(tester);
+  });
 
   testWidgets(
-    'tier prices fall back to bundled table when backend omits upgradeCosts',
+    'missing upgrade quote disables paid choices but preserves base use',
     (WidgetTester tester) async {
       final api = _UpgradeCostsBackendApiService(upgradeCosts: null);
 
       await _openActionsSheet(tester, api);
 
-      // Bundled UNCOMMON ladder: 10 / 30 / 90.
       expect(find.textContaining('LVL 1'), findsOneWidget);
-      expect(find.text('10'), findsOneWidget);
-      expect(find.text('30'), findsOneWidget);
-      expect(find.text('90'), findsOneWidget);
+      expect(find.text('Unavailable'), findsNWidgets(3));
+      final buttons = tester.widgetList<PillButton>(find.byType(PillButton));
+      expect(
+        buttons
+            .where((button) => button.label.startsWith('LVL'))
+            .every((button) => button.onPressed == null),
+        isTrue,
+      );
+      expect(
+        buttons
+            .singleWhere((button) => button.label.startsWith('USE BASE'))
+            .onPressed,
+        isNotNull,
+      );
 
       Navigator.of(tester.element(find.textContaining('LVL 1'))).pop();
       await _pumpFrames(tester);
+    },
+  );
+  testWidgets(
+    'server tier count and explicit zero quote remain authoritative',
+    (tester) async {
+      await PowerupCopy.refresh(
+        fetch: () async => {
+          'powerups': [
+            {
+              'type': 'LEG_CRAMP',
+              'name': 'Leg Cramp',
+              'description': 'Server effect',
+              'upgradeTierLabels': ['Base effect', 'Server upgrade'],
+            },
+          ],
+        },
+      );
+      await _openActionsSheet(
+        tester,
+        _UpgradeCostsBackendApiService(
+          upgradeCosts: {
+            'byType': {
+              'LEG_CRAMP': [0, 0],
+            },
+          },
+        ),
+      );
+      expect(find.text('LVL 1: Server upgrade'), findsOneWidget);
+      expect(find.textContaining('LVL 2'), findsNothing);
+      final paid = tester
+          .widgetList<PillButton>(find.byType(PillButton))
+          .singleWhere((button) => button.label.startsWith('LVL'));
+      expect(paid.onPressed, isNotNull);
+      expect(find.text('0'), findsOneWidget);
     },
   );
 }

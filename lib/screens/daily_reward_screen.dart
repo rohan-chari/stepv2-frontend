@@ -1,3 +1,6 @@
+import '../utils/server_reel_preview.dart';
+import '../models/character_wardrobe.dart'
+    show wardrobeMap, wardrobeMaps, wardrobeCoinPrice;
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
@@ -925,114 +928,83 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
   // too; _claimBoxOnSpin replants it once the claim lands.
   List<_DailyStripItem> _generateStrip(Map<String, dynamic>? result) {
     final box = _box ?? const <String, dynamic>{};
-    final odds = box['odds'] is Map<String, dynamic>
-        ? box['odds'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    // Audit register #8: the old 0.50 / 0.35 fallbacks matched NO backend row
-    // (every real row is 0.70/0.25/0.05 at streak 1 or 0.20/0.35/0.45 at cap),
-    // so an old backend that omits `odds` used to fill the reel with decoys the
-    // box could never actually pay at that rate. Fall back to the real
-    // streak-1 row instead — the conservative end of the curve.
-    final commonOdds =
-        (odds['COMMON'] as num?)?.toDouble() ?? dailyBoxFallbackOdds['COMMON']!;
-    final uncommonOdds =
-        (odds['UNCOMMON'] as num?)?.toDouble() ??
-        dailyBoxFallbackOdds['UNCOMMON']!;
-
-    final ranges = box['coinRanges'] is Map<String, dynamic>
-        ? box['coinRanges'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    (int, int) rangeFor(String tier, int defMin, int defMax) {
-      final range = ranges[tier];
-      if (range is List && range.length == 2) {
-        final min = (range[0] as num?)?.toInt();
-        final max = (range[1] as num?)?.toInt();
-        if (min != null && max != null && max >= min) return (min, max);
-      }
-      return (defMin, defMax);
-    }
-
-    final (commonMin, commonMax) = rangeFor('COMMON', 10, 30);
-    final (uncommonMin, uncommonMax) = rangeFor('UNCOMMON', 40, 80);
-    final accessoryPool = (box['accessoryPool'] as List? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
-    // Powerup prizes (spinPowerups feature). Absent on old backends → empty, so
-    // the reel keeps showing accessory-only RARE tiles exactly as before.
-    final powerupPool = (box['powerupPool'] as List? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .where(
-          (powerup) =>
-              powerup['powerupType'] != 'IMPOSTER' &&
-              powerup['powerupType'] != 'DECOY',
-        )
-        .toList();
-
+    final itemOdds = wardrobeMap(box['itemOdds']);
     final rng = Random();
-    // Coin payouts read better as round numbers, so pick a random multiple of
-    // 5 within the tier's range instead of any integer (avoids 11, 17, …).
-    int randomCoins(int min, int max) {
-      final lo = (min + 4) ~/ 5; // smallest multiple of 5 >= min (divided by 5)
-      final hi = max ~/ 5; // largest multiple of 5 <= max (divided by 5)
-      if (hi < lo) return min + rng.nextInt(max - min + 1); // no multiple fits
-      return (lo + rng.nextInt(hi - lo + 1)) * 5;
+    final accessories = wardrobeMaps(box['accessoryPool']);
+    final powerups = wardrobeMaps(box['powerupPool']);
+    final accessoryOdds = serverItemProbabilities(
+      itemOdds['accessories'],
+      'sku',
+    );
+    final powerupOdds = serverItemProbabilities(itemOdds['powerups'], 'type');
+    final ranges = wardrobeMap(box['coinRanges']);
+
+    _DailyStripItem coins(String rarity) {
+      final range = ranges[rarity];
+      var label = 'Coins';
+      if (range is List &&
+          range.length == 2 &&
+          range.every(
+            (value) =>
+                value is num &&
+                value.isFinite &&
+                value >= 0 &&
+                value == value.roundToDouble(),
+          ) &&
+          (range[1] as num) >= (range[0] as num)) {
+        label =
+            '${(range[0] as num).toInt()}–${(range[1] as num).toInt()} coins';
+      }
+      return _DailyStripItem.coinPreview(rarity, label);
     }
 
-    final items = <_DailyStripItem>[];
-    for (int i = 0; i < _DailyStripItem.stripLength; i++) {
-      if (i == _DailyStripItem.resultPosition && result != null) {
-        items.add(_DailyStripItem.fromResult(result));
-        continue;
-      }
-      final roll = rng.nextDouble();
-      if (roll < commonOdds) {
-        items.add(
-          _DailyStripItem.coins(randomCoins(commonMin, commonMax), 'COMMON'),
+    _DailyStripItem candidate() {
+      final rarity = sampleServerProbability(
+        itemOdds['rarity'] ?? box['odds'],
+        rng.nextDouble(),
+      );
+      if (rarity == 'COMMON' || rarity == 'UNCOMMON') return coins(rarity!);
+      if (rarity != 'RARE') return const _DailyStripItem.mysteryAccessory();
+      final kind = sampleServerProbability(
+        itemOdds['rareMix'],
+        rng.nextDouble(),
+      );
+      if (kind == 'COINS') return coins('RARE');
+      if (kind == 'ACCESSORY') {
+        final sku = sampleServerProbability(
+          accessoryOdds,
+          rng.nextDouble(),
+          requireComplete: false,
         );
-      } else if (roll < commonOdds + uncommonOdds) {
-        items.add(
-          _DailyStripItem.coins(
-            randomCoins(uncommonMin, uncommonMax),
-            'UNCOMMON',
-          ),
+        final item = accessories
+            .where((item) => sku != null && item['sku'] == sku)
+            .firstOrNull;
+        if (item != null) return _DailyStripItem.accessory(item);
+      } else if (kind == 'POWERUP') {
+        final type = sampleServerProbability(
+          powerupOdds,
+          rng.nextDouble(),
+          requireComplete: false,
         );
-      } else if (accessoryPool.isNotEmpty || powerupPool.isNotEmpty) {
-        // RARE decoy: mix accessories and powerups from whatever's winnable.
-        // When both pools have stock, roughly half-and-half (mirrors the
-        // backend's 50/50 RARE sub-roll); otherwise draw from the non-empty one.
-        final usePowerup =
-            powerupPool.isNotEmpty && (accessoryPool.isEmpty || rng.nextBool());
-        if (usePowerup) {
-          items.add(
-            _DailyStripItem.powerup(
-              powerupPool[rng.nextInt(powerupPool.length)],
-            ),
-          );
-        } else {
-          items.add(
-            _DailyStripItem.accessory(
-              accessoryPool[rng.nextInt(accessoryPool.length)],
-            ),
-          );
-        }
-      } else {
-        items.add(const _DailyStripItem.mysteryAccessory());
+        final item = powerups
+            .where((item) => type != null && item['powerupType'] == type)
+            .firstOrNull;
+        if (item != null) return _DailyStripItem.powerup(item);
       }
+      return const _DailyStripItem.mysteryAccessory();
     }
-    return items;
+
+    return [
+      for (var i = 0; i < _DailyStripItem.stripLength; i++)
+        if (i == _DailyStripItem.resultPosition && result != null)
+          _DailyStripItem.fromResult(result)
+        else
+          candidate(),
+    ];
   }
 }
 
 Color _rarityColor(String rarity) => caseRarityColor(rarity);
-
-/// Daily-box decoy odds used ONLY when the backend omits `box.odds` (older
-/// backend). This is the real streak-1 row from the balance config — not an
-/// invented curve. Audit register #8.
-const dailyBoxFallbackOdds = <String, double>{
-  'COMMON': 0.70,
-  'UNCOMMON': 0.25,
-  'RARE': 0.05,
-};
 
 /// One tile on the daily-box reel: a coin stack or an accessory.
 class _DailyStripItem {
@@ -1048,7 +1020,7 @@ class _DailyStripItem {
   // Set when this tile is a shop powerup (spinPowerups feature): drives the
   // PowerupIcon face. Null for coin/accessory tiles.
   final String? powerupType;
-  final bool retiredPowerup;
+  final bool coinPreview;
 
   const _DailyStripItem._({
     required this.rarity,
@@ -1057,14 +1029,14 @@ class _DailyStripItem {
     this.name,
     this.animationFrames = 1,
     this.powerupType,
-    this.retiredPowerup = false,
+    this.coinPreview = false,
   });
 
-  const _DailyStripItem.coins(int amount, String rarity)
-    : this._(rarity: rarity, coinAmount: amount);
+  const _DailyStripItem.coinPreview(String rarity, String label)
+    : this._(rarity: rarity, name: label, coinPreview: true);
 
   const _DailyStripItem.mysteryAccessory()
-    : this._(rarity: 'RARE', name: '???');
+    : this._(rarity: 'UNKNOWN', name: '???');
 
   factory _DailyStripItem.accessory(Map<String, dynamic> shopItem) {
     return _DailyStripItem._(
@@ -1075,31 +1047,29 @@ class _DailyStripItem {
     );
   }
 
-  factory _DailyStripItem.powerup(Map<String, dynamic> powerup) {
+  factory _DailyStripItem.powerup(
+    Map<String, dynamic> powerup, {
+    String rarity = 'RARE',
+  }) {
     return _DailyStripItem._(
-      rarity: 'RARE',
+      rarity: rarity,
       powerupType: powerup['powerupType'] as String?,
       name: powerup['name'] as String? ?? 'Powerup',
     );
   }
 
   factory _DailyStripItem.fromResult(Map<String, dynamic> result) {
-    final rarity = (result['rarity'] as String? ?? 'COMMON').toUpperCase();
+    final rarity = result['rarity'] is String
+        ? (result['rarity'] as String).toUpperCase()
+        : 'UNKNOWN';
     // Shop powerup prize (additive field; absent on old backends / other
     // reward types). Read defensively so a partial payload never crashes.
-    final powerup = result['powerup'] as Map<String, dynamic>?;
-    if (result['rewardType'] == 'POWERUP' && powerup != null) {
-      if (powerup['powerupType'] == 'IMPOSTER') {
-        return _DailyStripItem._(
-          rarity: rarity,
-          name: 'Retired reward',
-          retiredPowerup: true,
-        );
-      }
-      return _DailyStripItem.powerup(powerup);
+    final powerup = wardrobeMap(result['powerup']);
+    if (result['rewardType'] == 'POWERUP' && powerup.isNotEmpty) {
+      return _DailyStripItem.powerup(powerup, rarity: rarity);
     }
-    final shopItem = result['shopItem'] as Map<String, dynamic>?;
-    if (shopItem != null) {
+    final shopItem = wardrobeMap(result['shopItem']);
+    if (shopItem.isNotEmpty) {
       return _DailyStripItem._(
         rarity: rarity,
         assetKey: shopItem['assetKey'] as String?,
@@ -1109,13 +1079,14 @@ class _DailyStripItem {
     }
     return _DailyStripItem._(
       rarity: rarity,
-      coinAmount: (result['coinAmount'] as num?)?.toInt() ?? 0,
+      coinAmount: wardrobeCoinPrice(result['coinAmount']),
+      name: wardrobeCoinPrice(result['coinAmount']) != null ? null : '???',
     );
   }
 
   bool get isPowerup => powerupType != null;
-  bool get isCoins => coinAmount != null;
-  bool get isAccessory => coinAmount == null && powerupType == null;
+  bool get isCoins => coinAmount != null || coinPreview;
+  bool get isAccessory => !isCoins && powerupType == null;
   bool get isMystery => isAccessory && assetKey == null && name == '???';
 }
 
@@ -1135,7 +1106,9 @@ class _DailyReelTile extends StatelessWidget {
           Expanded(child: Center(child: _buildFace(context))),
           const SizedBox(height: 3),
           Text(
-            item.isCoins ? '+${item.coinAmount}' : (item.name ?? '???'),
+            item.coinAmount != null
+                ? '+${item.coinAmount}'
+                : (item.name ?? '???'),
             style: PixelText.body(
               size: 10,
               color: AppColors.of(context).textDark,
@@ -1176,13 +1149,6 @@ class _DailyReelTile extends StatelessWidget {
     if (item.isPowerup) {
       return PowerupIcon(type: item.powerupType!, size: 46);
     }
-    if (item.retiredPowerup) {
-      return Icon(
-        Icons.block_rounded,
-        size: 42,
-        color: AppColors.of(context).textMid,
-      );
-    }
     if (item.assetKey != null) {
       return SizedBox(
         width: 46,
@@ -1217,7 +1183,7 @@ class _LadderTile extends StatelessWidget {
     final claimed = tile['claimed'] == true;
     final isToday = tile['isToday'] == true;
     final rewardType = reward['type'] as String? ?? 'COINS';
-    final coinAmount = (reward['coinAmount'] as num?)?.toInt() ?? 0;
+    final coinAmount = wardrobeCoinPrice(reward['coinAmount']);
 
     final borderColor = claimed
         ? AppColors.of(context).parchmentBorder
@@ -1273,6 +1239,8 @@ class _LadderTile extends StatelessWidget {
           Text(
             rewardType == 'ACCESSORY' || rewardType == 'POWERUP'
                 ? rewardType
+                : coinAmount == null
+                ? 'Reward received'
                 : '+$coinAmount',
             style: PixelText.number(
               size: 14,
@@ -1336,15 +1304,13 @@ class _RewardRevealState extends State<_RewardReveal> {
   @override
   Widget build(BuildContext context) {
     final type = widget.reward['rewardType'] as String? ?? 'COINS';
-    final coinAmount = (widget.reward['coinAmount'] as num?)?.toInt() ?? 0;
+    final coinAmount = wardrobeCoinPrice(widget.reward['coinAmount']);
     final shopItem = widget.reward['shopItem'] as Map<String, dynamic>?;
     // Shop powerup prize (spinPowerups feature). Read defensively — a POWERUP
     // rewardType with a missing payload falls through to the coin card rather
     // than crashing.
     final powerup = widget.reward['powerup'] as Map<String, dynamic>?;
-    final isRetiredPowerup =
-        type == 'POWERUP' && powerup?['powerupType'] == 'IMPOSTER';
-    final isPowerup = type == 'POWERUP' && powerup != null && !isRetiredPowerup;
+    final isPowerup = type == 'POWERUP' && powerup != null;
     // Present only on daily-box claims; legacy ladder claims have no rarity.
     final rarity = widget.reward['rarity'] as String?;
     final rarityColor = rarity != null ? _rarityColor(rarity) : null;
@@ -1410,31 +1376,7 @@ class _RewardRevealState extends State<_RewardReveal> {
               ),
             ],
             const SizedBox(height: 16),
-            if (isRetiredPowerup) ...[
-              Icon(
-                Icons.block_rounded,
-                size: 88,
-                color: AppColors.of(context).textMid,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'POWERUP RETIRED',
-                textAlign: TextAlign.center,
-                style: PixelText.title(
-                  size: 20,
-                  color: AppColors.of(context).textDark,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'This reward is no longer available.',
-                textAlign: TextAlign.center,
-                style: PixelText.body(
-                  size: 12,
-                  color: AppColors.of(context).textMid,
-                ),
-              ),
-            ] else if (isPowerup) ...[
+            if (isPowerup) ...[
               Center(
                 child: Container(
                   width: 130,
@@ -1521,7 +1463,7 @@ class _RewardRevealState extends State<_RewardReveal> {
               const Center(child: SpinningCoin(size: 96)),
               const SizedBox(height: 12),
               Text(
-                '+$coinAmount COINS',
+                coinAmount == null ? 'REWARD RECEIVED' : '+$coinAmount COINS',
                 textAlign: TextAlign.center,
                 style: PixelText.title(
                   size: 26,

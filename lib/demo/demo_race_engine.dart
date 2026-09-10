@@ -597,6 +597,7 @@ class DemoRaceEngine {
       'status': _completed ? 'COMPLETED' : 'ACTIVE',
       'participants': participants,
       'powerupData': {
+        'dropOdds': {'reelPreviewAvailable': false},
         'enabled': true,
         'powerupSlots': 3,
         'queuedBoxCount': 0,

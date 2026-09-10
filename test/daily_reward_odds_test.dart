@@ -124,16 +124,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('reel decoy fallback odds match a real backend row (0.70/0.25) '
-      'when the backend omits box.odds', (WidgetTester tester) async {
+  testWidgets('missing server odds shows neutral reel candidates', (
+    WidgetTester tester,
+  ) async {
     // Audit register #8: the old 0.50/0.35 fallbacks matched NO backend row.
     // With odds omitted the decoys must be drawn at the streak-1 row, so RARE
     // decoys (accessories) are ~5% and coin tiles dominate.
     await _pumpScreen(tester, _ItemOddsApi(claimedToday: false));
 
-    expect(dailyBoxFallbackOdds['COMMON'], 0.70);
-    expect(dailyBoxFallbackOdds['UNCOMMON'], 0.25);
-    expect(dailyBoxFallbackOdds['RARE'], closeTo(0.05, 1e-9));
+    expect(find.text('???'), findsWidgets);
+    expect(find.textContaining('+'), findsNothing);
     expect(find.text('SWIPE OR TAP'), findsOneWidget);
   });
 }

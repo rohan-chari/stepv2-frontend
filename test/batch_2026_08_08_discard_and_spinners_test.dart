@@ -1,3 +1,4 @@
+import 'support/server_powerup_policy.dart';
 // Feature batch 2026-08-08 — Item 1 (discard for coins + confirm dialog) and
 // Item 12 (per-action loading indicators).
 //
@@ -45,7 +46,7 @@ Map<String, dynamic> _race() => {
 class _StubApi extends BackendApiService {
   _StubApi({
     this.discardResponse = const {'ok': true},
-    this.serverDiscardPrices,
+    this.serverDiscardPrices = const {'COMMON': 2, 'UNCOMMON': 5, 'RARE': 10},
     this.useCompleter,
   });
 
@@ -204,6 +205,7 @@ Future<void> _openPowerupSheet(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(seedServerPowerupPolicy);
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -323,19 +325,16 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('an older backend falls back to the bundled 2/5/10', (
-      tester,
-    ) async {
-      await _pump(tester, _StubApi());
+    testWidgets('an older backend keeps discard unpriced', (tester) async {
+      await _pump(tester, _StubApi(serverDiscardPrices: null));
       await openDiscardDialog(tester);
 
-      expect(find.textContaining('for 10 coins'), findsOneWidget);
+      expect(find.textContaining('for 10 coins'), findsNothing);
+      expect(find.text('Discard Protein Shake?'), findsOneWidget);
       await _teardown(tester);
     });
 
-    testWidgets('a malformed discardPrices falls back rather than quoting 0', (
-      tester,
-    ) async {
+    testWidgets('a malformed discard quote stays unpriced', (tester) async {
       // A non-map, or a map with no usable numeric entries, must not be
       // treated as "everything is free".
       await _pump(
@@ -347,19 +346,19 @@ void main() {
       // NB 'for 0 coins', not '0 coins' — the latter is a substring of
       // '10 coins' and would pass vacuously.
       expect(find.textContaining('for 0 coins'), findsNothing);
-      expect(find.textContaining('for 10 coins'), findsOneWidget);
+      expect(find.textContaining('for 10 coins'), findsNothing);
+      expect(find.text('Discard Protein Shake?'), findsOneWidget);
       await _teardown(tester);
     });
 
-    testWidgets('a rarity the server omits uses its COMMON floor', (
-      tester,
-    ) async {
+    testWidgets('an omitted rarity stays unpriced', (tester) async {
       // RARE is missing from the server table -> fall back to the server's
       // own COMMON price (4), not the bundled RARE price (10).
       await _pump(tester, _StubApi(serverDiscardPrices: const {'COMMON': 4}));
       await openDiscardDialog(tester);
 
-      expect(find.textContaining('for 4 coins'), findsOneWidget);
+      expect(find.textContaining('for 4 coins'), findsNothing);
+      expect(find.text('Discard Protein Shake?'), findsOneWidget);
       await _teardown(tester);
     });
   });

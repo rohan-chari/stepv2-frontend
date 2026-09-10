@@ -14,6 +14,14 @@ int? wardrobeRevision(Object? value) =>
 List<Map<String, dynamic>> wardrobeMaps(Object? value) =>
     value is List ? value.whereType<Map>().map(wardrobeMap).toList() : [];
 
+int? wardrobeCoinPrice(Object? value) =>
+    value is num &&
+        value.isFinite &&
+        value >= 0 &&
+        value == value.roundToDouble()
+    ? value.toInt()
+    : null;
+
 class CharacterOutfit {
   CharacterOutfit.fromJson(Object? raw) {
     final json = wardrobeMap(raw);

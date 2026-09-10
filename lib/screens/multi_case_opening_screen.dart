@@ -415,6 +415,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               hideSwipeHint: true,
               spinTrigger: _trigger,
               rarityByType: widget.rarityByType,
+              dropOdds: widget.dropOdds,
               onComplete: _onReelComplete,
             ),
           ),

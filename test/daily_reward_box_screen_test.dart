@@ -5,6 +5,8 @@ import 'package:step_tracker/screens/daily_reward_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/case_opening_strip.dart';
+import 'package:step_tracker/widgets/powerup_icon.dart';
 
 class _BoxModeApi extends BackendApiService {
   _BoxModeApi({
@@ -13,6 +15,7 @@ class _BoxModeApi extends BackendApiService {
     this.powerupPool,
     this.rarePrizeMix,
     this.boxResult,
+    this.itemOdds,
   });
 
   final bool claimedToday;
@@ -20,6 +23,7 @@ class _BoxModeApi extends BackendApiService {
   final List<Map<String, dynamic>>? powerupPool;
   final Map<String, dynamic>? rarePrizeMix;
   final Map<String, dynamic>? boxResult;
+  final Map<String, dynamic>? itemOdds;
   int legacyClaimCalls = 0;
   int boxClaimCalls = 0;
 
@@ -42,10 +46,30 @@ class _BoxModeApi extends BackendApiService {
           'UNCOMMON': [40, 80],
         },
         'accessoryPool': [
-          {'id': 'a1', 'assetKey': 'cowboy_hat', 'name': 'Cowboy Hat'},
+          {
+            'id': 'a1',
+            'sku': 'cowboy_hat',
+            'assetKey': 'cowboy_hat',
+            'name': 'Cowboy Hat',
+          },
         ],
         if (powerupPool != null) 'powerupPool': powerupPool,
         if (rarePrizeMix != null) 'rarePrizeMix': rarePrizeMix,
+        'itemOdds':
+            itemOdds ??
+            {
+              'rareMix': {
+                ...(rarePrizeMix ?? const {'ACCESSORY': 1.0, 'POWERUP': 0.0}),
+                'COINS': 0.0,
+              },
+              'accessories': [
+                {'sku': 'cowboy_hat', 'p': 1.0},
+              ],
+              'powerups': [
+                for (final item in powerupPool ?? <Map<String, dynamic>>[])
+                  {'type': item['powerupType'], 'p': 1.0 / powerupPool!.length},
+              ],
+            },
       },
     };
   }
@@ -401,11 +425,12 @@ void main() {
     expect(find.text('Added to your powerups'), findsOneWidget);
   });
 
-  testWidgets('an older backend cannot reveal a retired Imposter reward', (
+  testWidgets('server can restore and reveal an Imposter reward', (
     WidgetTester tester,
   ) async {
     final auth = await _authService();
     final api = _BoxModeApi(
+      odds: const {'COMMON': 0.0, 'UNCOMMON': 0.0, 'RARE': 1.0},
       powerupPool: const [
         {
           'sku': 'POWERUP_IMPOSTER',
@@ -428,9 +453,8 @@ void main() {
     );
     await _pumpScreen(tester, api, auth);
 
-    // The retired item is absent from decoys even when an older backend still
-    // returns it in the optional pool.
-    expect(find.text('Imposter'), findsNothing);
+    // Server restoration reaches both preview candidates and the actual winner.
+    expect(find.text('Imposter'), findsWidgets);
 
     await tester.tap(find.text('SWIPE OR TAP'));
     await tester.pump();
@@ -439,10 +463,81 @@ void main() {
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('Imposter'), findsNothing);
-    expect(find.text('POWERUP RETIRED'), findsOneWidget);
-    expect(find.text('This reward is no longer available.'), findsOneWidget);
+    expect(find.text('Imposter'), findsOneWidget);
+    expect(find.text('POWERUP'), findsOneWidget);
+    expect(find.text('Added to your powerups'), findsOneWidget);
   });
+
+  for (final type in ['DECOY', 'FUTURE_ITEM']) {
+    testWidgets(
+      'daily reel uses only server candidate $type and preserves winner rarity',
+      (tester) async {
+        final api = _BoxModeApi(
+          odds: {'RARE': 1.0},
+          powerupPool: [
+            {'powerupType': type, 'name': type},
+          ],
+          itemOdds: {
+            'rareMix': {'POWERUP': 1.0},
+            'powerups': [
+              {'type': type, 'p': 1.0},
+            ],
+          },
+          boxResult: {
+            'rarity': 'UNCOMMON',
+            'rewardType': 'POWERUP',
+            'powerup': {'powerupType': 'SERVER_WINNER', 'name': 'Winner'},
+          },
+        );
+        await _pumpScreen(tester, api, await _authService());
+        expect(
+          tester
+              .widgetList<PowerupIcon>(find.byType(PowerupIcon))
+              .every((icon) => icon.type == type),
+          isTrue,
+        );
+        expect(find.text(type), findsWidgets);
+        await tester.tap(find.text('SWIPE OR TAP'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        final winner = find.ancestor(
+          of: find.text('Winner'),
+          matching: find.byType(CaseReelTile),
+        );
+        expect(winner, findsOneWidget);
+        expect(tester.widget<CaseReelTile>(winner).rarity, 'UNCOMMON');
+      },
+    );
+  }
+  testWidgets(
+    'omitted daily conditional mass is neutral rather than rerolled',
+    (tester) async {
+      await _pumpScreen(
+        tester,
+        _BoxModeApi(
+          odds: {'RARE': 1.0},
+          powerupPool: [
+            {'powerupType': 'DECOY', 'name': 'Decoy'},
+          ],
+          itemOdds: {
+            'rareMix': {'POWERUP': 1.0},
+            'powerups': [
+              {'type': 'DECOY', 'p': 0.0},
+            ],
+          },
+        ),
+        await _authService(),
+      );
+      expect(find.text('Decoy'), findsNothing);
+      expect(find.text('???'), findsWidgets);
+      expect(
+        tester
+            .widgetList<CaseReelTile>(find.byType(CaseReelTile))
+            .every((tile) => tile.rarity == 'UNKNOWN'),
+        isTrue,
+      );
+    },
+  );
 
   testWidgets('popup omits odds even when the backend supplies a rare mix', (
     WidgetTester tester,

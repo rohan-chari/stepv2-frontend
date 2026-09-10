@@ -102,10 +102,35 @@ before correctness or style.
 - **Build-time config is baked in.** `BACKEND_BASE_URL` is injected via
   `--dart-define` at build (see `DEPLOYMENT.md`); a wrong value ships a broken
   binary that can't be hotfixed without a new App Store submission.
-- New content that a frozen client can't render (e.g. a PNG it doesn't bundle)
-  ships `testOnly:true` and flips to `false` only after the carrying App Store
-  build has rolled out.
+- Supported content and remote artwork are activated by backend policy; a PNG
+  missing from the bundle does not require a carrying app release. If a new
+  interaction needs a renderer an older client lacks, the backend uses truthful
+  client capabilities to return compatible content. Never add binary item lists
+  or require an app release merely to change availability or prices.
 - **Deploy order is backend first, then app.**
+
+## Backend owns product policy
+
+Powerup, accessory, and character availability, retirement, prices, purchase
+eligibility, upgrade eligibility, and reward pools are controlled by the
+backend. The app renders those responses; it must not override them with
+item-type/SKU allowlists, denylists, retirement checks, or a bundled catalog.
+A backend content change must not require a new binary merely to change
+product policy.
+
+- Explicit valid server `false`, `0`, and empty lists are authoritative. Do
+  not resurrect bundled rules when the server disables or empties something.
+- Missing economic quotes or policy must produce a safe unavailable/unpriced
+  state, never an invented price, ad offer, payout, or drop pool.
+- Bundled artwork and descriptive copy may be rendering fallbacks. They must
+  not decide whether an item is sold, owned, usable, or obtainable. A missing
+  bundled asset alone does not justify hiding content supported by the remote
+  asset renderer.
+- Keep truthful client capability headers and defensive shape validation.
+  The backend owns compatibility/channel filtering for supported rendering
+  and interaction contracts; do not duplicate those product decisions locally.
+- Tests must prove that changing server responses changes product visibility,
+  eligibility, and displayed prices without changing client code.
 
 ## Backend scalability and performance guidelines
 

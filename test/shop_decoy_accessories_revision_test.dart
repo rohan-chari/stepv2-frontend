@@ -8,7 +8,6 @@ import 'package:step_tracker/screens/character_wardrobe_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/app_refresh_indicator.dart';
-import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/race_ui.dart';
 import 'package:step_tracker/widgets/shop_character_card.dart';
 import 'character_wardrobe_screen_test.dart' show WardrobeApi, hat, corgi;
@@ -158,12 +157,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   }
 
-  testWidgets('Decoy returns at server price while Imposter stays hidden', (
-    tester,
-  ) async {
+  testWidgets('Decoy and Imposter follow the server catalog', (tester) async {
     await render(tester, _Api());
     expect(find.text('Decoy'), findsOneWidget);
-    expect(find.text('Imposter'), findsNothing);
+    expect(find.text('Imposter'), findsOneWidget);
     await tap(tester, find.text('Decoy'));
     expect(find.text('BUY · 150'), findsOneWidget);
   });
@@ -206,31 +203,28 @@ void main() {
       expect(tile, findsNothing);
     },
   );
-  testWidgets('Edit outfit opens the active eligible character', (
-    tester,
-  ) async {
-    final api = _Api()..active = 'character-corgi';
-    await render(tester, api);
-    await tap(tester, find.byKey(const Key('shop-edit-outfit')));
-    expect(find.byType(CharacterWardrobeScreen), findsOneWidget);
-    expect(api.wardrobeOpened, 'character-corgi');
-    expect(tester.takeException(), isNull);
-  });
   testWidgets(
-    'unsupported wardrobe keeps accessory purchases and explains disabled editing',
+    'character tile Edit opens that eligible character independently of active character',
+    (tester) async {
+      final api = _Api();
+      await render(tester, api);
+      expect(find.byKey(const Key('shop-edit-outfit')), findsNothing);
+      await tap(
+        tester,
+        find.byKey(const Key('shop-character-edit-character-corgi')),
+      );
+      expect(find.byType(CharacterWardrobeScreen), findsOneWidget);
+      expect(api.wardrobeOpened, 'character-corgi');
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'unsupported wardrobe keeps accessory purchases and omits tile editing',
     (tester) async {
       await render(tester, _Api()..unsupported = true);
       expect(find.byKey(Key('shop-accessory-${hat['id']}')), findsOneWidget);
-      expect(
-        tester
-            .widget<PillButton>(find.byKey(const Key('shop-edit-outfit')))
-            .onPressed,
-        isNull,
-      );
-      expect(
-        find.text('Saved outfit is currently unavailable.'),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('shop-edit-outfit')), findsNothing);
+      expect(find.byIcon(Icons.edit_rounded), findsNothing);
     },
   );
   testWidgets(
@@ -240,10 +234,8 @@ void main() {
       expect(find.byKey(Key('shop-accessory-${hat['id']}')), findsNothing);
       expect(find.text('No accessories for sale right now.'), findsOneWidget);
       expect(
-        tester
-            .widget<PillButton>(find.byKey(const Key('shop-edit-outfit')))
-            .onPressed,
-        isNotNull,
+        find.byKey(const Key('shop-character-edit-default')),
+        findsOneWidget,
       );
     },
   );

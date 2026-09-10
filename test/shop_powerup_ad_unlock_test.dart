@@ -15,7 +15,7 @@ class _FakeShopApi extends BackendApiService {
   _FakeShopApi({
     required this.coins,
     required this.price,
-    this.includeAdUnlock = false,
+    this.includeAdUnlock = true,
   });
 
   final int coins;
@@ -206,22 +206,18 @@ void main() {
   );
 
   testWidgets(
-    'older backend keeps legacy action, skips speculation, and loads on tap',
+    'missing backend ad policy cannot start a speculative or paid ad',
     (tester) async {
       final ads = _FakeShopAdController();
-      final api = _FakeShopApi(coins: 110, price: 150);
+      final api = _FakeShopApi(coins: 110, price: 150, includeAdUnlock: false);
 
       await _pump(tester, coins: 110, price: 150, api: api, ads: ads);
-      expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
+      expect(find.text('WATCH 1 AD TO UNLOCK'), findsNothing);
+      expect(find.text('GET MORE COINS'), findsOneWidget);
       expect(ads.loadCalls, 0);
 
-      await tester.tap(find.text('WATCH 1 AD TO UNLOCK'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(ads.loadCalls, 1);
-      expect(ads.showCalls, 1);
-      expect(api.unlockCalls, 1);
+      expect(ads.showCalls, 0);
+      expect(api.unlockCalls, 0);
     },
   );
 

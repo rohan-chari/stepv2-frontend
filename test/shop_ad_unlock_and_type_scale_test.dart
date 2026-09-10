@@ -228,16 +228,14 @@ void main() {
 
   // ── §7 / test 15 — the ad-unlock rules come from the server ────────────
   group('§7 ad-unlock is driven by the catalog adUnlock block', () {
-    testWidgets('adUnlock absent → today\'s 150-coin behaviour is preserved', (
-      tester,
-    ) async {
+    testWidgets('adUnlock absent → no invented ad unlock', (tester) async {
       await _pump(tester, coins: 30, price: 150);
       await tester.ensureVisible(find.text('Big Bang').first);
       await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
-      expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
-      expect(find.text('GET MORE COINS'), findsNothing);
+      expect(find.text('WATCH 3 ADS TO UNLOCK'), findsNothing);
+      expect(find.text('GET MORE COINS'), findsOneWidget);
     });
 
     testWidgets('maxShortfall 20 → a 90-short tile routes to Get coins', (
@@ -317,7 +315,7 @@ void main() {
       },
     );
 
-    testWidgets('a malformed adUnlock block falls back to the legacy rules', (
+    testWidgets('a malformed adUnlock block offers no ad unlock', (
       tester,
     ) async {
       await _pump(
@@ -330,8 +328,32 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Big Bang').first);
       await tester.pump();
-      expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
+      expect(find.text('WATCH 3 ADS TO UNLOCK'), findsNothing);
     });
+
+    for (final invalid in [double.nan, double.infinity, -1, 1.5]) {
+      testWidgets('invalid ad policy $invalid disables paid ad path safely', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          coins: 30,
+          price: 150,
+          adUnlock: {
+            'maxShortfall': invalid,
+            'coinsPerAd': 50,
+            'maxAds': 3,
+            'remainingToday': 1,
+          },
+        );
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('Big Bang').first);
+        await tester.tap(find.text('Big Bang').first);
+        await tester.pump();
+        expect(find.textContaining('WATCH'), findsNothing);
+        expect(find.text('GET MORE COINS'), findsOneWidget);
+      });
+    }
 
     testWidgets('cosmetics get the same ad-unlock affordance', (tester) async {
       await _pump(

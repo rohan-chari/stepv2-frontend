@@ -21,6 +21,12 @@ Future<void> _pumpStrip(
           resultRarity: 'COMMON',
           onComplete: () {},
           rarityByType: rarityByType,
+          dropOdds: rarityByType == null
+              ? null
+              : const {
+                  'reelPreviewAvailable': true,
+                  'byType': {'PROTEIN_SHAKE': 1.0},
+                },
         ),
       ),
     ),
@@ -75,7 +81,7 @@ void main() {
   });
 
   testWidgets(
-    'server map absent -> bundled fallback used, reel still renders',
+    'server map absent -> neutral rarity and mystery reel still renders',
     (WidgetTester tester) async {
       await _pumpStrip(tester);
 
@@ -83,11 +89,8 @@ void main() {
       expect(rarities, isNotEmpty);
       // The bundled table assigns COMMON to half the pool, so an all-UNCOMMON
       // reel here would mean the fallback was dropped.
-      expect(rarities.any((r) => r == 'COMMON'), isTrue);
-      expect(
-        rarities.every((r) => const {'COMMON', 'UNCOMMON', 'RARE'}.contains(r)),
-        isTrue,
-      );
+      expect(rarities.every((r) => r == 'UNKNOWN'), isTrue);
+      expect(rarities.every((r) => const {'UNKNOWN'}.contains(r)), isTrue);
     },
   );
 
@@ -99,7 +102,7 @@ void main() {
     await _pumpStrip(tester, rarityByType: const {'SHORTCUT': 'RARE'});
 
     final rarities = _tileRarities(tester);
-    expect(rarities.any((r) => r == 'COMMON'), isTrue);
+    expect(rarities.every((r) => r == 'UNKNOWN'), isTrue);
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,3 +1,4 @@
+import '../utils/server_reel_preview.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -537,12 +538,9 @@ class CaseOpeningStrip extends StatefulWidget {
   final Listenable? spinTrigger;
   final bool hideSwipeHint;
 
-  /// Server-authoritative powerup rarity table (balance config `rarityByType`).
-  /// The bundled [_CaseOpeningStripState._bundledRarityByType] below is a
-  /// FALLBACK ONLY: server entries win per type, types the server omits keep
-  /// their bundled rarity, and a null map (older backend) leaves the reel
-  /// behaving exactly as it did before this field existed.
+  /// Server metadata supplies decorative eligibility and presentation only.
   final Map<String, String>? rarityByType;
+  final Map<String, dynamic>? dropOdds;
 
   const CaseOpeningStrip({
     super.key,
@@ -554,6 +552,7 @@ class CaseOpeningStrip extends StatefulWidget {
     this.spinTrigger,
     this.hideSwipeHint = false,
     this.rarityByType,
+    this.dropOdds,
   });
 
   @override
@@ -568,69 +567,6 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
   // Place result near the end so there's a long scroll
   static const _resultPosition = 38;
 
-  /// FALLBACK ONLY — the balance config is authoritative. Consulted per type
-  /// when [CaseOpeningStrip.rarityByType] is null (old backend) or omits that
-  /// type. Read through [_rarityFor], never directly.
-  static const _bundledRarityByType = {
-    'PROTEIN_SHAKE': 'COMMON',
-    'SHORTCUT': 'COMMON',
-    'RUNNERS_HIGH': 'UNCOMMON',
-    'LEG_CRAMP': 'UNCOMMON',
-    'STEALTH_MODE': 'UNCOMMON',
-    'WRONG_TURN': 'UNCOMMON',
-    'RED_CARD': 'RARE',
-    'SECOND_WIND': 'RARE',
-    'COMPRESSION_SOCKS': 'RARE',
-    'FANNY_PACK': 'RARE',
-    'TRAIL_MIX': 'COMMON',
-    'DETOUR_SIGN': 'COMMON',
-    'LUCKY_HORSESHOE': 'RARE',
-    'CAMPFIRE_REST': 'UNCOMMON',
-    'TRAIL_MAGNET': 'COMMON',
-    'POCKET_WATCH': 'RARE',
-    'TRAIL_MINE': 'RARE',
-    'PINECONE_TOSS': 'UNCOMMON',
-    'SNEAKY_SWAP': 'RARE',
-    'MIRROR': 'RARE',
-    'CLEANSE': 'RARE',
-    // Batch 2026-08-09 item 6: Power Outage left the shop and entered the
-    // RARE box-drop pool. Absent here it would have painted COMMON.
-    'POWER_OUTAGE': 'RARE',
-  };
-
-  // Weighted random: common 50%, uncommon 35%, rare 15%
-  static const _commonTypes = [
-    'PROTEIN_SHAKE',
-    'SHORTCUT',
-    'TRAIL_MIX',
-    'DETOUR_SIGN',
-  ];
-  // CAMPFIRE_REST and TRAIL_MAGNET are retired from backend generation, so
-  // don't advertise either as obtainable. Their icon/name/rarity entries stay
-  // elsewhere so old clients and players holding legacy copies still render.
-  static const _uncommonTypes = [
-    'RUNNERS_HIGH',
-    'LEG_CRAMP',
-    'STEALTH_MODE',
-    'WRONG_TURN',
-    'PINECONE_TOSS',
-  ];
-  // Batch 2026-08-09: FANNY_PACK left `dropPool.RARE` (item 8a) so the reel
-  // must stop advertising it; POWER_OUTAGE joined it (item 6). Decoys only —
-  // the real result tile always comes from the server.
-  static const _rareTypes = [
-    'RED_CARD',
-    'SECOND_WIND',
-    'COMPRESSION_SOCKS',
-    'POWER_OUTAGE',
-    'LUCKY_HORSESHOE',
-    'POCKET_WATCH',
-    'TRAIL_MINE',
-    'SNEAKY_SWAP',
-    'CLEANSE',
-    'MIRROR',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -641,8 +577,9 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
   void didUpdateWidget(CaseOpeningStrip oldWidget) {
     super.didUpdateWidget(oldWidget);
     // A late-arriving server rarity table must relabel the decoys already on
-    // screen, otherwise the reel keeps advertising the stale bundled rarities.
-    if (!_sameRarityTable(widget.rarityByType, oldWidget.rarityByType)) {
+    // screen so refreshed server metadata reaches the decorative tiles.
+    if (!_sameRarityTable(widget.rarityByType, oldWidget.rarityByType) ||
+        widget.dropOdds != oldWidget.dropOdds) {
       _items = _generateStrip();
       return;
     }
@@ -664,10 +601,8 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     return true;
   }
 
-  /// Server value wins; bundled table fills the gaps; COMMON as the last
-  /// resort so an unknown type still renders a tile.
-  String _rarityFor(String type) =>
-      widget.rarityByType?[type] ?? _bundledRarityByType[type] ?? 'COMMON';
+  /// Server rarity when supplied; unknown rarity stays neutral.
+  String _rarityFor(String type) => widget.rarityByType?[type] ?? 'UNKNOWN';
 
   _StripItem _resultOrDecoy(Random rng) {
     if (widget.resultType.isNotEmpty) {
@@ -692,16 +627,11 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     return items;
   }
 
-  String _randomType(Random rng) {
-    final roll = rng.nextDouble();
-    if (roll < 0.50) {
-      return _commonTypes[rng.nextInt(_commonTypes.length)];
-    } else if (roll < 0.85) {
-      return _uncommonTypes[rng.nextInt(_uncommonTypes.length)];
-    } else {
-      return _rareTypes[rng.nextInt(_rareTypes.length)];
-    }
-  }
+  String _randomType(Random rng) =>
+      widget.dropOdds?['reelPreviewAvailable'] == true
+      ? sampleServerProbability(widget.dropOdds?['byType'], rng.nextDouble()) ??
+            'MYSTERY_BOX'
+      : 'MYSTERY_BOX';
 
   @override
   Widget build(BuildContext context) {

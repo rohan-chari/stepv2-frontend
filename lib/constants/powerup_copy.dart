@@ -5,7 +5,7 @@
 /// duration is the canonical example) silently made the client lie. This file
 /// consolidates all seven maps and layers the backend-served catalog on top.
 ///
-/// Resolution order for EVERY string (§9.5.4):
+/// Resolution order for display copy (§9.5.4):
 ///   1. the current in-memory backend snapshot, when present and non-empty
 ///   2. the persisted last-known-good backend snapshot
 ///   3. the bundled emergency value below
@@ -16,8 +16,8 @@
 /// fetch resolves, and a new client talking to an old backend all still render
 /// real copy instead of `LEG_CRAMP`.
 ///
-/// This mirrors the backend-authoritative-with-bundled-fallback shape already
-/// used for upgrade costs in `race_detail_screen.dart`.
+/// Catalog membership, eligibility and upgrade tiers always come from the
+/// current or last good server snapshot; display-copy fallbacks grant no actions.
 library;
 
 import 'dart:convert';
@@ -228,13 +228,13 @@ class PowerupCopySnapshot {
   /// Validates a `/powerups/catalog` response.
   ///
   /// Returns null — meaning "keep the previous good snapshot" — for anything
-  /// partial, empty, duplicate-typed, or malformed. Unknown extra fields are
+  /// partial, duplicate-typed, or malformed. A valid empty list clears the roster. Unknown extra fields are
   /// ignored so a NEWER backend never breaks this build, and a missing
   /// `version` is tolerated because the response is additive-only.
   static PowerupCopySnapshot? parse(dynamic raw) {
     if (raw is! Map) return null;
     final list = raw['powerups'];
-    if (list is! List || list.isEmpty) return null;
+    if (list is! List) return null;
 
     final entries = <String, PowerupCopyEntry>{};
     for (final item in list) {
@@ -251,11 +251,16 @@ class PowerupCopySnapshot {
       if (entries.containsKey(type)) return null;
 
       final tiers = <String>[];
+      var validTiers = true;
       final rawTiers = item['upgradeTierLabels'];
       if (rawTiers is List) {
         for (final t in rawTiers) {
           final label = _trimmedOrNull(t);
-          if (label != null) tiers.add(label);
+          if (label == null) {
+            validTiers = false;
+          } else {
+            tiers.add(label);
+          }
         }
       }
 
@@ -264,17 +269,14 @@ class PowerupCopySnapshot {
         name: name,
         description: description,
         shortDescription: _trimmedOrNull(item['shortDescription']),
-        // Only a complete 4-tier ladder is usable; anything else defers to the
-        // bundled labels rather than rendering a half-built tier list.
-        upgradeTierLabels: tiers.length == 4 ? tiers : const [],
+        // Empty/malformed tiers disable upgrades; valid server length is authoritative.
+        upgradeTierLabels: validTiers ? tiers : const [],
         // Stacking is deliberately row-local validation. A future enum or one
         // malformed rule must never discard otherwise usable catalog copy.
         stacking: PowerupStackingRule.tryParse(item['stacking']),
         availability: PowerupAvailability.tryParse(item['availability']),
       );
     }
-
-    if (entries.isEmpty) return null;
 
     return PowerupCopySnapshot(
       version: _trimmedOrNull(raw['version']) ?? '',
@@ -338,42 +340,16 @@ abstract final class PowerupCopy {
   /// details are unavailable instead of guessing.
   static List<PowerupCopyEntry> get guideEntries {
     final snapshot = _memory ?? _persisted;
-    if (snapshot != null) {
-      final authoritativeAvailability =
-          snapshot.availabilityVersion == 2 &&
-          snapshot.entries.values.every((entry) => entry.availability != null);
-      final result = <PowerupCopyEntry>[
-        for (final entry in snapshot.entries.values)
-          if (entry.type != 'IMPOSTER' &&
-              (!authoritativeAvailability ||
-                  entry.availability?.available == true))
-            (snapshot.stackingVersion == null
-                    ? entry.copyWith(stacking: _bundledStacking[entry.type])
-                    : entry)
-                .copyWith(clearAvailability: !authoritativeAvailability),
-      ];
-      final present = result.map((entry) => entry.type).toSet();
-      if (authoritativeAvailability) return result;
-      for (final type in bundledTypes) {
-        if (type == 'IMPOSTER' || present.contains(type)) continue;
-        result.add(_bundledGuideEntry(type));
-      }
-      return result;
-    }
+    if (snapshot == null) return const [];
+    final authoritativeAvailability = (snapshot.availabilityVersion ?? 0) >= 2;
     return [
-      for (final type in bundledTypes)
-        if (type != 'IMPOSTER') _bundledGuideEntry(type),
+      for (final entry in snapshot.entries.values)
+        if (entry.availability?.available ?? !authoritativeAvailability)
+          snapshot.stackingVersion == null
+              ? entry.copyWith(stacking: _bundledStacking[entry.type])
+              : entry,
     ];
   }
-
-  static PowerupCopyEntry _bundledGuideEntry(String type) => PowerupCopyEntry(
-    type: type,
-    name: _bundledNames[type] ?? type,
-    description: _bundledDescriptions[type] ?? type,
-    shortDescription: _bundledShortDescriptions[type],
-    upgradeTierLabels: _bundledUpgradeTierLabels[type] ?? const [],
-    stacking: _bundledStacking[type],
-  );
 
   // -- Reads ---------------------------------------------------------------
 
@@ -422,15 +398,12 @@ abstract final class PowerupCopy {
     return descriptionFor(type);
   }
 
-  /// The 4 upgrade-tier labels, or null when the type is not upgradeable.
+  /// Server tier labels, or null when no valid tier choices are supplied.
   static List<String>? upgradeTierLabelsFor(String? type) {
     if (type == null || type.isEmpty) return null;
     final key = type.toUpperCase();
-    for (final snapshot in [_memory, _persisted]) {
-      final tiers = snapshot?.entries[key]?.upgradeTierLabels;
-      if (tiers != null && tiers.length == 4) return tiers;
-    }
-    return _bundledUpgradeTierLabels[key];
+    final tiers = (_memory ?? _persisted)?.entries[key]?.upgradeTierLabels;
+    return tiers != null && tiers.isNotEmpty ? tiers : null;
   }
 
   /// Whether this type shows the tiered use-modal.
@@ -699,86 +672,6 @@ abstract final class PowerupCopy {
     'DRILL_SERGEANT': 'On the clock',
     'PIGGY_BANK': 'Banking steps for coins',
     'BOUNTY': 'Bounty placed',
-  };
-
-  static const _bundledUpgradeTierLabels = {
-    'PROTEIN_SHAKE': [
-      '+1,500 steps',
-      '+2,250 steps',
-      '+3,000 steps',
-      '+4,500 steps',
-    ],
-    'SHORTCUT': [
-      'Steal up to 1,000 steps',
-      'Steal up to 1,500 steps',
-      'Steal up to 2,000 steps',
-      'Steal up to 3,000 steps',
-    ],
-    // 2026-08-15: joined the 15-min upgrade ladder (was 3/4/5/7h here, never
-    // matched the backend's real 1/2/3/4h ladder either).
-    'DETOUR_SIGN': [
-      'Hide leaderboard 1h',
-      'Hide leaderboard 1h 15m',
-      'Hide leaderboard 1h 30m',
-      'Hide leaderboard 1h 45m',
-    ],
-    'TRAIL_MIX': [
-      '+100 steps per unique type',
-      '+150 steps per unique type',
-      '+200 steps per unique type',
-      '+300 steps per unique type',
-    ],
-    // 2026-08-15: joined the 15-min upgrade ladder (was 3/4/5/7h here, never
-    // matched the backend's real 1/2/3/4h ladder either).
-    'RUNNERS_HIGH': [
-      '2x for 1h',
-      '2x for 1h 15m',
-      '2x for 1h 30m',
-      '2x for 1h 45m',
-    ],
-    // Item 1 — each upgrade adds 15 minutes on top of the 1h base.
-    'LEG_CRAMP': [
-      'Freeze 1h',
-      'Freeze 1h 15m',
-      'Freeze 1h 30m',
-      'Freeze 1h 45m',
-    ],
-    // 2026-08-15: joined the 15-min upgrade ladder (was 4/5/6.5/8h here
-    // originally, then fixed to the old 1/2/3/4h ladder — now stale again).
-    'STEALTH_MODE': ['Hide 1h', 'Hide 1h 15m', 'Hide 1h 30m', 'Hide 1h 45m'],
-    'WRONG_TURN': [
-      'Reverse 1h',
-      'Reverse 1h 15m',
-      'Reverse 1h 30m',
-      'Reverse 1h 45m',
-    ],
-    'COMPRESSION_SOCKS': [
-      'Shield 24h',
-      'Shield 30h',
-      'Shield 36h',
-      'Shield 48h',
-    ],
-    // LUCKY_HORSESHOE deliberately has NO bundled ladder (batch 2026-08-09
-    // item 8b): it now guarantees a rare at every level, so the upgrade UI —
-    // which this map gates via `isUpgradeable` — is hidden in this build. The
-    // type stays in the backend's `upgradeableTypes` with zeroed costs so
-    // frozen binaries that still offer L1-3 don't hit a permanent 400, and a
-    // backend that still serves a ladder still overrides this omission.
-    'CAMPFIRE_REST': ['2.25x boost', '2.5x boost', '2.75x boost', '3x boost'],
-    'TRAIL_MAGNET': [
-      'Box 1,000 steps closer',
-      'Box 1,500 steps closer',
-      'Box 2,000 steps closer',
-      'Box 3,000 steps closer',
-    ],
-    'POCKET_WATCH': ['Extend 1h', 'Extend 1.5h', 'Extend 2h', 'Extend 3h'],
-    'TRAIL_MINE': ['3% penalty', '5% penalty', '8% penalty', '12% penalty'],
-    'PINECONE_TOSS': [
-      '-750 steps',
-      '-1,000 steps',
-      '-1,500 steps',
-      '-2,250 steps',
-    ],
   };
 
   static const _bundledStacking = <String, PowerupStackingRule>{

@@ -40,17 +40,7 @@ import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
 import '../../services/meta_app_events_service.dart';
 
-// Powerup types retired from Store and Inventory. Old-backend residue is
-// filtered defensively; historical race Activity remains readable elsewhere.
-const _hiddenPowerupInventoryTypes = {'IMPOSTER'};
-const _notForSalePowerupTypes = {'IMPOSTER'};
-
-/// The watch-ads-to-unlock rules (spec §7 / contract §4.3).
-///
-/// The server owns these numbers so they can be retuned without an App Store
-/// cycle. [legacy] reproduces exactly what shipped binaries compile in, and is
-/// what we fall back to when the backend is older than the `adUnlock` block —
-/// a missing block must never change today's behaviour.
+/// Server-supplied watch-ad policy. Missing or invalid values disable this path.
 class _AdUnlockConfig {
   const _AdUnlockConfig({
     required this.maxShortfall,
@@ -68,31 +58,35 @@ class _AdUnlockConfig {
   /// the button, which is what makes us fail BEFORE the ad rather than after.
   final int? remainingToday;
 
-  static const legacy = _AdUnlockConfig(
-    maxShortfall: 150,
-    coinsPerAd: 50,
-    maxAds: 3,
-    remainingToday: null,
+  static const unavailable = _AdUnlockConfig(
+    maxShortfall: 0,
+    coinsPerAd: 0,
+    maxAds: 0,
+    remainingToday: 0,
   );
 
   bool get hasUnlockLeft => remainingToday == null || remainingToday! > 0;
 
-  /// Reads the block defensively: any missing or non-numeric field falls back
-  /// to its legacy value rather than zeroing the flow out.
   static _AdUnlockConfig fromJson(Object? raw) {
-    if (raw is! Map) return legacy;
-    int intOr(String key, int fallback) {
-      final value = raw[key];
-      final parsed = value is num ? value.toInt() : null;
-      return parsed != null && parsed > 0 ? parsed : fallback;
+    if (raw is! Map) return unavailable;
+    final shortfall = wardrobeCoinPrice(raw['maxShortfall']);
+    final coins = wardrobeCoinPrice(raw['coinsPerAd']);
+    final ads = wardrobeCoinPrice(raw['maxAds']);
+    final remaining = wardrobeCoinPrice(raw['remainingToday']);
+    if (shortfall == null ||
+        shortfall <= 0 ||
+        coins == null ||
+        coins <= 0 ||
+        ads == null ||
+        ads <= 0 ||
+        (raw['remainingToday'] != null && remaining == null)) {
+      return unavailable;
     }
-
-    final remainingRaw = raw['remainingToday'];
     return _AdUnlockConfig(
-      maxShortfall: intOr('maxShortfall', legacy.maxShortfall),
-      coinsPerAd: intOr('coinsPerAd', legacy.coinsPerAd),
-      maxAds: intOr('maxAds', legacy.maxAds),
-      remainingToday: remainingRaw is num ? remainingRaw.toInt() : null,
+      maxShortfall: shortfall,
+      coinsPerAd: coins,
+      maxAds: ads,
+      remainingToday: remaining,
     );
   }
 }
@@ -273,7 +267,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   // Ad-unlock rules. The server serves them in the catalog's `adUnlock` block
   // (contract §4.3); when it is absent — an older backend — we keep the
   // compiled-in legacy behaviour byte for byte.
-  _AdUnlockConfig _adUnlock = _AdUnlockConfig.legacy;
+  _AdUnlockConfig _adUnlock = _AdUnlockConfig.unavailable;
   bool _hasValidServerAdUnlock = false;
   ExtraSpinAdController? _shopAdController;
   RewardedAdContext? _shopAdContext;
@@ -571,7 +565,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
     'Scroll from Featured coins to Powerups, then Characters and Accessories. Powerup badges show how many you own.',
-    'Owned and locked characters share one collection. Open an owned character to edit its saved outfit or make it active.',
+    'Tap Edit to change a character’s outfit. Tap its card to make it active.',
   ];
 
   Element? _elementWithKey(Key key) {
@@ -999,15 +993,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         final type = raw['powerupType'];
         final quantity = raw['quantity'];
         if (type is String && quantity is num && quantity.toInt() > 0) {
-          if (!_hiddenPowerupInventoryTypes.contains(type)) {
-            inventory[type] = quantity.toInt();
-          }
+          inventory[type] = quantity.toInt();
         }
       }
     }
-    _powerupStoreItems = storeItems
-        .where((item) => !_notForSalePowerupTypes.contains(item['powerupType']))
-        .toList();
+    _powerupStoreItems = storeItems;
     _powerupInventory = inventory;
     _powerupsAvailable = true;
     _powerupsAvailabilityResolved = true;
@@ -1024,6 +1014,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return items is List && items.every((row) => row is Map && isValid(row));
   }
 
+  bool _validCoinQuote(Object? value) =>
+      value is num &&
+      value.isFinite &&
+      value >= 0 &&
+      value == value.roundToDouble();
+
   bool _isValidCosmeticItem(
     Map<dynamic, dynamic> item, {
     required bool requireCompleteFields,
@@ -1038,7 +1034,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             item['description'] == null ||
             item['description'] is String) &&
         item['slot'] is String &&
-        item['priceCoins'] is num &&
+        _validCoinQuote(item['priceCoins']) &&
         item['assetKey'] is String &&
         (!requireCompleteFields || item['owned'] is bool) &&
         (!requireCompleteFields || item['equipped'] is bool);
@@ -1053,7 +1049,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         item['name'] is String &&
         item.containsKey('description') &&
         (item['description'] == null || item['description'] is String) &&
-        item['priceCoins'] is num &&
+        _validCoinQuote(item['priceCoins']) &&
         item['powerupType'] is String &&
         (item['powerupType'] as String).isNotEmpty &&
         (!item.containsKey('category') || item['category'] is String) &&
@@ -1181,11 +1177,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   bool _validAdUnlockBlock(Object? raw) {
     if (raw is! Map) return false;
     for (final key in const ['maxShortfall', 'coinsPerAd', 'maxAds']) {
-      final value = raw[key];
-      if (value is! num || value.toInt() <= 0) return false;
+      final value = wardrobeCoinPrice(raw[key]);
+      if (value == null || value <= 0) return false;
     }
-    final remaining = raw['remainingToday'];
-    return remaining == null || (remaining is num && remaining.toInt() >= 0);
+    return raw['remainingToday'] == null ||
+        wardrobeCoinPrice(raw['remainingToday']) != null;
   }
 
   Future<void> _purchase(Map<String, dynamic> item) async {
@@ -1937,6 +1933,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 key: Key('shop-character-${row.key}'),
                 character: row,
                 onPressed: () => _openCharacterMenu(row),
+                onEdit:
+                    row.owned &&
+                        row.canEdit &&
+                        (_wardrobes.state == WardrobeLoadState.loaded ||
+                            _wardrobes.state == WardrobeLoadState.paging)
+                    ? () => _openCharacterWardrobe(row)
+                    : null,
               ),
           ],
         ),
@@ -1954,13 +1957,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   Widget _buildAccessories() {
     final state = _catalogState;
-    final active = _wardrobes.characters.values
-        .where((character) => character.active && character.canEdit)
-        .firstOrNull;
-    final canEdit =
-        active != null &&
-        (_wardrobes.state == WardrobeLoadState.loaded ||
-            _wardrobes.state == WardrobeLoadState.paging);
     final items = _safeShopItems(_catalog?['items'])
         .where(
           (item) =>
@@ -1998,28 +1994,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             gridKey: const Key('shop-accessories-grid'),
             spaciousPowerups: true,
             children: [for (final item in items) _storeCosmeticTile(item)],
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: PillButton(
-            key: const Key('shop-edit-outfit'),
-            label: 'EDIT OUTFIT',
-            icon: Icons.checkroom_rounded,
-            onPressed: canEdit ? () => _openCharacterWardrobe(active) : null,
-          ),
-        ),
-        if (!canEdit &&
-            _wardrobes.state != WardrobeLoadState.loading &&
-            _wardrobes.state != WardrobeLoadState.initial)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(
-              'Saved outfit is currently unavailable.',
-              style: PixelText.body(
-                size: 13,
-                color: AppColors.of(context).textLight,
-              ),
-            ),
           ),
       ],
     );
@@ -2460,7 +2434,15 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     var getCoins = false;
     final name = item['name'] as String? ?? 'Accessory';
     final rawPrice = item['priceCoins'];
-    final price = rawPrice is num ? rawPrice.toInt() : 0;
+    if (!_validCoinQuote(rawPrice)) {
+      await _showItemSheet(
+        art: _cosmeticArt(item),
+        name: name,
+        description: 'Price is currently unavailable. Please try again.',
+      );
+      return null;
+    }
+    final price = (rawPrice as num).toInt();
     // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
     // by the same server-served rules.
     final route = _routeFor(price);
@@ -2797,6 +2779,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   _AffordRoute _routeFor(int price) {
     final shortfall = price - widget.authService.coins;
     if (shortfall <= 0) return _AffordRoute.affordable;
+    if (!_hasValidServerAdUnlock) return _AffordRoute.getCoins;
     if (shortfall > _adUnlock.maxShortfall) return _AffordRoute.getCoins;
     if (!_adUnlock.hasUnlockLeft) return _AffordRoute.getCoins;
     return _AffordRoute.watchAds;

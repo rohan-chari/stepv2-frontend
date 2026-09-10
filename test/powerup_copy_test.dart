@@ -94,16 +94,18 @@ void main() {
       expect(PowerupCopy.nameFor('POCKET_WATCH'), 'Pocket Watch');
     });
 
-    test('persisted snapshot resolves before bundled copy on a cold start',
-        () async {
-      await PowerupCopy.refresh(
-        fetch: () async => payload([entry('LEG_CRAMP', name: 'Persisted!')]),
-      );
-      // Simulate relaunch: fresh in-memory state, same SharedPreferences.
-      PowerupCopy.resetForTest(keepPersisted: true);
-      await PowerupCopy.loadPersisted();
-      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Persisted!');
-    });
+    test(
+      'persisted snapshot resolves before bundled copy on a cold start',
+      () async {
+        await PowerupCopy.refresh(
+          fetch: () async => payload([entry('LEG_CRAMP', name: 'Persisted!')]),
+        );
+        // Simulate relaunch: fresh in-memory state, same SharedPreferences.
+        PowerupCopy.resetForTest(keepPersisted: true);
+        await PowerupCopy.loadPersisted();
+        expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Persisted!');
+      },
+    );
   });
 
   group('shortDescription nullability', () {
@@ -147,15 +149,17 @@ void main() {
       }
     });
 
-    test('a server-omitted short description still resolves bundled copy',
-        () async {
-      // Level 3 of the resolution order still applies to shortDescription: a
-      // snapshot that omits it must not blank out copy the app already had.
-      await PowerupCopy.refresh(
-        fetch: () async => payload([entry('LEG_CRAMP')]),
-      );
-      expect(PowerupCopy.shortDescriptionFor('LEG_CRAMP'), 'Steps frozen');
-    });
+    test(
+      'a server-omitted short description still resolves bundled copy',
+      () async {
+        // Level 3 of the resolution order still applies to shortDescription: a
+        // snapshot that omits it must not blank out copy the app already had.
+        await PowerupCopy.refresh(
+          fetch: () async => payload([entry('LEG_CRAMP')]),
+        );
+        expect(PowerupCopy.shortDescriptionFor('LEG_CRAMP'), 'Steps frozen');
+      },
+    );
 
     test('a present shortDescription is returned', () async {
       await PowerupCopy.refresh(
@@ -163,7 +167,10 @@ void main() {
           entry('LEG_CRAMP', shortDescription: 'Steps frozen solid'),
         ]),
       );
-      expect(PowerupCopy.shortDescriptionFor('LEG_CRAMP'), 'Steps frozen solid');
+      expect(
+        PowerupCopy.shortDescriptionFor('LEG_CRAMP'),
+        'Steps frozen solid',
+      );
     });
   });
 
@@ -171,43 +178,42 @@ void main() {
     test('server labels win when four are supplied', () async {
       await PowerupCopy.refresh(
         fetch: () async => payload([
-          entry(
-            'POCKET_WATCH',
-            upgradeTierLabels: ['A', 'B', 'C', 'D'],
-          ),
+          entry('POCKET_WATCH', upgradeTierLabels: ['A', 'B', 'C', 'D']),
         ]),
       );
-      expect(PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH'),
-          ['A', 'B', 'C', 'D']);
+      expect(PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH'), [
+        'A',
+        'B',
+        'C',
+        'D',
+      ]);
     });
 
-    test('an empty server list falls back to bundled tier labels', () async {
+    test('an empty server list disables upgrade tiers', () async {
       await PowerupCopy.refresh(
         fetch: () async => payload([entry('POCKET_WATCH')]),
       );
       final labels = PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH');
-      expect(labels, isNotNull);
-      expect(labels!.length, 4);
+      expect(labels, isNull);
     });
 
     test('a non-upgradeable type has no tier labels', () {
       expect(PowerupCopy.upgradeTierLabelsFor('CLEANSE'), isNull);
     });
 
-    test('a malformed tier list is ignored in favour of bundled labels',
-        () async {
+    test('a malformed tier list never invents paid upgrades', () async {
       await PowerupCopy.refresh(
         fetch: () async => payload([
           {
             'type': 'POCKET_WATCH',
             'name': 'Pocket Watch',
             'description': 'd',
-            // Only two entries: not a usable ladder.
-            'upgradeTierLabels': ['A', 'B'],
+            // Invalid entry must not shift the meaning of subsequent levels.
+            'upgradeTierLabels': ['A', null],
           },
         ]),
       );
-      expect(PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH')!.length, 4);
+      expect(PowerupCopy.upgradeTierLabelsFor('POCKET_WATCH'), isNull);
     });
   });
 
@@ -222,15 +228,19 @@ void main() {
       expect(desc.toLowerCase().contains('hour'), isFalse, reason: desc);
     });
 
-    test('Leech fallback stacking explains the one-live-effect victim cap', () {
-      final leech = PowerupCopy.guideEntries.firstWhere(
-        (entry) => entry.type == 'LEECH',
-      );
-      final summary = leech.stacking?.summary ?? '';
-      expect(leech.stacking?.samePowerup, SamePowerupStacking.blocked);
-      expect(summary, contains('one live Leech'));
-      expect(summary, isNot(contains('two attackers')));
-    });
+    test(
+      'Leech fallback stacking explains the one-live-effect victim cap',
+      () async {
+        await PowerupCopy.refresh(fetch: () async => payload([entry('LEECH')]));
+        final leech = PowerupCopy.guideEntries.firstWhere(
+          (entry) => entry.type == 'LEECH',
+        );
+        final summary = leech.stacking?.summary ?? '';
+        expect(leech.stacking?.samePowerup, SamePowerupStacking.blocked);
+        expect(summary, contains('one live Leech'));
+        expect(summary, isNot(contains('two attackers')));
+      },
+    );
 
     test('bundled copy covers the new store types', () {
       expect(PowerupCopy.nameFor('HITCHHIKE'), 'Hitchhike');
@@ -252,11 +262,12 @@ void main() {
       expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Good');
     }
 
-    test('an empty powerups list is rejected', () async {
+    test('an empty powerups list authoritatively clears the roster', () async {
       await seedGood();
       final ok = await PowerupCopy.refresh(fetch: () async => payload([]));
-      expect(ok, isFalse);
-      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Good');
+      expect(ok, isTrue);
+      expect(PowerupCopy.guideEntries, isEmpty);
+      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Leg Cramp');
     });
 
     test('a malformed (non-map) response is rejected', () async {
@@ -298,34 +309,38 @@ void main() {
       expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Good');
     });
 
-    test('a rejected refresh does not overwrite the PERSISTED snapshot',
-        () async {
-      await seedGood();
-      await PowerupCopy.refresh(fetch: () async => payload([]));
-      PowerupCopy.resetForTest(keepPersisted: true);
-      await PowerupCopy.loadPersisted();
-      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Good');
-    });
+    test(
+      'a rejected refresh does not overwrite the PERSISTED snapshot',
+      () async {
+        await seedGood();
+        await PowerupCopy.refresh(fetch: () async => {'powerups': 'invalid'});
+        PowerupCopy.resetForTest(keepPersisted: true);
+        await PowerupCopy.loadPersisted();
+        expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Good');
+      },
+    );
   });
 
   group('transient failures are never a permanent lockout', () {
-    test('a 404 falls back and still allows a later refresh to succeed',
-        () async {
-      final ok = await PowerupCopy.refresh(
-        fetch: () async => throw PowerupCopyUnavailable(404),
-      );
-      expect(ok, isFalse);
-      // Bundled copy still renders.
-      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Leg Cramp');
-      // The endpoint is NOT marked permanently unsupported.
-      expect(PowerupCopy.isPermanentlyUnsupported, isFalse);
+    test(
+      'a 404 falls back and still allows a later refresh to succeed',
+      () async {
+        final ok = await PowerupCopy.refresh(
+          fetch: () async => throw PowerupCopyUnavailable(404),
+        );
+        expect(ok, isFalse);
+        // Bundled copy still renders.
+        expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Leg Cramp');
+        // The endpoint is NOT marked permanently unsupported.
+        expect(PowerupCopy.isPermanentlyUnsupported, isFalse);
 
-      final second = await PowerupCopy.refresh(
-        fetch: () async => payload([entry('LEG_CRAMP', name: 'Back!')]),
-      );
-      expect(second, isTrue);
-      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Back!');
-    });
+        final second = await PowerupCopy.refresh(
+          fetch: () async => payload([entry('LEG_CRAMP', name: 'Back!')]),
+        );
+        expect(second, isTrue);
+        expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Back!');
+      },
+    );
 
     test('a 500 and a timeout behave the same way', () async {
       expect(
@@ -335,7 +350,9 @@ void main() {
         isFalse,
       );
       expect(
-        await PowerupCopy.refresh(fetch: () async => throw StateError('timeout')),
+        await PowerupCopy.refresh(
+          fetch: () async => throw StateError('timeout'),
+        ),
         isFalse,
       );
       expect(PowerupCopy.isPermanentlyUnsupported, isFalse);
@@ -381,18 +398,20 @@ void main() {
       expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Once');
     });
 
-    test('a later refresh after the in-flight one completes does fetch again',
-        () async {
-      var calls = 0;
-      Future<Map<String, dynamic>> fetch() async {
-        calls++;
-        return payload([entry('LEG_CRAMP', name: 'Call $calls')]);
-      }
+    test(
+      'a later refresh after the in-flight one completes does fetch again',
+      () async {
+        var calls = 0;
+        Future<Map<String, dynamic>> fetch() async {
+          calls++;
+          return payload([entry('LEG_CRAMP', name: 'Call $calls')]);
+        }
 
-      await PowerupCopy.refresh(fetch: fetch);
-      await PowerupCopy.refresh(fetch: fetch);
-      expect(calls, 2);
-    });
+        await PowerupCopy.refresh(fetch: fetch);
+        await PowerupCopy.refresh(fetch: fetch);
+        expect(calls, 2);
+      },
+    );
   });
 
   group('persistence survives logout', () {
@@ -411,24 +430,31 @@ void main() {
   });
 
   group('older/newer backend shapes never crash', () {
-    test('partial v2 availability fails open for the whole snapshot', () async {
-      await PowerupCopy.refresh(
-        fetch: () async => {
-          'availabilityVersion': 2,
-          'powerups': [
-            entry('RED_CARD', availability: {'shop': false, 'roll': true}),
-            entry('TRAIL_MIX'),
-          ],
-        },
-      );
+    test(
+      'partial v2 availability preserves valid rows without reviving a fallback roster',
+      () async {
+        await PowerupCopy.refresh(
+          fetch: () async => {
+            'availabilityVersion': 2,
+            'powerups': [
+              entry('RED_CARD', availability: {'shop': false, 'roll': true}),
+              entry('TRAIL_MIX'),
+            ],
+          },
+        );
 
-      final types = PowerupCopy.guideEntries.map((entry) => entry.type).toSet();
-      expect(types, containsAll(<String>{'RED_CARD', 'TRAIL_MIX', 'LEECH'}));
-      expect(
-        PowerupCopy.guideEntries.every((entry) => entry.availability == null),
-        isTrue,
-      );
-    });
+        final types = PowerupCopy.guideEntries
+            .map((entry) => entry.type)
+            .toSet();
+        expect(types, <String>{'RED_CARD'});
+        expect(
+          PowerupCopy.guideEntries.every(
+            (entry) => entry.availability?.available == true,
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('fractional availability version is ignored', () {
       final snapshot = PowerupCopySnapshot.parse({
@@ -460,17 +486,20 @@ void main() {
       expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Cramp');
     });
 
-    test('a missing version still validates (additive-only response)', () async {
-      final ok = await PowerupCopy.refresh(
-        fetch: () async => {
-          'powerups': [
-            {'type': 'LEG_CRAMP', 'name': 'Cramp', 'description': 'd'},
-          ],
-        },
-      );
-      expect(ok, isTrue);
-      expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Cramp');
-    });
+    test(
+      'a missing version still validates (additive-only response)',
+      () async {
+        final ok = await PowerupCopy.refresh(
+          fetch: () async => {
+            'powerups': [
+              {'type': 'LEG_CRAMP', 'name': 'Cramp', 'description': 'd'},
+            ],
+          },
+        );
+        expect(ok, isTrue);
+        expect(PowerupCopy.nameFor('LEG_CRAMP'), 'Cramp');
+      },
+    );
 
     test('null entries inside the list are rejected wholesale', () async {
       final ok = await PowerupCopy.refresh(

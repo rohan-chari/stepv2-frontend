@@ -1,3 +1,4 @@
+import 'support/server_powerup_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -170,9 +171,9 @@ Future<void> _openHeldSheet(WidgetTester tester, _ClarityApi api) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    PowerupCopy.resetForTest();
+    await seedServerPowerupPolicy();
     PackageInfo.setMockInitialValues(
       appName: 'Bara',
       packageName: 'com.rohanchari.steptracker',
@@ -320,7 +321,7 @@ void main() {
   });
 
   testWidgets(
-    'old manual catalog stays complete and omits guessed source chips',
+    'old manual catalog renders only returned rows without source chips',
     (tester) async {
       await PowerupCopy.refresh(
         fetch: () async => {
@@ -340,10 +341,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(
-        PowerupCopy.guideEntries.map((entry) => entry.type),
-        contains('LEECH'),
-      );
+      expect(PowerupCopy.guideEntries.map((entry) => entry.type), ['RED_CARD']);
       expect(find.byKey(const Key('powerup-source-chip')), findsNothing);
     },
   );
@@ -415,30 +413,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('inconsistent Ghost Pepper timeline falls back to legacy expiry', (
-    tester,
-  ) async {
-    final now = DateTime.now();
-    await _pumpRace(
-      tester,
-      _ClarityApi(
-        activeEffects: [
-          {
-            'type': 'GHOST_PEPPER',
-            'onSelf': true,
-            'sourceUserId': 'me',
-            'targetUserId': 'me',
-            'startsAt': now.subtract(const Duration(minutes: 5)).toIso8601String(),
-            'expiresAt': now.add(const Duration(minutes: 55)).toIso8601String(),
-            'phaseDurations': const {'boostMs': 600000, 'burnoutMs': 600000},
-          },
-        ],
-      ),
-    );
+  testWidgets(
+    'inconsistent Ghost Pepper timeline falls back to legacy expiry',
+    (tester) async {
+      final now = DateTime.now();
+      await _pumpRace(
+        tester,
+        _ClarityApi(
+          activeEffects: [
+            {
+              'type': 'GHOST_PEPPER',
+              'onSelf': true,
+              'sourceUserId': 'me',
+              'targetUserId': 'me',
+              'startsAt': now
+                  .subtract(const Duration(minutes: 5))
+                  .toIso8601String(),
+              'expiresAt': now
+                  .add(const Duration(minutes: 55))
+                  .toIso8601String(),
+              'phaseDurations': const {'boostMs': 600000, 'burnoutMs': 600000},
+            },
+          ],
+        ),
+      );
 
-    expect(find.textContaining('BOOST ·'), findsNothing);
-    expect(find.textContaining('BURNOUT ·'), findsNothing);
-    expect(find.textContaining('54m'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.textContaining('BOOST ·'), findsNothing);
+      expect(find.textContaining('BURNOUT ·'), findsNothing);
+      expect(find.textContaining('54m'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

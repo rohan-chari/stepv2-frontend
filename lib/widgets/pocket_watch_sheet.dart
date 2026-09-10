@@ -161,7 +161,7 @@ class PocketWatchSheet extends StatefulWidget {
   final String? viewerUserId;
   final int myCoins;
   final List<String> tierLabels;
-  final int Function(int level) costForLevel;
+  final int? Function(int level) costForLevel;
   final PocketWatchConfirm onConfirm;
 
   /// Optional discard action. When provided, the sheet renders a DISCARD button
@@ -530,12 +530,12 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
 
   List<Widget> _buildTierButtons(bool canConfirm) {
     final buttons = <Widget>[];
-    for (var level = 0; level < 4; level++) {
+    for (var level = 0; level < widget.tierLabels.length; level++) {
       final label = level < widget.tierLabels.length
           ? widget.tierLabels[level]
           : 'Tier $level';
       final cost = widget.costForLevel(level);
-      final affordable = widget.myCoins >= cost;
+      final affordable = cost != null && widget.myCoins >= cost;
       final enabled = canConfirm && affordable;
 
       buttons.add(
@@ -556,7 +556,7 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '$cost',
+                        cost == null ? 'Unavailable' : '$cost',
                         style: PixelText.pill(size: 12, color: Colors.white),
                       ),
                       const SizedBox(width: 4),

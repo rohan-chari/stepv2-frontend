@@ -46,7 +46,11 @@ class ShopProductGrid extends StatelessWidget {
         mainAxisSpacing: spaciousPowerups ? 16 : 14,
         crossAxisSpacing: 12,
         childAspectRatio: spaciousPowerups
-            ? 0.68
+            ? 0.68 /
+                  (MediaQuery.textScalerOf(context).scale(1) / 1.6).clamp(
+                    1,
+                    double.infinity,
+                  )
             : !wide && constraints.maxWidth < 350
             ? 0.70
             : 0.82,

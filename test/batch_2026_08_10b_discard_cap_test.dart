@@ -32,7 +32,10 @@ const _pocketWatch = {
 };
 
 class _CapStubApi extends BackendApiService {
-  _CapStubApi({this.discardCapRemaining, this.inventory = const [_rarePowerup]});
+  _CapStubApi({
+    this.discardCapRemaining,
+    this.inventory = const [_rarePowerup],
+  });
 
   /// `powerupData.discardCapRemaining`. Null = the key is OMITTED, i.e. an
   /// older backend — every dialog must then read exactly as it does today.
@@ -77,6 +80,7 @@ class _CapStubApi extends BackendApiService {
       },
     ],
     'powerupData': {
+      'discardPrices': {'COMMON': 2, 'UNCOMMON': 5, 'RARE': 10},
       'enabled': true,
       'inventory': inventory,
       'powerupSlots': 3,
@@ -236,7 +240,6 @@ void main() {
       expect(find.text('Discard Protein Shake for 10 coins?'), findsOneWidget);
       await _teardown(tester);
     });
-
   });
 
   group('Item 2 — the "+N 🪙" tag uses the same clamped number', () {

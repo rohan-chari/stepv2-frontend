@@ -625,8 +625,20 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                         padding: const EdgeInsets.only(top: 12),
                                         child: PillButton(
                                           label:
-                                              'Buy · ${selected?.item['priceCoins'] ?? 0}',
-                                          onPressed: _busy
+                                              wardrobeCoinPrice(
+                                                    selected
+                                                        ?.item['priceCoins'],
+                                                  ) ==
+                                                  null
+                                              ? 'Price unavailable'
+                                              : 'Buy · ${wardrobeCoinPrice(selected?.item['priceCoins'])}',
+                                          onPressed:
+                                              _busy ||
+                                                  wardrobeCoinPrice(
+                                                        selected
+                                                            ?.item['priceCoins'],
+                                                      ) ==
+                                                      null
                                               ? null
                                               : () => _buy(selected!),
                                         ),
@@ -842,7 +854,11 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
             selected: _draft[item.slot] == item.id,
             button: true,
             label:
-                '${item.item['name'] ?? 'Accessory'}, ${item.owned ? 'Owned' : '${item.item['priceCoins'] ?? 0} coins'}',
+                '${item.item['name'] ?? 'Accessory'}, ${item.owned
+                    ? 'Owned'
+                    : wardrobeCoinPrice(item.item['priceCoins']) == null
+                    ? 'Price unavailable'
+                    : '${wardrobeCoinPrice(item.item['priceCoins'])} coins'}',
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
@@ -885,7 +901,12 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                         ),
                       ),
                       if (item.canPurchase)
-                        _text('${item.item['priceCoins'] ?? 0} coins', size: 10)
+                        _text(
+                          wardrobeCoinPrice(item.item['priceCoins']) == null
+                              ? 'Price unavailable'
+                              : '${wardrobeCoinPrice(item.item['priceCoins'])} coins',
+                          size: 10,
+                        )
                       else
                         _text(
                           item.canSelect

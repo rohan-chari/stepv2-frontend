@@ -671,7 +671,7 @@ void main() {
     }
   });
 
-  testWidgets('STORE filters retired Imposter from an older backend payload', (
+  testWidgets('STORE renders Imposter when the backend returns it', (
     tester,
   ) async {
     final auth = await _createAuthService();
@@ -684,7 +684,7 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
 
-    expect(find.text('Imposter'), findsNothing);
+    expect(find.text('Imposter'), findsOneWidget);
     expect(find.text('Signal Jammer'), findsWidgets);
     // The surviving 75-coin powerup still has its normal buy affordance.
     expect(find.text('75'), findsWidgets);
@@ -747,30 +747,29 @@ void main() {
     },
   );
 
-  testWidgets(
-    'INVENTORY hides retired residue and keeps owned powerup counts',
-    (tester) async {
-      final auth = await _createAuthService();
-      final api = _FakeShopApi(
-        catalog: _catalog(),
-        powerupCatalog: _powerupCatalog(),
-        inventory: _inventory(),
-      );
+  testWidgets('INVENTORY keeps every server-returned owned powerup count', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
 
-      await _pumpShop(tester, auth, api);
-      await _selectSegment(tester, 'INVENTORY');
+    await _pumpShop(tester, auth, api);
+    await _selectSegment(tester, 'INVENTORY');
 
-      // Retired residue is omitted while supported inventory remains usable.
-      await _selectCategory(tester, 'POWERUPS');
-      expect(find.text('Imposter'), findsNothing);
-      expect(find.text('Signal Jammer'), findsWidgets);
-      expect(find.textContaining('3'), findsWidgets);
+    // Retired residue is omitted while supported inventory remains usable.
+    await _selectCategory(tester, 'POWERUPS');
+    expect(find.text('Imposter'), findsOneWidget);
+    expect(find.text('Signal Jammer'), findsWidgets);
+    expect(find.textContaining('3'), findsWidgets);
 
-      // Owned cosmetic appears under ACCESSORIES.
-      await _selectCategory(tester, 'ACCESSORIES');
-      expect(find.text('Red Scarf'), findsWidgets);
-    },
-  );
+    // Owned cosmetic appears under ACCESSORIES.
+    await _selectCategory(tester, 'ACCESSORIES');
+    expect(find.text('Red Scarf'), findsWidgets);
+  });
 
   testWidgets('Capybara details use identity copy without an ability claim', (
     tester,
