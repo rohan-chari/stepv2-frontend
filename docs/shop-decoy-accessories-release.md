@@ -1,32 +1,69 @@
-# Shop Decoy and accessories release
+# Shop Decoy and accessories — TestFlight 2.3.13 (18)
 
-Release candidate: Bara 2.3.13 (18), Android versionCode203148.
+The App Store Connect API-key upload succeeded on September 10, 2026 at
+19:43:26 UTC. Apple confirmed **VALID / IN_BETA_TESTING** at 19:49:30 UTC,
+with build 18 present in the existing **bara testers** internal group.
+[Apple status](artifacts/shop-decoy-accessories-18/testflight-status.json).
+The unchanged exempt-encryption declaration matches build 17. A direct group
+assignment returned 422 because this group manages availability automatically;
+the following read confirmed membership.
+The matching signed Android artifact, version code 203148, is retained locally.
 
-Status: implementation verified; release builds and deployment pending.
+Decoy is available for 150 base coins, with the existing membership discount
+preserved. The backend prevents reuse in the same race for one hour after an
+attack pops it. Natural expiry does not start that cooldown. Rejected use keeps
+held items or returns redeemed inventory.
 
-Requested behavior and the full manual placement checklist are in
-[the requirements](shop-decoy-accessories-requirements.md).
+The Shop now has separate Characters and Accessories sections. Unpurchased
+accessories open the existing purchase flow directly, and Accessories has an
+Edit outfit entry for the active character. Powerup art is displayed at 0.8×
+and character art at 1.1× inside unchanged cards. Other screens and source
+artwork are unaffected.
 
-Expected verification evidence:
-- Decoy restored at150 base coins, existing membership discount preserved.
-- Server enforces one hour after consumption, including bulk attacks; activation and natural expiry do not start cooldown.
-- Separate Characters and Accessories sections, direct unowned-accessory purchase, Edit outfit entry.
-- Only displayed shop artwork scale changes; card and global sprite dimensions remain stable.
-- Tests-first backend HTTP/local DB and frontend real-widget coverage, clean Flutter analysis, code review.
-- Backend additive migration, verified live catalog and healthy existing worker topology.
-- Both signed artifacts with README production configuration and source fingerprints.
-- ASC API-key upload, VALID/IN_BETA_TESTING and existing internal tester membership.
+Frontend runtime source is `32aa92b`, pushed to main. Backend runtime
+`6a0f6c39df749f0abbabe59e935d1341d1347379` was deployed before the upload.
+Both additive migrations succeeded; their checksums and the concurrent index
+were verified. Live current and legacy catalog requests return 200, the
+current catalog offers Decoy at 150 with updated copy, and health/Redis checks
+pass. Two HTTP workers and the existing resolution/cron workers are online;
+staging remains stopped. Unrelated live catalog settings, environment, and
+server lockfile were preserved.
 
-Manual physical-device placement remains for the user; automated visual/widget
-checks will be recorded separately from device checks.
+Both signed artifacts passed version, production configuration, signature,
+and compiled-code checks. All three Android ABIs match fresh compiler output.
+Source fingerprints matched immediately before upload. The existing AppLovin
+and Meta missing-dSYM warnings were nonblocking. No App Review submission,
+customer release, or Google Play upload was performed.
 
-## Implementation verification
-265 relevant Flutter tests pass, including all Shop suites, wardrobe, billing preview, wave5, Decoy inventory refund/message, and admin toast assertions. The full initial run was3284 passed/43 failed;5 task-related finder/fixture failures and2 admin-toast failures were corrected and passed isolated.36 remaining historical admin failures conflict with the previously committed redesign and are retained; all36 failures reproduced exactly on isolated unchanged baseline eca6acf (28 other tests passed). Final flutter analyze is clean. The full Flutter suite is not green.
+Validation:
 
-The admin toast tests exposed a missing Material ancestor in the existing Tools groups; a transparent wrapper fixes it without moving UI. Original toast assertions remain intact.
+- Final Flutter analysis is clean; 265 relevant tests pass, including Shop,
+  wardrobe, billing preview, Decoy stash refund/message, and admin toast tests.
+- The full initial Flutter run had 3,284 passing and 43 failing tests. Five
+  task-related finder/fixture failures and two admin toast failures were fixed
+  and passed on rerun. All 36 remaining historical admin failures reproduced
+  exactly on unchanged baseline `eca6acf`; their assertions remain intact.
+  **The full Flutter suite is not green.**
+- Backend: 3,397 unit tests, 13 new HTTP tests, nine existing Decoy tests, and
+  actual migration-isolation tests pass. Related concurrency regressions pass.
+  One unrelated Drill Sergeant failure in the expanded wave5 suite also
+  reproduces on unchanged baseline `45e622d`; that assertion is retained.
+- Independent implementation and late-delta review found no required fixes.
+  The runtime rejected creating a separate code-reviewer thread twice because
+  of its thread limit. The existing read-only reviewer loaded and applied the
+  code-reviewer contract to both repositories and the final commits.
 
-Backend:13new HTTP tests,9 existing Decoy tests and actual migration isolation pass;3397 unit tests pass. Expanded wave5 has an unrelated Drill Sergeant failure reproduced on unchanged baseline45e622d. Backend integration suite is not claimed fully green.
+The admin toast tests exposed an existing missing Material ancestor in Tools.
+A transparent wrapper fixes the assertion without moving UI. Navigation helpers
+now follow Tools → Debugging; every original toast assertion is preserved.
 
-Independent implementation review found no required fixes, including the late admin wrapper. Runtime rejected creating a separate code-reviewer thread twice (thread limit); the existing read-only architect agent loaded and applied the code-reviewer contract to the combined implementation and late delta.
+Rendered phone captures confirm the section layout and artwork scale. Their
+capture harness omitted MaterialIcons, so those screenshots have placeholder
+icon glyphs. Physical-device placement remains a manual check; the full
+[manual checklist](shop-decoy-accessories-requirements.md#manual-ui-placement-test-plan)
+covers both platforms, Shop entries, outfit editing, tutorial continuation,
+and the billing preview.
 
-Rendered phone captures inspected locally at /tmp/shop-powerups-characters.png and /tmp/shop-accessories.png: separate sections, Decoy150, direct accessory cards/edit entry, comparable art scale and unchanged card dimensions. Capture harness omitted MaterialIcons; physical-device glyph/placement checks remain manual.
+[Verification report](artifacts/shop-decoy-accessories-18/release-verification.json).
+Full artifacts, test logs, baseline evidence, and visual captures are retained
+under `build/release-candidates/shop-decoy-accessories-2.3.13-18/`.
