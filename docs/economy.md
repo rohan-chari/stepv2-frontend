@@ -719,6 +719,57 @@ feed metadata stores only `{penalty:455}`. Source: `DB races`,
 `race_participants`, `race_active_effects`, `race_powerup_events` (aggregate,
 read-only forensic query).
 
+### 3.3f.1 Red Card 10,000-step cap — deployed, 2026-09-10
+
+Owner-requested spec addition: each successful Red Card use removes at most
+**10,000 race steps**, retaining the existing 10% calculation and integer
+rounding below that limit. This is a per-use cap, not a daily, race-wide, or
+per-victim cumulative allowance. No price, drop odds, upgrade, or coin payout
+change is part of this release.
+
+Pre-change checkout verification: `CODE
+src/modules/powerups/commands/usePowerup.js` defined `RED_CARD_PERCENT = 0.10`
+and the `RED_CARD` effect case passed
+`Math.round(targetParticipant.totalSteps * RED_CARD_PERCENT)` into
+`applyImmediatePenalty`. The helper delegates to `CODE
+src/modules/races/models/raceParticipant.js:applyPenaltyAtomic`, which clamps
+the actual penalty to the current nonnegative score in the existing atomic
+SQL write. No 10,000-step cap was present in that baseline path. This check did
+not query production; it does not establish which checkout is deployed or
+re-verify stored catalog copy, price, or drop configuration.
+
+Implemented nominal penalty:
+`min(10000, max(0, round(finalLandingTarget.totalSteps * 0.10)))`.
+The local backend adds this clamp after final targeting;23real HTTP tests pass,
+including legacy clients and preserved historical losses. Backend `3a60332` deployed
+on 2026-09-10 with the matching catalog description.
+Pass this into the existing atomic penalty helper, and retain its returned
+actual amount for the response, feed metadata, and resolved impact delta.
+Resolve the existing Mirror, Decoy, and Compression Socks behavior first:
+reflection uses the attacker's score; redirect uses the redirected recipient's
+score; a blocked hit removes zero. Team targeting remains the enemy team's
+top eligible individual, rather than using the enemy team's combined total.
+Existing step modifiers are already represented in the current score basis;
+do not multiply the computed penalty again. Historical events retain their
+recorded amounts, including amounts above the new cap.
+
+| Final recipient's race score | Existing nominal loss | Capped loss | Reduction |
+|---|---:|---:|---:|
+| 10,000 | 1,000 | 1,000 | 0 |
+| 50,000 | 5,000 | 5,000 | 0 |
+| 100,000 | 10,000 | 10,000 | 0 |
+| 200,000 | 20,000 | 10,000 | 10,000 |
+| 1,000,000 | 100,000 | 10,000 | 90,000 |
+
+These are deterministic illustrative inputs, not measured player percentiles.
+For any unchanged distribution of eligible landings, successful-hit expected
+loss changes from `E[P]` to `E[min(P,10000)]`; the reduction is
+`E[max(P-10000,0)]`. The first changed integer score is 100,005 under the
+existing JavaScript rounding. The cap adds no database reads, writes, queue
+jobs, or stored counter. Repeated distinct successful uses can still remove
+more than 10,000 in aggregate. Direct coin-source and coin-sink rule deltas
+are zero; changes to placement and player purchasing behavior are unmeasured.
+
 ### 3.3g Config drift to flag
 
 | Key | `DB balance_config` v3 | `CODE balanceConfig.defaults.js` | Consequence |
