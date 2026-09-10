@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Shared merchandise geometry for Featured and Powerups.
+/// Shared merchandise geometry for Featured, Powerups and Characters.
 class ShopProductGrid extends StatelessWidget {
   const ShopProductGrid({
     super.key,

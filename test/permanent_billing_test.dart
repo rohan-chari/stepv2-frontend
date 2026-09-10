@@ -380,7 +380,7 @@ void main() {
     );
   }
   testWidgets(
-    'known permanent owner can reach Shop management without checkout',
+    'known permanent owner retains direct management while Shop entry is hidden',
     (tester) async {
       final api = PermanentApi()
         ..available = false
@@ -418,9 +418,14 @@ void main() {
           ),
         ),
       );
-      expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
+      expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(BaraPlusBody), findsNothing);
+      await tester.pumpWidget(
+        MaterialApp(home: BaraPlusScreen(controller: billing)),
+      );
+      await tester.pump();
       await tester.ensureVisible(find.byKey(const Key('manage-bara')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));

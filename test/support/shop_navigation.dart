@@ -25,7 +25,10 @@ Future<void> selectShopCategory(WidgetTester tester, String category) async {
   await tester.ensureVisible(target);
   await tester.pump();
   if (category == 'ACCESSORIES') {
-    await tester.tap(find.byKey(const Key('shop-character-default')));
+    final character = find.byKey(const Key('shop-character-default'));
+    await tester.ensureVisible(character);
+    await tester.pump();
+    await tester.tap(character);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Edit outfit'));

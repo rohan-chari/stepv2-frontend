@@ -1,0 +1,94 @@
+{
+  "capture": "Actual Flutter Shop after Bara+ entry removal, bundled fonts, offline billing fixtures; not live purchase proof",
+  "images": {
+    "dark-1.0-characters.png": {
+      "sha256": "dc2b968d4857ae6222bfeace3b5142869999834be2b16a68a04c90bdb3421a89",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-featured.png": {
+      "sha256": "d09c3f6992c2b28c8d6624ccd1a3596f854494dd5071f2212218d5f2b14fbdda",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-powerups.png": {
+      "sha256": "80a125049b3428ad1c4092da378059ded80628b1b3a78696fc006cb1f6b83291",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-characters.png": {
+      "sha256": "86cda6e60452550b1d74770bb5aac85a1befa2707521c34eca72b20be349e5ae",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-featured.png": {
+      "sha256": "f2a7f4c50aa9b9a49c4c36ea0e3697a29191cddc1a1df321d83ef009acc7b4f7",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-powerups.png": {
+      "sha256": "b5c9348b05a63f8f365f22f829e8837b01157da2c22a1857a202d769c8988137",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-characters.png": {
+      "sha256": "1fc3ba1001d0acf3d77f5d4b96173f5251b5f3a8a61ec14b41a3fe0309c419a2",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-featured.png": {
+      "sha256": "0436559444607c9606d0dfe77731e6f4e86613358da2629f441120dc6fd1b3a1",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-powerups.png": {
+      "sha256": "23e7cba2762544d0aa34b2431945b6c59b45213e121c6a23dcc06d5fe4ee70cd",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-characters.png": {
+      "sha256": "3f6b1420a06b8f2298e998ca1d6946e5623ae9264e1bdeed06541198f80c5c46",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-featured.png": {
+      "sha256": "6640f48cdca538d4ba6a233e1657c814002a7d29f9e27dabe578772924ef3ae1",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-powerups.png": {
+      "sha256": "a93f9f82355629c60bc0c6910356a287fc9cf3b32d2dd8c1e1a8cf37c025f45b",
+      "size": [
+        780,
+        1688
+      ]
+    }
+  },
+  "sourceHashes": {
+    "lib/screens/tabs/shop_tab.dart": "a81b06b813c05521e0201b0890e65957787a42d01ce8994ec627419d00aee7c7",
+    "lib/widgets/shop_character_card.dart": "f8ecc4ccb9c70acbfe510b9bf90e5863a64cfd67cafffd7a9380727ef09debf4",
+    "lib/widgets/shop_product_grid.dart": "e3a265e4ec0c9ca338db9f2bad162b8c0b08b2c2e4ec264dfebc2cec2434da22"
+  }
+}

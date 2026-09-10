@@ -1,11 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
-import 'unified_shop_test.dart' show pumpShop, AvailabilityBilling;
+import 'unified_shop_test.dart'
+    show pumpShop, pumpRetainedMembership, AvailabilityBilling;
 import 'billing_components_test.dart' show FakeBilling;
 
 void main() {
@@ -56,7 +56,7 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
   testWidgets(
-    'real Shop visit logs once and explicit membership open logs its view',
+    'real Shop visit logs once and hidden membership emits no acquisition events',
     (tester) async {
       addTearDown(tester.view.reset);
       final billing = AvailabilityBilling()
@@ -67,18 +67,30 @@ void main() {
       billing.update(billing.state);
       await tester.pump();
       expect(events, ['shopViewed']);
-      await tester.ensureVisible(
-        find.byKey(const Key('shop-membership-toggle')),
-      );
-      await tester.tap(find.byKey(const Key('shop-membership-toggle')));
-      await tester.pump();
-      expect(events, ['shopViewed', 'membershipViewed']);
+      expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
+      expect(find.byKey(const Key('start-bara-trial')), findsNothing);
+      expect(events, ['shopViewed']);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
+      expect(events, ['shopViewed', 'shopViewed']);
+      expect(find.byKey(const Key('buy-coins-coins_500')), findsOneWidget);
+      expect(events, isNot(contains('membershipViewed')));
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+  testWidgets(
+    'retained membership body still records explicit purchase intent',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      final billing = AvailabilityBilling()..membership = true;
+      await pumpRetainedMembership(tester, billing: billing);
+      expect(events, isEmpty);
       final subscribe = find.byKey(const Key('start-bara-trial'));
       await tester.ensureVisible(subscribe);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(subscribe);
       await tester.pump();
-      expect(events, ['shopViewed', 'membershipViewed', 'purchaseIntent']);
+      expect(events, ['purchaseIntent']);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
@@ -87,7 +99,11 @@ void main() {
     (tester) async {
       addTearDown(tester.view.reset);
       await pumpShop(tester, billing: FakeBilling());
-      await tester.tap(find.byKey(const Key('shop-membership-toggle')));
+      expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
+      final buy = find.byKey(const Key('buy-coins-coins_500'));
+      await tester.ensureVisible(buy);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(buy);
       await tester.pump();
       expect(events, isEmpty);
     },

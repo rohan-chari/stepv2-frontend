@@ -46,7 +46,9 @@ not App Review submission or customer-release authorization.
 
 - Frontend runtime source `13e0d8f`; subsequent economy/release notes are docs only.
 - iOS2.3.13(13): API-authenticated Xcode upload succeeded at12:16:52UTC, with
-  `Upload succeeded` and `EXPORT SUCCEEDED`, exit0. Apple processing status pending.
+  `Upload succeeded` and `EXPORT SUCCEEDED`, exit0. Apple subsequently confirmed VALID / IN_BETA_TESTING, automatically present in
+  bara testers; build ID `b0e24778-757a-4d77-8285-eb7ade3da3cd`,
+  checked12:33:43UTC. No export-compliance or tester-group mutation was needed.
 - Existing AppLovinSDK and FBAudienceNetwork missing-dSYM warnings remain
   nonblocking; there was no CoreKit symbol-upload failure.
 - Matching Android2.3.13/203143 signed production AAB built and verified; retained

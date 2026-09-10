@@ -383,6 +383,8 @@ class _ProfileTabState extends State<ProfileTab> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
+                        // Bara+ on hold: restore this badge with membership entry points.
+                        /*
                         if (BillingScope.maybeOf(context)?.snapshot.isMember ==
                             true)
                           Padding(
@@ -396,6 +398,7 @@ class _ProfileTabState extends State<ProfileTab> {
                               ),
                             ),
                           ),
+                        */
                         if (showEmail) ...[
                           const SizedBox(height: 4),
                           Text(

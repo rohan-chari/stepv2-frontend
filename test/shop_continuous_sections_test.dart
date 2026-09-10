@@ -42,10 +42,9 @@ void main() {
         tester.getTopLeft(powerups).dy,
         lessThan(tester.getTopLeft(characters).dy),
       );
+      expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
       expect(
-        tester
-            .getBottomLeft(find.byKey(const Key('shop-membership-toggle')))
-            .dy,
+        tester.getBottomLeft(featured).dy,
         lessThanOrEqualTo(tester.getTopLeft(find.byType(CoinPackOffers)).dy),
       );
       await tester.ensureVisible(find.text('OWNED'));

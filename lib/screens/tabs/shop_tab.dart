@@ -5,7 +5,8 @@ import '../../widgets/shop_character_card.dart';
 import '../character_wardrobe_screen.dart';
 import '../../widgets/shop_category_bar.dart';
 import '../../services/billing_controller.dart';
-import '../../models/billing.dart';
+// Bara+ on hold; used by the retained Featured composition below.
+// import '../../models/billing.dart';
 import '../../widgets/billing_scope.dart';
 import '../../widgets/shop_product_grid.dart';
 import '../../widgets/coin_pack_offers.dart';
@@ -339,7 +340,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final original = item['basePriceCoins'];
     final current = item['priceCoins'];
     if (original is! num || current is! num || current >= original) return null;
-    return 'Bara+ price · ${current.toInt()} coins (usually ${original.toInt()})';
+    return '${current.toInt()} coins (usually ${original.toInt()})';
   }
 
   @override
@@ -565,7 +566,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   ];
   static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
-    'Scroll from Featured coins and Bara+ to Powerups, then Characters & Accessories. Buy and Owned live inside Powerups.',
+    'Scroll from Featured coins to Powerups, then Characters & Accessories. Buy and Owned live inside Powerups.',
     'Owned and locked characters share one collection. Open an owned character to edit its saved outfit or make it active.',
   ];
 
@@ -1886,40 +1887,53 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildSectionHeader(String title, String id, GlobalKey anchor) =>
-      Padding(
-        key: anchor,
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-        child: Semantics(
-          header: true,
-          child: Row(
-            key: Key('shop-section-$id'),
-            children: [
-              Container(
-                width: 5,
-                height: 23,
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).pillGold,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: AppColors.of(context).pillGoldDark,
+  Widget _buildSectionHeader(String title, String id, GlobalKey anchor) {
+    final colors = AppColors.of(context);
+    final description = switch (id) {
+      'featured' => 'Stock up on coins for powerups and accessories.',
+      'powerups' => 'Buy powerups to use in races, or view the ones you own.',
+      _ => 'Tap a character to customize its outfit or unlock a new one.',
+    };
+    return Padding(
+      key: anchor,
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            child: Row(
+              key: Key('shop-section-$id'),
+              children: [
+                Container(
+                  width: 5,
+                  height: 23,
+                  decoration: BoxDecoration(
+                    color: colors.pillGold,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: colors.pillGoldDark),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: PixelText.title(
-                    size: 24,
-                    color: AppColors.of(context).textLight,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: PixelText.title(size: 24, color: colors.textLight),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 8),
+          Text(
+            description,
+            key: Key('shop-section-description-$id'),
+            style: PixelText.body(size: 14, color: colors.textLight),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildCharacters() {
     if (_wardrobes.state == WardrobeLoadState.initial && !_loading) {
@@ -1967,7 +1981,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             ),
           ),
         ShopProductGrid(
-          compact: true,
+          spaciousPowerups: true,
           gridKey: const Key('shop-cosmetic-grid'),
           children: [
             for (final row in rows)
@@ -2794,9 +2808,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (focus == ShopFocus.membership) {
-        _openMembershipDetails();
-      } else {
+      // Bara+ on hold: restore this entry together with the Featured row.
+      // if (focus == ShopFocus.membership) {
+      //   _openMembershipDetails();
+      // } else {
+      {
         final target = _coinsKey.currentContext;
         if (target != null) {
           unawaited(
@@ -2811,6 +2827,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     });
   }
 
+  // Bara+ on hold: retained with its identity and billing safeguards for restore.
+  // ignore: unused_element
   Future<void> _openMembershipDetails() async {
     if (_membershipOpen) return;
     _recordMeta(MetaConversion.membershipViewed);
@@ -2906,9 +2924,26 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     });
   }
 
+  // Bara+ on hold. The original Featured composition is retained below;
+  // restore it and the commented membership entry in _focusFeatured together.
+  Widget _buildFeatured() {
+    final billing = BillingScope.maybeOf(context);
+    return Container(
+      key: _coinsKey,
+      child: CoinPackOffers(
+        key: ValueKey('coins-${billing?.userId}'),
+        onGreenSurface: true,
+        showHeading: false,
+      ),
+    );
+  }
+
+  /* Bara+ restore: original Featured composition.
   Widget _buildFeatured() {
     final colors = AppColors.of(context);
     final billing = BillingScope.maybeOf(context);
+    final membershipLoading =
+        billing?.snapshot.operationStatus == BillingOperationStatus.loading;
     final membershipAvailable =
         billing != null &&
         (billing.plans.isNotEmpty ||
@@ -2991,11 +3026,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             child: Column(
               children: [
                 Text(
-                  'Membership is currently unavailable.',
+                  membershipLoading
+                      ? 'Loading membership…'
+                      : 'Membership is currently unavailable.',
                   textAlign: TextAlign.center,
                   style: PixelText.body(size: 13, color: colors.textLight),
                 ),
-                if (billing != null)
+                if (billing != null && !membershipLoading)
                   TextButton(
                     onPressed: billing.snapshot.busy ? null : billing.refresh,
                     child: Text(
@@ -3009,6 +3046,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       ],
     );
   }
+  */
 
   ExtraSpinAdController _newAdController() =>
       widget.adControllerBuilder?.call() ??
@@ -3678,7 +3716,7 @@ class _ShopLoadingSkeleton extends StatelessWidget {
 
   Widget _section(BuildContext context, int tileCount) => ShopProductGrid(
     compact: true,
-    spaciousPowerups: !cosmetic,
+    spaciousPowerups: true,
     gridKey: const Key('shop-loading-grid'),
     children: [for (var i = 0; i < tileCount; i++) _tile(context)],
   );

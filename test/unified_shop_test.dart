@@ -154,6 +154,43 @@ Future<void> pumpShop(
   await tester.pump();
 }
 
+// Bara+ remains testable directly while its production entry points are on hold.
+Future<void> pumpRetainedMembership(
+  WidgetTester tester, {
+  required FakeBilling billing,
+  double width = 390,
+  double textScale = 1,
+  bool includeCoins = false,
+}) async {
+  tester.view.physicalSize = Size(width, 844);
+  tester.view.devicePixelRatio = 1;
+  await tester.pumpWidget(
+    BillingScope(
+      controller: billing,
+      child: MaterialApp(
+        theme: ThemeData(extensions: [AppPalette.light]),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                const BaraPlusBody(),
+                if (includeCoins) const CoinPackOffers(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
 void main() {
   setUp(() {
     PackageInfo.setMockInitialValues(
@@ -188,7 +225,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Featured'), findsOneWidget);
     expect(find.byType(CoinPackOffers), findsOneWidget);
-    expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
     expect(find.text('INVENTORY'), findsNothing);
     expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
     expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
@@ -229,10 +266,7 @@ void main() {
         );
         expect(find.byKey(const Key('tutorial-callout-card')), findsNothing);
         expect(find.byType(CoinPackOffers), findsOneWidget);
-        expect(
-          find.byType(BaraPlusBody),
-          focus == ShopFocus.membership ? findsOneWidget : findsNothing,
-        );
+        expect(find.byType(BaraPlusBody), findsNothing);
         await closeShopMembership(tester);
         await tester.drag(
           find.byType(CustomScrollView).first,
@@ -266,28 +300,28 @@ void main() {
     expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
     expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
   });
-  testWidgets('sections recover independently from unavailable store', (
+  testWidgets('coins recover independently while membership stays hidden', (
     tester,
   ) async {
     addTearDown(tester.view.reset);
     final billing = AvailabilityBilling();
     await pumpShop(tester, billing: billing);
-    expect(find.text('Membership is currently unavailable.'), findsOneWidget);
+    expect(find.text('Membership is currently unavailable.'), findsNothing);
     expect(find.text('Coin packs are currently unavailable.'), findsOneWidget);
     await tester.tap(find.text('Try again').first);
     await tester.pump();
-    expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
     expect(find.byKey(const Key('buy-coins-coins_500')), findsOneWidget);
     billing.membership = false;
     billing.update(billing.state);
     await tester.pump();
-    expect(find.text('Membership is currently unavailable.'), findsOneWidget);
+    expect(find.text('Membership is currently unavailable.'), findsNothing);
     expect(find.byKey(const Key('buy-coins-coins_500')), findsOneWidget);
     billing.membership = true;
     billing.packs = false;
     billing.update(billing.state);
     await tester.pump();
-    expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
     expect(find.text('Coin packs are currently unavailable.'), findsOneWidget);
   });
   testWidgets('unknown product keeps verified amount price and generic sack', (
@@ -330,11 +364,7 @@ void main() {
     'embedded membership keeps plans without repeating marketing hero',
     (tester) async {
       addTearDown(tester.view.reset);
-      await pumpShop(
-        tester,
-        billing: FakeBilling(),
-        focus: ShopFocus.membership,
-      );
+      await pumpRetainedMembership(tester, billing: FakeBilling());
       expect(find.text('A LITTLE EXTRA JOY'), findsNothing);
       expect(find.text('For you. For your capy.'), findsNothing);
       expect(find.text('THE MONTHLY LOOK'), findsOneWidget);
@@ -346,10 +376,9 @@ void main() {
     tester,
   ) async {
     addTearDown(tester.view.reset);
-    await pumpShop(
+    await pumpRetainedMembership(
       tester,
       billing: FakeBilling(),
-      focus: ShopFocus.membership,
       width: 320,
       textScale: 1.6,
     );
@@ -375,7 +404,7 @@ void main() {
   ) async {
     addTearDown(tester.view.reset);
     final billing = FakeBilling();
-    await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
+    await pumpRetainedMembership(tester, billing: billing, includeCoins: true);
     billing.update(
       const BillingSnapshot(
         operationStatus: BillingOperationStatus.pending,
@@ -402,7 +431,7 @@ void main() {
     );
   });
   testWidgets(
-    'Profile omits Membership while Featured retains embedded management',
+    'Profile and Featured hide Membership while direct management is retained',
     (tester) async {
       addTearDown(tester.view.reset);
       final auth = await shopAuth();
@@ -428,8 +457,11 @@ void main() {
       expect(find.text('Membership'), findsNothing);
       await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
       expect(find.byType(ShopTab), findsOneWidget);
-      expect(find.byType(BaraPlusBody), findsOneWidget);
+      expect(find.byType(BaraPlusBody), findsNothing);
       expect(find.byType(BaraPlusScreen), findsNothing);
+      expect(find.byKey(const Key('manage-bara')), findsNothing);
+      expect(find.byType(CoinPackOffers), findsOneWidget);
+      await pumpRetainedMembership(tester, billing: billing);
       expect(find.byKey(const Key('manage-bara')), findsOneWidget);
     },
   );

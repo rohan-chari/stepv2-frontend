@@ -8,7 +8,8 @@ import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/screens/bara_plus_screen.dart';
 import 'package:step_tracker/models/billing.dart';
 import 'package:step_tracker/widgets/coin_pack_offers.dart';
-import 'unified_shop_test.dart' show pumpShop, AvailabilityBilling;
+import 'unified_shop_test.dart'
+    show pumpShop, pumpRetainedMembership, AvailabilityBilling;
 import 'billing_components_test.dart' show FakeBilling;
 
 class _SwitchingBilling extends FakeBilling {
@@ -59,18 +60,18 @@ void main() {
   });
   for (final width in [320.0, 390.0, 800.0]) {
     testWidgets(
-      'Featured membership is a separate row and Powerups are spacious at $width',
+      'Featured starts with coins and merchandise sizes match at $width',
       (tester) async {
         addTearDown(tester.view.reset);
         await pumpShop(tester, billing: FakeBilling(), width: width);
         final membership = find.byKey(const Key('shop-membership-toggle'));
         final coin = find.byKey(const Key('coin-tile-coins_500'));
+        expect(membership, findsNothing);
+        expect(coin, findsOneWidget);
         expect(
-          tester.getSize(membership).width,
-          greaterThan(tester.getSize(coin).width),
-        );
-        expect(
-          tester.getBottomLeft(membership).dy,
+          tester
+              .getBottomLeft(find.byKey(const Key('shop-section-featured')))
+              .dy,
           lessThanOrEqualTo(tester.getTopLeft(coin).dy),
         );
         await selectShopCategory(tester, 'POWERUPS');
@@ -81,9 +82,9 @@ void main() {
         final character = tester.getSize(
           find.byKey(const Key('shop-character-default')),
         );
-        if (width >= 360) {
-          expect(powerup.width, greaterThan(character.width));
-        } else {
+        expect(character.width, closeTo(powerup.width, .01));
+        expect(character.height, closeTo(powerup.height, .01));
+        if (width < 360) {
           expect(powerup.width, closeTo((width - 32 - 24) / 3, .01));
         }
         expect(powerup.height, closeTo(powerup.width / .68, .01));
@@ -111,14 +112,14 @@ void main() {
     expect(find.byKey(const Key('shop-product-card')), findsOneWidget);
   });
   testWidgets(
-    'membership focus loading opens details and observes products arriving',
+    'retained membership body observes products arriving when mounted directly',
     (tester) async {
       addTearDown(tester.view.reset);
       final billing = AvailabilityBilling()
         ..state = const BillingSnapshot(
           operationStatus: BillingOperationStatus.loading,
         );
-      await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
+      await pumpRetainedMembership(tester, billing: billing);
       expect(find.byType(BaraPlusBody), findsOneWidget);
       expect(
         find.text('Store pricing is currently unavailable.'),
@@ -131,30 +132,31 @@ void main() {
       expect(find.byKey(const Key('start-bara-trial')), findsOneWidget);
     },
   );
-  testWidgets('open membership sheet closes on billing identity change', (
-    tester,
-  ) async {
-    addTearDown(tester.view.reset);
-    final billing = _SwitchingBilling()
-      ..pendingPurchase = Completer<BillingResult>();
-    await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
-    expect(find.byType(BaraPlusBody), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('start-bara-trial')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.byKey(const Key('start-bara-trial')));
-    await tester.pump();
-    billing.id = 'next-account';
-    billing.update(const BillingSnapshot());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(BaraPlusBody), findsNothing);
-    billing.pendingPurchase?.complete(
-      const BillingResult(success: true, message: 'Old purchase complete'),
-    );
-    await tester.pump();
-    expect(find.text('Old purchase complete'), findsNothing);
-  });
+  testWidgets(
+    'retained membership body ignores purchase feedback after identity change',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      final billing = _SwitchingBilling()
+        ..pendingPurchase = Completer<BillingResult>();
+      await pumpRetainedMembership(tester, billing: billing);
+      expect(find.byType(BaraPlusBody), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('start-bara-trial')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byKey(const Key('start-bara-trial')));
+      await tester.pump();
+      billing.id = 'next-account';
+      billing.update(const BillingSnapshot());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(BaraPlusBody), findsOneWidget);
+      billing.pendingPurchase?.complete(
+        const BillingResult(success: true, message: 'Old purchase complete'),
+      );
+      await tester.pump();
+      expect(find.text('Old purchase complete'), findsNothing);
+    },
+  );
   testWidgets(
     'enlarged section headers remain readable and vertically ordered',
     (tester) async {
@@ -185,23 +187,26 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('identity cleanup preserves unrelated route above membership', (
-    tester,
-  ) async {
-    addTearDown(tester.view.reset);
-    final billing = _SwitchingBilling();
-    await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
-    Navigator.of(tester.element(find.byType(BaraPlusBody))).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: Text('Notification details')),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    billing.id = 'next-account';
-    billing.update(const BillingSnapshot());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Notification details'), findsOneWidget);
-  });
+  testWidgets(
+    'legacy membership focus and identity cleanup preserve unrelated route',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      final billing = _SwitchingBilling();
+      await pumpShop(tester, billing: billing, focus: ShopFocus.membership);
+      expect(find.byType(BaraPlusBody), findsNothing);
+      expect(find.byType(CoinPackOffers), findsOneWidget);
+      Navigator.of(tester.element(find.byType(ShopTab))).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('Notification details')),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      billing.id = 'next-account';
+      billing.update(const BillingSnapshot());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Notification details'), findsOneWidget);
+    },
+  );
 }

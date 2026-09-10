@@ -1,0 +1,64 @@
+{
+  "capture": "Actual Flutter wardrobe with bundled fonts; 30-accessory fixture, not live data",
+  "images": {
+    "dark-1.0-bottom.png": {
+      "sha256": "56556573b5f8646d837ce3abf6d9dec88aa3e0ba25396722a81c05b3c2b3e9db",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-top.png": {
+      "sha256": "f1ecd807df7c34007ebc27f6af174a4c3385cd5c708b7459da41b85767d11f3e",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-bottom.png": {
+      "sha256": "49b89e7566e8eb268fc9fd08d9f44c69e55eeceea554959f195754406f49627c",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-top.png": {
+      "sha256": "9c6dd997e563880c7ad327a71a2b77f3c094c566741fa7e050dc8179d38ae8be",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-bottom.png": {
+      "sha256": "4c2c4f0eea01e9841101e6a13ee54aa1fb4cce3d772039faaaee141ed8d0eaaa",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-top.png": {
+      "sha256": "731915b563773aa89644b6f49ed2e5a624b9b1ef86f769dea5b2416129f4431c",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-bottom.png": {
+      "sha256": "4172360819dfaf5d06e0db6d92693cb8208930369c627cd5c05a5569e2399849",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-top.png": {
+      "sha256": "73b42315b0d83169b438a230c3cfc64796b39f51403798d6cb32a4ee38f0de45",
+      "size": [
+        780,
+        1688
+      ]
+    }
+  },
+  "sourceHashes": {
+    "lib/screens/character_wardrobe_screen.dart": "f57075b47756ebdf2deaad6baed168ae86b02e0068ada8eaba2a281c01c0e17d"
+  }
+}

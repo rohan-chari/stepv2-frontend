@@ -1,0 +1,35 @@
+{
+  "bundle" : "com.rohanchari.steptracker",
+  "checkedAt" : "2026-09-10T12:39:09Z",
+  "environment" : "iOS simulator, no StoreKit configuration file",
+  "products" : [
+    {
+      "displayName" : "2,800 Coins",
+      "displayPrice" : "$4.99",
+      "id" : "bara_coins_2800_v1"
+    },
+    {
+      "displayName" : "Bara+ Permanent",
+      "displayPrice" : "$19.99",
+      "id" : "bara_plus_permanent_v1"
+    },
+    {
+      "displayName" : "500 Coins",
+      "displayPrice" : "$0.99",
+      "id" : "bara_coins_500_v1"
+    },
+    {
+      "displayName" : "Bara+ Monthly",
+      "displayPrice" : "$4.99",
+      "id" : "bara_plus_monthly_v1"
+    }
+  ],
+  "requested" : [
+    "bara_coins_500_v1",
+    "bara_coins_2800_v1",
+    "bara_coins_6000_v1",
+    "bara_plus_monthly_v1",
+    "bara_plus_permanent_v1"
+  ],
+  "success" : true
+}

@@ -43,6 +43,7 @@ class LiveBillingController extends BillingController {
   bool _rerollSupported = false;
   int _cost = 50;
   bool _working = false;
+  bool _loadingCatalog = false;
   Timer? _retry;
   Map<String, dynamic> _data = {};
   final Map<String, String> _productIds = {};
@@ -165,7 +166,10 @@ class LiveBillingController extends BillingController {
               (status == BillingStatus.active || status == BillingStatus.trial))
           ? _int(member['discountPercent']).clamp(0, 100)
           : 0,
-      operationStatus: _operation,
+      operationStatus:
+          _loadingCatalog && _operation != BillingOperationStatus.pending
+          ? BillingOperationStatus.loading
+          : _operation,
       message: _message,
     );
   }
@@ -187,6 +191,7 @@ class LiveBillingController extends BillingController {
     _generation++;
     _retry?.cancel();
     _working = false;
+    _loadingCatalog = false;
     _user = auth.userId ?? '';
     _token = auth.authToken;
     _identity = null;
@@ -227,6 +232,8 @@ class LiveBillingController extends BillingController {
       return;
     }
     _working = true;
+    _loadingCatalog = true;
+    _notify();
     try {
       final data = await api.fetchBillingBootstrap(
         identityToken: token,
@@ -363,6 +370,7 @@ class LiveBillingController extends BillingController {
     } finally {
       if (_current(generation)) {
         _working = false;
+        _loadingCatalog = false;
         _notify();
       }
     }

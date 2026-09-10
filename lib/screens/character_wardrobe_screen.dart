@@ -428,8 +428,33 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
             },
             child: Scaffold(
               backgroundColor: colors.roofLight,
+              bottomNavigationBar: _saved == null
+                  ? null
+                  : SafeArea(
+                      top: false,
+                      child: Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.roofMid,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: colors.parchmentBorder),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: .2),
+                              blurRadius: 14,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: IntrinsicHeight(child: _buildControls()),
+                      ),
+                    ),
               body: SafeArea(
-                bottom: true,
+                bottom: false,
                 child: Column(
                   children: [
                     Padding(
@@ -489,51 +514,6 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                     ),
                                   ],
                                   if (_saved != null) ...[
-                                    KeyedSubtree(
-                                      key: _controlsKey,
-                                      child: Wrap(
-                                        key: const Key('wardrobe-controls'),
-                                        spacing: 10,
-                                        runSpacing: 8,
-                                        children: [
-                                          PillButton(
-                                            label: _busy
-                                                ? 'Saving…'
-                                                : 'Save outfit',
-                                            onPressed:
-                                                _dirty &&
-                                                    !_hasUnowned &&
-                                                    !_readOnly &&
-                                                    !_busy &&
-                                                    !widget.tutorial
-                                                ? _save
-                                                : null,
-                                          ),
-                                          TextButton(
-                                            style: TextButton.styleFrom(
-                                              foregroundColor: colors.textLight,
-                                              disabledForegroundColor: colors
-                                                  .textLight
-                                                  .withValues(alpha: .45),
-                                              minimumSize: const Size(64, 48),
-                                            ),
-                                            onPressed: _dirty && !_busy
-                                                ? () => setState(() {
-                                                    _saved =
-                                                        _wardrobe?.outfit ??
-                                                        _saved;
-                                                    _draft = {
-                                                      ...?_saved?.slots,
-                                                    };
-                                                    _selected = null;
-                                                  })
-                                                : null,
-                                            child: const Text('Reset'),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
                                     KeyedSubtree(
                                       key: _previewKey,
                                       child: Container(
@@ -635,42 +615,28 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                     const SizedBox(height: 16),
                                     KeyedSubtree(
                                       key: _choicesKey,
-                                      child:
-                                          !_accessories.values.any(
+                                      child: Column(
+                                        children: [
+                                          if (!_accessories.values.any(
                                             (item) =>
                                                 item.fit != 'preservation-only',
-                                          )
-                                          ? _text(
+                                          ))
+                                            _text(
                                               'No accessories for this character yet.',
-                                            )
-                                          : _grid(
-                                              _accessories.values
-                                                  .where(
-                                                    (item) =>
-                                                        item.fit !=
-                                                        'preservation-only',
-                                                  )
-                                                  .toList(),
                                             ),
+                                          _accessorySection(
+                                            'Owned',
+                                            'owned',
+                                            owned: true,
+                                          ),
+                                          _accessorySection(
+                                            'Unowned',
+                                            'unowned',
+                                            owned: false,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    if (_accessories.values.any(
-                                      (item) => item.fit == 'preservation-only',
-                                    )) ...[
-                                      const SizedBox(height: 16),
-                                      _text('Other owned items', size: 17),
-                                      _text(
-                                        'These items are yours, but do not fit this character.',
-                                      ),
-                                      _grid(
-                                        _accessories.values
-                                            .where(
-                                              (item) =>
-                                                  item.fit ==
-                                                  'preservation-only',
-                                            )
-                                            .toList(),
-                                      ),
-                                    ],
                                     if (_paging)
                                       const Center(
                                         child: CircularProgressIndicator(),
@@ -704,7 +670,7 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                   'Outfits save independently for each character. Reset returns to its saved look.',
                   'Preview accessories here before buying or saving. Editing does not switch your active character.',
                   'Only accessories made for this character can be selected. Items you already own remain yours.',
-                  'Back returns to Characters. The category bar takes you to the rest of the shop.',
+                  'Back returns to Characters. Scroll through the shop sections to browse more.',
                 ][_tutorialIndex],
                 stepIndex: _tutorialIndex + 2,
                 stepCount: 6,
@@ -720,6 +686,110 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildControls() {
+    final colors = AppColors.of(context);
+    return KeyedSubtree(
+      key: _controlsKey,
+      child: Row(
+        key: const Key('wardrobe-controls'),
+        children: [
+          Expanded(
+            child: PillButton(
+              fullWidth: true,
+              scaleDownContent: false,
+              labelMaxLines: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              label: _busy ? 'Saving…' : 'Save outfit',
+              onPressed:
+                  _dirty &&
+                      !_hasUnowned &&
+                      !_readOnly &&
+                      !_busy &&
+                      !widget.tutorial
+                  ? _save
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 10),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: colors.textLight,
+              disabledForegroundColor: colors.textLight.withValues(alpha: .45),
+              minimumSize: const Size(64, 48),
+            ),
+            onPressed: _dirty && !_busy
+                ? () => setState(() {
+                    _saved = _wardrobe?.outfit ?? _saved;
+                    _draft = {...?_saved?.slots};
+                    _selected = null;
+                  })
+                : null,
+            child: Text(
+              'Reset',
+              style: PixelText.body(
+                size: 14,
+                color: _dirty && !_busy
+                    ? colors.textLight
+                    : colors.textLight.withValues(alpha: .45),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _accessorySection(String title, String id, {required bool owned}) {
+    final colors = AppColors.of(context);
+    final items = _accessories.values
+        .where((item) => item.fit != 'preservation-only' && item.owned == owned)
+        .toList();
+    return Column(
+      key: Key('wardrobe-section-$id'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+          child: Semantics(
+            header: true,
+            child: Row(
+              children: [
+                Container(
+                  width: 5,
+                  height: 23,
+                  decoration: BoxDecoration(
+                    color: colors.pillGold,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: colors.pillGoldDark),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: PixelText.title(size: 24, color: colors.textLight),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (items.isNotEmpty)
+          _grid(items)
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              owned
+                  ? 'Your accessories will appear here.'
+                  : 'No unowned accessories for this character.',
+              style: PixelText.body(size: 14, color: colors.textLight),
+            ),
+          ),
+      ],
     );
   }
 

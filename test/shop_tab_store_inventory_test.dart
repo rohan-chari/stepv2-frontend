@@ -732,10 +732,18 @@ void main() {
 
       // Unowned cosmetic is offered in the store...
       expect(find.text('Blue Hat'), findsWidgets);
-      // ...but the OWNED cosmetic is not in the store list.
+      // The owned cosmetic is grouped separately from purchase offers.
       expect(find.text('Red Scarf'), findsWidgets);
       expect(find.text('100 coins'), findsOneWidget);
-      expect(find.text('Owned'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('wardrobe-item-item-owned')),
+          matching: find.text('Owned'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('wardrobe-section-owned')), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-section-unowned')), findsOneWidget);
     },
   );
 

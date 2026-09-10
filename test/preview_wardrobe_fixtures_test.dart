@@ -34,37 +34,25 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await selectShopCategory(tester, 'ACCESSORIES');
-      await tester.scrollUntilVisible(
-        find.text('Other owned items'),
-        180,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(find.text('Other owned items'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('wardrobe-item-baseball_cap')),
-        -180,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.byKey(const Key('wardrobe-item-baseball_cap')));
-      await tester.pump();
+      expect(find.text('Other owned items'), findsNothing);
+      expect(find.byKey(const Key('wardrobe-item-baseball_cap')), findsNothing);
       expect(find.text('Trying on'), findsNothing);
       expect(find.textContaining('Buy ·'), findsNothing);
-      expect(find.text('Unavailable'), findsWidgets);
       await tester.ensureVisible(
         find.byKey(const Key('wardrobe-item-sunglasses')),
       );
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(const Key('wardrobe-item-sunglasses')));
       await tester.pump();
-      await tester.scrollUntilVisible(
-        find.text('Reset'),
-        -200,
-        scrollable: find.byType(Scrollable).last,
-      );
+      expect(find.text('Reset').hitTestable(), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Reset'));
       await tester.pump();
+      await tester.scrollUntilVisible(
+        find.text('Saved outfit'),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('Saved outfit'), findsOneWidget);
       expect(
         controller.ownedCosmetics,

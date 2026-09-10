@@ -10,7 +10,8 @@ import '../styles.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/billing_scope.dart';
 import '../widgets/coin_pack_offers.dart';
-import '../widgets/bara_plus_card.dart';
+// Bara+ on hold; restore with its entry below.
+// import '../widgets/bara_plus_card.dart';
 import '../widgets/coin_balance_badge.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
@@ -271,11 +272,14 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
                         const CoinPackOffers(onGreenSurface: true),
                         const SizedBox(height: 20),
                       ],
+                      // Bara+ on hold.
+                      /*
                       if (BillingScope.maybeOf(context)?.canShowMembership ==
                           true) ...[
                         const BaraPlusCard(),
                         const SizedBox(height: 24),
                       ],
+                      */
                       if (_adCoinReward != null &&
                           _adController.isSupported) ...[
                         _buildWatchAdCard(),

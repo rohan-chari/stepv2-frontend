@@ -210,11 +210,7 @@ class _PreviewHomeState extends State<_PreviewHome> {
         builder: (_) => ShopTab(
           authService: widget.controller.auth,
           backendApiService: widget.api,
-          initialFocus: entry == 1
-              ? ShopFocus.coins
-              : entry == 2
-              ? ShopFocus.membership
-              : ShopFocus.featured,
+          initialFocus: entry == 1 ? ShopFocus.coins : ShopFocus.featured,
           adControllerBuilder: () => PreviewUnsupportedAds(),
           getCoinsAdController: ads,
         ),
@@ -223,14 +219,14 @@ class _PreviewHomeState extends State<_PreviewHome> {
   }
 
   Widget _page() => switch (page) {
-    0 || 1 || 2 => Center(
+    0 || 1 => Center(
       child: PillButton(
         label: 'OPEN SHOP',
         icon: Icons.storefront_rounded,
         onPressed: () => _openShop(page),
       ),
     ),
-    3 => ProfileTab(
+    2 => ProfileTab(
       authService: widget.controller.auth,
       displayName: 'Rohan',
       onSettingsChanged: () {},
@@ -292,7 +288,7 @@ class _PreviewHomeState extends State<_PreviewHome> {
       selectedIndex: page,
       onDestinationSelected: (value) {
         setState(() => page = value);
-        if (value < 3) _openShop(value);
+        if (value < 2) _openShop(value);
       },
       destinations: const [
         NavigationDestination(
@@ -305,11 +301,14 @@ class _PreviewHomeState extends State<_PreviewHome> {
           icon: Icon(Icons.toll),
           label: 'Coins',
         ),
+        // Bara+ on hold. Restore its index mapping in _page/_openShop too.
+        /*
         NavigationDestination(
           key: Key('preview-nav-plus'),
           icon: Icon(Icons.stars_rounded),
           label: 'Bara+',
         ),
+        */
         NavigationDestination(
           key: Key('preview-nav-profile'),
           icon: Icon(Icons.person_outline),

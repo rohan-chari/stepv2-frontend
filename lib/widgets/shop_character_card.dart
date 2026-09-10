@@ -20,12 +20,12 @@ class ShopCharacterCard extends StatelessWidget {
           '${character.name}, ${character.owned ? 'owned' : 'locked'}${character.active ? ', active' : ''}',
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color: colors.parchment,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: character.active
                   ? colors.pillGoldDark
@@ -33,41 +33,70 @@ class ShopCharacterCard extends StatelessWidget {
               width: character.active ? 2 : 1,
             ),
           ),
-          child: Column(
+          child: Stack(
+            clipBehavior: Clip.none,
+            fit: StackFit.expand,
             children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) => Center(
-                    child: RacerAvatar(
-                      rank: 1,
-                      size: constraints.biggest.shortestSide.clamp(24, 120),
-                      showMedalRing: false,
-                      animal: character.animal,
-                      accessories: character.owned
-                          ? character.outfit?.items ?? []
-                          : [],
+              Column(
+                children: [
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Center(
+                        child: RacerAvatar(
+                          rank: 1,
+                          size: constraints.biggest.shortestSide.clamp(24, 240),
+                          showMedalRing: false,
+                          animal: character.animal,
+                          accessories: character.owned
+                              ? character.outfit?.items ?? []
+                              : [],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    character.name,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(size: 13, color: colors.textDark),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    character.active
+                        ? 'ACTIVE'
+                        : character.owned
+                        ? 'OWNED'
+                        : 'LOCKED',
+                    style: PixelText.title(
+                      size: 10,
+                      color: character.active
+                          ? colors.coinDark
+                          : colors.textMid,
+                    ),
+                  ),
+                ],
+              ),
+              if (!character.owned)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: ExcludeSemantics(
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: colors.textDark,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Icon(
+                          Icons.lock_rounded,
+                          size: 15,
+                          color: colors.parchment,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Text(
-                character.name,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                style: PixelText.body(size: 12, color: colors.textDark),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                character.active
-                    ? 'ACTIVE'
-                    : character.owned
-                    ? 'OWNED'
-                    : 'LOCKED',
-                style: PixelText.title(
-                  size: 9,
-                  color: character.active ? colors.coinDark : colors.textMid,
-                ),
-              ),
             ],
           ),
         ),

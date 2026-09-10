@@ -705,32 +705,31 @@ void main() {
     expect(api.equipWrites, 0);
   });
 
-  testWidgets(
-    'wardrobe Back requires discard before clearing a local try-on',
-    (tester) async {
-      final api = _DressingRoomApi();
-      await _pumpShop(tester, api);
-      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
-      await tester.tap(_selector('moon-pack'));
-      await tester.pump();
-      expect(find.text('Trying on'), findsOneWidget);
-      await tester.tap(find.text('Back to Characters'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Discard outfit changes?'), findsOneWidget);
-      await tester.tap(find.text('Keep editing'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(_previewIds(tester), contains('moon-pack'));
-      await _leaveWardrobe(tester, discard: true);
-      expect(_stage(), findsNothing);
-      await _open(tester, section: 'STORE', category: 'ACCESSORIES');
-      expect(find.text('Saved outfit'), findsOneWidget);
-      expect(_previewIds(tester), isNot(contains('moon-pack')));
-      expect(api.equipWrites, 0);
-      expect(api.purchaseWrites, 0);
-    },
-  );
+  testWidgets('wardrobe Back requires discard before clearing a local try-on', (
+    tester,
+  ) async {
+    final api = _DressingRoomApi();
+    await _pumpShop(tester, api);
+    await _open(tester, section: 'STORE', category: 'ACCESSORIES');
+    await tester.tap(_selector('moon-pack'));
+    await tester.pump();
+    expect(find.text('Trying on'), findsOneWidget);
+    await tester.tap(find.text('Back to Characters'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Discard outfit changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_previewIds(tester), contains('moon-pack'));
+    await _leaveWardrobe(tester, discard: true);
+    expect(_stage(), findsNothing);
+    await _open(tester, section: 'STORE', category: 'ACCESSORIES');
+    expect(find.text('Saved outfit'), findsOneWidget);
+    expect(_previewIds(tester), isNot(contains('moon-pack')));
+    expect(api.equipWrites, 0);
+    expect(api.purchaseWrites, 0);
+  });
 
   testWidgets('cosmetic stage and grid use 3, 4, and 6 column breakpoints', (
     tester,
@@ -740,16 +739,16 @@ void main() {
       await _open(tester, section: 'INVENTORY', category: 'ACCESSORIES');
 
       final grid = tester.widget<GridView>(
-        find.byKey(const Key('wardrobe-accessory-grid')),
+        find.byKey(const Key('wardrobe-accessory-grid')).first,
       );
       final delegate =
           grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
       expect(delegate.crossAxisCount, entry.$2);
       expect(tester.getSize(_stage()).height, greaterThanOrEqualTo(160));
       expect(
-        tester.getTopLeft(_stage()).dy,
-        greaterThan(
-          tester.getBottomLeft(find.byKey(const Key('wardrobe-controls'))).dy,
+        tester.getBottomLeft(_stage()).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('wardrobe-controls'))).dy,
         ),
       );
       expect(
@@ -1063,11 +1062,17 @@ void main() {
       await _pumpShop(tester, api);
       await _open(tester, section: 'STORE', category: 'ACCESSORIES');
 
-      final grid = tester.widget<GridView>(
+      final grids = tester.widgetList<GridView>(
         find.byKey(const Key('wardrobe-accessory-grid')),
       );
-      final delegate = grid.childrenDelegate;
-      expect(delegate.estimatedChildCount, 24);
+      expect(
+        grids.fold<int>(
+          0,
+          (count, grid) =>
+              count + (grid.childrenDelegate.estimatedChildCount ?? 0),
+        ),
+        24,
+      );
       expect(api.fixtureWardrobeReads, 1);
 
       final lateSelector = _selector('performance-59');

@@ -451,6 +451,41 @@ class PreservationOnlyApi extends WardrobeApi {
   };
 }
 
+class SectionedAccessoriesApi extends WardrobeApi {
+  @override
+  Future<Map<String, dynamic>> fetchCharacterWardrobe({
+    required String identityToken,
+    required String characterKey,
+    int limit = 24,
+    String? cursor,
+    String? localDate,
+  }) async => {
+    ...await super.fetchCharacterWardrobe(
+      identityToken: identityToken,
+      characterKey: characterKey,
+    ),
+    'accessories': [
+      for (var i = 0; i < 30; i++)
+        {
+          'item': {...hat, 'id': 'accessory-$i', 'name': 'Accessory $i'},
+          'owned': i < 15,
+          'canPurchase': i >= 15,
+          'canPreview': true,
+          'canSelect': i < 15,
+          'fit': 'approved',
+        },
+      {
+        'item': {...hat, 'id': 'preserved'},
+        'owned': true,
+        'canPurchase': false,
+        'canPreview': false,
+        'canSelect': false,
+        'fit': 'preservation-only',
+      },
+    ],
+  };
+}
+
 Future<void> platformBack(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 500));
   if (debugDefaultTargetPlatformOverride == TargetPlatform.iOS) {
@@ -523,6 +558,27 @@ void main() {
     });
   });
   testWidgets(
+    'Owned and Unowned sections keep Save outfit fixed while accessories scroll',
+    (tester) async {
+      final api = SectionedAccessoriesApi();
+      await pumpWardrobeShop(tester, api);
+      await openWardrobe(tester);
+      expect(find.byKey(const Key('wardrobe-section-owned')), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-section-unowned')), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-item-preserved')), findsNothing);
+      expect(find.text('Other owned items'), findsNothing);
+      final controls = find.byKey(const Key('wardrobe-controls'));
+      await tester.pump(const Duration(milliseconds: 400));
+      final before = tester.getRect(controls);
+      expect(before.bottom, lessThanOrEqualTo(844));
+      await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getRect(controls), before);
+      expect(find.text('Save outfit').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Characters collection deduplicates pages and restarts on appearance revision change',
     (tester) async {
       final api = PagedCharactersApi();
@@ -579,7 +635,7 @@ void main() {
     },
   );
   testWidgets(
-    'compatible empty state remains explicit beside Other owned items',
+    'compatible empty state hides preservation-only items without changing ownership',
     (tester) async {
       await pumpWardrobeShop(tester, PreservationOnlyApi());
       await openWardrobe(tester);
@@ -588,10 +644,10 @@ void main() {
         find.text('No accessories for this character yet.'),
         findsOneWidget,
       );
-      expect(find.text('Other owned items'), findsOneWidget);
+      expect(find.text('Other owned items'), findsNothing);
       expect(
         find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
-        findsOneWidget,
+        findsNothing,
       );
     },
   );
@@ -873,9 +929,9 @@ void main() {
       await openWardrobe(tester, key: 'character-corgi');
       expect(find.byKey(const Key('wardrobe-preview')), findsOneWidget);
       expect(
-        tester.getBottomLeft(find.byKey(const Key('wardrobe-controls'))).dy,
-        lessThanOrEqualTo(
-          tester.getTopLeft(find.byKey(const Key('wardrobe-preview'))).dy,
+        tester.getTopLeft(find.byKey(const Key('wardrobe-controls'))).dy,
+        greaterThanOrEqualTo(
+          tester.getBottomLeft(find.byKey(const Key('wardrobe-preview'))).dy,
         ),
       );
       await tester.tap(

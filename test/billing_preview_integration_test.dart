@@ -70,7 +70,7 @@ void main() {
     controller.setScenario(PreviewBillingScenario.monthly);
     addTearDown(controller.dispose);
     await launch(tester, controller);
-    expect(find.byKey(const Key('billing-shop-membership')), findsOneWidget);
+    expect(find.byKey(const Key('billing-shop-membership')), findsNothing);
     await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
     await tester.tap(find.text('Ghost Pepper').first);
@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.byKey(const Key('preview-nav-profile')));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
-    expect(find.byKey(const Key('billing-profile-badge')), findsOneWidget);
+    expect(find.byKey(const Key('billing-profile-badge')), findsNothing);
     expect(find.byKey(const Key('billing-profile-membership')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

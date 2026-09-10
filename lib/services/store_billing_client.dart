@@ -106,24 +106,53 @@ class RevenueCatBillingClient extends StoreBillingClient {
     List<String> coins,
     List<String> subscriptions,
   ) => _serial(() async {
-    final found = <rc.StoreProduct>[
-      if (coins.isNotEmpty)
-        ...await rc.Purchases.getProducts(
-          coins,
-          productCategory: rc.ProductCategory.nonSubscription,
-        ),
-      if (subscriptions.isNotEmpty)
-        ...await rc.Purchases.getProducts(
-          subscriptions,
-          productCategory: rc.ProductCategory.subscription,
-        ),
-    ];
-    final eligibility = _isIOS && subscriptions.isNotEmpty
-        ? await rc.Purchases.checkTrialOrIntroductoryPriceEligibility(
-            subscriptions,
-          )
-        : <String, rc.IntroEligibility>{};
+    final found = <rc.StoreProduct>[];
+    var successfulCategories = 0;
+    // Each refresh replaces the native checkout cache, including failed refreshes.
+    // Serial access prevents a purchase from observing an intermediate catalog.
     _products.clear();
+    Future<void> fetch(List<String> ids, rc.ProductCategory category) async {
+      if (ids.isEmpty) return;
+      try {
+        found.addAll(
+          await rc.Purchases.getProducts(ids, productCategory: category),
+        );
+        successfulCategories++;
+      } catch (error) {
+        _catalogDiagnostic(
+          category == rc.ProductCategory.nonSubscription
+              ? 'non_subscription_products'
+              : 'subscription_products',
+          error,
+        );
+      }
+    }
+
+    await fetch(coins, rc.ProductCategory.nonSubscription);
+    await fetch(subscriptions, rc.ProductCategory.subscription);
+    if (successfulCategories == 0 &&
+        (coins.isNotEmpty || subscriptions.isNotEmpty)) {
+      throw const StoreBillingException(
+        'Store products are currently unavailable.',
+      );
+    }
+    var eligibility = <String, rc.IntroEligibility>{};
+    final foundSubscriptions = found
+        .where((product) => subscriptions.contains(product.identifier))
+        .map((product) => product.identifier)
+        .toList();
+    if (_isIOS && foundSubscriptions.isNotEmpty) {
+      try {
+        eligibility =
+            await rc.Purchases.checkTrialOrIntroductoryPriceEligibility(
+              foundSubscriptions,
+            );
+      } catch (error) {
+        // Missing eligibility must never remove a valid localized store offer or
+        // advertise a trial whose eligibility has not been confirmed.
+        _catalogDiagnostic('trial_eligibility', error);
+      }
+    }
     return found.map((product) {
       _products[product.identifier] = product;
       var days = 0;
@@ -147,6 +176,22 @@ class RevenueCatBillingClient extends StoreBillingClient {
       );
     }).toList();
   });
+  void _catalogDiagnostic(String stage, Object error) {
+    var code = 'unknown';
+    if (error is PlatformException) {
+      // The SDK helper parses and indexes unchecked. Native transport errors
+      // can have nonnumeric/negative codes, so accept only known enum indices.
+      final index = int.tryParse(error.code);
+      if (index != null &&
+          index >= 0 &&
+          index < rc.PurchasesErrorCode.values.length) {
+        code = rc.PurchasesErrorCode.values[index].name;
+      }
+    }
+    // Never include native messages/details, IDs, receipts, or account payloads.
+    debugPrint('Store catalog: $stage ($code)');
+  }
+
   @override
   Future<List<String>> transactionIds(String productId) => _serial(() async {
     await rc.Purchases.invalidateCustomerInfoCache();
@@ -298,7 +343,10 @@ class RevenueCatBillingClient extends StoreBillingClient {
       final candidate = Uri.tryParse(info.managementURL ?? '');
       if (candidate != null &&
           candidate.scheme == 'https' &&
-          const {'apps.apple.com', 'play.google.com'}.contains(candidate.host)) {
+          const {
+            'apps.apple.com',
+            'play.google.com',
+          }.contains(candidate.host)) {
         management = candidate;
       }
     } catch (_) {
