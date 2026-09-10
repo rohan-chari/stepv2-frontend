@@ -1,0 +1,23 @@
+{
+  "commit": "2741c1f",
+  "previewWidgetTests": {
+    "passed": 18,
+    "failed": 0
+  },
+  "tutorialMineTests": {
+    "passed": 53,
+    "failed": 0
+  },
+  "focusedRegressions": {
+    "passed": 174,
+    "behaviorFailures": 0,
+    "runnerNote": "One nonexistent test filename caused a load error; corrected relevant suite passed separately."
+  },
+  "countsOverlap": true,
+  "flutterAnalyze": "clean",
+  "review": "SHIP; remote mannequin readiness and release-channel fixes resolved",
+  "nativeBuilds": "deferred by user for combined release",
+  "uploaded": false,
+  "appReviewModified": false,
+  "unrelatedBillingAndEconomyChanges": "preserved and excluded"
+}

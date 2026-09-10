@@ -1,0 +1,30 @@
+{
+  "backendReleaseCommit": "430a289",
+  "sourceCommit": "20522fe8325d4bcd4c8b2d77d229f1cb6af9defd",
+  "isolatedFromUnrelatedChanges": true,
+  "isolatedHttpTests": {
+    "passed": 30,
+    "failed": 0,
+    "skipped": 0
+  },
+  "unitTests": {
+    "passed": 3399,
+    "failed": 0,
+    "skipped": 0,
+    "scope": "original implementation checkout with explicit dedicated test database"
+  },
+  "database": "local steps-tracker-integration_test",
+  "previewQueryCount": {
+    "selectsMin": 2,
+    "selectsMax": 4,
+    "basis": "structural code analysis; excludes transaction setup and existing auth middleware"
+  },
+  "mineAddedQueries": 0,
+  "migrations": false,
+  "deployed": false,
+  "notes": [
+    "First isolated run lacked test-only SESSION_TOKEN_SECRET; explicit fixture secret rerun passed.",
+    "Initial original unit run used outdated local development schema; explicit test DB rerun passed.",
+    "No production integration tests or production mutation performed."
+  ]
+}
