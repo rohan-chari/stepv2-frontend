@@ -1,0 +1,52 @@
+{
+  "baseline_head": "4ee76b9678ebda30c0eebd99467a6b6eb7e8a07f",
+  "owned_files": {
+    "lib/models/home_sync_refresh.dart": "ab2814cec78479e9b8214160f634cd11800d69ec4cd4bbe61eaff29fe1abb6b4",
+    "lib/screens/main_shell.dart": "93b528cdccb4e40ae356276bb367be49275a0751c41a9369809da78941e6b3cf",
+    "lib/screens/tabs/home_tab.dart": "267b70a17d7a9f076200eb6fc1f81bb01531b72c44daea61669b07ffd65f448a",
+    "lib/services/backend_api_service.dart": "470afc4def7f3723bb3ce8bec90ef690cf9f519890e34e21a357b0f4626c33e0",
+    "lib/services/friends_summary_repository.dart": "0bf613baf35309e16df6c2e8a950eb9e0cd0ec9d581fee38ea6ee95002f9150c",
+    "lib/widgets/race_opportunity_card.dart": "93b435f9bfe2f33d652ce16c253b408f62c634a50cc3215ec426da4efbf99fb2",
+    "test/main_shell_nav_order_test.dart": "c34c798cebadbf9828a8cd4b242f1aa642b677625793e5b1efe6ac1c33a688d3",
+    "test/backend_api_service_sync_v2_test.dart": "06f42967dc93c04c74e694345ed2e3d52172ddd99e21aab00b959cddf99d54b9"
+  },
+  "analysis": {
+    "result": "clean",
+    "log": "/tmp/event-frontend-analyze-frozen.log"
+  },
+  "full_suite": {
+    "result": "passed",
+    "count": 3247,
+    "exit_code": 0,
+    "duration": "1m59s",
+    "log": "/tmp/event-frontend-full-frozen.log"
+  },
+  "prior_full_suite": {
+    "passed": 3238,
+    "log": "/tmp/event-frontend-full-suite.log"
+  },
+  "red_green_regressions": [
+    "fresh post-resolution narrow refresh",
+    "independent unshown summary receipt survives reversed full/narrow completion",
+    "consumed summary receipt never reopens after stale full completion",
+    "malformed optional rewards and pending-invite metadata",
+    "account change clears retained friends/equipment",
+    "old catalog and Friends-tab responses cannot repopulate new-account state",
+    "old-account job status cannot trigger new-account catch-up",
+    "full-shell snapshot provenance after standalone friends/catalog replacement"
+  ],
+  "builds": "Owned by root; no builds/uploads/deployments performed by frontend implementation agent",
+  "placement_changes": false,
+  "new_dependencies": false,
+  "new_flags": false,
+  "targeted_suite": {
+    "result": "passed",
+    "count": 163,
+    "log": "/tmp/event-frontend-targeted-frozen.log"
+  },
+  "review": {
+    "verdict": "SHIP",
+    "agent": "implementation_review",
+    "remaining_runtime_findings": 0
+  }
+}
