@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/admin_system_health.dart';
 import '../styles.dart';
-import '../widgets/spinning_crate.dart';
+import '../widgets/admin_metric_widgets.dart';
 
 class AdminSystemHealthBody extends StatelessWidget {
   const AdminSystemHealthBody({
@@ -31,7 +31,7 @@ class AdminSystemHealthBody extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Semantics(
             label: 'Loading system health',
-            child: const SpinningCrate(size: 46),
+            child: const CircularProgressIndicator(strokeWidth: 2),
           ),
         ),
       );
@@ -70,14 +70,14 @@ class _SystemHealthStatePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(message, style: PixelText.body(size: 12, color: colors.textMid)),
+          Text(message, style: AdminSans.body(size: 12, color: colors.textMid)),
           const SizedBox(height: 6),
           TextButton(
             key: const Key('admin-system-health-retry'),
             onPressed: onRetry,
             child: Text(
               'RETRY',
-              style: PixelText.title(size: 12, color: colors.textAccent),
+              style: AdminSans.title(size: 12, color: colors.textAccent),
             ),
           ),
         ],
@@ -112,7 +112,7 @@ class _SystemHealthContent extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'STALE — REFRESH FAILED',
-            style: PixelText.title(size: 11, color: colors.error),
+            style: AdminSans.title(size: 11, color: colors.error),
           ),
         ],
         const SizedBox(height: 14),
@@ -130,14 +130,14 @@ class _SystemHealthContent extends StatelessWidget {
           children: [
             Text(
               'Updated ${_relativeTime(health.generatedAt)}',
-              style: PixelText.body(size: 10, color: colors.textMid),
+              style: AdminSans.body(size: 10, color: colors.textMid),
             ),
             TextButton(
               key: const Key('admin-system-health-refresh'),
               onPressed: loading ? null : onRefresh,
               child: Text(
                 loading ? 'REFRESHING…' : 'REFRESH',
-                style: PixelText.title(
+                style: AdminSans.title(
                   size: 11,
                   color: loading ? colors.textMid : colors.textAccent,
                 ),
@@ -186,7 +186,7 @@ class _StatusPlate extends StatelessWidget {
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: PixelText.title(size: 14, color: accent),
+        style: AdminSans.title(size: 14, color: accent),
       ),
     );
   }
@@ -207,7 +207,7 @@ class _PoolNow extends StatelessWidget {
         if (health.processes.isEmpty)
           Text(
             'POOL TELEMETRY UNAVAILABLE',
-            style: PixelText.body(size: 11, color: colors.textMid),
+            style: AdminSans.body(size: 11, color: colors.textMid),
           ),
         for (final identity in const [
           ('http', '0', 'HTTP 0'),
@@ -251,12 +251,12 @@ class _ProcessRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: PixelText.title(size: 11, color: colors.textDark)),
+          Text(label, style: AdminSans.title(size: 11, color: colors.textDark)),
           const SizedBox(height: 4),
           if (process == null)
             Text(
               'MISSING${missingReason == null ? '' : ' · ${missingReason!.toUpperCase()}'}',
-              style: PixelText.title(size: 10, color: colors.error),
+              style: AdminSans.title(size: 10, color: colors.error),
             )
           else ...[
             Wrap(
@@ -321,7 +321,7 @@ class _LastHour extends StatelessWidget {
           _Heading(heading),
           Text(
             'POOL AND STEP SUMMARY UNAVAILABLE',
-            style: PixelText.body(size: 11, color: colors.textMid),
+            style: AdminSans.body(size: 11, color: colors.textMid),
           ),
         ],
       );
@@ -395,7 +395,7 @@ class _EndpointSummaryRow extends StatelessWidget {
         '${endpoint.endpoint.toUpperCase()} · ${_number(endpoint.failures)} FAIL · '
         '${_millisecondsOrUnavailable(endpoint.latencyP95Ms)} REQUEST P95 · '
         '${_millisecondsOrUnavailable(endpoint.transactionP95Ms)} TX P95',
-        style: PixelText.body(size: 10, color: colors.textMid),
+        style: AdminSans.body(size: 10, color: colors.textMid),
       ),
     );
   }
@@ -416,7 +416,7 @@ class _FailureRates extends StatelessWidget {
         if (health.failureWindows.isEmpty)
           Text(
             'FAILURE HISTORY UNAVAILABLE',
-            style: PixelText.body(size: 11, color: colors.textMid),
+            style: AdminSans.body(size: 11, color: colors.textMid),
           )
         else ...[
           if (health.historyStatus == AdminSystemHealthHistoryStatus.partial)
@@ -424,7 +424,7 @@ class _FailureRates extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 7),
               child: Text(
                 'HISTORY PARTIAL',
-                style: PixelText.title(size: 10, color: colors.error),
+                style: AdminSans.title(size: 10, color: colors.error),
               ),
             ),
           for (final window in health.failureWindows)
@@ -465,21 +465,21 @@ class _FailureWindowCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: PixelText.title(size: 12, color: colors.textDark)),
+          Text(title, style: AdminSans.title(size: 12, color: colors.textDark)),
           const SizedBox(height: 3),
           Text(
             collection,
-            style: PixelText.title(size: 9, color: colors.textAccent),
+            style: AdminSans.title(size: 9, color: colors.textAccent),
           ),
           if (window.partialCoverageMinutes > 0)
             Text(
               '+${_number(window.partialCoverageMinutes)} PARTIAL',
-              style: PixelText.body(size: 9, color: colors.textMid),
+              style: AdminSans.body(size: 9, color: colors.textMid),
             ),
           const SizedBox(height: 7),
           Text(
             'OBSERVED TELEMETRY',
-            style: PixelText.body(size: 9, color: colors.textMid),
+            style: AdminSans.body(size: 9, color: colors.textMid),
           ),
           _MetricLine(
             label: 'REQUEST FAILURES',
@@ -520,12 +520,12 @@ class _FailureEndpointRow extends StatelessWidget {
         children: [
           Text(
             endpoint.endpoint.toUpperCase(),
-            style: PixelText.title(size: 9, color: colors.textDark),
+            style: AdminSans.title(size: 9, color: colors.textDark),
           ),
           Text(
             'REQUEST ${_rate(endpoint.requestFailures, endpoint.requests, endpoint.requestFailureRate)}'
             ' · SERVER ${_rate(endpoint.serverFailures, endpoint.requests, endpoint.serverFailureRate)}',
-            style: PixelText.body(size: 9, color: colors.textMid),
+            style: AdminSans.body(size: 9, color: colors.textMid),
           ),
         ],
       ),
@@ -543,7 +543,7 @@ class _Heading extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 5),
     child: Text(
       text,
-      style: PixelText.title(size: 12, color: AppColors.of(context).textDark),
+      style: AdminSans.title(size: 12, color: AppColors.of(context).textDark),
     ),
   );
 }
@@ -564,11 +564,11 @@ class _MetricLine extends StatelessWidget {
         runSpacing: 2,
         alignment: WrapAlignment.spaceBetween,
         children: [
-          Text(label, style: PixelText.body(size: 10, color: colors.textMid)),
+          Text(label, style: AdminSans.body(size: 10, color: colors.textMid)),
           Text(
             value,
             textAlign: TextAlign.end,
-            style: PixelText.title(size: 10, color: colors.textDark),
+            style: AdminSans.title(size: 10, color: colors.textDark),
           ),
         ],
       ),
@@ -587,7 +587,7 @@ class _TinyValue extends StatelessWidget {
     final colors = AppColors.of(context);
     return Text(
       '$label $value',
-      style: PixelText.body(size: 9, color: colors.textMid),
+      style: AdminSans.body(size: 9, color: colors.textMid),
     );
   }
 }

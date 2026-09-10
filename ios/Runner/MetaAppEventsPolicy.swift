@@ -48,12 +48,18 @@ enum MetaAppEventsPolicy {
                        attAuthorized: Bool) -> MetaPermission {
     guard resolved, status == .notRequired || status == .obtained,
           let sections = sectionIDs(values["IABGPP_GppSID"]) else { return .denied }
-    if let header = values["IABGPP_HDR_GppString"] {
-      guard let string = header as? String, !string.isEmpty,
-            string.range(of: "^[A-Za-z0-9_~.\\-]+$", options: .regularExpression) != nil,
-            values["IABGPP_GppSID"] != nil else { return .denied }
-    }
     guard sections.allSatisfy({ $0 == 2 || $0 == 6 || usSections[$0] != nil }) else { return .denied }
+    var decoded: [String: Int] = [:]
+    if let header = values["IABGPP_HDR_GppString"] {
+      guard let string = header as? String, values["IABGPP_GppSID"] != nil,
+            let fields = MetaGPP.decode(string, applicable: sections) else { return .denied }
+      decoded = fields
+      // Never allow the encoded signal to conceal an explicit expanded denial
+      // or vice versa. UMP itself supplies only the two compact GPP keys.
+      for (key, value) in decoded {
+        if let expanded = values[key], integer(expanded) != value { return .denied }
+      }
+    }
 
     var applicability: [Int] = []
     for key in ["IABTCF_gdprApplies", "IABGPP_TCFEU2_gdprApplies"] {
@@ -71,15 +77,18 @@ enum MetaAppEventsPolicy {
       // A malformed/stale explicit provider rejection cannot be overridden by
       // the non-required result. With no AC signal, native UMP is authoritative.
       if let ac = values["IABTCF_AddtlConsent"], additionalConsent(ac) != true { return .denied }
-      guard status == .notRequired || (gdpr == 0 && !sections.isEmpty) else { return .denied }
+      // An obtained US message need not populate the separate European TCF
+      // applicability key. Its applicable US sections still require evaluation.
+      guard status == .notRequired || (!sections.isEmpty && !sections.contains(2)) else { return .denied }
     }
 
     for section in sections {
       if section == 6 {
-        guard integer(values["IABGPP_USP1_OptOut"]) == 2 else { return .denied }
+        guard decoded["IABGPP_USP1_OptOut"] ?? integer(values["IABGPP_USP1_OptOut"]) == 2 else { return .denied }
       } else if let (prefix, fields) = usSections[section] {
         for field in fields {
-          let value = values["IABGPP_\(prefix)_\(field)"]
+          let key = "IABGPP_\(prefix)_\(field)"
+          let value: Any? = decoded[key] ?? values[key]
           if field == "Gpc" {
             guard integer(value) == 0 else { return .denied }
           } else {
@@ -139,6 +148,142 @@ enum MetaAppEventsPolicy {
       guard parts[2] == "dv" || (parts[2].hasPrefix("dv.") && ids(String(parts[2].dropFirst(3))) != nil) else { return nil }
     }
     return consented.contains(89)
+  }
+}
+
+/// Bounded reader for IAB GPP headers and the US sections used by this policy.
+/// Format reference and independently encoded fixtures: docs/meta-gpp-fix-validation.md.
+/// This only decodes CMP data in memory; it never creates or changes consent.
+private enum MetaGPP {
+  private enum Invalid: Error { case signal }
+
+  static func decode(_ string: String, applicable: Set<Int>) -> [String: Int]? {
+    do { return try read(string, applicable: applicable) } catch { return nil }
+  }
+
+  private static func read(_ string: String, applicable: Set<Int>) throws -> [String: Int] {
+    guard !string.isEmpty, string.utf8.count <= 16384,
+          string.range(of: "^[A-Za-z0-9_~.\\-]+$", options: .regularExpression) != nil else { throw Invalid.signal }
+    let parts = string.split(separator: "~", omittingEmptySubsequences: false).map(String.init)
+    guard let first = parts.first, parts.count <= 65, parts.allSatisfy({ !$0.isEmpty }) else { throw Invalid.signal }
+    var header = try Bits(first)
+    guard try header.take(6) == 3, try header.take(6) == 1 else { throw Invalid.signal }
+    let count = try header.take(12)
+    guard count <= 64 else { throw Invalid.signal }
+    var ids: [Int] = []
+    var last = 0
+    for _ in 0..<count {
+      let range = try header.take(1) == 1
+      let start = try last + header.fibonacci()
+      let end = range ? try start + header.fibonacci() : start
+      guard start > last, end <= 1024, ids.count + end - start + 1 <= 64 else { throw Invalid.signal }
+      ids.append(contentsOf: start...end)
+      last = end
+    }
+    guard header.validPadding(), ids.count == parts.count - 1,
+          applicable.isSubset(of: Set(ids)) else { throw Invalid.signal }
+    var result: [String: Int] = [:]
+    for (index, id) in ids.enumerated() where applicable.contains(id) {
+      if id == 6 {
+        let usp = Array(parts[index + 1])
+        guard usp.count == 4, usp[0] == "1", usp.dropFirst().allSatisfy({ "YN-".contains($0) }),
+              usp[2] == "N" || usp[2] == "Y" else { throw Invalid.signal }
+        result["IABGPP_USP1_OptOut"] = usp[2] == "N" ? 2 : 1
+      } else if let (prefix, fields) = MetaAppEventsPolicy.usSections[id] {
+        let choices = try us(parts[index + 1], id: id, hasGpc: fields.contains("Gpc"))
+        for (field, value) in choices { result["IABGPP_\(prefix)_\(field)"] = value }
+      }
+    }
+    return result
+  }
+
+  // Number of two-bit core fields after the version, sale offset, and MSPA
+  // covered-transaction offset. Arrays occupy one field per element.
+  private static let layouts: [Int: (count: Int, sale: Int, mspa: Int)] = [
+    7: (32, 6, 29), 8: (20, 3, 17), 9: (17, 3, 14), 10: (16, 3, 13),
+    11: (18, 4, 15), 12: (19, 3, 16), 13: (20, 3, 17), 14: (20, 3, 17),
+    15: (23, 3, 20), 16: (18, 3, 15), 17: (23, 3, 20), 18: (18, 4, 15),
+    19: (18, 3, 15), 20: (20, 3, 17), 21: (24, 3, 21), 22: (18, 3, 15),
+    23: (18, 3, 15), 24: (8, 5, 0), 25: (9, 5, 0), 26: (9, 5, 0), 27: (9, 5, 0)
+  ]
+
+  private static func us(_ encoded: String, id: Int, hasGpc: Bool) throws -> [String: Int] {
+    let segments = encoded.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+    let hasSensitiveSegment = (25...27).contains(id)
+    guard let first = segments.first, var layout = layouts[id],
+          segments.count <= (hasGpc || hasSensitiveSegment ? 2 : 1) else { throw Invalid.signal }
+    var core = try Bits(first)
+    let version = try core.take(6)
+    guard version == 1 || (id == 7 && version == 2) else { throw Invalid.signal }
+    if id == 7 && version == 1 { layout = (27, 6, 24) }
+    var values: [Int] = []
+    for _ in 0..<layout.count {
+      let value = try core.take(2)
+      guard value <= 2 else { throw Invalid.signal }
+      values.append(value)
+    }
+    guard values[layout.mspa] != 0, core.validPadding() else { throw Invalid.signal }
+    var result = ["SaleOptOut": values[layout.sale]]
+    if id == 7 || id == 8 { result["SharingOptOut"] = values[layout.sale + 1] }
+    if id != 8 { result["TargetedAdvertisingOptOut"] = values[layout.sale + (id == 7 ? 2 : 1)] }
+    if hasGpc {
+      // The optional GPC segment's absence means no GPC signal was supplied,
+      // not malformed consent. Explicit GPC=true always blocks collection.
+      result["Gpc"] = 0
+      if segments.count == 2 {
+        var gpc = try Bits(segments[1])
+        guard try gpc.take(2) == 1 else { throw Invalid.signal }
+        result["Gpc"] = try gpc.take(1)
+        guard gpc.validPadding() else { throw Invalid.signal }
+      }
+    }
+    if hasSensitiveSegment && segments.count == 2 {
+      // IN/KY/RI define an optional eight-choice sensitive-data segment, not
+      // a GPC segment. Validate its shape without changing Bara's data scope.
+      var sensitive = try Bits(segments[1])
+      for _ in 0..<8 { guard try sensitive.take(2) <= 2 else { throw Invalid.signal } }
+      guard sensitive.validPadding() else { throw Invalid.signal }
+    }
+    return result
+  }
+
+  private struct Bits {
+    private let bits: [Int]
+    private var position = 0
+    init(_ string: String) throws {
+      let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".utf8)
+      guard !string.isEmpty, string.utf8.count <= 4096 else { throw Invalid.signal }
+      var bits: [Int] = []
+      for character in string.utf8 {
+        guard let value = alphabet.firstIndex(of: character) else { throw Invalid.signal }
+        for shift in stride(from: 5, through: 0, by: -1) { bits.append((value >> shift) & 1) }
+      }
+      self.bits = bits
+    }
+    mutating func take(_ count: Int) throws -> Int {
+      guard position + count <= bits.count else { throw Invalid.signal }
+      var result = 0
+      for _ in 0..<count { result = (result << 1) | bits[position]; position += 1 }
+      return result
+    }
+    mutating func fibonacci() throws -> Int {
+      var previous = 0, current = 1, next = 2, result = 0
+      for _ in 0..<20 {
+        let bit = try take(1)
+        if bit == 1 && previous == 1 { return result }
+        if bit == 1 { result += current }
+        (current, next) = (next, current + next)
+        previous = bit
+      }
+      throw Invalid.signal
+    }
+    func validPadding() -> Bool {
+      // Accept both spec six-bit padding and the IAB encoder's byte-then-six
+      // padding. Reject excess characters and nonzero trailing bits.
+      let simple = ((position + 5) / 6) * 6
+      let bytes = ((((position + 7) / 8) * 8 + 5) / 6) * 6
+      return (bits.count == simple || bits.count == bytes) && bits[position...].allSatisfy({ $0 == 0 })
+    }
   }
 }
 

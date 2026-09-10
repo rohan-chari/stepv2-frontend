@@ -1,5 +1,10 @@
 # Meta native validation — September 10, 2026
 
+> The expanded-US-signal-only implementation described below was corrected by
+> the [US GPP parser fix](meta-gpp-fix-validation.md). That document supersedes
+> its US parsing and smoke-fixture details; this file retains the original
+> release validation record.
+
 The native integration is implemented in `MetaAppEventsPolicy.swift`,
 `MetaAppEventsCoordinator.swift`, and `MetaCoreKitAdapter.swift`. AppDelegate
 creates the coordinator before plugin registration and attaches its narrow

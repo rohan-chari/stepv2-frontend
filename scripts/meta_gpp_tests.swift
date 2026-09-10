@@ -16,7 +16,7 @@ enum MetaGPPTests {
       precondition(!MetaAppEventsPolicy.evaluate(resolved: false, status: .obtained,
         values: values, attAuthorized: true).collection)
     }
-    let allowed = "DBABLA~CAAgqAAAAABA.QA"
+    let allowed = "DBABLA~CAAqAAAAAABA.QA"
     func permits(_ gpp: String, sid: String = "7", extra: [String: Any] = [:]) -> Bool {
       var values: [String: Any] = ["IABGPP_GppSID": sid, "IABGPP_HDR_GppString": gpp]
       values.merge(extra) { _, new in new }
@@ -30,9 +30,9 @@ enum MetaGPPTests {
     precondition(!permits(allowed, extra: ["IABUSPrivacy_String": "1YYN"]))
     precondition(!permits(allowed, sid: "8"))
     precondition(!permits(allowed, sid: "7_99"))
-    for malformed in ["", "garbage", "DBABLA", "DBABLA~", "DBABLA~C", "DBABLA~CAAgqAAAAABA.bad",
-                      allowed + "~extra", allowed + ".QA", "DBABLA~DAAgqAAAAABA.QA",
-                      "DBABLA~CAAgqAAAAABA.QB", "DBABLA~CAAgqAAAAABA=", String(repeating: "A", count: 20000)] {
+    for malformed in ["", "garbage", "DBABLA", "DBABLA~", "DBABLA~C", "DBABLA~CAAqAAAAAABA.bad",
+                      allowed + "~extra", allowed + ".QA", "DBABLA~DAAqAAAAAABA.QA",
+                      "DBABLA~CAAqAAAAAABA.QB", "DBABLA~CAAqAAAAAABA=", String(repeating: "A", count: 20000)] {
       precondition(!permits(malformed), "Malformed GPP must fail closed: " + String(malformed.prefix(80)))
     }
     print("Meta GPP: \(fixtures.count) independent IAB fixtures and malformed/contradictory signal checks passed.")

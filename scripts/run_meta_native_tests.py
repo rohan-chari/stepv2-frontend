@@ -8,13 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 with tempfile.TemporaryDirectory(prefix="bara-meta-native-tests-") as directory:
     executable = Path(directory) / "meta-tests"
-    subprocess.run(["swiftc", "-warnings-as-errors",
+    subprocess.run(["swiftc", "-warnings-as-errors", "-module-cache-path", str(Path(directory) / "cache"),
                     str(ROOT / "ios/Runner/MetaAppEventsPolicy.swift"),
                     str(ROOT / "scripts/meta_app_events_native_tests.swift"),
                     "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
 
-    subprocess.run(["swiftc", "-warnings-as-errors",
+    subprocess.run(["swiftc", "-warnings-as-errors", "-module-cache-path", str(Path(directory) / "cache"),
                     str(ROOT / "ios/Runner/MetaAppEventsPolicy.swift"),
                     str(ROOT / "scripts/meta_gpp_tests.swift"),
                     "-o", str(executable)], check=True)

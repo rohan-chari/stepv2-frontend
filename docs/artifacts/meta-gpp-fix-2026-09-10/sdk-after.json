@@ -1,0 +1,25 @@
+{
+  "activation_request_count": 2,
+  "checks": {
+    "actual_sdk_activation_serialized": true,
+    "actual_sdk_install_serialized": true,
+    "actual_sdk_shop_event_serialized": true,
+    "advertiser_id_disabled": true,
+    "allowlisted_event_accepted": true,
+    "autolog_disabled": true,
+    "expired_session_resume_serializes_second_activation": true,
+    "expired_session_serializes_deactivation": true,
+    "host_foreground": true,
+    "no_sdk_requests_before_consent": true,
+    "quick_resume_coalesces_activation": true,
+    "signup_rejected": true,
+    "withdrawal_blocks_new_event": true,
+    "withdrawal_disables_id": true,
+    "withdrawal_explicit_flush_only": true,
+    "withdrawn_event_never_serialized": true
+  },
+  "fixture_server_session_timeout_seconds": 1,
+  "intercepted_request_count": 6,
+  "passed": true,
+  "sdk_version": "18.1.1"
+}

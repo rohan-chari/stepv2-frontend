@@ -92,12 +92,18 @@ final class SmokeDelegate: UIResponder, UIApplicationDelegate {
   private var checks: [String: Bool] = [:]
   private var started = false
   private var awaitingLongResume = false
+  private var usOptOut = false
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     URLProtocol.registerClass(FixtureProtocol.self)
     URLSessionConfiguration.installFixtureProtocol()
     lifecycle = MetaAppEventsLifecycle(sdk: MetaCoreKitAdapter(application: application, launchOptions: options),
-      permission: { resolved in resolved ? MetaPermission(collection: true, advertiserID: false) : .denied },
+      permission: { [weak self] resolved in
+        // Actual Google UMP storage shape: no expanded USNAT fields.
+        let encoded = self?.usOptOut == true ? "DBABLA~CAAaAAAAAABA.QA" : "DBABLA~CAAqAAAAAABA.QA"
+        return MetaAppEventsPolicy.evaluate(resolved: resolved, status: .obtained,
+          values: ["IABGPP_GppSID": "7", "IABGPP_HDR_GppString": encoded], attAuthorized: false)
+      },
       isForeground: { application.applicationState == .active })
     observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification,
       object: nil, queue: .main) { [weak self] _ in
@@ -135,7 +141,8 @@ final class SmokeDelegate: UIResponder, UIApplicationDelegate {
     lifecycle.becameActive()
     NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: UIApplication.shared)
     NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: UIApplication.shared)
-    lifecycle.updateConsent(resolved: false)
+    usOptOut = true
+    lifecycle.updateConsent(resolved: true)
     checks["withdrawal_blocks_new_event"] = !lifecycle.log(event: "raceJoined")
     checks["withdrawal_explicit_flush_only"] = AppEvents.shared.flushBehavior == .explicitOnly
     checks["withdrawal_disables_id"] = !Settings.shared.isAdvertiserIDCollectionEnabled
@@ -146,6 +153,7 @@ final class SmokeDelegate: UIResponder, UIApplicationDelegate {
       // events separately from the lifecycle unit harness invocation count.
       let activationRequests = bodies.filter { $0.contains("fb_mobile_activate_app") }.count
       self.checks["quick_resume_coalesces_activation"] = activationRequests == 1
+      self.usOptOut = false
       self.lifecycle.updateConsent(resolved: true)
       self.awaitingLongResume = true
       let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

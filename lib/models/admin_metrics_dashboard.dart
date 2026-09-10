@@ -286,8 +286,14 @@ class AdminDauComparison {
     final rawActions = map?.map('actions');
     if (rawActions != null) {
       for (final key in const [
-        'raceParticipation', 'boxOpen', 'powerupUse', 'dailyRewardClaim',
-        'notificationOpen', 'rewardedAd', 'leaderboardView', 'raceCreated',
+        'raceParticipation',
+        'boxOpen',
+        'powerupUse',
+        'dailyRewardClaim',
+        'notificationOpen',
+        'rewardedAd',
+        'leaderboardView',
+        'raceCreated',
         'raceCompleted',
       ]) {
         if (rawActions.contains(key)) {
@@ -350,6 +356,7 @@ class AdminDauDailyRow {
     this.actionBasedDau,
     this.averageActionReach,
     this.usersWithAnyAction,
+    this.actionUsers = const {},
   });
 
   factory AdminDauDailyRow.from(Object? raw) {
@@ -359,9 +366,19 @@ class AdminDauDailyRow {
       actionBasedDau: map?.integer('actionBasedDau'),
       averageActionReach: map?.decimal('averageActionReach'),
       usersWithAnyAction: map?.integer('usersWithAnyAction'),
+      actionUsers: {
+        for (final key in const [
+          'boxOpen',
+          'powerupUse',
+          'dailyRewardClaim',
+          'leaderboardView',
+        ])
+          key: map?.integer('action_$key'),
+      },
     );
   }
 
+  final Map<String, int?> actionUsers;
   final String? date;
   final int? actionBasedDau;
   final double? averageActionReach;
@@ -438,6 +455,15 @@ class AdminDauEngagement {
                   actionBasedDau: row.integer('actionBasedDau'),
                   averageActionReach: row.decimal('averageActionReach'),
                   usersWithAnyAction: row.integer('usersWithAnyAction'),
+                  actionUsers: {
+                    for (final key in const [
+                      'boxOpen',
+                      'powerupUse',
+                      'dailyRewardClaim',
+                      'leaderboardView',
+                    ])
+                      key: row.integer('action_$key'),
+                  },
                 ),
               )
               .toList() ??
