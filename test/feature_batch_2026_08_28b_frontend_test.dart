@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'support/server_powerup_policy.dart';
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -154,7 +155,7 @@ void main() {
     },
   );
 
-  test('old catalog snapshots merge missing bundled guide rows', () async {
+  test('old catalog snapshots preserve the returned guide roster', () async {
     PowerupCopy.resetForTest();
     addTearDown(PowerupCopy.resetForTest);
     await PowerupCopy.refresh(
@@ -171,10 +172,10 @@ void main() {
     );
 
     final types = PowerupCopy.guideEntries.map((entry) => entry.type).toSet();
-    expect(types, containsAll(['RED_CARD', 'RUNNERS_HIGH', 'QUICK_RINSE']));
+    expect(types, {'RED_CARD'});
     expect(
       PowerupCopy.guideEntries
-          .firstWhere((entry) => entry.type == 'RUNNERS_HIGH')
+          .firstWhere((entry) => entry.type == 'RED_CARD')
           .stacking,
       isNotNull,
     );
@@ -256,6 +257,8 @@ void main() {
   testWidgets(
     'real case-opening help defaults to POWERUPS and reaches STACKING',
     (tester) async {
+      await seedServerPowerupPolicy();
+      addTearDown(PowerupCopy.resetForTest);
       await tester.pumpWidget(
         MaterialApp(
           home: CaseOpeningScreen(
@@ -289,6 +292,8 @@ void main() {
   testWidgets(
     'guide fits narrow large-text night mode and preserves each page scroll',
     (tester) async {
+      await seedServerPowerupPolicy();
+      addTearDown(PowerupCopy.resetForTest);
       await tester.binding.setSurfaceSize(const Size(320, 700));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
