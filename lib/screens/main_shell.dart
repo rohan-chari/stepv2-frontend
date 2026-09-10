@@ -152,6 +152,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Future<void>? _getCoinsWarmFuture;
   bool _globalSummaryShowing = false;
   _PendingGlobalEventSummary? _pendingGlobalEventSummary;
+  String? _independentGlobalSummaryId;
+  final Set<String> _consumedGlobalSummaryIds = {};
   Timer? _globalSummaryExpiryTimer;
   int _globalSummaryWorkPollToken = 0;
   _ActiveGlobalEventSummaryWork? _activeGlobalEventSummaryWork;
@@ -243,6 +245,97 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _inboxRefreshGeneration = 0;
   bool _homePresentationResolved = false;
   bool _homeFriendsResolved = false;
+  DateTime? _retainedHomeFetchedAt;
+  List<Map<String, dynamic>>? _retainedHomeFriends;
+  Map<String, dynamic>? _retainedHomePresentation;
+  Timer? _retainedHomeExpiry;
+  int _equipmentRevision = 0;
+  int _homeAccountRevision = 0;
+  (int, int, int, String)? _retainedHomeRevisions;
+  bool _catchUpRunning = false;
+  bool _catchUpPending = false;
+  bool _narrowHomeInFlight = false;
+
+  (int, int, int, String) get _homeRevisions => (
+    _homeAccountRevision,
+    _equipmentRevision,
+    _friendsRepository.revision,
+    BackendConfig.baseUrl,
+  );
+
+  bool get _canRetainHomeSections {
+    final at = _retainedHomeFetchedAt;
+    return _homePresentationResolved &&
+        _homeFriendsResolved &&
+        at != null &&
+        DateTime.now().difference(at) <= const Duration(seconds: 60) &&
+        _retainedHomeRevisions == _homeRevisions &&
+        identical(_friendsSteps, _retainedHomeFriends) &&
+        identical(_shopCatalogState.data, _retainedHomePresentation);
+  }
+
+  void _invalidateRetainedHomeSections() {
+    _retainedHomeFetchedAt = null;
+    _retainedHomeExpiry?.cancel();
+    if (_narrowHomeInFlight) _catchUpPending = true;
+  }
+
+  /// Only requests begun after a completion observation can satisfy it. A new
+  /// observation during a request requires one further request, without delay.
+  Future<void> _refreshHomeAfterResolution() async {
+    _catchUpPending = true;
+    if (_catchUpRunning) return;
+    _catchUpRunning = true;
+    try {
+      while (mounted && _catchUpPending) {
+        _catchUpPending = false;
+        if (_canRetainHomeSections) {
+          await _fetchHomeSyncRefresh();
+        } else {
+          await _fetchRaceCard();
+        }
+      }
+    } finally {
+      _catchUpRunning = false;
+    }
+  }
+
+  Future<void> _fetchHomeSyncRefresh() async {
+    final identityToken = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    if (identityToken == null || identityToken.isEmpty) return;
+    final revisions = _homeRevisions;
+    final generation = ++_raceCardGeneration;
+    final roundTrip = Stopwatch()..start();
+    _narrowHomeInFlight = true;
+    try {
+      final result = await _backendApiService.fetchHomeSyncRefresh(
+        identityToken: identityToken,
+      );
+      if (!mounted ||
+          identityToken != widget.authService.authToken ||
+          userId != widget.authService.userId ||
+          revisions.$1 != _homeAccountRevision) {
+        return;
+      }
+      if (revisions != _homeRevisions || !_canRetainHomeSections) {
+        _catchUpPending = true;
+        return;
+      }
+      if (generation != _raceCardGeneration) return;
+      if (result.unsupported) {
+        await _fetchRaceCard();
+      } else {
+        final core = result.home;
+        if (core != null) _applyHomeCore(core, roundTrip.elapsed);
+      }
+    } catch (_) {
+      // Keep the last coherent snapshot. No immediate overload retry.
+    } finally {
+      _narrowHomeInFlight = false;
+    }
+  }
+
   bool _skipNextMeRefresh = false;
   final HomeSuggestedRacesStore _homeSuggestions = HomeSuggestedRacesStore();
   final _homeSuggestionDeadlines =
@@ -708,6 +801,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final tokenChanged = _raceCardAuthToken != nextToken;
     if (userChanged || tokenChanged) _bindInterstitialAccount();
     if (userChanged || tokenChanged) {
+      _homeAccountRevision++;
+      _invalidateRetainedHomeSections();
+      if (userChanged) {
+        _friendsRepository.clear();
+        _shopCatalogCache.clear();
+        _consumedGlobalSummaryIds.clear();
+      }
+      _catchUpPending = false;
+      if (userChanged && nextUserId != null) {
+        _backendApiService.onAuthenticatedUser(nextUserId);
+      } else if (nextToken == null || nextToken.isEmpty) {
+        _backendApiService.resetSessionCapabilities();
+      }
       _invalidateGetCoinsSession();
     }
     unawaited(
@@ -738,7 +844,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _raceCardLoading = nextToken != null && nextToken.isNotEmpty;
         _homePresentationResolved = false;
         _homeFriendsResolved = false;
+        _friendsSteps = [];
+        _friendsStepsState = const Loadable.initial();
+        _friendsFetchedAt = null;
+        _incomingFriendRequests = 0;
+        _equippedAccessories = const [];
+        _equippedAnimal = null;
+        _shopCatalogState = const Loadable.initial();
         _pendingGlobalEventSummary = null;
+        _independentGlobalSummaryId = null;
         _globalSummaryExpiryTimer?.cancel();
         _globalSummaryExpiryTimer = null;
         _activeGlobalEventSummaryWork = null;
@@ -972,6 +1086,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _healthService = widget.healthService ?? HealthService();
     _backendApiService = widget.backendApiService ?? BackendApiService();
     _friendsRepository = FriendsSummaryRepository(_backendApiService);
+    _friendsRepository.addListener(_invalidateRetainedHomeSections);
     _backgroundSyncBootstrapService =
         widget.backgroundSyncBootstrapService ??
         BackgroundSyncBootstrapService();
@@ -1045,6 +1160,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onNotificationAction,
     );
     _foregroundPollTimer?.cancel();
+    _retainedHomeExpiry?.cancel();
+    _friendsRepository.removeListener(_invalidateRetainedHomeSections);
+    _friendsRepository.dispose();
     for (final entry in _homeSuggestionDeadlines.entries) {
       entry.key.cancel();
       if (!entry.value.isCompleted) {
@@ -2256,6 +2374,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// profile — coalesced, no new indicator.
   void _startJobPolling(String jobId, int generation) {
     final token = ++_jobPollToken;
+    final accountRevision = _homeAccountRevision;
     const schedule = [
       Duration(milliseconds: 750),
       Duration(milliseconds: 1500),
@@ -2266,7 +2385,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     Future<void> poll(int index) async {
       if (index >= schedule.length) return;
       await Future<void>.delayed(schedule[index]);
-      if (!mounted || token != _jobPollToken) return;
+      if (!mounted ||
+          token != _jobPollToken ||
+          accountRevision != _homeAccountRevision) {
+        return;
+      }
       final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
@@ -2275,11 +2398,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         jobId: jobId,
         generation: generation,
       );
-      if (!mounted || token != _jobPollToken) return;
+      if (!mounted ||
+          token != _jobPollToken ||
+          accountRevision != _homeAccountRevision) {
+        return;
+      }
 
       if (status.isSucceeded) {
         // Silent catch-up: cached rival totals close the gap.
-        unawaited(_fetchRaceCard());
+        unawaited(_refreshHomeAfterResolution());
         if (_racesData != null) unawaited(_fetchRacesCore());
         unawaited(_refreshMe());
         return;
@@ -2396,11 +2523,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refetchHomeForCreatedGlobalEventSummary() async {
-    await _fetchRaceCard();
+    await _fetchRaceCard(preserveSummaryReceipt: true);
     if (mounted) await _coordinateHomeOverlays();
   }
 
   Future<void> _fetchFriendsSteps() async {
+    final accountRevision = _homeAccountRevision;
+    final friendRevision = _friendsRepository.revision;
     final previous = _friendsSteps;
     if (mounted) {
       setState(() {
@@ -2427,6 +2556,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final snapshot = await _friendsRepository.fetch(
         identityToken: identityToken,
       );
+      if (!mounted ||
+          accountRevision != _homeAccountRevision ||
+          friendRevision != _friendsRepository.revision ||
+          identityToken != widget.authService.authToken) {
+        return;
+      }
       final rawFriends = snapshot['friends'];
       if (rawFriends is! List || rawFriends.any((row) => row is! Map)) {
         throw const ApiException('Couldn’t load friends. Please try again.');
@@ -3482,6 +3617,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// and the last catalog stays visible while a refresh runs. [force] bypasses
   /// the TTL (used after an invalidation event).
   Future<void> _fetchShopCatalog({bool force = false}) async {
+    final accountRevision = _homeAccountRevision;
+    final equipmentRevision = _equipmentRevision;
     final previous = _shopCatalogState.data;
 
     // Serve a fresh cached catalog without touching the network or the loading
@@ -3517,16 +3654,32 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     try {
-      final data = await _shopCatalogCache.get(
-        () => _backendApiService.fetchShopCatalog(identityToken: identityToken),
-        forceRefresh: force,
-      );
+      final data = await _shopCatalogCache.get(() async {
+        final catalog = await _backendApiService.fetchShopCatalog(
+          identityToken: identityToken,
+        );
+        if (!mounted ||
+            accountRevision != _homeAccountRevision ||
+            equipmentRevision != _equipmentRevision) {
+          throw StateError('Superseded catalog');
+        }
+        return catalog;
+      }, forceRefresh: force);
+      if (!mounted ||
+          accountRevision != _homeAccountRevision ||
+          equipmentRevision != _equipmentRevision) {
+        return;
+      }
       _applyShopCatalog(data);
       if (mounted) {
         setState(() => _shopCatalogState = Loadable.success(data));
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted ||
+          accountRevision != _homeAccountRevision ||
+          equipmentRevision != _equipmentRevision) {
+        return;
+      }
       setState(() {
         _shopCatalogState = Loadable.error(e.toString(), data: previous);
       });
@@ -3538,6 +3691,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// and refetching, we seed it with the authoritative post-change catalog so the
   /// home surfaces stay current and the TTL window resets.
   void _onShopCatalogChanged(Map<String, dynamic> catalog) {
+    _equipmentRevision++;
+    _invalidateRetainedHomeSections();
     _shopCatalogCache.set(catalog);
     _applyShopCatalog(catalog);
     if (mounted) {
@@ -3705,10 +3860,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchRaceCard({bool usePersistedTotals = false}) async {
+  Future<void> _fetchRaceCard({
+    bool usePersistedTotals = false,
+    bool preserveSummaryReceipt = false,
+  }) async {
     final identityToken = widget.authService.authToken;
     final userId = widget.authService.userId;
     final generation = ++_raceCardGeneration;
+    final revisions = _homeRevisions;
     if (identityToken == null || identityToken.isEmpty) {
       if (mounted) setState(() => _raceCardLoading = false);
       return;
@@ -3724,14 +3883,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       );
       requestRoundTrip.stop();
       if (!mounted ||
-          generation != _raceCardGeneration ||
           identityToken != widget.authService.authToken ||
           userId != widget.authService.userId) {
         return;
       }
+      if (generation != _raceCardGeneration) {
+        if (preserveSummaryReceipt) {
+          _acceptHomeSummary(data, requestRoundTrip.elapsed, independent: true);
+        }
+        return;
+      }
+      if (preserveSummaryReceipt) {
+        _acceptHomeSummary(data, requestRoundTrip.elapsed, independent: true);
+      }
       _homePresentationResolved = false;
       _homeFriendsResolved = false;
-      if (data['contract'] == 'home-shell-v1') {
+      _retainedHomeFetchedAt = null;
+      _retainedHomeExpiry?.cancel();
+      if (data['contract'] == 'home-shell-v1' && revisions == _homeRevisions) {
         final resolved = data['resolved'];
         final presentation = data['presentation'];
         if (resolved is Map &&
@@ -3791,48 +3960,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           });
         }
       }
-      if (mounted) {
-        setState(() {
-          _raceCard = data;
-          _raceCardLoading = false;
+      if (_homePresentationResolved &&
+          _homeFriendsResolved &&
+          revisions == _homeRevisions) {
+        _retainedHomeFetchedAt = DateTime.now();
+        // Independent readers may replace these surfaces later. Preserve their
+        // visible data, but only these exact full-shell snapshots qualify for
+        // retention by a subsequent narrow response.
+        _retainedHomeFriends = _friendsSteps;
+        _retainedHomePresentation = _shopCatalogState.data;
+        _retainedHomeRevisions = revisions;
+        _retainedHomeExpiry = Timer(const Duration(seconds: 60), () {
+          _retainedHomeFetchedAt = null;
         });
-        final rawGlobalSummary = data['globalEventSummary'];
-        _replacePendingGlobalEventSummary(
-          _PendingGlobalEventSummary.tryParse(
-            rawGlobalSummary,
-            requestRoundTrip: requestRoundTrip.elapsed,
-          ),
-        );
-        // During the coordinated Home load, race results cannot be evaluated
-        // until the core race list has settled. The outer loader drains this
-        // summary after both requests complete. Standalone card refreshes can
-        // still surface the summary immediately without advancing invites.
-        if (_homeLoadInFlight == null) {
-          unawaited(_showPendingGlobalEventSummaryIfEligible());
-        }
-        final next = NextRaceState.tryParse(data['nextRace']);
-        if (!_nextRaceHomeShownRecorded && next?.visible == true) {
-          _nextRaceHomeShownRecorded = true;
-          unawaited(
-            _activationAnalytics.record(
-              'next_race_cta_shown',
-              context: {'surface': 'home'},
-            ),
-          );
-          if (next!.openRaces.isNotEmpty) {
-            unawaited(
-              _activationAnalytics.record(
-                'open_race_discovery_shown',
-                context: {'race_count': '${next.openRaces.length}'},
-              ),
-            );
-          }
-        }
-        if (!_inviteSetupShownRecorded && _showInviteCodePrompt) {
-          _inviteSetupShownRecorded = true;
-          unawaited(_activationAnalytics.record('invite_code_setup_shown'));
-        }
       }
+      _applyHomeCore(data, requestRoundTrip.elapsed);
     } catch (_) {
       // Card is non-critical; ignore fetch errors and keep last value.
       if (mounted &&
@@ -3844,10 +3986,78 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  void _applyHomeCore(Map<String, dynamic> data, Duration requestRoundTrip) {
+    setState(() {
+      _raceCard = data;
+      _raceCardLoading = false;
+    });
+    _acceptHomeSummary(data, requestRoundTrip);
+    // During the coordinated Home load, race results cannot be evaluated
+    // until the core race list has settled. The outer loader drains this
+    // summary after both requests complete. Standalone card refreshes can
+    // still surface the summary immediately without advancing invites.
+    if (_homeLoadInFlight == null) {
+      unawaited(_showPendingGlobalEventSummaryIfEligible());
+    }
+    final next = NextRaceState.tryParse(data['nextRace']);
+    if (!_nextRaceHomeShownRecorded && next?.visible == true) {
+      _nextRaceHomeShownRecorded = true;
+      unawaited(
+        _activationAnalytics.record(
+          'next_race_cta_shown',
+          context: {'surface': 'home'},
+        ),
+      );
+      if (next!.openRaces.isNotEmpty) {
+        unawaited(
+          _activationAnalytics.record(
+            'open_race_discovery_shown',
+            context: {'race_count': '${next.openRaces.length}'},
+          ),
+        );
+      }
+    }
+    if (!_inviteSetupShownRecorded && _showInviteCodePrompt) {
+      _inviteSetupShownRecorded = true;
+      unawaited(_activationAnalytics.record('invite_code_setup_shown'));
+    }
+  }
+
+  void _acceptHomeSummary(
+    Map<String, dynamic> data,
+    Duration roundTrip, {
+    bool independent = false,
+  }) {
+    final summary = _PendingGlobalEventSummary.tryParse(
+      data['globalEventSummary'],
+      requestRoundTrip: roundTrip,
+    );
+    if (summary != null && _consumedGlobalSummaryIds.contains(summary.id)) {
+      return;
+    }
+    // A CREATED receipt is independent of core Home generations. Keep its
+    // still-valid overlay pending behind race results, even if a concurrent
+    // catch-up core no longer includes that optional section.
+    if (summary == null &&
+        (independent ||
+            (_independentGlobalSummaryId != null &&
+                _pendingGlobalEventSummary?.id ==
+                    _independentGlobalSummaryId))) {
+      return;
+    }
+    _replacePendingGlobalEventSummary(summary);
+    if (independent && summary != null) {
+      _independentGlobalSummaryId = summary.id;
+    }
+  }
+
   void _replacePendingGlobalEventSummary(_PendingGlobalEventSummary? summary) {
     _globalSummaryExpiryTimer?.cancel();
     _globalSummaryExpiryTimer = null;
     _pendingGlobalEventSummary = summary;
+    if (summary?.id != _independentGlobalSummaryId) {
+      _independentGlobalSummaryId = null;
+    }
     if (summary == null) return;
 
     final remaining = summary.remaining;
@@ -3947,6 +4157,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       );
       if (presentationToken == widget.authService.authToken &&
           presentationUserId == widget.authService.userId) {
+        // Mark locally before the acknowledgement awaits. A delayed response
+        // for this same receipt must not reopen an already dismissed dialog.
+        _consumedGlobalSummaryIds.add(id);
         try {
           await _backendApiService.acknowledgeGlobalEventSummary(
             identityToken: presentationToken,
@@ -4840,6 +5053,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshMe() async {
+    final accountRevision = _homeAccountRevision;
     try {
       final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
@@ -4847,6 +5061,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final user = await _backendApiService.fetchMe(
         identityToken: identityToken,
       );
+      if (!mounted ||
+          accountRevision != _homeAccountRevision ||
+          identityToken != widget.authService.authToken) {
+        return;
+      }
       // Key session capability caches to the authenticated user; a plain token
       // rotation for the same user is a no-op (§9.1).
       final rawUserId = user['id'];
@@ -5134,8 +5353,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onOpenProfile: _openProfile,
                         ),
                         FriendsTab(
+                          // Dispose the old account's in-flight view callbacks
+                          // before they can seed this shell's retained friends.
+                          key: ValueKey(('friends', widget.authService.userId)),
                           authService: widget.authService,
-                          onFriendsChanged: () {},
+                          onFriendsChanged: _invalidateRetainedHomeSections,
                           friendsRepository: _friendsRepository,
                           onSnapshot: (snapshot) {
                             final rows = snapshot['friends'];

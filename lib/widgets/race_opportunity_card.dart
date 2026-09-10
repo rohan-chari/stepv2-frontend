@@ -20,17 +20,20 @@ class RaceCardUser {
     this.accessories = const [],
   });
 
-  static RaceCardUser? fromJson(Map<String, dynamic>? json) {
-    if (json == null) return null;
-    final accessories =
-        (json['accessories'] as List?)
-            ?.whereType<Map<String, dynamic>>()
-            .toList() ??
-        const <Map<String, dynamic>>[];
+  static RaceCardUser? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final rawAccessories = json['accessories'];
+    final accessories = rawAccessories is List
+        ? rawAccessories.whereType<Map<String, dynamic>>().toList()
+        : const <Map<String, dynamic>>[];
     return RaceCardUser(
-      userId: json['userId'] as String? ?? '',
-      displayName: json['displayName'] as String? ?? 'Anonymous',
-      profilePhotoUrl: json['profilePhotoUrl'] as String?,
+      userId: json['userId'] is String ? json['userId'] as String : '',
+      displayName: json['displayName'] is String
+          ? json['displayName'] as String
+          : 'Anonymous',
+      profilePhotoUrl: json['profilePhotoUrl'] is String
+          ? json['profilePhotoUrl'] as String
+          : null,
       accessories: accessories,
     );
   }
@@ -48,11 +51,19 @@ class RaceCardData {
   });
 
   static RaceCardData fromJson(Map<String, dynamic> json) {
-    final stateStr = (json['state'] as String? ?? 'EMPTY').toUpperCase();
+    final state = json['state'];
+    final stateStr = state is String ? state.toUpperCase() : 'EMPTY';
+    final rawData = json['data'];
+    final count = json['pendingInviteCount'];
     return RaceCardData(
       state: _stateFromString(stateStr),
-      pendingInviteCount: (json['pendingInviteCount'] as int?) ?? 0,
-      data: (json['data'] as Map?)?.cast<String, dynamic>() ?? const {},
+      pendingInviteCount: count is num && count.isFinite ? count.toInt() : 0,
+      data: rawData is Map
+          ? {
+              for (final entry in rawData.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            }
+          : const {},
     );
   }
 

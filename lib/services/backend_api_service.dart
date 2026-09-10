@@ -15,6 +15,7 @@ import '../constants/powerup_copy.dart';
 import '../models/admin_system_health.dart';
 import '../models/balance_config.dart';
 import '../models/home_race_suggestion.dart';
+import '../models/home_sync_refresh.dart';
 import '../models/interstitial_ad.dart';
 import '../models/powerup_shop_admin_item.dart';
 import '../models/race_discovery_summary.dart';
@@ -476,8 +477,13 @@ class BackendApiService {
   bool get interstitialSupported =>
       _interstitialSupport != EndpointSupport.unsupported;
 
+  int _homeSyncSupportRevision = 0;
+  EndpointSupport _homeSyncRefreshSupport = EndpointSupport.unknown;
+
   /// Clears every session-scoped capability cache. Call on sign-out.
   void resetSessionCapabilities() {
+    _homeSyncRefreshSupport = EndpointSupport.unknown;
+    _homeSyncSupportRevision++;
     _syncV2Support = EndpointSupport.unknown;
     _discoverySummarySupport = EndpointSupport.unknown;
     _homeSuggestedRacesSupport = EndpointSupport.unknown;
@@ -499,6 +505,8 @@ class BackendApiService {
   void onAuthenticatedUser(String userId) {
     final baseUrl = BackendConfig.baseUrl;
     if (_sessionUserId != userId || _sessionBaseUrl != baseUrl) {
+      _homeSyncRefreshSupport = EndpointSupport.unknown;
+      _homeSyncSupportRevision++;
       _syncV2Support = EndpointSupport.unknown;
       _discoverySummarySupport = EndpointSupport.unknown;
       _homeSuggestedRacesSupport = EndpointSupport.unknown;
@@ -2193,6 +2201,47 @@ class BackendApiService {
     );
 
     return _decodeJsonResponse(response);
+  }
+
+  /// Post-resolution core refresh; legacy/demo subclasses explicitly opt in.
+  /// Unsupported is session/origin scoped; transient failures never negotiate
+  /// support away and never cause an immediate second request.
+  Future<HomeSyncRefreshResult> fetchHomeSyncRefresh({
+    required String identityToken,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return HomeSyncRefreshResult.unsupportedResult;
+    }
+    if (_homeSyncRefreshSupport == EndpointSupport.unsupported) {
+      return HomeSyncRefreshResult.unsupportedResult;
+    }
+    final supportRevision = _homeSyncSupportRevision;
+    try {
+      final now = DateTime.now();
+      String two(int n) => n.toString().padLeft(2, '0');
+      final date = '${now.year}-${two(now.month)}-${two(now.day)}';
+      final response = await _sendGetRequest(
+        path:
+            '/home/race-card?view=sync-refresh-v1&homeActiveRaces=1&localDate=$date',
+        identityToken: identityToken,
+      );
+      final raw = await _readRawResponse(response);
+      final result = raw.statusCode == 404 || raw.statusCode == 405
+          ? HomeSyncRefreshResult.unsupportedResult
+          : raw.statusCode == 200
+          ? HomeSyncRefreshResult.parse(raw.json)
+          : HomeSyncRefreshResult.unavailable;
+      if (supportRevision == _homeSyncSupportRevision) {
+        if (result.unsupported) {
+          _homeSyncRefreshSupport = EndpointSupport.unsupported;
+        } else if (result.home != null) {
+          _homeSyncRefreshSupport = EndpointSupport.supported;
+        }
+      }
+      return result;
+    } catch (_) {
+      return HomeSyncRefreshResult.unavailable;
+    }
   }
 
   Future<Map<String, dynamic>> fetchStats({

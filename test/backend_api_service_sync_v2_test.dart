@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/models/race_resolution_status.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
@@ -116,6 +117,10 @@ class _FakeHttpClient implements HttpClient {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _LegacyHomeApi extends BackendApiService {
+  _LegacyHomeApi(HttpClient client) : super(httpClient: client);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -125,6 +130,229 @@ void main() {
           const MethodChannel('flutter_timezone'),
           (call) async => 'America/New_York',
         );
+  });
+
+  group('Home sync refresh wire contract', () {
+    test(
+      'legacy demo/test subclass never inherits live narrow networking',
+      () async {
+        final http = _FakeHttpClient([_Scripted(500, '{}')]);
+        final api = _LegacyHomeApi(http);
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'demo')).unsupported,
+          true,
+        );
+        expect(http.requests, isEmpty);
+      },
+    );
+    final coreStates = <Map<String, dynamic>>[
+      {'state': 'EMPTY', 'data': {}},
+      {
+        'state': 'ACTIVE_RACES',
+        'data': {
+          'races': [
+            {'raceId': 'r'},
+          ],
+        },
+      },
+      {
+        'state': 'ACTIVE_RACE',
+        'data': {'raceId': 'r', 'me': null, 'leader': null, 'others': []},
+      },
+      {
+        'state': 'PENDING_INVITE',
+        'data': {'raceId': 'r'},
+      },
+      {
+        'state': 'PUBLIC_RACE',
+        'data': {'raceId': 'r'},
+      },
+      {
+        'state': 'FRIEND_RACING',
+        'data': {'raceId': 'r', 'friend': {}, 'participants': []},
+      },
+      {
+        'state': 'FRIEND_FINISHED',
+        'data': {'friend': {}, 'raceName': 'Race'},
+      },
+    ];
+    Map<String, dynamic> envelope(Object? core) => {
+      'contract': 'home-sync-refresh-v1',
+      'home': core,
+      'retainedSections': ['presentation', 'friends'],
+    };
+    setUp(() {
+      PackageInfo.setMockInitialValues(
+        appName: 'Bara',
+        packageName: 'bara',
+        version: '2.3.13',
+        buildNumber: '12',
+        buildSignature: '',
+      );
+    });
+    for (final core in coreStates) {
+      test(
+        'accepts complete ${core['state']} and sends existing headers',
+        () async {
+          final http = _FakeHttpClient([
+            _Scripted(200, jsonEncode(envelope(core))),
+          ]);
+          final api = BackendApiService(httpClient: http)
+            ..onAuthenticatedUser('user');
+          final result = await api.fetchHomeSyncRefresh(identityToken: 'token');
+          expect(result.home, core);
+          expect(result.unsupported, false);
+          final request = http.requests.single;
+          expect(request.method, 'GET');
+          expect(request.uri.path, '/home/race-card');
+          expect(request.uri.queryParameters['view'], 'sync-refresh-v1');
+          expect(request.uri.queryParameters['homeActiveRaces'], '1');
+          expect(
+            request.uri.queryParameters['localDate'],
+            matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')),
+          );
+          expect(
+            request.uri.queryParameters.containsKey('homePersistedTotals'),
+            false,
+          );
+          expect(
+            request.headers[HttpHeaders.authorizationHeader],
+            'Bearer token',
+          );
+          expect(request.headers['X-Timezone'], 'America/New_York');
+          expect(request.headers['X-App-Version'], '2.3.13');
+          expect(request.headers['X-Client-Features'], isNotEmpty);
+        },
+      );
+    }
+    for (final invalid in <Object?>[
+      null,
+      {},
+      {'state': 'UNKNOWN', 'data': {}},
+      {'state': 'EMPTY'},
+      {'state': 'EMPTY', 'data': null},
+      {
+        'state': 'ACTIVE_RACES',
+        'data': {
+          'races': [null],
+        },
+      },
+      {
+        'state': 'ACTIVE_RACES',
+        'data': {
+          'races': [
+            {'raceId': ''},
+          ],
+        },
+      },
+      {
+        'state': 'ACTIVE_RACE',
+        'data': {'raceId': 'r', 'me': 'bad', 'others': []},
+      },
+      {
+        'state': 'ACTIVE_RACE',
+        'data': {'raceId': 'r', 'others': null},
+      },
+      {
+        'state': 'PENDING_INVITE',
+        'data': {'raceId': 7},
+      },
+      {
+        'state': 'FRIEND_RACING',
+        'data': {'raceId': 'r', 'friend': null, 'participants': []},
+      },
+      {
+        'state': 'FRIEND_FINISHED',
+        'data': {'friend': {}, 'raceName': null},
+      },
+    ]) {
+      test('rejects incomplete core $invalid', () async {
+        final api = BackendApiService(
+          httpClient: _FakeHttpClient([
+            _Scripted(200, jsonEncode(envelope(invalid))),
+          ]),
+        );
+        final result = await api.fetchHomeSyncRefresh(identityToken: 'token');
+        expect(result.home, isNull);
+        expect(result.unsupported, true);
+      });
+    }
+    for (final retained in <Object?>[null, [], ['friends', 'presentation'], ['presentation'], ['presentation', 'friends', 'coins']]) {
+      test('rejects unsupported retained sections $retained', () async {
+        final http = _FakeHttpClient([_Scripted(200, jsonEncode({
+          ...envelope(coreStates.first), 'retainedSections': retained,
+        }))]);
+        final api = BackendApiService(httpClient: http);
+        expect((await api.fetchHomeSyncRefresh(identityToken: 'token')).unsupported, true);
+      });
+    }
+    for (final status in [200, 404, 405]) {
+      test('old server $status remembered until account reset', () async {
+        final http = _FakeHttpClient([
+          _Scripted(status, jsonEncode({'state': 'EMPTY'})),
+          _Scripted(200, jsonEncode(envelope(coreStates.first))),
+        ]);
+        final api = BackendApiService(httpClient: http)
+          ..onAuthenticatedUser('a');
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'a')).unsupported,
+          true,
+        );
+        api.onAuthenticatedUser('a');
+        expect(
+          (await api.fetchHomeSyncRefresh(
+            identityToken: 'rotated-a',
+          )).unsupported,
+          true,
+        );
+        expect(http.requests, hasLength(1));
+        api.onAuthenticatedUser('b');
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'b')).home,
+          coreStates.first,
+        );
+        expect(http.requests, hasLength(2));
+        api.resetSessionCapabilities();
+        await api.fetchHomeSyncRefresh(identityToken: 'b');
+        expect(http.requests, hasLength(3));
+      });
+    }
+    for (final status in [401, 403, 500, 503]) {
+      test('HTTP $status does not fall back or remember unsupported', () async {
+        final http = _FakeHttpClient([
+          _Scripted(status, '{}'),
+          _Scripted(200, jsonEncode(envelope(coreStates.first))),
+        ]);
+        final api = BackendApiService(httpClient: http);
+        final result = await api.fetchHomeSyncRefresh(identityToken: 'token');
+        expect(result.home, isNull);
+        expect(result.unsupported, false);
+        expect(http.requests, hasLength(1));
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'token')).home,
+          coreStates.first,
+        );
+      });
+    }
+    test(
+      'socket failure retains negotiation and never retries immediately',
+      () async {
+        final http = _FakeHttpClient([
+          _Scripted(200, '{}', throwOnSend: true),
+          _Scripted(200, jsonEncode(envelope(coreStates.first))),
+        ]);
+        final api = BackendApiService(httpClient: http);
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'token')).unsupported,
+          false,
+        );
+        expect(http.requests, hasLength(1));
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'token')).home,
+          coreStates.first,
+        );
+      },
+    );
   });
 
   final stepData = StepData(steps: 12345, date: DateTime(2026, 7, 17));

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/models/home_race_suggestion.dart';
+import 'package:step_tracker/models/home_sync_refresh.dart';
 import 'package:step_tracker/models/interstitial_ad.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
@@ -16,6 +17,7 @@ import 'package:step_tracker/screens/onboarding_flow.dart';
 import 'package:step_tracker/screens/get_coins_screen.dart';
 import 'package:step_tracker/screens/inbox_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
+import 'package:step_tracker/screens/tabs/friends_tab.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -758,6 +760,152 @@ class _SummaryWorkPollingApi extends _FakeBackendApiService {
   }
 }
 
+class _SyncRefreshApi extends _FakeBackendApiService {
+  int fullCalls = 0;
+  int narrowCalls = 0;
+  int syncCalls = 0;
+  int statusCalls = 0;
+  int racesCalls = 0;
+  int meCalls = 0;
+  final Completer<RaceResolutionStatus> completion = Completer();
+  final Completer<Map<String, dynamic>> narrow = Completer();
+  bool resolved = true;
+  bool includeSummaryWork = false;
+  int friendsCalls = 0;
+  int catalogCalls = 0;
+  final List<Future<Map<String, dynamic>>> fullScripts = [];
+  final List<Future<Map<String, dynamic>>> narrowScripts = [];
+  final List<Future<Map<String, dynamic>>> catalogScripts = [];
+  final List<Future<Map<String, dynamic>>> friendScripts = [];
+  final Completer<GlobalEventSummaryWorkStatus?> summaryStatus = Completer();
+
+  Map<String, dynamic> get fullPayload => {
+    'contract': 'home-shell-v1',
+    'state': 'EMPTY',
+    'data': <String, dynamic>{},
+    'resolved': {'presentation': resolved, 'friends': resolved},
+    'presentation': {
+      'coins': 10,
+      'equipped': <String, dynamic>{},
+      'cape': null,
+    },
+    'friends': {
+      'friends': [
+        {'id': 'friend', 'displayName': 'Fresh Friend', 'steps': 42},
+      ],
+      'incomingFriendRequests': 0,
+      'pending': {'incoming': [], 'outgoing': []},
+    },
+    'homeServiceBanner': {'message': 'Old service banner'},
+  };
+
+  @override
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+    bool homePull = false,
+  }) async {
+    syncCalls++;
+    return StepSyncV2Result(
+      kind: StepSyncV2Kind.current,
+      jobId: 'job',
+      generation: 1,
+      globalEventSummaryWork: includeSummaryWork ? _summaryWorkReceipt() : null,
+    );
+  }
+
+  @override
+  Future<GlobalEventSummaryWorkStatus?> fetchGlobalEventSummaryWorkStatus({
+    required String identityToken,
+    required String workId,
+  }) => summaryStatus.future;
+
+  @override
+  Future<RaceResolutionStatus> fetchRaceResolutionStatus({
+    required String identityToken,
+    required String jobId,
+    required int generation,
+  }) {
+    statusCalls++;
+    return completion.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) async {
+    fullCalls++;
+    if (fullScripts.isNotEmpty) return fullScripts.removeAt(0);
+    return fullPayload;
+  }
+
+  @override
+  Future<HomeSyncRefreshResult> fetchHomeSyncRefresh({
+    required String identityToken,
+  }) {
+    narrowCalls++;
+    return (narrowScripts.isNotEmpty
+            ? narrowScripts.removeAt(0)
+            : narrow.future)
+        .then(HomeSyncRefreshResult.parse);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchFriends({
+    required String identityToken,
+  }) async {
+    friendsCalls++;
+    if (friendScripts.isNotEmpty) return friendScripts.removeAt(0);
+    return {
+      'friends': <Map<String, dynamic>>[],
+      'pending': {'incoming': [], 'outgoing': []},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchShopCatalog({
+    required String identityToken,
+  }) {
+    catalogCalls++;
+    if (catalogScripts.isNotEmpty) return catalogScripts.removeAt(0);
+    return super.fetchShopCatalog(identityToken: identityToken);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaces({required String identityToken}) {
+    racesCalls++;
+    return super.fetchRaces(identityToken: identityToken);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
+    meCalls++;
+    return {...await super.fetchMe(identityToken: identityToken), 'coins': 77};
+  }
+}
+
+Future<void> _mountSyncRefresh(
+  WidgetTester tester,
+  _SyncRefreshApi api, {
+  HealthService? healthService,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: MainShell(
+        authService: await _authService(),
+        healthService: healthService ?? _FakeHealthService(),
+        backendApiService: api,
+        backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 800));
+  await tester.pump();
+}
+
 Map<String, dynamic> _globalEventSummary({
   String id = 'summary-1',
   int extraRaceSteps = 125,
@@ -1061,6 +1209,779 @@ void main() {
       buildSignature: '',
     );
   });
+
+  testWidgets('successful resolution retains fresh shell and replaces core', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    expect(api.fullCalls, 1);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    expect(api.narrowCalls, 1);
+    expect(api.fullCalls, 1);
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {
+        'state': 'EMPTY',
+        'data': <String, dynamic>{},
+        'inboxUnreadCount': 3,
+      },
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    expect(home.raceCard?['inboxUnreadCount'], 3);
+    expect(home.raceCard?.containsKey('homeServiceBanner'), false);
+    expect(home.friendsSteps.single['displayName'], 'Fresh Friend');
+    expect(home.authService.coins, 77);
+    expect(api.racesCalls, 2);
+    expect(api.meCalls, greaterThanOrEqualTo(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'unresolved shell uses full catch-up after successful resolution',
+    (tester) async {
+      final api = _SyncRefreshApi()..resolved = false;
+      await _mountSyncRefresh(tester, api);
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump();
+      expect(api.fullCalls, 2);
+      expect(api.narrowCalls, 0);
+      expect(find.byType(HomeTab), findsOneWidget);
+    },
+  );
+
+  for (final invalid in <Map<String, dynamic>>[
+    {'state': 'EMPTY', 'data': {}},
+    {
+      'contract': 'home-sync-refresh-v1',
+      'home': {},
+      'retainedSections': ['presentation', 'friends'],
+    },
+    {
+      'contract': 'home-sync-refresh-v1',
+      'home': {
+        'state': 'ACTIVE_RACES',
+        'data': {
+          'races': [null],
+        },
+      },
+      'retainedSections': ['presentation', 'friends'],
+    },
+  ]) {
+    testWidgets('invalid narrow ${invalid.toString()} falls back once', (
+      tester,
+    ) async {
+      final api = _SyncRefreshApi();
+      await _mountSyncRefresh(tester, api);
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump();
+      api.narrow.complete(invalid);
+      await tester.pump();
+      await tester.pump();
+      expect(api.narrowCalls, 1);
+      expect(api.fullCalls, 2);
+      expect(
+        tester.widget<HomeTab>(find.byType(HomeTab)).raceCard?['state'],
+        'EMPTY',
+      );
+    });
+  }
+
+  testWidgets('transient narrow failure keeps coherent Home without fallback', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.narrow.completeError(const SocketException('unavailable'));
+    await tester.pump();
+    expect(api.fullCalls, 1);
+    expect(api.narrowCalls, 1);
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    expect(home.raceCard?.containsKey('homeServiceBanner'), true);
+    expect(home.friendsSteps.single['displayName'], 'Fresh Friend');
+    expect(home.raceCardLoading, false);
+  });
+
+  testWidgets('equipment invalidation during narrow forces one full refresh', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    home.onShopChanged?.call({'coins': 88, 'equipped': {}, 'items': []});
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 99},
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(api.fullCalls, 2);
+    expect(api.narrowCalls, 1);
+    expect(
+      tester
+          .widget<HomeTab>(find.byType(HomeTab))
+          .raceCard?['inboxUnreadCount'],
+      isNull,
+    );
+  });
+
+  testWidgets('expired retained shell uses full resolution refresh', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    await tester.pump(const Duration(seconds: 61));
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    expect(api.fullCalls, 2);
+    expect(api.narrowCalls, 0);
+  });
+
+  testWidgets(
+    'friend repository invalidation during narrow rejects retention',
+    (tester) async {
+      final api = _SyncRefreshApi();
+      await _mountSyncRefresh(tester, api);
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump();
+      final children =
+          tester.widget<PageView>(find.byType(PageView)).childrenDelegate
+              as SliverChildListDelegate;
+      final friends = children.children.whereType<FriendsTab>().single;
+      friends.friendsRepository!.invalidate();
+      api.narrow.complete({
+        'contract': 'home-sync-refresh-v1',
+        'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 99},
+        'retainedSections': ['presentation', 'friends'],
+      });
+      await tester.pump();
+      expect(api.fullCalls, 2);
+      expect(api.narrowCalls, 1);
+      expect(
+        tester
+            .widget<HomeTab>(find.byType(HomeTab))
+            .raceCard?['inboxUnreadCount'],
+        isNull,
+      );
+    },
+  );
+
+  testWidgets('failed legacy fallback keeps previous coherent shell', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    final failure = Completer<Map<String, dynamic>>();
+    api.fullScripts.add(failure.future);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.narrow.complete({'state': 'EMPTY'});
+    await tester.pump();
+    failure.completeError(const SocketException('offline'));
+    await tester.pump();
+    expect(api.fullCalls, 2);
+    expect(api.narrowCalls, 1);
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    expect(home.raceCard?.containsKey('homeServiceBanner'), true);
+    expect(home.raceCardLoading, false);
+  });
+
+  testWidgets('new completion during narrow schedules one newer catch-up', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    final later = Completer<Map<String, dynamic>>();
+    api.narrowScripts.addAll([api.narrow.future, later.future]);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    final refresh = tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh();
+    await tester.pump();
+    await refresh;
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(api.fullCalls, 2, reason: 'Deliberate pull stays on full path.');
+    expect(api.narrowCalls, 1, reason: 'The old catch-up remains in flight.');
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 9},
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    expect(api.narrowCalls, 2);
+    expect(
+      tester
+          .widget<HomeTab>(find.byType(HomeTab))
+          .raceCard?['inboxUnreadCount'],
+      isNull,
+    );
+    later.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 5},
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    expect(
+      tester
+          .widget<HomeTab>(find.byType(HomeTab))
+          .raceCard?['inboxUnreadCount'],
+      5,
+    );
+    expect(api.friendsCalls, 0);
+    expect(api.catalogCalls, 0);
+  });
+
+  testWidgets('summary receipt survives full response older than narrow core', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi()..includeSummaryWork = true;
+    await _mountSyncRefresh(tester, api);
+    final summaryHome = Completer<Map<String, dynamic>>();
+    api.fullScripts.add(summaryHome.future);
+    api.summaryStatus.complete(
+      GlobalEventSummaryWorkStatus(
+        state: GlobalEventSummaryWorkState.created,
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      ),
+    );
+    await tester.pump();
+    expect(api.fullCalls, 2);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 5},
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    summaryHome.complete({
+      ...api.fullPayload,
+      'globalEventSummary': _globalEventSummary(),
+    });
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(
+      tester
+          .widget<HomeTab>(find.byType(HomeTab))
+          .raceCard?['inboxUnreadCount'],
+      5,
+    );
+    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets(
+    'malformed optional reward sections degrade without crashing Home',
+    (tester) async {
+      final api = _SyncRefreshApi();
+      await _mountSyncRefresh(tester, api);
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump();
+      api.narrow.complete({
+        'contract': 'home-sync-refresh-v1',
+        'home': {
+          'state': 'EMPTY',
+          'data': {},
+          'dailyReward': 'bad',
+          'stepMilestones': [],
+        },
+        'retainedSections': ['presentation', 'friends'],
+      });
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeTab), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'account change discards in-flight narrow core and retained friends',
+    (tester) async {
+      final api = _SyncRefreshApi();
+      await _mountSyncRefresh(tester, api);
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump();
+      final auth = tester.widget<HomeTab>(find.byType(HomeTab)).authService;
+      final newHome = {
+        ...api.fullPayload,
+        'inboxUnreadCount': 2,
+        'friends': {
+          'friends': <Map<String, dynamic>>[],
+          'pending': {'incoming': [], 'outgoing': []},
+        },
+      };
+      api.fullScripts.add(Future.value(newHome));
+      await auth.syncFromBackendUser(const {'id': 'user-2'});
+      await tester.pump();
+      api.narrow.complete({
+        'contract': 'home-sync-refresh-v1',
+        'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 99},
+        'retainedSections': ['presentation', 'friends'],
+      });
+      await tester.pump();
+      final home = tester.widget<HomeTab>(find.byType(HomeTab));
+      expect(home.raceCard?['inboxUnreadCount'], 2);
+      expect(home.friendsSteps, isEmpty);
+      expect(home.authService.userId, 'user-2');
+    },
+  );
+
+  testWidgets('new full response wins over an older narrow response', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi()..includeSummaryWork = true;
+    await _mountSyncRefresh(tester, api);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.fullScripts.add(
+      Future.value({...api.fullPayload, 'inboxUnreadCount': 2}),
+    );
+    api.summaryStatus.complete(
+      GlobalEventSummaryWorkStatus(
+        state: GlobalEventSummaryWorkState.created,
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      ),
+    );
+    await tester.pump();
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 99},
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    expect(
+      tester
+          .widget<HomeTab>(find.byType(HomeTab))
+          .raceCard?['inboxUnreadCount'],
+      2,
+    );
+    expect(api.fullCalls, 2);
+  });
+
+  testWidgets('retaining a narrow result never renews the shell age', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    // Refresh the shell one minute before the existing five-minute foreground
+    // sync. Its resolution arrives late, leaving only twenty seconds of age.
+    await tester.pump(const Duration(seconds: 239));
+    final refresh = tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh();
+    await tester.pump();
+    await refresh;
+    await tester.pump(const Duration(seconds: 40));
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {'state': 'EMPTY', 'data': {}},
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    expect(api.narrowCalls, 1);
+    await tester.pump(const Duration(seconds: 21));
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump();
+    expect(api.syncCalls, 3);
+    expect(api.statusCalls, 3);
+    expect(api.fullCalls, 3);
+    expect(api.narrowCalls, 1);
+  });
+
+  for (final android in [false, true]) {
+    testWidgets(
+      'post-resolution retained Home works on ${android ? 'Android' : 'iOS'}',
+      (tester) async {
+        final api = _SyncRefreshApi();
+        await _mountSyncRefresh(
+          tester,
+          api,
+          healthService: android
+              ? (_AndroidPermissionHealth()..permission = true)
+              : _FakeHealthService(),
+        );
+        api.completion.complete(
+          const RaceResolutionStatus(RaceResolutionState.succeeded),
+        );
+        await tester.pump();
+        api.narrow.complete({
+          'contract': 'home-sync-refresh-v1',
+          'home': {'state': 'EMPTY', 'data': {}, 'inboxUnreadCount': 3},
+          'retainedSections': ['presentation', 'friends'],
+        });
+        await tester.pump();
+        final home = tester.widget<HomeTab>(find.byType(HomeTab));
+        expect(home.stepData?.steps, 1234);
+        expect(home.raceCard?['inboxUnreadCount'], 3);
+        expect(home.authService.coins, 77);
+        expect(home.friendsSteps.single['displayName'], 'Fresh Friend');
+        expect(api.friendsCalls, 0);
+        expect(api.catalogCalls, 0);
+        expect(api.narrowCalls, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('mutation during initial full fetch prevents later retention', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    final initial = Completer<Map<String, dynamic>>();
+    api.fullScripts.add(initial.future);
+    await _mountSyncRefresh(tester, api);
+    tester.widget<HomeTab>(find.byType(HomeTab)).onShopChanged?.call({
+      'coins': 88,
+      'equipped': {},
+      'items': [],
+    });
+    initial.complete(api.fullPayload);
+    await tester.pump();
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump();
+    expect(api.fullCalls, 2);
+    expect(api.narrowCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('acknowledged summary cannot reopen from a stale full receipt', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi()..includeSummaryWork = true;
+    await _mountSyncRefresh(tester, api);
+    final late = Completer<Map<String, dynamic>>();
+    api.fullScripts.add(late.future);
+    api.summaryStatus.complete(
+      GlobalEventSummaryWorkStatus(
+        state: GlobalEventSummaryWorkState.created,
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      ),
+    );
+    await tester.pump();
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {
+        'state': 'EMPTY',
+        'data': {},
+        'globalEventSummary': _globalEventSummary(),
+      },
+      'retainedSections': ['presentation', 'friends'],
+    });
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(api.globalSummaryAckCalls, 1);
+    late.complete({
+      ...api.fullPayload,
+      'globalEventSummary': _globalEventSummary(),
+    });
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    expect(api.globalSummaryAckCalls, 1);
+  });
+
+  testWidgets('pending invite optional malformed data degrades safely', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    api.completion.complete(
+      const RaceResolutionStatus(RaceResolutionState.succeeded),
+    );
+    await tester.pump();
+    api.narrow.complete({
+      'contract': 'home-sync-refresh-v1',
+      'home': {
+        'state': 'PENDING_INVITE',
+        'pendingInviteCount': 'bad',
+        'data': {
+          'raceId': 'invite',
+          'inviter': 'bad',
+          'participantCount': [],
+          'durationHours': 'bad',
+        },
+      },
+      'retainedSections': ['presentation', 'friends'],
+    });
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Someone'), findsWidgets);
+    expect(api.fullCalls, 1);
+  });
+
+  testWidgets(
+    'account switch clears retained sections before new full response',
+    (tester) async {
+      final api = _SyncRefreshApi();
+      await _mountSyncRefresh(tester, api);
+      final old = tester.widget<HomeTab>(find.byType(HomeTab));
+      old.onShopChanged?.call({
+        'coins': 10,
+        'equipped': {
+          'HEAD': {'assetKey': 'wizard_hat'},
+        },
+        'items': [],
+      });
+      final next = Completer<Map<String, dynamic>>();
+      api.fullScripts.add(next.future);
+      await old.authService.syncFromBackendUser(const {'id': 'user-2'});
+      await tester.pump();
+      final home = tester.widget<HomeTab>(find.byType(HomeTab));
+      expect(home.raceCard, isNull);
+      expect(home.friendsSteps, isEmpty);
+      expect(home.equippedAccessories, isEmpty);
+      next.complete(api.fullPayload);
+      await tester.pump();
+    },
+  );
+
+  testWidgets('old catalog load cannot reseed a new account cache', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi()..resolved = false;
+    final oldCatalog = Completer<Map<String, dynamic>>();
+    api.catalogScripts.add(oldCatalog.future);
+    await _mountSyncRefresh(tester, api);
+    expect(api.catalogCalls, 1);
+    final auth = tester.widget<HomeTab>(find.byType(HomeTab)).authService;
+    await auth.syncFromBackendUser(const {'id': 'user-2'});
+    await tester.pump();
+    api.catalogScripts.add(
+      Future.value({'coins': 22, 'equipped': {}, 'items': []}),
+    );
+    final refresh = tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh();
+    await tester.pump();
+    await refresh;
+    expect(api.catalogCalls, 2);
+    oldCatalog.complete({'coins': 999, 'equipped': {}, 'items': []});
+    await tester.pump();
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    expect(home.shopCatalogState?.data?['coins'], 22);
+    expect(home.authService.coins, isNot(999));
+    expect(home.authService.userId, 'user-2');
+    await tester.pump(const Duration(milliseconds: 800));
+  });
+
+  testWidgets('old Friends tab response cannot repopulate new account Home', (
+    tester,
+  ) async {
+    final api = _SyncRefreshApi();
+    await _mountSyncRefresh(tester, api);
+    final auth = tester.widget<HomeTab>(find.byType(HomeTab)).authService;
+    final oldFriends = Completer<Map<String, dynamic>>();
+    api.friendScripts.add(oldFriends.future);
+    final children =
+        tester.widget<PageView>(find.byType(PageView)).childrenDelegate
+            as SliverChildListDelegate;
+    children.children
+        .whereType<FriendsTab>()
+        .single
+        .friendsRepository!
+        .invalidate();
+    tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.friendsCalls, 1);
+    await auth.syncFromBackendUser(const {'id': 'user-2'});
+    await tester.pump();
+    oldFriends.complete({
+      'friends': [
+        {'id': 'old-only', 'displayName': 'OLD ACCOUNT ONLY'},
+      ],
+      'pending': {'incoming': [], 'outgoing': []},
+    });
+    await tester.pump();
+    tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(0);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final home = tester.widget<HomeTab>(find.byType(HomeTab));
+    expect(
+      home.friendsSteps.any((friend) => friend['id'] == 'old-only'),
+      false,
+    );
+    expect(home.authService.userId, 'user-2');
+  });
+
+  testWidgets(
+    'old account resolution status cannot trigger new account catch-up',
+    (tester) async {
+      final api = _SyncRefreshApi();
+      await _mountSyncRefresh(tester, api);
+      final auth = tester.widget<HomeTab>(find.byType(HomeTab)).authService;
+      await auth.syncFromBackendUser(const {'id': 'user-2'});
+      await tester.pump();
+      final calls = api.fullCalls;
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump();
+      expect(api.narrowCalls, 0);
+      expect(api.fullCalls, calls);
+    },
+  );
+
+  for (final duringNarrow in [false, true]) {
+    testWidgets(
+      'standalone friends replacing full shell ${duringNarrow ? 'during narrow' : 'before completion'} requires full catch-up',
+      (tester) async {
+        final api = _SyncRefreshApi()..includeSummaryWork = true;
+        await _mountSyncRefresh(tester, api);
+        final independent = Completer<Map<String, dynamic>>();
+        api.friendScripts.add(independent.future);
+        final children =
+            tester.widget<PageView>(find.byType(PageView)).childrenDelegate
+                as SliverChildListDelegate;
+        children.children
+            .whereType<FriendsTab>()
+            .single
+            .friendsRepository!
+            .invalidate();
+        tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(2);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(api.friendsCalls, 1);
+        api.summaryStatus.complete(
+          GlobalEventSummaryWorkStatus(
+            state: GlobalEventSummaryWorkState.created,
+            expiresAt: DateTime.now().add(const Duration(hours: 1)),
+          ),
+        );
+        await tester.pump();
+        expect(api.fullCalls, 2);
+        tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(0);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        if (duringNarrow) {
+          api.completion.complete(
+            const RaceResolutionStatus(RaceResolutionState.succeeded),
+          );
+          await tester.pump();
+          expect(api.narrowCalls, 1);
+        }
+        independent.complete({
+          'friends': [
+            {'id': 'independent', 'displayName': 'Independent Friend'},
+          ],
+          'pending': {'incoming': [], 'outgoing': []},
+        });
+        await tester.pump();
+        expect(
+          tester
+              .widget<HomeTab>(find.byType(HomeTab))
+              .friendsSteps
+              .single['id'],
+          'independent',
+        );
+        if (duringNarrow) {
+          api.narrow.complete({
+            'contract': 'home-sync-refresh-v1',
+            'home': {'state': 'EMPTY', 'data': {}},
+            'retainedSections': ['presentation', 'friends'],
+          });
+        } else {
+          api.completion.complete(
+            const RaceResolutionStatus(RaceResolutionState.succeeded),
+          );
+        }
+        await tester.pump();
+        expect(api.fullCalls, 3);
+        expect(api.narrowCalls, duringNarrow ? 1 : 0);
+        expect(
+          tester
+              .widget<HomeTab>(find.byType(HomeTab))
+              .friendsSteps
+              .single['id'],
+          'friend',
+        );
+      },
+    );
+  }
+
+  testWidgets(
+    'standalone catalog replacing full presentation requires full catch-up',
+    (tester) async {
+      final api = _SyncRefreshApi()
+        ..resolved = false
+        ..includeSummaryWork = true;
+      final catalog = Completer<Map<String, dynamic>>();
+      api.catalogScripts.add(catalog.future);
+      await _mountSyncRefresh(tester, api);
+      expect(api.catalogCalls, 1);
+      api.resolved = true;
+      api.summaryStatus.complete(
+        GlobalEventSummaryWorkStatus(
+          state: GlobalEventSummaryWorkState.created,
+          expiresAt: DateTime.now().add(const Duration(hours: 1)),
+        ),
+      );
+      await tester.pump();
+      expect(api.fullCalls, 2);
+      catalog.complete({'coins': 123, 'equipped': {}, 'items': []});
+      await tester.pump();
+      expect(
+        tester
+            .widget<HomeTab>(find.byType(HomeTab))
+            .shopCatalogState
+            ?.data?['coins'],
+        123,
+      );
+      api.completion.complete(
+        const RaceResolutionStatus(RaceResolutionState.succeeded),
+      );
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump();
+      expect(api.fullCalls, 3);
+      expect(api.narrowCalls, 0);
+    },
+  );
 
   testWidgets(
     'authenticated foreground shell warms Race Detail after consent',

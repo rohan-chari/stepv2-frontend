@@ -197,6 +197,15 @@ class HomeTab extends StatelessWidget {
     this.suppressPendingInvite = false,
   });
 
+  Map<String, dynamic>? _homeObject(String key) {
+    final value = raceCard?[key];
+    if (value is! Map) return null;
+    return {
+      for (final entry in value.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isTutorialPreview) return _buildHome(context, null);
@@ -428,9 +437,7 @@ class HomeTab extends StatelessWidget {
                                   // Fed by the home batch so the claim card lands
                                   // with everything else; falls back to its own
                                   // fetch on old backends.
-                                  initialData:
-                                      raceCard?['stepMilestones']
-                                          as Map<String, dynamic>?,
+                                  initialData: _homeObject('stepMilestones'),
                                   awaitingBatch: raceCardLoading,
                                 ),
                               ),
@@ -1021,13 +1028,16 @@ class HomeTab extends StatelessWidget {
     final cardData = data.data;
     switch (data.state) {
       case RaceCardState.pendingInvite:
-        final inviter = RaceCardUser.fromJson(
-          cardData['inviter'] as Map<String, dynamic>?,
-        );
+        final inviter = RaceCardUser.fromJson(cardData['inviter']);
         final raceId = cardData['raceId'] as String? ?? '';
-        final participantCount =
-            (cardData['participantCount'] as num?)?.toInt() ?? 0;
-        final durationHours = (cardData['durationHours'] as num?)?.toInt() ?? 0;
+        final rawCount = cardData['participantCount'];
+        final rawDuration = cardData['durationHours'];
+        final participantCount = rawCount is num && rawCount.isFinite
+            ? rawCount.toInt()
+            : 0;
+        final durationHours = rawDuration is num && rawDuration.isFinite
+            ? rawDuration.toInt()
+            : 0;
         return _HomeRaceActionRow(
           label: 'INVITE',
           title: '${atName(inviter?.displayName ?? 'Someone')} challenged you',
@@ -1530,7 +1540,7 @@ class HomeTab extends StatelessWidget {
                 compact: true,
                 // Fed by the home batch so the CLAIM button lands with everything
                 // else; falls back to its own fetch on old backends.
-                initialData: raceCard?['dailyReward'] as Map<String, dynamic>?,
+                initialData: _homeObject('dailyReward'),
                 awaitingBatch: raceCardLoading,
                 compactFontSize: _quickActionFontSize(context),
                 adController: dailyRewardAdController,
