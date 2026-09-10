@@ -1,0 +1,30 @@
+{
+  "version": "2.3.13",
+  "build": "14",
+  "compiled_sha256": "bb09f8c2c265628caf51385bbdab8f3876ba18ffaec7235f7717d185c87f8be6",
+  "archive_compiled_sha256": "273a30cdd9031deaa817cc0f28bb5dab42a693ce90221aebda40e45799e76dbf",
+  "macho": {
+    "16777228:0": {
+      "uuid": "0c7143a3e2bd794d4c4ff3021c8ce88a",
+      "sections": {
+        "__TEXT/__text": "4f3d133e73029bb704e295391c48386bc2421a84b79aabb21ecc336dadfd7052",
+        "__TEXT/__const": "ef77cf7a9b14497a92e8770860ac06d17fd1bf1d864d5d500f8bd6f7b6c7c886",
+        "__TEXT/__unwind_info": "b28edd66b7ac30b8a6a902358b865277853d050c04704d54892d9f9644ff45e9"
+      }
+    }
+  },
+  "signature_verified": true,
+  "apns": "production",
+  "debuggable": false,
+  "required_configuration_verified": true,
+  "corekit_verified": true,
+  "current_ui_verified": true,
+  "assets": {
+    "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+    "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+    "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+    "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+  },
+  "sha256": "94d76957504ab56b260d06fbcf32a573f0654c39b23aff2fd60a0d143f74312f",
+  "source_commit": "5071aa2"
+}

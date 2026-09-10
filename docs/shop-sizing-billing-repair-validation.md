@@ -115,9 +115,20 @@ behavior. No paid purchase or server-fulfillment transaction was performed.
 
 ## Release
 
-Planned pair: iOS2.3.13(14), Android2.3.13/203144. Preserve every README configuration
-value, verify signatures/native binaries/artifacts, then upload iOS with existing
-ASC env references. No new backend deployment, App Review or customer release.
+Verified pair: iOS **2.3.13 (14)** and Android **2.3.13 / 203144**, runtime source
+`5071aa2`. Both were rebuilt after the final animated-preview additions. Actual
+signatures, required README configuration, native code and artwork passed checks;
+see [artifact verification](artifacts/shop-outfit-release-2026-09-10/README.md).
+
+iOS uploaded successfully with the existing ASC key: both `Upload succeeded` and
+`EXPORT SUCCEEDED` were confirmed. Existing AppLovinSDK and FBAudienceNetwork dSYM
+warnings did not block upload. The earlier intermediate archive was not uploaded.
+No new backend deployment, App Review, customer release or Play upload occurred.
+Apple confirmed **VALID / IN_BETA_TESTING** at2026-09-10T13:34:34Z.
+Build14 is present in the existing **bara testers** group, with unchanged export
+compliance (`usesNonExemptEncryption:false`). Apple build ID:
+`6f9825a4-ecb9-4b99-876c-e6dd9e8b80c1`.
+[Recorded status](artifacts/shop-outfit-release-2026-09-10/testflight-status.json).
 
 The current [manual UI checklist](shop-outfit-release-checklist.md#manual-ui-checklist)
 covers Shop, coin entry, wardrobe sections/footer, hidden Bara+ surfaces, tutorials,

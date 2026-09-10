@@ -1,0 +1,35 @@
+{
+  "package": "com.rohanchari.steptracker",
+  "version": "2.3.13",
+  "version_code": "203144",
+  "billing_client": "8.3.0",
+  "bundle": "build/verification/shop-outfit-14/app-prod-release.aab",
+  "sha256": "5de446754b2ce1485072f6fc18e860260093122b37554993a91a2a3b37fe4619",
+  "upload_certificate_sha256": "CF:06:4C:DD:CA:14:CB:6B:27:91:BC:86:77:39:EF:14:EC:0E:AE:13:3C:68:E2:71:30:E5:0D:0F:8B:EE:14:3A",
+  "signature_verified": true,
+  "fresh_native_libraries": {
+    "arm64-v8a": {
+      "packaged_sha256": "25bd2d2cd1a778684b3d9e7ef19b4d85c7c5da1c4684fb9ed4585553a19edbb3",
+      "fresh_compiler_sha256": "20490d1c1d407dbf3b5f9add7f3176e45019ad2130bd42eef2c6bb4a5d7d6e45",
+      "all_allocated_sections_match": true
+    },
+    "armeabi-v7a": {
+      "packaged_sha256": "9c59033c0be36fc4c13e32adac1977b28a5d894680b44ffd9ba5694bb3e37ae4",
+      "fresh_compiler_sha256": "d7781312157187422a21ea5915d19d117c5fd10c4869170a919bb283966115cb",
+      "all_allocated_sections_match": true
+    },
+    "x86_64": {
+      "packaged_sha256": "13d4a486a624572204e52b9f3282ee2a947e31d55faf87a800f2cb2753fe160d",
+      "fresh_compiler_sha256": "749c341b4a1156cd0a03eae680cd0160f67f5a92b48224fb295cacf696df20c8",
+      "all_allocated_sections_match": true
+    }
+  },
+  "current_ui_verified": true,
+  "assets": {
+    "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+    "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+    "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+    "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+  },
+  "source_commit": "5071aa2"
+}
