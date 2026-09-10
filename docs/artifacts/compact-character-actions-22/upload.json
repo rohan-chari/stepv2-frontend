@@ -1,0 +1,13 @@
+{
+  "version": "2.3.13",
+  "build": 22,
+  "success": true,
+  "uploadLines": [
+    "2026-09-10 18:51:23.720 xcodebuild[91761:5641415] Progress 100%: Upload succeeded."
+  ],
+  "warnings": [
+    "AppLovinSDK missing dSYM",
+    "FBAudienceNetwork missing dSYM"
+  ],
+  "nonblocking": true
+}

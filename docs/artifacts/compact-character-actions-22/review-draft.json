@@ -1,0 +1,32 @@
+{
+  "submissionId": "8b519f75-88b4-4245-bfe0-a333d5307f4a",
+  "versionId": "c7899e0d-bed5-4768-8754-f78aa9c655e9",
+  "buildId": "344d9b31-1498-4f05-9262-dd436a8116bf",
+  "createdAt": "2026-09-10T22:58:59.712Z",
+  "items": [
+    {
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDZ8ODkxMTUwODA2",
+      "relationship": "appStoreVersion",
+      "targetId": "c7899e0d-bed5-4768-8754-f78aa9c655e9",
+      "state": "READY_FOR_REVIEW"
+    },
+    {
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fGI0Nzk4ZDRjLWM0Y2EtNDA3ZC04YzI3LTdmMjljMzk4ODFjNw",
+      "relationship": "inAppPurchaseVersion",
+      "targetId": "b4798d4c-c4ca-407d-8c27-7f29c39881c7",
+      "state": "READY_FOR_REVIEW"
+    },
+    {
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fDMxYjk0MTE5LTgwZTQtNGI5My05MDBlLTQyMmZlMzBhODViNw",
+      "relationship": "inAppPurchaseVersion",
+      "targetId": "31b94119-80e4-4b93-900e-422fe30a85b7",
+      "state": "READY_FOR_REVIEW"
+    },
+    {
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fDZmZTQzY2ZkLTUwOTktNGQzNS04NmE2LTg4ZTFmMjg3YjYyYw",
+      "relationship": "inAppPurchaseVersion",
+      "targetId": "6fe43cfd-5099-4d35-86a6-88e1f287b62c",
+      "state": "READY_FOR_REVIEW"
+    }
+  ]
+}

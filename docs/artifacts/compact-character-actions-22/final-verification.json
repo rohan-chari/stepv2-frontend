@@ -1,0 +1,191 @@
+{
+  "verifiedAt": "2026-09-10T22:59:30.044Z",
+  "backendCommit": "340b40574fac8f6be75792f00af17c9a2caf745e",
+  "frontendBuildCommit": "f31613f87c608d58b46d7d3653baabe3c35087b8",
+  "submission": {
+    "id": "8b519f75-88b4-4245-bfe0-a333d5307f4a",
+    "platform": "IOS",
+    "submittedDate": "2026-09-10T22:59:19.073Z",
+    "state": "WAITING_FOR_REVIEW"
+  },
+  "version": {
+    "platform": "IOS",
+    "versionString": "2.3.13",
+    "appStoreState": "WAITING_FOR_REVIEW",
+    "appVersionState": "WAITING_FOR_REVIEW",
+    "copyright": "2026 Rohan Chari",
+    "reviewType": "APP_STORE",
+    "releaseType": "MANUAL",
+    "earliestReleaseDate": null,
+    "usesIdfa": null,
+    "downloadable": true,
+    "createdDate": "2026-09-10T07:33:40-07:00",
+    "buildId": "344d9b31-1498-4f05-9262-dd436a8116bf",
+    "build": "22"
+  },
+  "items": [
+    {
+      "type": "reviewSubmissionItems",
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDZ8ODkxMTUwODA2",
+      "attributes": {
+        "state": "READY_FOR_REVIEW"
+      },
+      "relationships": {
+        "appStoreVersion": {
+          "data": {
+            "type": "appStoreVersions",
+            "id": "c7899e0d-bed5-4768-8754-f78aa9c655e9"
+          }
+        },
+        "inAppPurchaseVersion": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems/OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDZ8ODkxMTUwODA2"
+      }
+    },
+    {
+      "type": "reviewSubmissionItems",
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fGI0Nzk4ZDRjLWM0Y2EtNDA3ZC04YzI3LTdmMjljMzk4ODFjNw",
+      "attributes": {
+        "state": "READY_FOR_REVIEW"
+      },
+      "relationships": {
+        "appStoreVersion": {
+          "data": null
+        },
+        "inAppPurchaseVersion": {
+          "data": {
+            "type": "inAppPurchaseVersions",
+            "id": "b4798d4c-c4ca-407d-8c27-7f29c39881c7"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems/OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fGI0Nzk4ZDRjLWM0Y2EtNDA3ZC04YzI3LTdmMjljMzk4ODFjNw"
+      }
+    },
+    {
+      "type": "reviewSubmissionItems",
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fDMxYjk0MTE5LTgwZTQtNGI5My05MDBlLTQyMmZlMzBhODViNw",
+      "attributes": {
+        "state": "READY_FOR_REVIEW"
+      },
+      "relationships": {
+        "appStoreVersion": {
+          "data": null
+        },
+        "inAppPurchaseVersion": {
+          "data": {
+            "type": "inAppPurchaseVersions",
+            "id": "31b94119-80e4-4b93-900e-422fe30a85b7"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems/OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fDMxYjk0MTE5LTgwZTQtNGI5My05MDBlLTQyMmZlMzBhODViNw"
+      }
+    },
+    {
+      "type": "reviewSubmissionItems",
+      "id": "OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fDZmZTQzY2ZkLTUwOTktNGQzNS04NmE2LTg4ZTFmMjg3YjYyYw",
+      "attributes": {
+        "state": "READY_FOR_REVIEW"
+      },
+      "relationships": {
+        "appStoreVersion": {
+          "data": null
+        },
+        "inAppPurchaseVersion": {
+          "data": {
+            "type": "inAppPurchaseVersions",
+            "id": "6fe43cfd-5099-4d35-86a6-88e1f287b62c"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems/OGI1MTlmNzUtODhiNC00MjQ1LWJmZTAtYTMzM2Q1MzA3ZjRhfDE3fDZmZTQzY2ZkLTUwOTktNGQzNS04NmE2LTg4ZTFmMjg3YjYyYw"
+      }
+    }
+  ],
+  "appleProducts": [
+    {
+      "id": "6809896890",
+      "name": "500 Coins",
+      "productId": "bara_coins_500_v1",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "WAITING_FOR_REVIEW",
+      "reviewNote": "Consumable pack that adds 500 coins to the signed-in Bara account. Coins can be used for powerups, cosmetics, and box rerolls. Find this purchase on the Get Coins screen.",
+      "familySharable": false,
+      "contentHosting": null,
+      "versionId": "b4798d4c-c4ca-407d-8c27-7f29c39881c7",
+      "localizations": [
+        {
+          "name": "500 Coins",
+          "locale": "en-US",
+          "description": "500 coins for powerups, cosmetics, and rerolls."
+        }
+      ],
+      "screenshotId": "6502553a-e2fb-4c5e-8b40-d62cfe1087d2",
+      "configuredUsdPrice": "0.99"
+    },
+    {
+      "id": "6809901675",
+      "name": "3,000 Coins",
+      "productId": "bara_coins_2800_v1",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "WAITING_FOR_REVIEW",
+      "reviewNote": "Consumable pack that adds 3,000 coins to the signed-in Bara account. Find this purchase in Shop, in the Featured coin-pack section. Coins can be used for powerups, cosmetics, and box rerolls. The internal product ID is retained for purchase-history compatibility; the displayed and granted amount is 3,000 coins.",
+      "familySharable": false,
+      "contentHosting": null,
+      "versionId": "31b94119-80e4-4b93-900e-422fe30a85b7",
+      "localizations": [
+        {
+          "name": "3,000 Coins",
+          "locale": "en-US",
+          "description": "3,000 coins for powerups, cosmetics & rerolls"
+        }
+      ],
+      "screenshotId": "db45169b-37a6-48d3-9138-bfe152e47bea",
+      "configuredUsdPrice": "4.99"
+    },
+    {
+      "id": "6809902519",
+      "name": "7,500 Coins",
+      "productId": "bara_coins_6000_v1",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "WAITING_FOR_REVIEW",
+      "reviewNote": "Consumable pack that adds 7,500 coins to the signed-in Bara account. Find this purchase in Shop, in the Featured coin-pack section. Coins can be used for powerups, cosmetics, and box rerolls. The internal product ID is retained for purchase-history compatibility; the displayed and granted amount is 7,500 coins.",
+      "familySharable": false,
+      "contentHosting": null,
+      "versionId": "6fe43cfd-5099-4d35-86a6-88e1f287b62c",
+      "localizations": [
+        {
+          "name": "7,500 Coins",
+          "locale": "en-US",
+          "description": "7,500 coins for powerups, cosmetics & rerolls"
+        }
+      ],
+      "screenshotId": "1cc2e2d2-02e8-46ba-8d36-98e559091297",
+      "configuredUsdPrice": "9.99"
+    }
+  ],
+  "revenueCatProducts": [
+    {
+      "id": "prod07d111f863",
+      "productId": "bara_coins_6000_v1",
+      "name": "7,500 Coins"
+    },
+    {
+      "id": "prod77c783d4a0",
+      "productId": "bara_coins_500_v1",
+      "name": "500 Coins"
+    },
+    {
+      "id": "prodb0a9a09a26",
+      "productId": "bara_coins_2800_v1",
+      "name": "3,000 Coins"
+    }
+  ]
+}
