@@ -2,6 +2,8 @@
 
 Status: implemented and code-reviewed; static/existing-control checks passed. Manual device placement checks remain pending.
 
+Release follow-up: [TestFlight 2.3.13 (17)](admin-redesign-testflight-17.md) is verified and available to internal testers; matching Android artifact built and verified.
+
 ## Summary and user story
 As the administrator, I want a readable overview and focused detail pages so I can understand app activity without scrolling through technical tables. User selected clean typography, overview/detail navigation, charts, four headline metrics, and a default seven-day range. User explicitly waived adding automated tests for this redesign.
 
