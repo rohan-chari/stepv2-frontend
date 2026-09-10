@@ -1,0 +1,88 @@
+{
+  "frontendCommit": "32531e9",
+  "backendCommit": "92b386e",
+  "frontendCombinedTests": 70,
+  "frontendAnalyze": "clean",
+  "backendExactTargetHttpTests": 30,
+  "review": "SHIP",
+  "sourceFingerprintsUnchanged": 543,
+  "builds": {
+    "sourceCommit": "32531e90243f7a1fd004fcb076cd58e416f5edfb",
+    "builds": [
+      {
+        "platform": "iOS",
+        "exitCode": 0,
+        "startedAtEpoch": 1789077471.483843,
+        "elapsedSeconds": 107.64266991615295,
+        "defineKeys": [
+          "META_APP_ID",
+          "META_CLIENT_TOKEN",
+          "BACKEND_BASE_URL",
+          "REVENUECAT_IOS_API_KEY",
+          "ADMOB_EXTRA_SPIN_AD_UNIT_ID",
+          "ADMOB_BANNER_AD_UNIT_ID",
+          "ADMOB_BOX_TOP_BANNER_AD_UNIT_ID",
+          "ADMOB_BOX_REROLL_AD_UNIT_ID",
+          "ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID",
+          "ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID",
+          "ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID",
+          "GOOGLE_IOS_CLIENT_ID"
+        ]
+      },
+      {
+        "platform": "Android",
+        "exitCode": 0,
+        "startedAtEpoch": 1789077579.224658,
+        "elapsedSeconds": 113.78584694862366,
+        "defineKeys": [
+          "BACKEND_BASE_URL",
+          "ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID",
+          "ADMOB_BANNER_AD_UNIT_ID_ANDROID"
+        ]
+      }
+    ]
+  },
+  "productionPreviewSmoke": {
+    "http": 200,
+    "canPreview": true
+  },
+  "coinPacks": [
+    500,
+    3000,
+    7500
+  ],
+  "usdPrices": [
+    "0.99",
+    "4.99",
+    "9.99"
+  ],
+  "topology": {
+    "http": 2,
+    "resolution": 1,
+    "cron": 1,
+    "staging": "stopped",
+    "poolBudget": 32
+  },
+  "referralCatchup": {
+    "raceActivities": 0,
+    "reviewOwnership": 0
+  },
+  "appleUpload": {
+    "succeeded": true,
+    "at": "2026-09-10T22:04:31.707Z",
+    "version": "2.3.13",
+    "build": 21,
+    "warnings": [
+      "AppLovinSDK missing dSYM",
+      "FBAudienceNetwork missing dSYM"
+    ]
+  },
+  "appReviewReplacement": {
+    "state": "WAITING_FOR_REVIEW",
+    "submissionId": "0b98ab5f-bb2a-4f90-af98-86cc2eef1225",
+    "submittedAt": "2026-09-10T22:11:08.35Z",
+    "build": 21,
+    "coinPackCount": 3,
+    "releaseType": "MANUAL"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "package": "com.rohanchari.steptracker",
+  "version": "2.3.13",
+  "version_code": "203151",
+  "billing_client": "8.3.0",
+  "bundle": "/Users/rohan/repos/stepv2-frontend/build/app/outputs/bundle/prodRelease/app-prod-release.aab",
+  "sha256": "7ba72122146b64b3cd5c5cfe7483018736c640fb9e9fe637113edbe176e909ec",
+  "upload_certificate_sha256": "CF:06:4C:DD:CA:14:CB:6B:27:91:BC:86:77:39:EF:14:EC:0E:AE:13:3C:68:E2:71:30:E5:0D:0F:8B:EE:14:3A",
+  "signature_verified": true,
+  "debuggable": false,
+  "production_admob_app_verified": true,
+  "fresh_native_libraries": {
+    "arm64-v8a": {
+      "packaged_sha256": "d64396e002cf1952f737527f7d3159442aeba62b9dffb14a9afe86a9ace63b7a",
+      "fresh_compiler_sha256": "ef0e1c09842cdef1a3e648d749a03fedbbca10c5f60d580c301d14e6ec4ccc12",
+      "all_allocated_sections_match": true
+    },
+    "armeabi-v7a": {
+      "packaged_sha256": "3df2fff4a763c43ced43e8057d948f6ed577cd37b9c2c7e89fff533733e35d70",
+      "fresh_compiler_sha256": "ee1019710ac42ba2caf45e17ac342489d6698db75714598f32364be17034e5ba",
+      "all_allocated_sections_match": true
+    },
+    "x86_64": {
+      "packaged_sha256": "183b2b06bfa45c614096dae140a6a9d5cddbacfe27199a3d3e2126e6a394df1a",
+      "fresh_compiler_sha256": "fad210819a6162993141cf22d527d3c05875dbe5cc75facfc86022931a10fbe1",
+      "all_allocated_sections_match": true
+    }
+  },
+  "current_ui_verified": true,
+  "assets": {
+    "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+    "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+    "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+    "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+  }
+}

@@ -1,0 +1,504 @@
+{
+  "checkedAt": "2026-09-10T21:57:09.730Z",
+  "products": [
+    {
+      "id": "6809896890",
+      "name": "500 Coins",
+      "productId": "bara_coins_500_v1",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "WAITING_FOR_REVIEW",
+      "reviewNote": "Consumable pack that adds 500 coins to the signed-in Bara account. Coins can be used for powerups, cosmetics, and box rerolls. Find this purchase on the Get Coins screen.",
+      "familySharable": false,
+      "contentHosting": null,
+      "versions": [
+        {
+          "id": "b4798d4c-c4ca-407d-8c27-7f29c39881c7",
+          "version": 1,
+          "state": "WAITING_FOR_REVIEW"
+        }
+      ],
+      "prices": {
+        "data": [
+          {
+            "type": "inAppPurchasePrices",
+            "id": "eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAiLCJzZCI6MC4wLCJlZCI6MC4wfQ",
+            "attributes": {
+              "startDate": null,
+              "endDate": null,
+              "manual": true
+            },
+            "relationships": {
+              "inAppPurchasePricePoint": {
+                "data": {
+                  "type": "inAppPurchasePricePoints",
+                  "id": "eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAifQ"
+                }
+              },
+              "territory": {
+                "data": {
+                  "type": "territories",
+                  "id": "USA"
+                }
+              }
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePrices/eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAiLCJzZCI6MC4wLCJlZCI6MC4wfQ"
+            }
+          }
+        ],
+        "included": [
+          {
+            "type": "inAppPurchasePricePoints",
+            "id": "eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAifQ",
+            "attributes": {
+              "customerPrice": "0.99",
+              "proceeds": "0.7"
+            },
+            "relationships": {
+              "territory": {},
+              "equalizations": {
+                "links": {
+                  "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAifQ/relationships/equalizations",
+                  "related": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAifQ/equalizations"
+                }
+              }
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTg5Njg5MCIsInQiOiJVU0EiLCJwIjoiMTAwMTAifQ"
+            }
+          },
+          {
+            "type": "territories",
+            "id": "USA",
+            "attributes": {
+              "currency": "USD"
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/territories/USA"
+            }
+          }
+        ],
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePriceSchedules/6809896890/manualPrices?include=inAppPurchasePricePoint%2Cterritory&limit=200"
+        },
+        "meta": {
+          "paging": {
+            "total": 1,
+            "limit": 200
+          }
+        }
+      }
+    },
+    {
+      "id": "6809901675",
+      "name": "3,000 Coins",
+      "productId": "bara_coins_2800_v1",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "WAITING_FOR_REVIEW",
+      "reviewNote": "Consumable pack that adds 3,000 coins to the signed-in Bara account. Find this purchase in Shop, in the Featured coin-pack section. Coins can be used for powerups, cosmetics, and box rerolls. The internal product ID is retained for purchase-history compatibility; the displayed and granted amount is 3,000 coins.",
+      "familySharable": false,
+      "contentHosting": null,
+      "versions": [
+        {
+          "id": "31b94119-80e4-4b93-900e-422fe30a85b7",
+          "version": 1,
+          "state": "WAITING_FOR_REVIEW"
+        }
+      ],
+      "prices": {
+        "data": [
+          {
+            "type": "inAppPurchasePrices",
+            "id": "eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIiLCJzZCI6MC4wLCJlZCI6MC4wfQ",
+            "attributes": {
+              "startDate": null,
+              "endDate": null,
+              "manual": true
+            },
+            "relationships": {
+              "inAppPurchasePricePoint": {
+                "data": {
+                  "type": "inAppPurchasePricePoints",
+                  "id": "eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIifQ"
+                }
+              },
+              "territory": {
+                "data": {
+                  "type": "territories",
+                  "id": "USA"
+                }
+              }
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePrices/eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIiLCJzZCI6MC4wLCJlZCI6MC4wfQ"
+            }
+          }
+        ],
+        "included": [
+          {
+            "type": "inAppPurchasePricePoints",
+            "id": "eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIifQ",
+            "attributes": {
+              "customerPrice": "4.99",
+              "proceeds": "3.5"
+            },
+            "relationships": {
+              "territory": {},
+              "equalizations": {
+                "links": {
+                  "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIifQ/relationships/equalizations",
+                  "related": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIifQ/equalizations"
+                }
+              }
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTkwMTY3NSIsInQiOiJVU0EiLCJwIjoiMTAwNjIifQ"
+            }
+          },
+          {
+            "type": "territories",
+            "id": "USA",
+            "attributes": {
+              "currency": "USD"
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/territories/USA"
+            }
+          }
+        ],
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePriceSchedules/6809901675/manualPrices?include=inAppPurchasePricePoint%2Cterritory&limit=200"
+        },
+        "meta": {
+          "paging": {
+            "total": 1,
+            "limit": 200
+          }
+        }
+      }
+    },
+    {
+      "id": "6809902519",
+      "name": "7,500 Coins",
+      "productId": "bara_coins_6000_v1",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "WAITING_FOR_REVIEW",
+      "reviewNote": "Consumable pack that adds 7,500 coins to the signed-in Bara account. Find this purchase in Shop, in the Featured coin-pack section. Coins can be used for powerups, cosmetics, and box rerolls. The internal product ID is retained for purchase-history compatibility; the displayed and granted amount is 7,500 coins.",
+      "familySharable": false,
+      "contentHosting": null,
+      "versions": [
+        {
+          "id": "6fe43cfd-5099-4d35-86a6-88e1f287b62c",
+          "version": 1,
+          "state": "WAITING_FOR_REVIEW"
+        }
+      ],
+      "prices": {
+        "data": [
+          {
+            "type": "inAppPurchasePrices",
+            "id": "eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjciLCJzZCI6MC4wLCJlZCI6MC4wfQ",
+            "attributes": {
+              "startDate": null,
+              "endDate": null,
+              "manual": true
+            },
+            "relationships": {
+              "inAppPurchasePricePoint": {
+                "data": {
+                  "type": "inAppPurchasePricePoints",
+                  "id": "eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjcifQ"
+                }
+              },
+              "territory": {
+                "data": {
+                  "type": "territories",
+                  "id": "USA"
+                }
+              }
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePrices/eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjciLCJzZCI6MC4wLCJlZCI6MC4wfQ"
+            }
+          }
+        ],
+        "included": [
+          {
+            "type": "inAppPurchasePricePoints",
+            "id": "eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjcifQ",
+            "attributes": {
+              "customerPrice": "9.99",
+              "proceeds": "7.0"
+            },
+            "relationships": {
+              "territory": {},
+              "equalizations": {
+                "links": {
+                  "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjcifQ/relationships/equalizations",
+                  "related": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjcifQ/equalizations"
+                }
+              }
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePricePoints/eyJzIjoiNjgwOTkwMjUxOSIsInQiOiJVU0EiLCJwIjoiMTAxMjcifQ"
+            }
+          },
+          {
+            "type": "territories",
+            "id": "USA",
+            "attributes": {
+              "currency": "USD"
+            },
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/territories/USA"
+            }
+          }
+        ],
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/inAppPurchasePriceSchedules/6809902519/manualPrices?include=inAppPurchasePricePoint%2Cterritory&limit=200"
+        },
+        "meta": {
+          "paging": {
+            "total": 1,
+            "limit": 200
+          }
+        }
+      }
+    }
+  ],
+  "submissions": {
+    "data": [
+      {
+        "type": "reviewSubmissions",
+        "id": "ec62661c-7eae-4d3f-902b-8bf841b4fbd9",
+        "attributes": {
+          "platform": "IOS",
+          "submittedDate": "2026-09-10T21:52:38.54Z",
+          "state": "WAITING_FOR_REVIEW"
+        },
+        "relationships": {
+          "items": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions/ec62661c-7eae-4d3f-902b-8bf841b4fbd9/relationships/items",
+              "related": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions/ec62661c-7eae-4d3f-902b-8bf841b4fbd9/items"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions/ec62661c-7eae-4d3f-902b-8bf841b4fbd9"
+        }
+      }
+    ],
+    "links": {
+      "self": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions?filter%5Bstate%5D=CANCELING%2CIN_REVIEW%2CREADY_FOR_REVIEW%2CWAITING_FOR_REVIEW&filter%5Bapp%5D=6760504694&limit=10"
+    },
+    "meta": {
+      "paging": {
+        "total": 1,
+        "limit": 10
+      }
+    }
+  },
+  "version": {
+    "data": {
+      "type": "appStoreVersions",
+      "id": "c7899e0d-bed5-4768-8754-f78aa9c655e9",
+      "attributes": {
+        "platform": "IOS",
+        "versionString": "2.3.13",
+        "appStoreState": "WAITING_FOR_REVIEW",
+        "appVersionState": "WAITING_FOR_REVIEW",
+        "copyright": "2026 Rohan Chari",
+        "reviewType": "APP_STORE",
+        "releaseType": "MANUAL",
+        "earliestReleaseDate": null,
+        "usesIdfa": null,
+        "downloadable": true,
+        "createdDate": "2026-09-10T07:33:40-07:00"
+      },
+      "relationships": {
+        "appStoreVersionLocalizations": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appStoreVersionLocalizations",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appStoreVersionLocalizations"
+          }
+        },
+        "build": {
+          "data": {
+            "type": "builds",
+            "id": "4aeba851-b067-45c6-a3d6-76837f109ea0"
+          },
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/build",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/build"
+          }
+        },
+        "appStoreVersionPhasedRelease": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appStoreVersionPhasedRelease",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appStoreVersionPhasedRelease"
+          }
+        },
+        "gameCenterAppVersion": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/gameCenterAppVersion",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/gameCenterAppVersion"
+          }
+        },
+        "routingAppCoverage": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/routingAppCoverage",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/routingAppCoverage"
+          }
+        },
+        "appStoreReviewDetail": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appStoreReviewDetail",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appStoreReviewDetail"
+          }
+        },
+        "appStoreVersionSubmission": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appStoreVersionSubmission",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appStoreVersionSubmission"
+          }
+        },
+        "appClipDefaultExperience": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appClipDefaultExperience",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appClipDefaultExperience"
+          }
+        },
+        "appStoreVersionExperiments": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appStoreVersionExperiments",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appStoreVersionExperiments"
+          }
+        },
+        "appStoreVersionExperimentsV2": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/appStoreVersionExperimentsV2",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/appStoreVersionExperimentsV2"
+          }
+        },
+        "customerReviews": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/customerReviews",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/customerReviews"
+          }
+        },
+        "alternativeDistributionPackage": {
+          "links": {
+            "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/relationships/alternativeDistributionPackage",
+            "related": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9/alternativeDistributionPackage"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9"
+      }
+    },
+    "included": [
+      {
+        "type": "builds",
+        "id": "4aeba851-b067-45c6-a3d6-76837f109ea0",
+        "attributes": {
+          "version": "19",
+          "uploadedDate": "2026-09-10T13:34:11-07:00",
+          "expirationDate": "2026-12-09T12:34:11-08:00",
+          "expired": false,
+          "minOsVersion": "15.0",
+          "lsMinimumSystemVersion": null,
+          "computedMinMacOsVersion": "12.0",
+          "computedMinVisionOsVersion": "1.0",
+          "iconAssetToken": {
+            "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/70/4b/c5/704bc56c-9794-5f8e-6cdf-56efa5f51268/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}",
+            "width": 167,
+            "height": 167
+          },
+          "processingState": "VALID",
+          "buildAudienceType": "APP_STORE_ELIGIBLE",
+          "usesNonExemptEncryption": false
+        },
+        "relationships": {
+          "preReleaseVersion": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/preReleaseVersion",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/preReleaseVersion"
+            }
+          },
+          "individualTesters": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/individualTesters",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/individualTesters"
+            }
+          },
+          "betaGroups": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/betaGroups"
+            }
+          },
+          "betaBuildLocalizations": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/betaBuildLocalizations",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/betaBuildLocalizations"
+            }
+          },
+          "appEncryptionDeclaration": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/appEncryptionDeclaration",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/appEncryptionDeclaration"
+            }
+          },
+          "betaAppReviewSubmission": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/betaAppReviewSubmission",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/betaAppReviewSubmission"
+            }
+          },
+          "app": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/app",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/app"
+            }
+          },
+          "buildBetaDetail": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/buildBetaDetail",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/buildBetaDetail"
+            }
+          },
+          "appStoreVersion": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/appStoreVersion",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/appStoreVersion"
+            }
+          },
+          "icons": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/icons",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/icons"
+            }
+          },
+          "perfPowerMetrics": {
+            "links": {
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/perfPowerMetrics"
+            }
+          },
+          "diagnosticSignatures": {
+            "links": {
+              "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/relationships/diagnosticSignatures",
+              "related": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0/diagnosticSignatures"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/builds/4aeba851-b067-45c6-a3d6-76837f109ea0"
+        }
+      }
+    ],
+    "links": {
+      "self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/c7899e0d-bed5-4768-8754-f78aa9c655e9?include=build"
+    }
+  }
+}

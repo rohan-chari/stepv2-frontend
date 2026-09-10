@@ -1,0 +1,31 @@
+{
+  "version": "2.3.13",
+  "build": "21",
+  "compiled_sha256": "7a0e09362799d35c3d263240e9373da477f964124316cf7ef5a97fc9489eb198",
+  "archive_compiled_sha256": "7c4dc4b67ae816ed20f6047aa538c84edff2a36ee5d1bab828a27d846500af8e",
+  "macho": {
+    "16777228:0": {
+      "uuid": "0c7143a3692b32674c4ff3027d63b1ad",
+      "sections": {
+        "__TEXT/__text": "aac118125f07e5a848a7473a3e0a35ab22f06e6c4bf8f3ed79fd67d2721043a0",
+        "__TEXT/__const": "4d166990ecd67c4675ec568f92cb88dba1a65e161951f1acde65f7348d8afb81",
+        "__TEXT/__unwind_info": "c3fc9b64f25274ad92802ce3b5bda2eab17b0c81719a42cfc208029d2d282573"
+      }
+    }
+  },
+  "signature_verified": true,
+  "apns": "production",
+  "debuggable": false,
+  "required_configuration_verified": true,
+  "corekit_verified": true,
+  "native_gpp_decoder_verified": true,
+  "native_archive_export_match": true,
+  "current_ui_verified": true,
+  "assets": {
+    "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+    "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+    "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+    "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+  },
+  "sha256": "c00840f5a91d8032820e75963f8846689f4585def0b759499ed888cd9e3572bf"
+}

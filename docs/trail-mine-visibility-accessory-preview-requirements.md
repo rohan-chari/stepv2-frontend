@@ -1,5 +1,7 @@
 # Trail Mine visibility and accessory preview requirements
 
+> Release authorization was subsequently renewed for the combined build and App Review, including the updated coin packs. Current execution status is in [the combined release record](combined-preview-coin-pack-release.md). Earlier hold statements below record the implementation-stage instructions.
+
 ## Approved scope and user story
 
 A player can see where their own active Trail Mine was planted. A shopper can

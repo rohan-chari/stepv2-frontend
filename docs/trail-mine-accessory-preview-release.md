@@ -1,5 +1,7 @@
 # Trail Mine placement and accessory preview release
 
+> Release authorization was subsequently renewed for the combined build and App Review, including the updated coin packs. Current execution status is in [the combined release record](combined-preview-coin-pack-release.md). Earlier hold statements below record the implementation-stage instructions.
+
 User has deferred the frontend release to bundle further changes. No new build
 number is reserved and no upload will be performed. Existing App Review
 submission/build 19 must remain untouched. Backend deployment is also pending.
