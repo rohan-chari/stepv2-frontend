@@ -1,0 +1,14 @@
+{
+  "attemptedAt": "2026-09-10T03:58:54Z",
+  "version": "2.3.13",
+  "build": "12",
+  "uploadSucceeded": false,
+  "exitCode": 70,
+  "errorDomain": "IDEDistributionErrorDomain",
+  "errorCode": 2,
+  "error": "Failed to Use Accounts",
+  "requiredAction": "Reauthenticate configured Apple account in Xcode Settings > Accounts; confirm App Store Connect team access.",
+  "backendDeployedCommit": "9e99fcbd6799cd944ddbbe7e0f0589c5016a4a38",
+  "androidVersionCode": "203142",
+  "androidVerified": true
+}

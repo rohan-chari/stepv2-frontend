@@ -1,6 +1,6 @@
 # Event traffic efficiency — app release candidate
 
-Status: **ready for a separately authorized backend-first production release**. Final independent review: **SHIP**, no blockers. No upload or production deployment has occurred.
+Status: **backend deployed; TestFlight upload blocked by Xcode account authentication**. Implementation review remains **SHIP**. User authorized both operations; upload requires account reauthentication.
 
 App implementation commit: `5687c8f`. Candidate version: 2.3.13 (12), with matching Android versionCode 203142. Backend runtime candidate: `f264099`, on the production-derived `event-traffic-efficiency-release` branch. The backend's original local main is not the deployment base; the release branch preserves the already-deployed immediate-join and Shop changes.
 
@@ -35,3 +35,9 @@ Artifact hashes and configuration checks are in [artifact-verification.json](evi
 The fixed 36-run backend comparison completed with identical durable outcomes, unchanged accepted throughput, no request errors, and passing time-to-visible-results tails in every trace. Isolated combined Home/races/profile SQL fell **22→17** in all three pairs. The additional whole-report diagnostic remains **failed**: shared-one-race request p99 missed its ceiling by 1 ms; shared-five-race request p95 exceeded its ceiling, and total session SQL increased by 0.57% despite lower HTTP-path SQL. A rotated nine-run isolation experiment did not reproduce a consistent latency penalty from sharing or increased writer stalls. Its candidate mean SQL was 1,821 versus production 1,836.67. The reviewer approved readiness under the actual spec gates while retaining the original failed diagnostic and its small observed differences. This is not proof that all latency effects are zero.
 
 The eventual deployment order is backend first, then the paired app release. Older apps retain their existing API behavior; new apps also work if the backend is rolled back. Production deployment and store uploads require separate authorization. The user's managed-database CPU objective must be measured after an authorized deployment under comparable real traffic; local SQL counts cannot establish that result.
+
+## Authorized deployment result
+
+Production backend `9e99fcb` is deployed with healthy API/worker checks, authenticated old/new Home representations, two HTTP workers, and staging stopped. Server configuration and lockfile were preserved; no migration or dependency installation was necessary. Required referral convergence checks reported zero missing rows.
+
+Xcode attempted the verified2.3.13(12) archive upload but returned `Failed to Use Accounts` (`IDEDistributionErrorDomain`, code2; process exit70), requesting App Store Connect access for the configured team. Following DEPLOYMENT.md, upload stopped pending reauthentication in Xcode Settings → Accounts. No successful upload, TestFlight availability, App Review submission or customer release is claimed. See [upload status](evidence/event-traffic-efficiency/testflight-status.json). The matching Android203142 remains verified locally.
