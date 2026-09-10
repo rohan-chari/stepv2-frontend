@@ -1,0 +1,66 @@
+{
+  "sourceCommit": "591340ceeeb1fe2451c036eca92ea7b78040b43f",
+  "artifacts": [
+    {
+      "platform": "iOS",
+      "file": "Bara.ipa",
+      "sha256": "873c473195c82a1fd17c5ef9f5f2e62516acd52ecffb3aef31ec5ea8f58e768e",
+      "bytes": 75755102,
+      "bundleId": "com.rohanchari.steptracker",
+      "version": "2.3.13",
+      "build": "12",
+      "signatureVerified": true,
+      "productionPush": true,
+      "debugEntitlement": false,
+      "compiledDefineKeys": [
+        "BACKEND_BASE_URL",
+        "REVENUECAT_IOS_API_KEY",
+        "GOOGLE_IOS_CLIENT_ID",
+        "ADMOB_EXTRA_SPIN_AD_UNIT_ID",
+        "ADMOB_BANNER_AD_UNIT_ID",
+        "ADMOB_BOX_TOP_BANNER_AD_UNIT_ID",
+        "ADMOB_BOX_REROLL_AD_UNIT_ID",
+        "ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID",
+        "ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID",
+        "ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID"
+      ],
+      "newContractMarker": true
+    },
+    {
+      "package": "com.rohanchari.steptracker",
+      "version": "2.3.13",
+      "version_code": "203142",
+      "billing_client": "8.3.0",
+      "sha256": "8da8821ae0f376c44f25d0982f557767506cc5f5a3cc4b5505bd70de0b2b2ff3",
+      "upload_certificate_sha256": "CF:06:4C:DD:CA:14:CB:6B:27:91:BC:86:77:39:EF:14:EC:0E:AE:13:3C:68:E2:71:30:E5:0D:0F:8B:EE:14:3A",
+      "signature_verified": true,
+      "platform": "Android",
+      "file": "app-prod-release.aab",
+      "bytes": 106319750,
+      "bundletoolValid": true,
+      "abis": [
+        {
+          "abi": "arm64-v8a",
+          "sha256": "b3577327004cb9daafb981d7a98a178d88154e0af960c8e1831f120fb8a8aefa",
+          "matchesFreshIndependentlyStrippedCompilerOutput": true,
+          "newContractMarker": true,
+          "productionDefinesVerified": true
+        },
+        {
+          "abi": "armeabi-v7a",
+          "sha256": "ab1205e2a2f29a04bc6ecb6ca323ccd373533c6c81b66adc7aeb62b5a6db499d",
+          "matchesFreshIndependentlyStrippedCompilerOutput": true,
+          "newContractMarker": true,
+          "productionDefinesVerified": true
+        },
+        {
+          "abi": "x86_64",
+          "sha256": "27c73b05198789331fef400208009c19926e73e5c77275d36278c461f2ddb471",
+          "matchesFreshIndependentlyStrippedCompilerOutput": true,
+          "newContractMarker": true,
+          "productionDefinesVerified": true
+        }
+      ]
+    }
+  ]
+}

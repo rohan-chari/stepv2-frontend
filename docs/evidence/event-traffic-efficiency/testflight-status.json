@@ -1,5 +1,5 @@
 {
-  "attemptedAt": "2026-09-10T03:58:54Z",
+  "attemptedAt": "2026-09-10T04:09:14Z",
   "version": "2.3.13",
   "build": "12",
   "uploadSucceeded": false,
@@ -7,8 +7,12 @@
   "errorDomain": "IDEDistributionErrorDomain",
   "errorCode": 2,
   "error": "Failed to Use Accounts",
-  "requiredAction": "Reauthenticate configured Apple account in Xcode Settings > Accounts; confirm App Store Connect team access.",
+  "requiredAction": "Restore App Store Connect team access to the signed-in Xcode command-line upload session; Xcode GUI is reported working by user.",
   "backendDeployedCommit": "9e99fcbd6799cd944ddbbe7e0f0589c5016a4a38",
   "androidVersionCode": "203142",
-  "androidVerified": true
+  "androidVerified": true,
+  "previousAttemptedAt": "2026-09-10T03:58:54Z",
+  "attemptCount": 2,
+  "rebuiltBothPlatforms": true,
+  "retryArtifacts": "retry-artifact-verification.json"
 }
