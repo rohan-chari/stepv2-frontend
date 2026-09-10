@@ -1534,6 +1534,47 @@ coin_transactions`.
 
 ## 6. Cosmetics — `DB shop_items`, verified 2026-08-08
 
+### Wardrobe planning verification — 2026-09-09 (local code only)
+
+These are current handler properties, not a fresh production catalog or
+income-distribution audit. No live prices, active rows, or balance-config values
+were queried for this planning review; historical production figures below
+retain their original verification dates.
+
+- Cosmetic coin purchases use server-priced items, an atomic debit/ledger and
+  unique ownership by user/item. An already-owned purchase spends 0 coins;
+  successful request replays reuse the stored result. Purchase eligibility
+  requires active, non-earn-only, channel-visible content and the applicable
+  character capability. Sources: backend
+  `src/modules/cosmetics/purchaseShopItem.js:59-166`.
+- Membership pricing rounds the discount down: payable coins are
+  `P - floor(P * discountPercent / 100)`. The server validates a supplied price
+  quote. Source: backend `src/modules/billing/services/memberPrice.js:10-16`.
+- Cosmetic ad unlocks use the server-priced shortfall, the shared
+  powerup/cosmetic allowance, user-and-item-specific verified grants, conditional
+  grant consumption and an atomic debit of the current wallet. They grant item
+  ownership rather than minting shortfall coins. Sources: backend
+  `src/modules/cosmetics/unlockShopItemWithAds.js:135-230`,
+  `src/modules/economy/services/adUnlockPolicy.js:35-41,80-110`.
+- The unowned accessory reward pool is global per user: active, non-test-only,
+  non-earn-only, non-CHARACTER items less owned IDs. It does not filter by active
+  or owned character. Thus a row can participate in rewards without appearing
+  in an explicit named reward table. Sources: backend
+  `src/modules/cosmetics/getUnownedAccessoryPool.js:10-27`,
+  `src/modules/economy/commands/claimDailyReward.js:45-49`.
+- Legacy day 6 grants an unowned accessory or, for an empty pool, 100 coins.
+  Removing the final eligible item therefore changes that claim's wallet grant
+  from 0 to 100 coins; 100 / 6 = 16.67 additional coins/day when claiming every
+  day of the legacy six-day cycle, excluding the value of the lost item.
+  This is a code-path example, not a measured player outcome. Sources: backend
+  `src/modules/economy/constants/dailyReward.js:2-6`,
+  `src/modules/economy/commands/claimDailyReward.js:100-121`.
+- Existing accessory compatibility describes pairwise clothing conflicts
+  (`eyewear` and `full_face` tags), not species fit. Equip validates ownership,
+  availability, channel, slot and those conflicts. Sources: backend
+  `src/modules/cosmetics/accessoryCompatibility.js:1-4,69-84`,
+  `src/modules/cosmetics/equipAccessory.js:63-118`.
+
 ### 6.1 Current catalog refresh — verified 2026-08-18
 
 | Price | Active, non-test-only, non-earn-only items |
