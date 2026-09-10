@@ -12,17 +12,16 @@ class LockedShopArt extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: [
+      child,
       if (locked)
-        ColorFiltered(
-          key: const Key('locked-shop-art-shade'),
-          colorFilter: ColorFilter.mode(
-            Colors.black.withValues(alpha: .22),
-            BlendMode.srcATop,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ColoredBox(
+              key: const Key('locked-shop-art-shade'),
+              color: Colors.black.withValues(alpha: .16),
+            ),
           ),
-          child: child,
-        )
-      else
-        child,
+        ),
       if (locked)
         Positioned.fill(
           child: IgnorePointer(
@@ -31,7 +30,7 @@ class LockedShopArt extends StatelessWidget {
                 child: Icon(
                   Icons.lock_rounded,
                   size: 28,
-                  color: AppColors.of(context).textLight,
+                  color: AppColors.of(context).pillGold,
                   shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
                 ),
               ),

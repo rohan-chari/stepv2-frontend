@@ -170,6 +170,11 @@ void main() {
         final lock = find.byIcon(Icons.lock_rounded);
         final art = find.byKey(const Key('shop-character-art'));
         expect(tester.getCenter(lock), tester.getCenter(art));
+        expect(tester.widget<Icon>(lock).color, AppColors.pillGold);
+        final shade = tester.widget<ColoredBox>(
+          find.byKey(const Key('locked-shop-art-shade')),
+        );
+        expect(shade.color, Colors.black.withValues(alpha: .16));
         expect(find.byKey(const Key('locked-shop-art-shade')), findsOneWidget);
       } else {
         expect(find.byKey(const Key('locked-shop-art-shade')), findsNothing);
