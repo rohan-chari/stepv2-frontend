@@ -186,16 +186,18 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('FEATURED'), findsOneWidget);
+    expect(find.text('Featured'), findsOneWidget);
     expect(find.byType(CoinPackOffers), findsOneWidget);
     expect(find.byKey(const Key('shop-membership-toggle')), findsOneWidget);
     expect(find.text('INVENTORY'), findsNothing);
-    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
     await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
     expect(find.text('INVENTORY'), findsNothing);
-    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
-    expect(find.byType(CoinPackOffers), findsNothing);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
+    expect(find.byType(CoinPackOffers), findsOneWidget);
   });
   testWidgets('coin pack artwork replaces placeholder icons', (tester) async {
     await tester.pumpWidget(
@@ -231,7 +233,11 @@ void main() {
           find.byType(BaraPlusBody),
           focus == ShopFocus.membership ? findsOneWidget : findsNothing,
         );
-        await selectShopCategory(tester, 'POWERUPS');
+        await closeShopMembership(tester);
+        await tester.drag(
+          find.byType(CustomScrollView).first,
+          const Offset(0, -450),
+        );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump();
@@ -243,7 +249,8 @@ void main() {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling(), tutorialDue: true);
     expect(find.text('INVENTORY'), findsNothing);
-    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
     expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
   });
   testWidgets('missing billing keeps Items and shows no sample prices', (
@@ -256,7 +263,8 @@ void main() {
     await selectShopCategory(tester, 'POWERUPS');
     await tester.pump();
     expect(find.text('INVENTORY'), findsNothing);
-    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
   });
   testWidgets('sections recover independently from unavailable store', (
     tester,

@@ -1,0 +1,214 @@
+import 'dart:io';
+import 'package:google_fonts/google_fonts.dart';
+// Temporary capture harness: GoogleFonts discovery aliases map to bundled variable font bytes.
+// ignore: implementation_imports
+import 'package:google_fonts/src/google_fonts_base.dart' as google_base;
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:step_tracker/preview/preview_billing_api.dart';
+import 'package:step_tracker/preview/preview_billing_controller.dart';
+import 'package:step_tracker/screens/tabs/shop_tab.dart';
+import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
+
+class _EvidenceApi extends PreviewBillingApi {
+  _EvidenceApi(super.controller);
+  @override
+  Future<Map<String, dynamic>> fetchPowerupShopCatalog({
+    required String identityToken,
+  }) async => {
+    'coins': controller.auth.coins,
+    'items': [
+      for (final row in const [
+        ('GHOST_PEPPER', 'Ghost Pepper', 200),
+        ('HITCHHIKE', 'Hitchhike', 150),
+        ('LEECH', 'Leech', 200),
+        ('QUICK_RINSE', 'Quick Rinse', 75),
+        ('RAINSTORM', 'Rainstorm', 200),
+        ('DEFENSE_SCAN', 'X-Ray', 75),
+      ])
+        {
+          'sku': row.$1,
+          'powerupType': row.$1,
+          'name': row.$2,
+          'description': 'Evidence fixture using bundled art.',
+          'priceCoins': row.$3,
+          'ownedQuantity': 0,
+        },
+    ],
+  };
+}
+
+class _FontManifest implements AssetManifest {
+  _FontManifest(this.assets);
+  final List<String> assets;
+  @override
+  List<String> listAssets() => assets;
+  @override
+  List<AssetMetadata>? getAssetVariants(String key) => null;
+}
+
+Future<void> _loadFonts() async {
+  final aliases = <String, ByteData>{};
+  for (final family in ['SpaceGrotesk', 'DMSans']) {
+    final data = await rootBundle.load('assets/fonts/$family-Variable.ttf');
+    for (final weight in [
+      'Thin',
+      'ExtraLight',
+      'Light',
+      'Regular',
+      'Medium',
+      'SemiBold',
+      'Bold',
+      'ExtraBold',
+      'Black',
+    ]) {
+      aliases['evidence-fonts/$family-$weight.ttf'] = data;
+    }
+  }
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMessageHandler('flutter/assets', (message) async {
+    final key = const StringCodec().decodeMessage(message);
+    return aliases[key] ??
+        await messenger.delegate.send('flutter/assets', message);
+  });
+  google_base.assetManifest = _FontManifest(aliases.keys.toList());
+  GoogleFonts.config.allowRuntimeFetching = false;
+
+  // Register bundled variable fonts under the exact GoogleFonts family aliases
+  // used by production TextStyles. This avoids the test binding's Ahem face.
+  for (final font in const [
+    ('SpaceGrotesk', 'SpaceGrotesk-Variable.ttf'),
+    ('DMSans', 'DMSans-Variable.ttf'),
+  ]) {
+    final data = await rootBundle.load('assets/fonts/${font.$2}');
+    for (final suffix in [
+      'regular',
+      '100',
+      '200',
+      '300',
+      '500',
+      '600',
+      '700',
+      '800',
+      '900',
+    ]) {
+      final loader = FontLoader('${font.$1}_$suffix')
+        ..addFont(Future.value(data));
+      await loader.load();
+    }
+    await (FontLoader(font.$1)..addFont(Future.value(data))).load();
+  }
+  await (FontLoader(
+    'Jersey25',
+  )..addFont(rootBundle.load('assets/fonts/Jersey25-Regular.ttf'))).load();
+  await (FontLoader(
+    'MaterialIcons',
+  )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+}
+
+void main() {
+  setUp(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'test',
+      version: '1',
+      buildNumber: '1',
+      buildSignature: '',
+    ),
+  );
+  testWidgets('capture actual Shop render with bundled fonts', (tester) async {
+    await tester.runAsync(_loadFonts);
+    for (final width in [390.0, 320.0]) {
+      for (final dark in [false, true]) {
+        tester.view.physicalSize = Size(width, 844);
+        tester.view.devicePixelRatio = 1;
+        final controller = PreviewBillingController();
+        final boundary = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: boundary,
+            child: BillingScope(
+              controller: controller,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: dark ? AppThemeData.night() : AppThemeData.light(),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    padding: const EdgeInsets.only(top: 44, bottom: 34),
+                  ),
+                  child: child!,
+                ),
+                home: Builder(
+                  builder: (context) => Scaffold(
+                    body: TextButton(
+                      key: const Key('open-evidence-shop'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ShopTab(
+                            authService: controller.auth,
+                            backendApiService: _EvidenceApi(controller),
+                            isTutorialPreview: true,
+                          ),
+                        ),
+                      ),
+                      child: const Text('Open Shop'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('open-evidence-shop')));
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        // Decode the same bundled images the real widget requested.
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        });
+        for (final section in ['featured', 'powerups', 'characters']) {
+          if (section != 'featured') {
+            await Scrollable.ensureVisible(
+              tester.element(find.byKey(Key('shop-section-$section'))),
+              alignment: 0,
+            );
+          }
+          await tester.pump();
+          for (var decodeFrame = 0; decodeFrame < 3; decodeFrame++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 120)),
+            );
+            await tester.pump(const Duration(milliseconds: 80));
+          }
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(tester.takeException(), isNull);
+          final render =
+              boundary.currentContext!.findRenderObject()
+                  as RenderRepaintBoundary;
+          await tester.runAsync(() async {
+            final screenshot = await render.toImage(pixelRatio: 2);
+            final bytes = await screenshot.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            await File(
+              'docs/artifacts/shop-sectioned-2026-09-10/${dark ? 'dark' : 'light'}-${width.toInt()}-$section.png',
+            ).writeAsBytes(bytes!.buffer.asUint8List());
+            screenshot.dispose();
+          });
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+      }
+    }
+    tester.view.reset();
+  });
+}

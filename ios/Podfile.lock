@@ -18,7 +18,13 @@ PODS:
   - AppLovinSDK (13.6.3)
   - device_info_plus (0.0.1):
     - Flutter
+  - FBAEMKit (18.1.1):
+    - FBSDKCoreKit_Basics (= 18.1.1)
   - FBAudienceNetwork (6.21.1)
+  - FBSDKCoreKit (18.1.1):
+    - FBAEMKit (= 18.1.1)
+    - FBSDKCoreKit_Basics (= 18.1.1)
+  - FBSDKCoreKit_Basics (18.1.1)
   - Firebase/CoreOnly (12.14.0):
     - FirebaseCore (~> 12.14.0)
   - Firebase/Installations (12.14.0):
@@ -198,6 +204,7 @@ DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - app_tracking_transparency (from `.symlinks/plugins/app_tracking_transparency/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
+  - FBSDKCoreKit (= 18.1.1)
   - firebase_app_installations (from `.symlinks/plugins/firebase_app_installations/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
@@ -230,7 +237,10 @@ SPEC REPOS:
     - AppAuth
     - AppCheckCore
     - AppLovinSDK
+    - FBAEMKit
     - FBAudienceNetwork
+    - FBSDKCoreKit
+    - FBSDKCoreKit_Basics
     - Firebase
     - FirebaseCore
     - FirebaseCoreInternal
@@ -322,7 +332,10 @@ SPEC CHECKSUMS:
   AppCheckCore: e215d35177a9cf469927863e69c13e220df32a8b
   AppLovinSDK: f3da9503e8193d8c4badc1a9965d73a0779812fa
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
+  FBAEMKit: fbb0a50e13109400d0615e7630a0db26ec6b8206
   FBAudienceNetwork: 85d18a65c9e35bc426bd4664cf3ae2a1172d7b60
+  FBSDKCoreKit: 0063014b3b1f7e975e70b60232b0cf8003839746
+  FBSDKCoreKit_Basics: f4a1e0f38769eb71abaf6395b85e015318fcda49
   Firebase: 7cc10425300768ec86292688af5cb228f0604bde
   firebase_app_installations: 712766fe34f3cd41af300191735ddb4396242075
   firebase_core: 383e19b49a08df5d7a6cf5017616de6a357ed7af
@@ -376,6 +389,6 @@ SPEC CHECKSUMS:
   VungleAds: 3b73c5e680c4c956ade61f3b0791e9b270914548
   webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
 
-PODFILE CHECKSUM: cbfc905a25d605fbf611c5315d5c905bbddedc38
+PODFILE CHECKSUM: ed8069217ee62576b3c492eeac9c4de406ded7da
 
 COCOAPODS: 1.16.2

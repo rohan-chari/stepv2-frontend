@@ -1,0 +1,84 @@
+{
+  "kind": "real Flutter widget render, offline preview fixtures",
+  "pixelRatio": 2,
+  "screenshots": [
+    {
+      "file": "dark-320-characters.png",
+      "width": 640,
+      "height": 1688,
+      "sha256": "7dfd503e80d3496ac4da927bf7b3cdb2d8c557a48b1b0daf5b45431885440697"
+    },
+    {
+      "file": "dark-320-featured.png",
+      "width": 640,
+      "height": 1688,
+      "sha256": "36b8f7f54317c244782af33752a8ce90568c71a9850c21a62c5aa0a27ff974bd"
+    },
+    {
+      "file": "dark-320-powerups.png",
+      "width": 640,
+      "height": 1688,
+      "sha256": "2d9d31dae83494fe0f8e30cc317c354e2c0371cbc88137066b57b58dfde480df"
+    },
+    {
+      "file": "dark-390-characters.png",
+      "width": 780,
+      "height": 1688,
+      "sha256": "db0cfabd7e66246bbe3c354fdfd15dde6852ef39efb0be032314c223ad731b57"
+    },
+    {
+      "file": "dark-390-featured.png",
+      "width": 780,
+      "height": 1688,
+      "sha256": "c6aad5717f08987bf574c90b9019a83fcfdf970cc52fcdaaff69820fcfdd2394"
+    },
+    {
+      "file": "dark-390-powerups.png",
+      "width": 780,
+      "height": 1688,
+      "sha256": "fdd59883fa9deb012b5394766ee0e32cbd8f7f3f7b69833c7f482518e149c91d"
+    },
+    {
+      "file": "light-320-characters.png",
+      "width": 640,
+      "height": 1688,
+      "sha256": "8f30473511fc3d19a9f121a9cba4f8b32e0587790de989af396600e5bb8d2e7f"
+    },
+    {
+      "file": "light-320-featured.png",
+      "width": 640,
+      "height": 1688,
+      "sha256": "2fa5d17b83626af6bbb15345de0d9f425a4f3f90a3703c8ee5a7c825102570a2"
+    },
+    {
+      "file": "light-320-powerups.png",
+      "width": 640,
+      "height": 1688,
+      "sha256": "2d530e9221f989e9da90b491346f3af607e025e010772686a9dd38f140b90cb4"
+    },
+    {
+      "file": "light-390-characters.png",
+      "width": 780,
+      "height": 1688,
+      "sha256": "6d6382170b9c0ab2ce27e5a431af5eda23c7341afc147d4e1224a225bdb6ecab"
+    },
+    {
+      "file": "light-390-featured.png",
+      "width": 780,
+      "height": 1688,
+      "sha256": "8d23a6265c992dde5e7d13eee1273e155b231b3797515e8d576030a472306565"
+    },
+    {
+      "file": "light-390-powerups.png",
+      "width": 780,
+      "height": 1688,
+      "sha256": "988e3b2762251ee9a10487e437630a51b70c7f77e9f1a1d992b0ad190c18108f"
+    }
+  ],
+  "sourceHashes": {
+    "lib/screens/tabs/shop_tab.dart": "f8ed21d4fa3b853f4929701fd70321199d3016fb671bb761d8d0d2a37977a6e4",
+    "lib/widgets/shop_product_grid.dart": "41346f96a7466110b84f739dfe2c46d6547baf0f1b10463d7d2909be870ae3e2",
+    "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+    "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa"
+  }
+}

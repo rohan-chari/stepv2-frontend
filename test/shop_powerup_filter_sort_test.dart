@@ -114,6 +114,8 @@ Future<void> _pump(WidgetTester tester, BackendApiService api) async {
 /// not change, so every property this file guarded still holds — it is only the
 /// interaction that moved. Updated in place rather than deleted.
 Future<void> _openSheet(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const Key('shop-filter-sort-button')));
+  await tester.pump(const Duration(milliseconds: 300));
   await tester.tap(find.byKey(const Key('shop-filter-sort-button')));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));

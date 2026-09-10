@@ -358,7 +358,7 @@ void main() {
         ],
       );
       // Switch to the accessories category so the cosmetic tile renders.
-      await tester.tap(find.text('CHARACTERS').first);
+      await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       final selector = find.byKey(const Key('shop-character-c1'));
@@ -400,7 +400,7 @@ void main() {
           },
         ],
       );
-      await tester.tap(find.text('CHARACTERS').first);
+      await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       final selector = find.byKey(const Key('shop-character-c1'));
@@ -422,7 +422,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(ShopTab), findsOneWidget);
-      expect(find.text('FEATURED'), findsOneWidget);
+      expect(find.text('Featured'), findsOneWidget);
       expect(find.byKey(const Key('shop-item-sheet')), findsNothing);
       await selectShopCategory(tester, 'CHARACTERS');
       await tester.pump();

@@ -18,6 +18,9 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A2F723038500C65CDCFE1FFD /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 02FD72DDA049642149A6D665 /* Pods_RunnerTests.framework */; };
+		BABA20260910000000000101 /* MetaAppEventsPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABA20260910000000000201 /* MetaAppEventsPolicy.swift */; };
+		BABA20260910000000000102 /* MetaAppEventsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABA20260910000000000202 /* MetaAppEventsCoordinator.swift */; };
+		BABA20260910000000000103 /* MetaCoreKitAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABA20260910000000000203 /* MetaCoreKitAdapter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +73,9 @@
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A33065D4D9C463C57693C3E2 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
 		C43D1CDDFCCBCE974B64AA6C /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		BABA20260910000000000201 /* MetaAppEventsPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaAppEventsPolicy.swift; sourceTree = "<group>"; };
+		BABA20260910000000000202 /* MetaAppEventsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaAppEventsCoordinator.swift; sourceTree = "<group>"; };
+		BABA20260910000000000203 /* MetaCoreKitAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaCoreKitAdapter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +160,9 @@
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
+				BABA20260910000000000203 /* MetaCoreKitAdapter.swift */,
+				BABA20260910000000000202 /* MetaAppEventsCoordinator.swift */,
+				BABA20260910000000000201 /* MetaAppEventsPolicy.swift */,
 				1FADFAC72E1B4D0000000001 /* RaceFeedNativeAdFactory.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -325,6 +334,7 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+			showEnvVarsInLog = 0;
 		};
 		616037DCFC91C05BB7D0148E /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -367,13 +377,17 @@
 			files = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/Runner/Info.plist",
+				"$(SRCROOT)/../scripts/prepare_meta_ios_plist.sh",
 			);
 			name = "Run Script";
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/BaraInfo.plist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			shellScript = "/bin/bash \"$SRCROOT/../scripts/prepare_meta_ios_plist.sh\" || exit 1\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			showEnvVarsInLog = 0;
 		};
 		F2A33A8F19986F7E4EE2307D /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -413,6 +427,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				BABA20260910000000000103 /* MetaCoreKitAdapter.swift in Sources */,
+				BABA20260910000000000102 /* MetaAppEventsCoordinator.swift in Sources */,
+				BABA20260910000000000101 /* MetaAppEventsPolicy.swift in Sources */,
 				1FADFAC72E1B4D0000000002 /* RaceFeedNativeAdFactory.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
@@ -510,7 +527,7 @@
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 4NRKZL9H5J;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/BaraInfo.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -696,7 +713,7 @@
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 4NRKZL9H5J;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/BaraInfo.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -721,7 +738,7 @@
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 4NRKZL9H5J;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/BaraInfo.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

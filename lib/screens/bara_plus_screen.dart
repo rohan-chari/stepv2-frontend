@@ -1,4 +1,6 @@
+import 'dart:async';
 import '../config/animals.dart';
+import '../services/meta_app_events_service.dart';
 import '../services/remote_asset_cache.dart';
 import '../widgets/accessory_thumbnail.dart';
 import 'package:flutter/material.dart';
@@ -702,13 +704,22 @@ class _BaraPlusScreenState extends State<BaraPlusBody> {
                   loading: _busy,
                   onPressed: disabled || offer == null
                       ? null
-                      : () => _perform(
-                          () => permanent
-                              ? billing.buyPermanent()
-                              : trialDays > 0
-                              ? billing.startTrial(selectedPlan)
-                              : billing.subscribe(selectedPlan),
-                        ),
+                      : () {
+                          if (!billing.isPreview) {
+                            unawaited(
+                              MetaAppEventsService.instance.log(
+                                MetaConversion.purchaseIntent,
+                              ),
+                            );
+                          }
+                          _perform(
+                            () => permanent
+                                ? billing.buyPermanent()
+                                : trialDays > 0
+                                ? billing.startTrial(selectedPlan)
+                                : billing.subscribe(selectedPlan),
+                          );
+                        },
                 ),
                 const SizedBox(height: 10),
                 _text(

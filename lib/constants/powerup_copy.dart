@@ -595,7 +595,7 @@ abstract final class PowerupCopy {
     // Batch 2026-08-09 item 1: base Leg Cramp is (and always was) 1 hour —
     // "2 hours" was stale bundled copy. Upgrades now add 15 min, not an hour.
     'LEG_CRAMP': "Freeze a rival's steps for 1 hour",
-    'RED_CARD': "Remove 10% of the leader's steps",
+    'RED_CARD': "Remove 10% of the leader's steps, up to 10,000 steps.",
     'SHORTCUT': 'Steal 1,000 steps from a rival',
     'COMPRESSION_SOCKS': 'Shield against the next attack',
     'PROTEIN_SHAKE': '+1,500 bonus steps instantly',

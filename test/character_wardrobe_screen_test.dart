@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:step_tracker/tutorial/spotlight_overlay.dart';
 import 'package:step_tracker/widgets/app_refresh_indicator.dart';
@@ -483,7 +484,7 @@ Future<void> pumpWardrobeShop(WidgetTester tester, WardrobeApi api) async {
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+  await selectShopCategory(tester, 'CHARACTERS');
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
 }
@@ -494,6 +495,8 @@ Future<void> openWardrobe(WidgetTester tester, {String key = 'default'}) async {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
   }
+  await tester.ensureVisible(find.byKey(Key('shop-character-$key')));
+  await tester.pump();
   await tester.tap(find.byKey(Key('shop-character-$key')));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
@@ -525,6 +528,8 @@ void main() {
       final api = PagedCharactersApi();
       await pumpWardrobeShop(tester, api);
       expect(api.requests, [(limit: 24, cursor: null)]);
+      await tester.ensureVisible(find.text('Load more'));
+      await tester.pump();
       await tester.tap(find.text('Load more'));
       await tester.pump();
       expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
@@ -539,6 +544,8 @@ void main() {
       expect(api.requests.last, (limit: 24, cursor: 'page-2'));
       api.appearance = 1;
       api.active = 'character-corgi';
+      await tester.ensureVisible(find.text('Load more'));
+      await tester.pump();
       await tester.tap(find.text('Load more'));
       await tester.pump();
       expect(api.requests.map((r) => r.cursor), [
@@ -771,6 +778,8 @@ void main() {
       await tester.tap(
         find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
       );
+      await tester.pump();
+      await tester.ensureVisible(find.text('Load more'));
       await tester.pump();
       await tester.tap(find.text('Load more'));
       await tester.pump();

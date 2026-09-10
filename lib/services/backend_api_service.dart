@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/backend_config.dart';
+import 'meta_app_events_service.dart';
 import '../constants/powerup_copy.dart';
 import '../models/admin_system_health.dart';
 import '../models/balance_config.dart';
@@ -3860,7 +3861,7 @@ class BackendApiService {
       body: onboarding ? const {'onboarding': true} : const {},
       identityToken: identityToken,
     );
-    return _decodeJsonResponse(response);
+    return _decodeExplicitRaceJoin(response);
   }
 
   /// TR-201: joins a public TEAM race on a chosen side. Separate from
@@ -3877,7 +3878,7 @@ class BackendApiService {
       body: {if (onboarding) 'onboarding': true, 'team': team},
       identityToken: identityToken,
     );
-    return _decodeJsonResponse(response);
+    return _decodeExplicitRaceJoin(response);
   }
 
   /// TR-103/TR-801 (contract §3b): a fresh pair of DISTINCT team names from
@@ -4612,7 +4613,7 @@ class BackendApiService {
       body: onboarding ? const {'onboarding': true} : const {},
       identityToken: identityToken,
     );
-    return _decodeJsonResponse(response);
+    return _decodeExplicitRaceJoin(response);
   }
 
   /// TR-201: joins a TEAM race behind a share [token], picking a side.
@@ -4629,7 +4630,7 @@ class BackendApiService {
       body: {if (onboarding) 'onboarding': true, 'team': team},
       identityToken: identityToken,
     );
-    return _decodeJsonResponse(response);
+    return _decodeExplicitRaceJoin(response);
   }
 
   /// Additive v2 activation contract. Callers must treat a 404 as an older
@@ -6435,6 +6436,23 @@ class BackendApiService {
     } on HttpException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
     }
+  }
+
+  Future<Map<String, dynamic>> _decodeExplicitRaceJoin(
+    HttpClientResponse response,
+  ) async {
+    final result = await _decodeJsonResponse(response);
+    final participant = result['participant'];
+    // These existing routes return 201 only for a new membership; duplicate
+    // joins fail with ALREADY_RESPONDED. Never infer a conversion from a generic
+    // legacy 200 or from automatic assignment/refresh endpoints.
+    if (response.statusCode == HttpStatus.created &&
+        participant is Map &&
+        participant['id'] is String &&
+        (participant['id'] as String).isNotEmpty) {
+      unawaited(MetaAppEventsService.instance.log(MetaConversion.raceJoined));
+    }
+    return result;
   }
 
   Future<HttpClientResponse> _sendJsonRequest({

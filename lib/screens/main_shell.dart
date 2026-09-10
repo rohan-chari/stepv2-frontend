@@ -29,6 +29,7 @@ import '../services/admin_metrics_telemetry_service.dart';
 import '../services/ad_service.dart';
 import '../services/rewarded_coins_controller.dart';
 import '../services/onboarding_state_service.dart';
+import '../services/meta_app_events_service.dart';
 import '../utils/onboarding_gate.dart';
 import '../utils/funded_exposure_error_copy.dart';
 import '../widgets/notification_ask_dialog.dart';
@@ -188,6 +189,39 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _probeInconclusive = false;
   int? _probeArmedAtMs;
   bool _homeReachedRecorded = false;
+  String? _metaOnboardingActionUserId;
+  String? _metaOnboardingCompletedUserId;
+
+  // Arm only from a real onboarding gate action. Restoring a completed account,
+  // ordinary Home renders and Settings tutorial replays never arm this signal.
+  void _observeMetaOnboardingAction() {
+    final userId = widget.authService.userId;
+    if (!_isOnboarding ||
+        userId == null ||
+        userId.isEmpty ||
+        _metaOnboardingCompletedUserId == userId ||
+        (widget.authService.firstRaceOnboardingSeen &&
+            widget.authService.tutorialOnboardingSeen)) {
+      return;
+    }
+    _metaOnboardingActionUserId = userId;
+  }
+
+  void _reportMetaOnboardingCompletion() {
+    final pendingUserId = _metaOnboardingActionUserId;
+    if (pendingUserId == null) return;
+    if (pendingUserId != widget.authService.userId) {
+      _metaOnboardingActionUserId = null;
+      return;
+    }
+    if (_isOnboarding) return;
+    _metaOnboardingActionUserId = null;
+    _metaOnboardingCompletedUserId = pendingUserId;
+    unawaited(
+      MetaAppEventsService.instance.log(MetaConversion.onboardingCompleted),
+    );
+  }
+
   // --- one-time Home invite-code prompt -------------------------------------
   // Null until the device-local answer has been read: "unknown" must never
   // render as "not resolved", or a returning user flashes a prompt they
@@ -691,6 +725,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// flag false would drop the user straight back into a gate on the next
   /// rebuild — the escape would not be an escape.
   Future<void> _escapeHealthGate() async {
+    _observeMetaOnboardingAction();
     await _onboardingState.setEscapedHealthGate(true);
     unawaited(_activationAnalytics.record('health_escaped'));
     if (mounted) setState(() => _escapedHealthGate = true);
@@ -4633,6 +4668,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// (idempotent) and locally so onboarding exits to home. Marks locally even
   /// if the network call fails so the user isn't stuck on this step.
   Future<void> _skipFirstRaceOnboarding() async {
+    _observeMetaOnboardingAction();
     final identityToken = widget.authService.authToken;
     if (identityToken != null && identityToken.isNotEmpty) {
       try {
@@ -4689,6 +4725,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _runTutorialOnboarding() async {
+    final tutorialUserId = widget.authService.userId;
     final mandatory = _tutorialMandatory;
     // Captured before the first await — the route is pushed onto this
     // navigator, and reading it after the async gap trips
@@ -4745,6 +4782,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // grant is idempotent server-side (one ledger key), so a re-completion
     // cannot double-pay.
     if (!mandatory || completed) {
+      if (mounted && widget.authService.userId == tutorialUserId) {
+        _observeMetaOnboardingAction();
+      }
       await widget.authService.markTutorialOnboardingSeen();
       await markWhatsNewSeenForOnboarding();
     }
@@ -4759,6 +4799,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// it is still the live path both with the flag off and after the circuit
   /// breaker trips.
   Future<void> _skipTutorialOnboarding() async {
+    _observeMetaOnboardingAction();
     await widget.authService.markTutorialOnboardingSeen();
     await markWhatsNewSeenForOnboarding();
   }
@@ -5103,6 +5144,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    _reportMetaOnboardingCompletion();
     // The funnel denominator's other end (§5.9): the first frame this user ever
     // renders with onboarding behind them. Guarded by a plain bool rather than
     // persistence because "reached home in this session" is the honest signal —

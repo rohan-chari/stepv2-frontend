@@ -14,13 +14,16 @@ Future<void> closeShopMembership(WidgetTester tester) async {
 Future<void> selectShopCategory(WidgetTester tester, String category) async {
   await closeShopMembership(tester);
   final target = find.byKey(
-    Key('shop-category-${category == 'ACCESSORIES' ? 'CHARACTERS' : category}'),
+    Key(
+      'shop-section-${category == 'ACCESSORIES' ? 'characters' : category.toLowerCase()}',
+    ),
   );
   await tester.ensureVisible(target);
   await tester.pump();
-  await tester.tap(target);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
+  await tester.ensureVisible(target);
+  await tester.pump();
   if (category == 'ACCESSORIES') {
     await tester.tap(find.byKey(const Key('shop-character-default')));
     await tester.pump();

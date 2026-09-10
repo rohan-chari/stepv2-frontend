@@ -7,17 +7,26 @@ class ShopProductGrid extends StatelessWidget {
     required this.children,
     this.gridKey,
     this.compact = false,
+    this.spaciousPowerups = false,
   });
   final List<Widget> children;
   final Key? gridKey;
   final bool compact;
+  final bool spaciousPowerups;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 600;
-      return GridView.count(
+      final grid = GridView.count(
         key: gridKey,
-        crossAxisCount: compact
+        crossAxisCount: spaciousPowerups
+            ? (MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                      constraints.maxWidth < 320
+                  ? 2
+                  : wide
+                  ? 5
+                  : 3)
+            : compact
             ? ((constraints.maxWidth >= 600
                           ? 6
                           : constraints.maxWidth >= 360
@@ -31,12 +40,27 @@ class ShopProductGrid extends StatelessWidget {
             : 3,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-        mainAxisSpacing: 14,
+        padding: spaciousPowerups
+            ? const EdgeInsets.fromLTRB(16, 12, 16, 8)
+            : const EdgeInsets.fromLTRB(10, 10, 10, 6),
+        mainAxisSpacing: spaciousPowerups ? 16 : 14,
         crossAxisSpacing: 12,
-        childAspectRatio: !wide && constraints.maxWidth < 350 ? 0.70 : 0.82,
+        childAspectRatio: spaciousPowerups
+            ? 0.68
+            : !wide && constraints.maxWidth < 350
+            ? 0.70
+            : 0.82,
         children: children,
       );
+      return spaciousPowerups
+          ? Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1000),
+                child: grid,
+              ),
+            )
+          : grid;
     },
   );
 }

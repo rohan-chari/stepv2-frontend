@@ -24,30 +24,32 @@ void main() {
       'auth_coins': 100,
     });
   });
-  testWidgets(
-    'shop owns three bottom destinations with no global inventory or preview',
-    (tester) async {
-      addTearDown(tester.view.reset);
-      await pumpShop(tester, billing: FakeBilling());
-      final navigation = find.byKey(const Key('shop-bottom-navigation'));
-      expect(navigation, findsOneWidget);
-      for (final name in ['FEATURED', 'POWERUPS', 'CHARACTERS']) {
-        expect(
-          find.descendant(of: navigation, matching: find.text(name)),
-          findsOneWidget,
-        );
-      }
-      expect(find.text('ACCESSORIES'), findsNothing);
-      expect(find.text('INVENTORY'), findsNothing);
-      expect(find.byKey(const Key('shop-character-preview')), findsNothing);
-      expect(tester.getTopLeft(navigation).dy, greaterThan(650));
-      await tester.tap(find.text('POWERUPS'));
-      await tester.pump();
-      expect(find.text('BUY'), findsOneWidget);
-      expect(find.text('OWNED'), findsOneWidget);
-      expect(find.text('FEATURED'), findsOneWidget);
-    },
-  );
+  testWidgets('shop has three ordered sections without bottom categories', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    await pumpShop(tester, billing: FakeBilling());
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    final featured = find.byKey(const Key('shop-section-featured'));
+    final powerups = find.byKey(const Key('shop-section-powerups'));
+    final characters = find.byKey(const Key('shop-section-characters'));
+    expect(
+      tester.getTopLeft(featured).dy,
+      lessThan(tester.getTopLeft(powerups).dy),
+    );
+    expect(
+      tester.getTopLeft(powerups).dy,
+      lessThan(tester.getTopLeft(characters).dy),
+    );
+    expect(find.text('ACCESSORIES'), findsNothing);
+    expect(find.text('INVENTORY'), findsNothing);
+    expect(find.byKey(const Key('shop-character-preview')), findsNothing);
+    await tester.ensureVisible(powerups);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('BUY'), findsOneWidget);
+    expect(find.text('OWNED'), findsOneWidget);
+    expect(find.text('Featured'), findsOneWidget);
+  });
   testWidgets(
     'offline Shop pushes above host navigation and Back restores host',
     (tester) async {
@@ -59,7 +61,8 @@ void main() {
       await tester.tap(find.byKey(const Key('preview-nav-shop')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
-      expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
+      expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+      expect(find.byKey(const Key('shop-section-featured')), findsOneWidget);
       expect(find.byKey(const Key('preview-nav-shop')), findsNothing);
       await tester.tap(find.text('Back'));
       await tester.pump();

@@ -520,7 +520,7 @@ void main() {
 
     expect(find.byType(GetCoinsScreen), findsNothing);
     expect(find.byType(ShopTab), findsOneWidget);
-    expect(find.text("FEATURED"), findsOneWidget);
+    expect(find.text('Featured'), findsOneWidget);
     expect(find.byType(ReferralScreen), findsNothing);
   });
 }

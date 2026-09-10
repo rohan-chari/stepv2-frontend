@@ -45,43 +45,35 @@ void main() {
       'auth_coins': 100,
     });
   });
-  testWidgets('Featured uses three shop bottom destinations', (tester) async {
+  testWidgets('Featured begins the continuous Shop sections', (tester) async {
     addTearDown(tester.view.reset);
     await pumpShop(tester, billing: FakeBilling());
     expect(find.text('ITEMS'), findsNothing);
     expect(find.text('INVENTORY'), findsNothing);
     expect(find.text('ACCESSORIES'), findsNothing);
-    final categories = find.byKey(const Key('shop-bottom-navigation'));
-    for (final name in ['FEATURED', 'POWERUPS', 'CHARACTERS']) {
-      expect(
-        find.descendant(of: categories, matching: find.text(name)),
-        findsOneWidget,
-      );
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    for (final section in ['featured', 'powerups', 'characters']) {
+      expect(find.byKey(Key('shop-section-$section')), findsOneWidget);
     }
-    expect(
-      tester.getTopLeft(categories).dy,
-      greaterThan(tester.getBottomLeft(find.text('SHOP')).dy),
-    );
     expect(find.byType(CoinPackOffers), findsOneWidget);
   });
   for (final width in [320.0, 390.0, 800.0]) {
     testWidgets(
-      'Featured cards match each other and Powerups match Characters at $width',
+      'Featured membership is a separate row and Powerups are spacious at $width',
       (tester) async {
         addTearDown(tester.view.reset);
         await pumpShop(tester, billing: FakeBilling(), width: width);
-        final membership = tester.getSize(
-          find.byKey(const Key('shop-membership-toggle')),
+        final membership = find.byKey(const Key('shop-membership-toggle'));
+        final coin = find.byKey(const Key('coin-tile-coins_500'));
+        expect(
+          tester.getSize(membership).width,
+          greaterThan(tester.getSize(coin).width),
         );
-        final coin = tester.getSize(
-          find.byKey(const Key('coin-tile-coins_500')),
+        expect(
+          tester.getBottomLeft(membership).dy,
+          lessThanOrEqualTo(tester.getTopLeft(coin).dy),
         );
-        expect(coin, membership);
-        await tester.ensureVisible(find.text('POWERUPS'));
-        await tester.pump();
-        await tester.tap(find.text('POWERUPS'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
+        await selectShopCategory(tester, 'POWERUPS');
         final powerup = tester.getSize(
           find.byKey(const Key('shop-product-card')).first,
         );
@@ -89,9 +81,13 @@ void main() {
         final character = tester.getSize(
           find.byKey(const Key('shop-character-default')),
         );
-        expect(powerup.width, character.width);
-        expect(powerup.height, character.height);
-        expect(powerup.width, lessThanOrEqualTo(coin.width));
+        if (width >= 360) {
+          expect(powerup.width, greaterThan(character.width));
+        } else {
+          expect(powerup.width, closeTo((width - 32 - 24) / 3, .01));
+        }
+        expect(powerup.height, closeTo(powerup.width / .68, .01));
+        expect(tester.takeException(), isNull);
       },
     );
   }
@@ -159,21 +155,36 @@ void main() {
     await tester.pump();
     expect(find.text('Old purchase complete'), findsNothing);
   });
-  testWidgets('enlarged category navigation remains one scrollable row', (
-    tester,
-  ) async {
-    addTearDown(tester.view.reset);
-    await pumpShop(tester, billing: FakeBilling(), width: 320, textScale: 1.6);
-    final firstY = tester.getTopLeft(find.text('FEATURED')).dy;
-    for (final label in ['POWERUPS', 'CHARACTERS']) {
-      expect(tester.getTopLeft(find.text(label)).dy, firstY);
-    }
-    await tester.ensureVisible(find.text('CHARACTERS'));
-    await tester.pump();
-    await tester.tap(find.text('CHARACTERS'));
-    await tester.pump();
-    expect(find.byType(CoinPackOffers), findsNothing);
-  });
+  testWidgets(
+    'enlarged section headers remain readable and vertically ordered',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      await pumpShop(
+        tester,
+        billing: FakeBilling(),
+        width: 320,
+        textScale: 1.6,
+      );
+      final featured = find.byKey(const Key('shop-section-featured'));
+      final powerups = find.byKey(const Key('shop-section-powerups'));
+      final characters = find.byKey(const Key('shop-section-characters'));
+      expect(
+        tester.getBottomLeft(featured).dy,
+        lessThan(tester.getTopLeft(powerups).dy),
+      );
+      expect(
+        tester.getBottomLeft(powerups).dy,
+        lessThan(tester.getTopLeft(characters).dy),
+      );
+      await selectShopCategory(tester, 'CHARACTERS');
+      expect(
+        find.byKey(const Key('shop-character-default')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.byType(CoinPackOffers), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('identity cleanup preserves unrelated route above membership', (
     tester,
   ) async {

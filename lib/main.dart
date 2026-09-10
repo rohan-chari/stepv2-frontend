@@ -14,6 +14,7 @@ import 'screens/start_screen.dart';
 import 'screens/update_required_screen.dart';
 import 'services/auth_service.dart';
 import 'services/ad_consent_coordinator.dart';
+import 'services/meta_app_events_service.dart';
 import 'services/ad_service.dart';
 import 'services/app_route_observer.dart';
 import 'services/backend_api_service.dart';
@@ -97,6 +98,8 @@ Future<void> main() async {
     initializeAds: AdService.initializeMobileAdsAfterConsent,
     applyPartnerConsent: AdService.applyPartnerConsentSignals,
     onAdsPermissionChanged: AdService.setConsentPermission,
+    onMeasurementConsentResolved: (resolved) =>
+        MetaAppEventsService.instance.updateConsent(resolved: resolved),
   );
   AdService.configureConsentBootstrap(adConsentCoordinator.bootstrap);
 

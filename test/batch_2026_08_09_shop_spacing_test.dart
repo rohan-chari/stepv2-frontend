@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -9,10 +10,8 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 /// Batch 2026-08-09 item 3 — shop header spacing.
 ///
-/// The gap between the STORE/INVENTORY segment control and the category pills
-/// (8px) and the gap between the category pills and the filter/sort row (was
-/// 2px, cramped — screenshot IMG_3502) must match. Asserted geometrically off
-/// the real ShopTab so the check survives a refactor of the header column.
+/// The section-local BUY/OWNED and filter/sort row retain an 8px gap.
+/// The continuous Shop has no category bar or category-sized blank viewport.
 class _FakeShopApi extends BackendApiService {
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
@@ -95,68 +94,55 @@ void main() {
     PowerupCopy.resetForTest();
   });
 
-  testWidgets('STORE+POWERUPS: pill gap and filter-row gap are both 8px', (
+  testWidgets('Powerups segment and filter retain an 8px local gap', (
     tester,
   ) async {
     await _pump(tester);
-
     final segment = find.byKey(const Key('shop-segment-control'));
-    final pills = find.byKey(const Key('shop-bottom-navigation'));
     final controls = find.byKey(const Key('shop-filter-sort-button'));
-
     expect(segment, findsOneWidget);
-    expect(pills, findsOneWidget);
-    expect(
-      controls,
-      findsOneWidget,
-      reason: 'filter/sort row renders in STORE + POWERUPS',
-    );
-
+    expect(controls, findsOneWidget);
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
     expect(_gap(tester, segment, controls), closeTo(8.0, 0.01));
     expect(
-      tester.getTopLeft(pills).dy,
-      greaterThan(tester.getBottomLeft(controls).dy),
-    );
-    expect(
-      tester.getBottomRight(pills).dy,
-      lessThanOrEqualTo(tester.getSize(find.byType(ShopTab)).height),
+      tester.getTopLeft(segment).dy,
+      greaterThan(
+        tester.getBottomLeft(find.byKey(const Key('shop-section-powerups'))).dy,
+      ),
     );
   });
 
-  testWidgets('STORE+CHARACTERS: no filter row and no stray void below pills', (
-    tester,
-  ) async {
+  testWidgets(
+    'Characters follows Powerups without another filter or category viewport',
+    (tester) async {
+      await _pump(tester);
+      await selectShopCategory(tester, 'CHARACTERS');
+      expect(find.byKey(const Key('shop-filter-sort-button')), findsOneWidget);
+      expect(find.byKey(const Key('shop-segment-control')), findsOneWidget);
+      expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+      final characters = find.byKey(const Key('shop-section-characters'));
+      expect(
+        tester.getTopLeft(characters).dy,
+        greaterThan(
+          tester
+              .getBottomLeft(find.byKey(const Key('shop-filter-sort-button')))
+              .dy,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('OWNED removes only the Powerups filter row', (tester) async {
     await _pump(tester);
-
-    await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
-    expect(find.byKey(const Key('shop-filter-sort-button')), findsNothing);
-    expect(find.byKey(const Key('shop-filter-sort-label')), findsNothing);
-
-    expect(find.byKey(const Key('shop-segment-control')), findsNothing);
-    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
-  });
-
-  testWidgets('INVENTORY: filter row absent, pill gap unchanged', (
-    tester,
-  ) async {
-    await _pump(tester);
-
     await tester.tap(find.text('OWNED'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-
     expect(find.byKey(const Key('shop-filter-sort-button')), findsNothing);
     expect(find.byKey(const Key('shop-segment-control')), findsOneWidget);
-    expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.byKey(const Key('shop-bottom-navigation'))).dy,
-      greaterThan(
-        tester.getBottomLeft(find.byKey(const Key('shop-segment-control'))).dy,
-      ),
-    );
+    expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+    expect(find.byKey(const Key('shop-section-featured')), findsOneWidget);
+    expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
   });
 
   testWidgets('no layout overflow on a small (SE-size) screen', (tester) async {

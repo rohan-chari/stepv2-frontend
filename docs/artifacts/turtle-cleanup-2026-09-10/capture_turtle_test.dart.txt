@@ -1,0 +1,128 @@
+import 'package:google_fonts/google_fonts.dart';
+// ignore: implementation_imports
+import 'package:google_fonts/src/google_fonts_base.dart' as google_base;
+import 'package:flutter/services.dart';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/home_course_track.dart';
+import 'package:step_tracker/widgets/goal_track.dart';
+
+class _FontManifest implements AssetManifest {
+  _FontManifest(this.assets);
+  final List<String> assets;
+  @override
+  List<String> listAssets() => assets;
+  @override
+  List<AssetMetadata>? getAssetVariants(String key) => null;
+}
+
+Future<void> _loadFonts() async {
+  final aliases = <String, ByteData>{};
+  for (final family in ['SpaceGrotesk', 'DMSans']) {
+    final data = await rootBundle.load('assets/fonts/$family-Variable.ttf');
+    for (final weight in [
+      'Thin',
+      'ExtraLight',
+      'Light',
+      'Regular',
+      'Medium',
+      'SemiBold',
+      'Bold',
+      'ExtraBold',
+      'Black',
+    ]) {
+      aliases['evidence-fonts/$family-$weight.ttf'] = data;
+    }
+  }
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMessageHandler('flutter/assets', (message) async {
+    final key = const StringCodec().decodeMessage(message);
+    return aliases[key] ??
+        await messenger.delegate.send('flutter/assets', message);
+  });
+  google_base.assetManifest = _FontManifest(aliases.keys.toList());
+  GoogleFonts.config.allowRuntimeFetching = false;
+
+  // Register bundled variable fonts under the exact GoogleFonts family aliases
+  // used by production TextStyles. This avoids the test binding's Ahem face.
+  for (final font in const [
+    ('SpaceGrotesk', 'SpaceGrotesk-Variable.ttf'),
+    ('DMSans', 'DMSans-Variable.ttf'),
+  ]) {
+    final data = await rootBundle.load('assets/fonts/${font.$2}');
+    for (final suffix in [
+      'regular',
+      '100',
+      '200',
+      '300',
+      '500',
+      '600',
+      '700',
+      '800',
+      '900',
+    ]) {
+      final loader = FontLoader('${font.$1}_$suffix')
+        ..addFont(Future.value(data));
+      await loader.load();
+    }
+    await (FontLoader(font.$1)..addFont(Future.value(data))).load();
+  }
+  await (FontLoader(
+    'Jersey25',
+  )..addFont(rootBundle.load('assets/fonts/Jersey25-Regular.ttf'))).load();
+  await (FontLoader(
+    'MaterialIcons',
+  )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+}
+
+void main() {
+  testWidgets('capture real turtle frame and Home rendering', (tester) async {
+    await tester.runAsync(_loadFonts);
+    tester.view.physicalSize = const Size(800, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final dark in [false,true]) {
+      for (final hat in [false,true]) {
+        final boundary=GlobalKey();
+        final accessories=<Map<String,dynamic>>[
+          if(hat) {'id':'hat','assetKey':'cowboy_hat','slot':'HEAD','name':'Cowboy Hat','renderMetadata':{"scale": 1, "offsetX": 0.009700176366842284, "offsetY": 0.03, "rotation": -0.14, "perAnimal": {"turtle": {"scale": 0.7999999999999998, "offsetX": 0.24152542372881236, "offsetY": 0.20124293785310765, "rotation": -0.06}, "corgi_puppy": {"scale": 1.0677966101694945, "offsetX": 1.734723475976807e-18, "offsetY": 0.14322033898305142, "rotation": -0.2399999999999999}}}},
+        ];
+        await tester.pumpWidget(MaterialApp(
+          theme:dark?AppThemeData.night():AppThemeData.light(),
+          home:Scaffold(body:RepaintBoundary(key:boundary,child:Column(children:[
+            HomeCourseTrack(height:300,goalSteps:20000,runners:[
+              GoalTrackRunner(name:'You',progress:0.65,isUser:true,animal:'turtle',accessories:accessories),
+            ]),
+            ColoredBox(color:dark?const Color(0xff081e52):Colors.white,child:Wrap(children:[
+              for(var frame=0;frame<8;frame++) CapybaraSpriteWithAccessories(accessories:accessories,capybaraSize:176,frameIndex:frame,animal:'turtle'),
+            ])),
+          ]))),
+        ));
+        for (var attempt=0;attempt<40;attempt++) {
+          await tester.runAsync(() async => Future<void>.delayed(const Duration(milliseconds:100)));
+          await tester.pump(const Duration(milliseconds:16));
+          final raw=tester.widgetList<RawImage>(find.byType(RawImage));
+          if(raw.isNotEmpty && raw.every((w)=>w.image!=null)) break;
+        }
+        expect(tester.widgetList<RawImage>(find.byType(RawImage)).every((w)=>w.image!=null),isTrue);
+        await tester.pump(const Duration(seconds:2));
+        await tester.pump(const Duration(milliseconds:80));
+        expect(tester.takeException(),isNull);
+        final render=boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final im=await render.toImage(pixelRatio:1);
+          final png=await im.toByteData(format:ui.ImageByteFormat.png);
+          await File('docs/artifacts/turtle-cleanup-2026-09-10/${dark?'dark':'light'}-${hat?'cowboy':'bare'}.png').writeAsBytes(png!.buffer.asUint8List());
+          im.dispose();
+        });
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
+  });
+}

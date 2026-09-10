@@ -1,0 +1,12 @@
+local result = Sprite(704,352,ColorMode.RGB)
+local out = Image(704,352,ColorMode.RGB)
+for row,bg in ipairs({app.pixelColor.rgba(255,255,255,255),app.pixelColor.rgba(0,0,0,255),app.pixelColor.rgba(8,30,82,255),app.pixelColor.rgba(49,91,76,255)}) do
+ for y=(row-1)*88,row*88-1 do for x=0,703 do out:drawPixel(x,y,bg) end end
+ local src=app.open(app.params.source)
+ local im=Image(src.spec); im:drawSprite(src,1)
+ out:drawImage(im,Point(0,(row-1)*88))
+end
+result:newCel(result.layers[1],1,out)
+app.activeSprite=result
+app.command.SpriteSize{ui=false,width=1408,height=704,method='nearest-neighbor'}
+result:saveAs(app.params.output)

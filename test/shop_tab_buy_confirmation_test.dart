@@ -333,7 +333,9 @@ void main() {
 
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
@@ -434,7 +436,9 @@ void main() {
 
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
@@ -444,7 +448,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
     await tester.tap(find.text('Signal Jammer'));
@@ -504,15 +510,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    final powerupsCategory = find.byKey(const Key('shop-category-POWERUPS'));
-    await tester.ensureVisible(powerupsCategory);
-    await tester.pump();
-    await tester.tap(powerupsCategory);
+    await tester.tap(find.text('Back to Characters'));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Discard changes'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
+    await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
     await tester.tap(find.text('Signal Jammer'));

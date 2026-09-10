@@ -14,6 +14,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import '../../config/animals.dart';
 import '../../models/loadable.dart';
@@ -36,6 +37,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
 import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
+import '../../services/meta_app_events_service.dart';
 
 // Powerup types retired from Store and Inventory. Old-backend residue is
 // filtered defensively; historical race Activity remains readable elsewhere.
@@ -206,6 +208,9 @@ class ShopTab extends StatefulWidget {
 class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   final _storeScrollController = ScrollController();
   final _coinsKey = GlobalKey();
+  final _powerupsKey = GlobalKey();
+  final _charactersKey = GlobalKey();
+  final _featuredKey = GlobalKey();
   final _headerKey = GlobalKey();
   double _toastTop = 100;
   final List<VoidCallback> _toasts = [];
@@ -220,8 +225,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   BuildContext? _characterMenuContext;
   BuildContext? _membershipSheetContext;
   String? _membershipUserId;
-  _ShopCategory _lastItemCategory = _ShopCategory.powerups;
-  bool _storeFeatured = true;
   bool _deferTutorial = false;
 
   static const _textShadows = [
@@ -358,7 +361,20 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       },
     )..addListener(_wardrobesChanged);
     _storeScrollController.addListener(() {
-      if (_activeCategory == _ShopCategory.characters &&
+      if (_deferTutorial &&
+          _storeScrollController.position.userScrollDirection ==
+              ScrollDirection.reverse) {
+        final powerups = _powerupsKey.currentContext?.findRenderObject();
+        if (powerups is RenderBox &&
+            powerups.hasSize &&
+            powerups.localToGlobal(Offset.zero).dy <
+                MediaQuery.sizeOf(context).height - 100) {
+          _deferTutorial = false;
+          _maybeScheduleTutorial();
+        }
+      }
+      if (_storeScrollController.position.userScrollDirection ==
+              ScrollDirection.reverse &&
           _storeScrollController.position.extentAfter < 300) {
         _wardrobes.load(more: true);
       }
@@ -370,15 +386,29 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     _deferTutorial =
         widget.initialFocus == ShopFocus.coins ||
         widget.initialFocus == ShopFocus.membership;
-    _storeFeatured =
-        widget.initialFocus != ShopFocus.items &&
-        (_deferTutorial || !_shouldShowTutorial);
-    _category = _storeFeatured
-        ? _ShopCategory.featured
-        : _ShopCategory.powerups;
     _loadCatalog();
     _maybeScheduleTutorial();
     if (_deferTutorial) _focusFeatured(widget.initialFocus, rebuild: false);
+    if (widget.initialFocus == ShopFocus.items && !_shouldShowTutorial) {
+      _scrollToSection(_powerupsKey);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _recordMeta(MetaConversion.shopViewed);
+      if (widget.initialFocus == ShopFocus.coins) {
+        _recordMeta(MetaConversion.coinOffersViewed);
+      }
+    });
+  }
+
+  void _recordMeta(MetaConversion event) {
+    if (!mounted ||
+        widget.forceTutorialReplay ||
+        _shouldShowTutorial ||
+        BillingScope.maybeOf(context)?.isPreview == true) {
+      return;
+    }
+    unawaited(MetaAppEventsService.instance.log(event));
   }
 
   @override
@@ -489,12 +519,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         (widget.authService.hasShopTutorialServerState &&
             widget.authService.shopTutorialCompletedAt == null);
     if (!shouldShow) return;
-    if (_category == _ShopCategory.featured) {
-      setState(() {
-        _category = _lastItemCategory;
-        _storeFeatured = false;
-      });
-    }
     _tutorialDecisionScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_launchTutorialWhenReady());
@@ -536,12 +560,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   static const _tutorialTargets = <Key>[
-    Key('shop-bottom-navigation'),
+    Key('shop-section-featured'),
     Key('shop-character-default'),
   ];
-  static const _tutorialTitles = ['PICK A CATEGORY', 'YOUR CHARACTERS'];
+  static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
-    'Featured has coins and Bara+. Powerups has Buy and Owned. Characters keeps every character together.',
+    'Scroll from Featured coins and Bara+ to Powerups, then Characters & Accessories. Buy and Owned live inside Powerups.',
     'Owned and locked characters share one collection. Open an owned character to edit its saved outfit or make it active.',
   ];
 
@@ -598,11 +622,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   Future<Rect?> _measureTutorialTarget(int step) async {
     if (!mounted || step < 0 || step >= _tutorialTargets.length) return null;
     final key = _tutorialTargets[step];
-    if (step == 1 && _activeCategory != _ShopCategory.characters) {
-      setState(() {
-        _category = _ShopCategory.characters;
-        _storeFeatured = false;
-      });
+    if (step == 1 && _wardrobes.state != WardrobeLoadState.loaded) {
       await _wardrobes.load();
       if (!mounted) return null;
       await WidgetsBinding.instance.endOfFrame;
@@ -1529,17 +1549,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           children: [
             Scaffold(
               backgroundColor: AppColors.of(context).roofLight,
-              bottomNavigationBar: ShopCategoryBar(
-                selected: ShopCategory.values.firstWhere(
-                  (value) => value.name == _activeCategory.name,
-                  orElse: () => ShopCategory.characters,
-                ),
-                onSelected: (value) => _selectCategory(
-                  _ShopCategory.values.firstWhere(
-                    (category) => category.name == value.name,
-                  ),
-                ),
-              ),
               body: Stack(
                 children: [
                   Positioned.fill(
@@ -1561,23 +1570,45 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                           child: AppRefreshIndicator(
                             onRefresh: () async {
                               await _loadCatalog();
-                              if (_activeCategory == _ShopCategory.characters) {
-                                await _wardrobes.load();
-                              }
+                              await _wardrobes.load();
                             },
                             child: CustomScrollView(
                               controller: _storeScrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
-                                SliverToBoxAdapter(child: _buildItemsHeader()),
                                 SliverToBoxAdapter(
-                                  child:
-                                      _activeCategory == _ShopCategory.featured
-                                      ? _buildFeatured()
-                                      : _activeCategory ==
-                                            _ShopCategory.characters
-                                      ? _buildCharacters()
-                                      : _buildBody(),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _buildSectionHeader(
+                                        'Featured',
+                                        'featured',
+                                        _featuredKey,
+                                      ),
+                                      _buildFeatured(),
+                                      _buildSectionHeader(
+                                        'Powerups',
+                                        'powerups',
+                                        _powerupsKey,
+                                      ),
+                                      _buildItemsHeader(),
+                                      _buildBody(),
+                                      _buildSectionHeader(
+                                        'Characters & Accessories',
+                                        'characters',
+                                        _charactersKey,
+                                      ),
+                                      _buildCharacters(),
+                                      SizedBox(
+                                        height:
+                                            MediaQuery.paddingOf(
+                                              context,
+                                            ).bottom +
+                                            24,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -1734,11 +1765,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_activeCategory == _ShopCategory.powerups) _buildSegmentControl(),
+        _buildSegmentControl(),
         // Powerup-store filter + sort live in the (fixed) header so they
         // don't disturb the body's stagger-in tile list.
-        if (_section == _ShopSection.store &&
-            _activeCategory == _ShopCategory.powerups) ...[
+        if (_section == _ShopSection.store) ...[
           // Batch 2026-08-09 item 3: was 2px — visibly cramped against
           // the 8px gap above the pills. The two header gaps now match.
           const SizedBox(height: 8),
@@ -1829,29 +1859,76 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  void _selectCategory(_ShopCategory category) {
-    if (_activeCategory == category) return;
-    _disposeShopAdTarget();
-    setState(() {
-      if (category != _ShopCategory.featured) {
-        _lastItemCategory = category;
-        _deferTutorial = false;
+  void _scrollToSection(GlobalKey key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = key.currentContext;
+      if (target != null) {
+        unawaited(
+          Scrollable.ensureVisible(
+            target,
+            alignment: 0,
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+          ),
+        );
       }
-      _category = category;
-      _storeFeatured = category == _ShopCategory.featured;
-      _selectedCosmeticItem = null;
     });
-    if (category == _ShopCategory.characters &&
-        _wardrobes.state == WardrobeLoadState.initial) {
-      _wardrobes.load();
-    }
-    if (category != _ShopCategory.featured) _maybeScheduleTutorial();
   }
 
+  void _selectCategory(_ShopCategory category) {
+    if (category == _ShopCategory.featured) {
+      _focusFeatured(ShopFocus.coins);
+      return;
+    }
+    _scrollToSection(
+      category == _ShopCategory.powerups ? _powerupsKey : _charactersKey,
+    );
+  }
+
+  Widget _buildSectionHeader(String title, String id, GlobalKey anchor) =>
+      Padding(
+        key: anchor,
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+        child: Semantics(
+          header: true,
+          child: Row(
+            key: Key('shop-section-$id'),
+            children: [
+              Container(
+                width: 5,
+                height: 23,
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).pillGold,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: AppColors.of(context).pillGoldDark,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: PixelText.title(
+                    size: 24,
+                    color: AppColors.of(context).textLight,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
   Widget _buildCharacters() {
-    if (_wardrobes.state == WardrobeLoadState.initial) {
+    if (_wardrobes.state == WardrobeLoadState.initial && !_loading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _wardrobes.load();
+        if (mounted &&
+            _wardrobes.state == WardrobeLoadState.initial &&
+            !_loading) {
+          _wardrobes.load();
+        }
       });
     }
     final unavailable = _wardrobes.state == WardrobeLoadState.unsupported;
@@ -1864,7 +1941,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         : _wardrobes.characters.values.toList();
     return Column(
       children: [
-        if (_wardrobes.state == WardrobeLoadState.loading && rows.isEmpty)
+        if ((_wardrobes.state == WardrobeLoadState.loading ||
+                _wardrobes.state == WardrobeLoadState.initial) &&
+            rows.isEmpty)
           const _ShopLoadingSkeleton(cosmetic: true),
         if (unavailable || _wardrobes.error != null)
           Padding(
@@ -2081,9 +2160,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   Widget _buildBody() {
     final state = _catalogState;
     if (state.shouldShowInitialLoading || (_loading && _catalog == null)) {
-      return _ShopLoadingSkeleton(
-        cosmetic: _activeCategory != _ShopCategory.powerups,
-      );
+      return const _ShopLoadingSkeleton(cosmetic: false);
     }
 
     if (state.isError && !state.hasData) {
@@ -2097,10 +2174,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       );
     }
 
-    final items =
-        (state.data?['items'] as List?)?.cast<Map<String, dynamic>>() ??
-        (_catalog?['items'] as List?)?.cast<Map<String, dynamic>>() ??
-        [];
+    final items = _safeShopItems(state.data?['items'] ?? _catalog?['items']);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -2151,6 +2225,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         child: ShopProductGrid(
           compact: true,
           gridKey: const Key('shop-product-grid'),
+          spaciousPowerups: true,
           children: tiles,
         ),
       );
@@ -2701,14 +2776,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     );
   }
 
-  void _openGetCoins() => _focusFeatured(ShopFocus.coins);
+  void _openGetCoins() {
+    _recordMeta(MetaConversion.coinOffersViewed);
+    _focusFeatured(ShopFocus.coins);
+  }
 
   void _focusFeatured(ShopFocus focus, {bool rebuild = true}) {
     void update() {
-      if (_category != _ShopCategory.featured) _lastItemCategory = _category;
-      _section = _ShopSection.store;
-      _category = _ShopCategory.featured;
-      _storeFeatured = true;
       _tutorialStep = null;
       _tutorialTarget = null;
     }
@@ -2739,6 +2813,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   Future<void> _openMembershipDetails() async {
     if (_membershipOpen) return;
+    _recordMeta(MetaConversion.membershipViewed);
     final billing = BillingScope.read(context);
     _membershipOpen = true;
     _membershipUserId = billing?.userId;
@@ -2842,97 +2917,72 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          key: _coinsKey,
-          child: CoinPackOffers(
-            key: ValueKey('coins-${billing?.userId}'),
-            onGreenSurface: true,
-            showHeading: false,
-            leadingTile: KeyedSubtree(
-              key: const Key('billing-shop-membership'),
-              child: Semantics(
-                button: true,
-                label: 'Bara+ membership details',
-                child: Material(
-                  key: const Key('shop-membership-toggle'),
-                  color: colors.parchment,
-                  borderRadius: BorderRadius.circular(14),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: _openMembershipDetails,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: KeyedSubtree(
+            key: const Key('billing-shop-membership'),
+            child: Semantics(
+              button: true,
+              label: 'Bara+ membership details',
+              child: Material(
+                key: const Key('shop-membership-toggle'),
+                color: colors.parchment,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: _openMembershipDetails,
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
                       children: [
-                        SizedBox(
-                          height: 25,
-                          child: Center(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
+                        Icon(
+                          Icons.auto_awesome,
+                          color: colors.coinDark,
+                          size: 32,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
                                 'Bara+',
                                 style: PixelText.title(
-                                  size: 19,
+                                  size: 23,
                                   color: colors.textDark,
                                 ),
                               ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Icon(
-                            Icons.auto_awesome,
-                            color: colors.coinDark,
-                            size: 34,
-                          ),
-                        ),
-                        SizedBox(
-                          height: 16,
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  billing?.snapshot.isPermanent == true
-                                      ? 'PERMANENT'
-                                      : billing?.snapshot.isMember == true
-                                      ? 'MEMBER'
-                                      : 'MEMBERSHIP',
-                                  style: PixelText.body(
-                                    size: 9,
-                                    color: colors.textMid,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          height: 40,
-                          alignment: Alignment.center,
-                          color: colors.pillGold.withValues(alpha: .25),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                'DETAILS',
-                                style: PixelText.title(
+                              const SizedBox(height: 4),
+                              Text(
+                                billing?.snapshot.isPermanent == true
+                                    ? 'PERMANENT'
+                                    : billing?.snapshot.isMember == true
+                                    ? 'MEMBER'
+                                    : 'MEMBERSHIP',
+                                style: PixelText.body(
                                   size: 12,
-                                  color: colors.textDark,
+                                  color: colors.textMid,
                                 ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
+                        Icon(Icons.chevron_right, color: colors.textMid),
                       ],
                     ),
                   ),
                 ),
               ),
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          key: _coinsKey,
+          child: CoinPackOffers(
+            key: ValueKey('coins-${billing?.userId}'),
+            onGreenSurface: true,
+            showHeading: false,
           ),
         ),
         if (!membershipAvailable)
@@ -2956,7 +3006,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               ],
             ),
           ),
-        const SizedBox(height: 24),
       ],
     );
   }
@@ -3629,6 +3678,7 @@ class _ShopLoadingSkeleton extends StatelessWidget {
 
   Widget _section(BuildContext context, int tileCount) => ShopProductGrid(
     compact: true,
+    spaciousPowerups: !cosmetic,
     gridKey: const Key('shop-loading-grid'),
     children: [for (var i = 0; i < tileCount; i++) _tile(context)],
   );
@@ -3750,18 +3800,16 @@ class _ShopTile extends StatelessWidget {
                           // the extra vertical breathing room is especially
                           // important for tall powerup art.
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                            horizontal: 10,
+                            vertical: 10,
                           ),
                           child: Center(
-                            // The bundled thumbnails have deliberately
-                            // transparent canvases, so their visible art was
-                            // reading much smaller than the tile allowed.
-                            // Scale the rendered artwork, while keeping the
-                            // card dimensions and hit target unchanged.
+                            // The taller three-column art window supplies the
+                            // extra size. Keep the full image contained inside
+                            // its padding so thumbs and effects cannot clip.
                             child: Transform.scale(
                               key: const Key('shop-tile-art-scale'),
-                              scale: 1.5,
+                              scale: 1,
                               child: art,
                             ),
                           ),

@@ -165,6 +165,8 @@ Future<void> _pump(
 }
 
 Future<void> _openFilterSortSheet(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const Key('shop-filter-sort-button')));
+  await tester.pump(const Duration(milliseconds: 300));
   await tester.tap(find.byKey(const Key('shop-filter-sort-button')));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
@@ -188,13 +190,13 @@ void main() {
       );
       final delegate =
           grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 4);
-      expect(delegate.childAspectRatio, greaterThan(0.78));
+      expect(delegate.crossAxisCount, 3);
+      expect(delegate.childAspectRatio, 0.68);
 
       final artScale = tester.widget<Transform>(
         find.byKey(const Key('shop-tile-art-scale')).first,
       );
-      expect(artScale.transform.getMaxScaleOnAxis(), closeTo(1.5, 0.001));
+      expect(artScale.transform.getMaxScaleOnAxis(), closeTo(1, 0.001));
     });
 
     testWidgets('narrow phones keep a usable art window for three columns', (
@@ -238,7 +240,7 @@ void main() {
         );
         final liveDelegate =
             live.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(liveDelegate.crossAxisCount, 6);
+        expect(liveDelegate.crossAxisCount, 5);
 
         await _pump(tester, _StalledApi(), surface: const Size(700, 900));
         expect(find.byKey(const Key('shop-character-preview')), findsNothing);
@@ -247,23 +249,29 @@ void main() {
         );
         final loadingDelegate =
             loading.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(loadingDelegate.crossAxisCount, 6);
-        expect(loadingDelegate.childAspectRatio, 0.82);
+        expect(loadingDelegate.crossAxisCount, 5);
+        expect(loadingDelegate.childAspectRatio, 0.68);
       },
     );
 
-    testWidgets('category controls expose selection and a 48dp target', (
-      tester,
-    ) async {
-      await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
-      final category = find.byKey(const Key('shop-category-POWERUPS'));
-      expect(tester.getSize(category).height, greaterThanOrEqualTo(48));
-      final semantics = tester.widget<Semantics>(
-        find.byKey(const Key('shop-category-semantics-POWERUPS')),
-      );
-      expect(semantics.properties.button, isTrue);
-      expect(semantics.properties.selected, isTrue);
-    });
+    testWidgets(
+      'section headers expose structure and product cards keep a 48dp target',
+      (tester) async {
+        await _pump(tester, _FakeShopApi(powerupCatalog: _powerupCatalog()));
+        final heading = find.byKey(const Key('shop-section-powerups'));
+        final semantics = tester.widget<Semantics>(
+          find.ancestor(of: heading, matching: find.byType(Semantics)).first,
+        );
+        expect(semantics.properties.header, isTrue);
+        expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+        expect(
+          tester
+              .getSize(find.byKey(const Key('shop-product-card')).first)
+              .height,
+          greaterThanOrEqualTo(48),
+        );
+      },
+    );
 
     testWidgets(
       'enabled action strips use readable night text and 48dp target',
@@ -296,10 +304,7 @@ void main() {
         surface: const Size(320, 568),
         textScaler: const TextScaler.linear(2.5),
       );
-      final powerups = find.byKey(const Key('shop-category-POWERUPS'));
-      await tester.ensureVisible(powerups);
-      await tester.pump();
-      await tester.tap(powerups);
+      await selectShopCategory(tester, 'POWERUPS');
       await tester.pump(const Duration(milliseconds: 200));
       await tester.ensureVisible(find.text('Zap'));
       await tester.pump();

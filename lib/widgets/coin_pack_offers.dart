@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/meta_app_events_service.dart';
 import '../models/billing.dart';
 import '../services/billing_controller.dart';
 import '../styles.dart';
@@ -55,6 +57,11 @@ class _CoinPackOffersState extends State<CoinPackOffers> {
     bool current() =>
         mounted && generation == _generation && controller.userId == userId;
     if (_busy || controller.snapshot.busy) return;
+    if (!controller.isPreview) {
+      unawaited(
+        MetaAppEventsService.instance.log(MetaConversion.purchaseIntent),
+      );
+    }
     setState(() {
       _busy = true;
       _busyOfferId = offer.id;

@@ -428,12 +428,8 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
             },
             child: Scaffold(
               backgroundColor: colors.roofLight,
-              bottomNavigationBar: ShopCategoryBar(
-                selected: ShopCategory.characters,
-                onSelected: _leave,
-              ),
               body: SafeArea(
-                bottom: false,
+                bottom: true,
                 child: Column(
                   children: [
                     Padding(

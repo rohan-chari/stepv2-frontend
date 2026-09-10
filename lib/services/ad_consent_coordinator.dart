@@ -246,6 +246,7 @@ class AdConsentCoordinator extends ChangeNotifier {
     required InitializeAdsWithConsent initializeAds,
     Future<void> Function(PartnerConsentSignals signals)? applyPartnerConsent,
     ValueChanged<bool>? onAdsPermissionChanged,
+    Future<void> Function(bool resolved)? onMeasurementConsentResolved,
   }) : _requestConsentInfoUpdate = requestConsentInfoUpdate,
        _loadAndShowConsentFormIfRequired = loadAndShowConsentFormIfRequired,
        _canRequestAds = canRequestAds,
@@ -254,13 +255,15 @@ class AdConsentCoordinator extends ChangeNotifier {
        _readPartnerConsentSignals = readPartnerConsentSignals,
        _initializeAds = initializeAds,
        _applyPartnerConsent = applyPartnerConsent,
-       _onAdsPermissionChanged = onAdsPermissionChanged;
+       _onAdsPermissionChanged = onAdsPermissionChanged,
+       _onMeasurementConsentResolved = onMeasurementConsentResolved;
 
   factory AdConsentCoordinator.production({
     required InitializeAdsWithConsent initializeAds,
     required Future<void> Function(PartnerConsentSignals signals)
     applyPartnerConsent,
     required ValueChanged<bool> onAdsPermissionChanged,
+    Future<void> Function(bool resolved)? onMeasurementConsentResolved,
   }) {
     return AdConsentCoordinator(
       requestConsentInfoUpdate: _requestProductionConsentInfoUpdate,
@@ -276,6 +279,7 @@ class AdConsentCoordinator extends ChangeNotifier {
       initializeAds: initializeAds,
       applyPartnerConsent: applyPartnerConsent,
       onAdsPermissionChanged: onAdsPermissionChanged,
+      onMeasurementConsentResolved: onMeasurementConsentResolved,
     );
   }
 
@@ -293,6 +297,15 @@ class AdConsentCoordinator extends ChangeNotifier {
   final Future<void> Function(PartnerConsentSignals signals)?
   _applyPartnerConsent;
   final ValueChanged<bool>? _onAdsPermissionChanged;
+  final Future<void> Function(bool resolved)? _onMeasurementConsentResolved;
+
+  Future<void> _notifyMeasurement(bool resolved) async {
+    try {
+      await _onMeasurementConsentResolved?.call(resolved);
+    } catch (_) {
+      // Measurement failure must not affect ad consent or application startup.
+    }
+  }
 
   Future<bool>? _bootstrapFlight;
   Future<void>? _privacyOptionsFlight;
@@ -320,9 +333,12 @@ class AdConsentCoordinator extends ChangeNotifier {
 
   Future<bool> _bootstrapForLaunch() async {
     var result = false;
+    var consentResolved = false;
     try {
       await _requestConsentInfoUpdate();
       await _loadAndShowConsentFormIfRequired();
+      consentResolved = true;
+      await _notifyMeasurement(true);
       await _refreshPrivacyRequirement();
       final allowed = await _canRequestAds();
       if (allowed) {
@@ -331,6 +347,7 @@ class AdConsentCoordinator extends ChangeNotifier {
         result = await _initializeAds(signals);
       }
     } catch (error) {
+      if (!consentResolved) await _notifyMeasurement(false);
       debugPrint('Ad consent bootstrap failed closed: $error');
     }
     _setAdsAllowed(result);
@@ -364,13 +381,17 @@ class AdConsentCoordinator extends ChangeNotifier {
   }
 
   Future<void> _showAndRefreshPrivacyOptions() async {
+    await _notifyMeasurement(false);
+    var consentResolved = false;
     try {
       await _showPrivacyOptionsForm();
+      consentResolved = true;
     } catch (error) {
       debugPrint('UMP privacy options form failed: $error');
     }
 
     try {
+      await _notifyMeasurement(consentResolved);
       await _refreshPrivacyRequirement();
       final allowed = await _canRequestAds();
       final signals = await _readSignalsSafely();

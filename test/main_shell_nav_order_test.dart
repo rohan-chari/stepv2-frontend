@@ -2633,7 +2633,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(GetCoinsScreen), findsNothing);
-      expect(find.text('FEATURED'), findsOneWidget);
+      expect(find.text('Featured'), findsOneWidget);
       await auth.updateSessionToken('refreshed-token');
       await tester.pump();
       await tester.pump();

@@ -131,6 +131,34 @@ Inline-row native ads are removed on both platforms. Keep the native ad-unit
 defines out of these commands; the missing unit collapses the slot without
 requesting a test ad. All seven other iOS ad units remain enabled.
 
+### Native Meta iOS configuration
+
+Pass `META_APP_ID` and `META_CLIENT_TOKEN` as Dart defines, just like the
+other build configuration below. They are baked into the iOS binary. Use the
+Meta **client token** for App ID `1600882908142439`, never an app secret or
+access token. Set the token in your shell before using the commands:
+
+```bash
+export META_CLIENT_TOKEN='<Meta client token>'
+```
+
+The existing ignored `.secrets/meta-ios.env` also retains the local values.
+Keep the actual token out of committed commands and shell tracing.
+
+The normal Xcode build automatically copies only these two defines into a
+derived native Info.plist for CoreKit. There is no separate Python configuration
+command or local xcconfig to generate. Release/Profile builds reject missing or
+invalid values; Debug safely disables measurement when they are unavailable.
+For a direct Xcode build, first generate Flutter's build settings using one of
+the configured Flutter commands below so `DART_DEFINES` is populated.
+
+The source plist keeps the display name `Bara`, automatic App Events off, and
+advertiser-ID collection off. Consent still controls runtime measurement.
+Android omits these defines and has no Meta App Events integration.
+
+Before upload, verify the actual archived plist using the gated command in
+[DEPLOYMENT.md](DEPLOYMENT.md#push-the-archive-to-app-store-connect).
+
 ### First-time setup
 ```bash
 flutter doctor
@@ -159,6 +187,8 @@ flutter pub get
 # since each env's GOOGLE_AUTH_CLIENT_ID allowlist only accepts its own client.
 # Omit the define and the button is hidden (sign-in stays Apple-only).
 flutter run -d 00008150-000171DE2638401C --device-connection=attached \
+  --dart-define=META_APP_ID=1600882908142439 \
+  --dart-define="META_CLIENT_TOKEN=${META_CLIENT_TOKEN:?Set the Meta client token}" \
   --profile \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -183,6 +213,8 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # GOOGLE_IOS_CLIENT_ID here is the PROD iOS OAuth client (prod backend only
 # accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
+  --dart-define=META_APP_ID=1600882908142439 \
+  --dart-define="META_CLIENT_TOKEN=${META_CLIENT_TOKEN:?Set the Meta client token}" \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -197,12 +229,16 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
 
 ### Run on a physical iPhone against local backend
 ```bash
-flutter run -d <device-id> --dart-define=BACKEND_BASE_URL=http://<your-mac-lan-ip>:3000
+flutter run -d <device-id> --dart-define=BACKEND_BASE_URL=http://<your-mac-lan-ip>:3000 \
+  --dart-define=META_APP_ID=1600882908142439 \
+  --dart-define="META_CLIENT_TOKEN=${META_CLIENT_TOKEN:?Set the Meta client token}"
 ```
 
 ### Run on simulator
 ```bash
 flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
+  --dart-define=META_APP_ID=1600882908142439 \
+  --dart-define="META_CLIENT_TOKEN=${META_CLIENT_TOKEN:?Set the Meta client token}" \
     --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
     --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -230,6 +266,8 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
 # The two production interstitial units are required for the initial iOS
 # release; each placement is disabled independently if its define is omitted.
 flutter build ipa --release \
+  --dart-define=META_APP_ID=1600882908142439 \
+  --dart-define="META_CLIENT_TOKEN=${META_CLIENT_TOKEN:?Set the Meta client token}" \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define="REVENUECAT_IOS_API_KEY=${REVENUECAT_IOS_API_KEY:?Set the RevenueCat iOS public SDK key}" \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -248,6 +286,7 @@ flutter build ipa --release \
 # and have NO fallback. The two Android interstitial defines are deliberately
 # omitted until real Android units exist; omission disables Android
 # interstitials without affecting navigation or the iOS release.
+# Android does not use the native Meta iOS configuration.
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \

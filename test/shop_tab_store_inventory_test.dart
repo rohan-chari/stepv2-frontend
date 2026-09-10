@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -289,6 +290,8 @@ Future<void> _pumpShop(
 Future<void> _selectSegment(WidgetTester tester, String label) async {
   final seg = find.text(label == 'STORE' ? 'BUY' : 'OWNED');
   if (seg.evaluate().isNotEmpty) {
+    await tester.ensureVisible(seg.last);
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(seg.last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -299,18 +302,7 @@ Future<void> _selectSegment(WidgetTester tester, String label) async {
 /// Taps a category pill (POWERUPS / CHARACTERS / ACCESSORIES). One category is
 /// shown at a time, so a test wanting cosmetics must select ACCESSORIES first.
 Future<void> _selectCategory(WidgetTester tester, String label) async {
-  final target = label == 'ACCESSORIES' ? 'CHARACTERS' : label;
-  await tester.tap(find.byKey(Key('shop-category-$target')));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-  if (label == 'ACCESSORIES') {
-    await tester.tap(find.byKey(const Key('shop-character-default')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Edit outfit'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-  }
+  await selectShopCategory(tester, label);
 }
 
 void main() {
@@ -355,21 +347,21 @@ void main() {
     final overlay = find.byType(SpotlightOverlay);
     final target = tester.widget<SpotlightOverlay>(overlay).targetRect!;
     final control = tester.getRect(
-      find.byKey(const Key('shop-bottom-navigation')),
+      find.byKey(const Key('shop-section-featured')),
     );
     final overlayOrigin = tester.getTopLeft(overlay);
     expect(target.shift(overlayOrigin), control);
     expect(
       target
           .shift(overlayOrigin)
-          .contains(tester.getCenter(find.text('FEATURED'))),
+          .contains(tester.getCenter(find.text('Featured'))),
       isTrue,
     );
     expect(
       target
           .shift(overlayOrigin)
-          .contains(tester.getCenter(find.text('CHARACTERS'))),
-      isTrue,
+          .contains(tester.getCenter(find.text('Characters & Accessories'))),
+      isFalse,
     );
   });
 
@@ -431,7 +423,7 @@ void main() {
           final target = tester.widget<SpotlightOverlay>(overlay).targetRect!;
           final actual = target.shift(tester.getTopLeft(overlay));
           final control = tester.getRect(
-            find.byKey(const Key('shop-bottom-navigation')),
+            find.byKey(const Key('shop-section-featured')),
           );
           expect(actual.left, closeTo(control.left, .01));
           expect(actual.top, closeTo(control.top, .01));
@@ -454,7 +446,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump();
         checkTarget();
-        expect(find.text('PICK A CATEGORY'), findsOneWidget);
+        expect(find.text('EXPLORE THE SHOP'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -476,7 +468,7 @@ void main() {
 
     await _pumpShop(tester, auth, api);
     expect(find.byKey(const Key('tutorial-callout-card')), findsOneWidget);
-    expect(find.text('PICK A CATEGORY'), findsOneWidget);
+    expect(find.text('EXPLORE THE SHOP'), findsOneWidget);
 
     await tester.tap(find.text('SKIP'));
     await tester.pump();
@@ -528,7 +520,7 @@ void main() {
       await tester.pump();
 
       for (final key in const [
-        Key('shop-bottom-navigation'),
+        Key('shop-section-featured'),
         Key('shop-product-grid'),
       ]) {
         expect(find.byKey(key), findsOneWidget);
@@ -671,7 +663,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    for (final label in ['FEATURED', 'CHARACTERS']) {
+    for (final label in ['Featured', 'Characters & Accessories']) {
       expect(
         tester.widget<Text>(find.text(label)).style?.color,
         AppPalette.night.textLight,
@@ -812,7 +804,7 @@ void main() {
     // POWERUPS pill is absent entirely, so it must not be selectable.
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
-    expect(find.text('POWERUPS'), findsOneWidget);
+    expect(find.text('Powerups'), findsOneWidget);
     expect(
       find.textContaining('Powerups are currently unavailable'),
       findsOneWidget,

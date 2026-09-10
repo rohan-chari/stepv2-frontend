@@ -43,7 +43,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(find.byKey(const Key('preview-nav-shop')), findsNothing);
-      expect(find.byKey(const Key('shop-bottom-navigation')), findsOneWidget);
+      expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
+      expect(find.byKey(const Key('shop-section-featured')), findsOneWidget);
+      expect(find.byKey(const Key('shop-section-powerups')), findsOneWidget);
+      expect(find.byKey(const Key('shop-section-characters')), findsOneWidget);
       await exitShop(tester);
       await tester.tap(find.byKey(const Key('preview-nav-shop')));
       await tester.pump();

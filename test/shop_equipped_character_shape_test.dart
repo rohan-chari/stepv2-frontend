@@ -1,3 +1,4 @@
+import 'support/shop_navigation.dart';
 import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,7 +103,7 @@ Future<void> _pumpCharacterInventory(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
-  await tester.tap(find.text('CHARACTERS'));
+  await selectShopCategory(tester, 'CHARACTERS');
   await tester.pump(const Duration(milliseconds: 300));
 }
 

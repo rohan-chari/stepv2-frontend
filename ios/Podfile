@@ -30,6 +30,10 @@ flutter_ios_podfile_setup
 target 'Runner' do
   use_frameworks!
 
+  # App acquisition/events; independent of Audience Network mediation below.
+  # CoreKit includes App Events and its required AEM dependency, without Login.
+  pod 'FBSDKCoreKit', '18.1.1'
+
   # AdMob Open Bidding adapter for Meta Audience Network (FAN). The adapter
   # brings in the compatible Meta Audience Network SDK transitively.
   # 6.21.1.1 is the newest adapter compatible with google_mobile_ads 9.0.0's

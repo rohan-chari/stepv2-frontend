@@ -40,8 +40,10 @@ void main() {
         scrollable: find.byType(Scrollable).last,
       );
       expect(find.text('Other owned items'), findsOneWidget);
-      await tester.ensureVisible(
+      await tester.scrollUntilVisible(
         find.byKey(const Key('wardrobe-item-baseball_cap')),
+        -180,
+        scrollable: find.byType(Scrollable).last,
       );
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(const Key('wardrobe-item-baseball_cap')));

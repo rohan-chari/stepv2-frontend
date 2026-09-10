@@ -16,6 +16,7 @@ import google_mobile_ads
   private var referralChannel: FlutterMethodChannel?
   private var metaAdsChannel: FlutterMethodChannel?
   private var adPrivacySignalsChannel: FlutterMethodChannel?
+  private var metaAppEventsCoordinator: MetaAppEventsCoordinator?
   private lazy var notificationInstallationIDStore = NotificationInstallationIDStore()
   private let healthStore = HKHealthStore()
   private var hasRegisteredHealthObserver = false
@@ -38,6 +39,9 @@ import google_mobile_ads
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    metaAppEventsCoordinator = MetaAppEventsCoordinator(
+      application: application, launchOptions: launchOptions
+    )
     GeneratedPluginRegistrant.register(with: self)
 
     // Custom native-ad layout for the races-tab in-feed ad (AdInlineCard
@@ -50,6 +54,7 @@ import google_mobile_ads
     )
 
     let controller = window!.rootViewController as! FlutterViewController
+    metaAppEventsCoordinator?.attach(messenger: controller.binaryMessenger)
     settingsChannel = FlutterMethodChannel(
       name: "com.steptracker/settings", binaryMessenger: controller.binaryMessenger
     )

@@ -706,7 +706,7 @@ void main() {
   });
 
   testWidgets(
-    'category changes require discard before clearing a local try-on',
+    'wardrobe Back requires discard before clearing a local try-on',
     (tester) async {
       final api = _DressingRoomApi();
       await _pumpShop(tester, api);
@@ -714,7 +714,7 @@ void main() {
       await tester.tap(_selector('moon-pack'));
       await tester.pump();
       expect(find.text('Trying on'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('shop-category-CHARACTERS')));
+      await tester.tap(find.text('Back to Characters'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Discard outfit changes?'), findsOneWidget);
