@@ -115,7 +115,10 @@ void main() {
       expect(controller.ownedCosmetics, contains('baseball_cap'));
       expect(accessory, findsNothing);
       expect(find.byKey(const Key('shop-edit-outfit')), findsNothing);
-      expect(find.byIcon(Icons.edit_rounded), findsWidgets);
+      expect(
+        find.byKey(const Key('shop-character-edit-default')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

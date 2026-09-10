@@ -292,7 +292,7 @@ void main() {
     }
 
     expect(find.text('Turtle'), findsWidgets);
-    await tester.tap(find.text('Turtle').first);
+    await tester.tap(find.byKey(const Key('shop-character-buy-item-turtle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('1000'), findsWidgets);

@@ -358,7 +358,7 @@ void main() {
       final preview = find.byKey(const Key('shop-character-preview'));
       expect(preview, findsNothing);
       await selectShopCategory(tester, 'CHARACTERS');
-      await tester.tap(find.byKey(const Key('shop-character-item-corgi')));
+      await tester.tap(find.byKey(const Key('shop-character-buy-item-corgi')));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('shop-item-sheet')), findsOneWidget);
       expect(find.text('BUY · 300'), findsOneWidget);
@@ -552,10 +552,7 @@ void main() {
       await _pump(tester, api);
       await openCharacterInventory(tester);
       expect(find.text('Capybara'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('shop-character-default')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.tap(find.text('Use character'));
+      await tester.tap(find.byKey(const Key('shop-character-equip-default')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 

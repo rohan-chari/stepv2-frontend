@@ -2576,10 +2576,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         await selectShopCategory(tester, 'CHARACTERS');
         await tester.pump(const Duration(milliseconds: 400));
-        await tester.tap(find.byKey(const Key('shop-character-default')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-        await tester.tap(find.text('Edit outfit'));
+        await tester.tap(find.byKey(const Key('shop-character-edit-default')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(find.byKey(const Key('wardrobe-item-wizard')));

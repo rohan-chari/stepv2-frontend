@@ -613,12 +613,12 @@ void main() {
             .accessories,
         isEmpty,
       );
-      await tester.tap(capybara);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Use character'), findsOneWidget);
+      expect(
+        find.byKey(const Key('shop-character-equip-default')),
+        findsOneWidget,
+      );
       expect(api.equipWrites, 0);
-      await tester.tap(find.text('Use character'));
+      await tester.tap(find.byKey(const Key('shop-character-equip-default')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(api.fixtureActivations, 1);
@@ -673,7 +673,7 @@ void main() {
       );
       expect(art.animal, 'corgi_puppy');
       expect(art.accessories, isEmpty);
-      await tester.tap(card);
+      await tester.tap(find.byKey(const Key('shop-character-buy-corgi')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('shop-item-sheet')), findsOneWidget);

@@ -390,7 +390,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-      await tester.tap(selector);
+      await tester.tap(find.byKey(const Key('shop-character-buy-c1')));
       await tester.pump(const Duration(milliseconds: 180));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
@@ -432,7 +432,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-      await tester.tap(selector);
+      await tester.tap(find.byKey(const Key('shop-character-buy-c1')));
       await tester.pump(const Duration(milliseconds: 180));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Watch'), findsNothing);

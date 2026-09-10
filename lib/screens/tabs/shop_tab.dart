@@ -217,7 +217,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
   bool _membershipOpen = false;
   bool _characterActivating = false;
-  BuildContext? _characterMenuContext;
+  bool _characterActionOpen = false;
   BuildContext? _membershipSheetContext;
   String? _membershipUserId;
   bool _deferTutorial = false;
@@ -456,12 +456,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
 
     if (nextUserId != _shopSessionUserId) _closeMembershipForIdentityChange();
-    final menuContext = _characterMenuContext;
-    _characterMenuContext = null;
     _characterActivating = false;
-    if (menuContext != null && menuContext.mounted) {
-      final route = ModalRoute.of(menuContext);
-      if (route != null) Navigator.of(menuContext).removeRoute(route);
+    _characterActionOpen = false;
+    final itemSheet = _billingItemSheetContext;
+    if (itemSheet != null && itemSheet.mounted) {
+      final route = ModalRoute.of(itemSheet);
+      if (route != null) Navigator.of(itemSheet).removeRoute(route);
     }
     _cosmeticPurchaseKeys.clear();
     _shopSessionUserId = nextUserId;
@@ -566,7 +566,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
     'Scroll from Featured coins to Powerups, then Characters and Accessories. Powerup badges show how many you own.',
-    'Tap Edit to change a character’s outfit. Tap its card to make it active.',
+    'Tap Edit to change an outfit, Equip to use a character, or Buy to unlock one.',
   ];
 
   Element? _elementWithKey(Key key) {
@@ -1837,7 +1837,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       'powerups' => 'Buy powerups for races. The badge shows how many you own.',
       'accessories' =>
         'Unlock a new accessory or edit your active character’s outfit.',
-      _ => 'Tap a character to customize its outfit or unlock a new one.',
+      _ => 'Edit an outfit, equip a character, or buy one with coins.',
     };
     return Padding(
       key: anchor,
@@ -1928,21 +1928,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         ShopProductGrid(
           spaciousPowerups: true,
           gridKey: const Key('shop-cosmetic-grid'),
-          children: [
-            for (final row in rows)
-              ShopCharacterCard(
-                key: Key('shop-character-${row.key}'),
-                character: row,
-                onPressed: () => _openCharacterMenu(row),
-                onEdit:
-                    row.owned &&
-                        row.canEdit &&
-                        (_wardrobes.state == WardrobeLoadState.loaded ||
-                            _wardrobes.state == WardrobeLoadState.paging)
-                    ? () => _openCharacterWardrobe(row)
-                    : null,
-              ),
-          ],
+          minCardWidth: 110,
+          children: [for (final row in rows) _characterCard(row)],
         ),
         if (_wardrobes.state == WardrobeLoadState.paging)
           const CircularProgressIndicator(),
@@ -2019,8 +2006,86 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _openCharacterWardrobe(ShopCharacter character) async {
+  bool get _characterActionsReady =>
+      mounted &&
+      !_saving &&
+      !_characterActivating &&
+      !_characterActionOpen &&
+      widget.authService.authToken != null;
+
+  bool get _wardrobesReady =>
+      _wardrobes.state == WardrobeLoadState.loaded ||
+      _wardrobes.state == WardrobeLoadState.paging;
+
+  Widget _characterCard(ShopCharacter row) {
     final generation = _shopSessionGeneration;
+    final userId = widget.authService.userId;
+    final token = widget.authService.authToken;
+    final legacy = _wardrobes.state == WardrobeLoadState.unsupported;
+    bool rowCurrent() =>
+        token != null &&
+        _sessionIsCurrent(
+          generation: generation,
+          userId: userId,
+          token: token,
+        ) &&
+        (legacy
+            ? _wardrobes.state == WardrobeLoadState.unsupported &&
+                  _legacyCharacterRows().any(
+                    (candidate) =>
+                        candidate.key == row.key &&
+                        candidate.canPurchase &&
+                        candidate.item['priceCoins'] == row.item['priceCoins'],
+                  )
+            : _wardrobesReady &&
+                  identical(_wardrobes.characters[row.key], row));
+    bool current() => _characterActionsReady && rowCurrent();
+    return ShopCharacterCard(
+      key: Key('shop-character-${row.key}'),
+      character: row,
+      onEdit:
+          _characterActionsReady && _wardrobesReady && row.owned && row.canEdit
+          ? () {
+              if (current()) _openCharacterWardrobe(row);
+            }
+          : null,
+      onEquip:
+          _characterActionsReady &&
+              _wardrobesReady &&
+              row.owned &&
+              !row.active &&
+              row.canActivate &&
+              _wardrobes.appearanceRevision != null &&
+              row.outfit?.revision != null
+          ? () {
+              if (current()) _equipCharacter(row);
+            }
+          : null,
+      onBuy:
+          _characterActionsReady &&
+              (_wardrobesReady || legacy) &&
+              !row.owned &&
+              row.canPurchase &&
+              wardrobeCoinPrice(row.item['priceCoins']) != null
+          ? () async {
+              if (!current()) return;
+              setState(() => _characterActionOpen = true);
+              try {
+                await _openStoreCosmeticSheet(row.item, canAct: rowCurrent);
+              } finally {
+                if (mounted && generation == _shopSessionGeneration) {
+                  setState(() => _characterActionOpen = false);
+                }
+              }
+            }
+          : null,
+    );
+  }
+
+  Future<void> _openCharacterWardrobe(ShopCharacter character) async {
+    if (!_characterActionsReady) return;
+    final generation = _shopSessionGeneration;
+    setState(() => _characterActionOpen = true);
     final category = await Navigator.of(context).push<ShopCategory>(
       MaterialPageRoute(
         builder: (_) => CharacterWardrobeScreen(
@@ -2030,6 +2095,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         ),
       ),
     );
+    if (mounted && generation == _shopSessionGeneration) {
+      setState(() => _characterActionOpen = false);
+    }
     if (mounted && generation == _shopSessionGeneration && category != null) {
       _selectCategory(
         _ShopCategory.values.firstWhere((value) => value.name == category.name),
@@ -2063,7 +2131,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           'item': item,
           'owned': owned,
           'active': current['id'] == id,
-          'canPurchase': !owned,
+          'canPurchase':
+              !owned &&
+              item['canPurchase'] == true &&
+              wardrobeCoinPrice(item['priceCoins']) != null,
           'canActivate': false,
           'canEdit': false,
           'availability': 'unavailable',
@@ -2073,119 +2144,45 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     return rows;
   }
 
-  Future<void> _openCharacterMenu(ShopCharacter character) async {
+  Future<void> _equipCharacter(ShopCharacter character) async {
+    if (!_characterActionsReady ||
+        !_wardrobesReady ||
+        !character.owned ||
+        character.active ||
+        !character.canActivate ||
+        _wardrobes.appearanceRevision == null ||
+        character.outfit?.revision == null) {
+      return;
+    }
     final generation = _shopSessionGeneration;
     final userId = widget.authService.userId;
     final token = widget.authService.authToken;
     if (token == null) return;
     bool current() =>
         _sessionIsCurrent(generation: generation, userId: userId, token: token);
-    if (_characterActivating) return;
-    if (!character.owned && character.canPurchase) {
-      _openStoreCosmeticSheet(character.item);
-      return;
-    }
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.of(context).parchment,
-      builder: (context) {
-        _characterMenuContext = context;
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * .85,
-            ),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      character.name,
-                      style: PixelText.title(
-                        size: 22,
-                        color: AppColors.of(context).textDark,
-                      ),
-                    ),
-                    if (character.key == 'default')
-                      Text(
-                        'The original. Steady, sociable, and always in your corner.',
-                        style: PixelText.body(
-                          size: 13,
-                          color: AppColors.of(context).textDark,
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    PillButton(
-                      label: 'Edit outfit',
-                      onPressed: character.canEdit
-                          ? () => Navigator.pop(context, 'edit')
-                          : null,
-                    ),
-                    const SizedBox(height: 10),
-                    PillButton(
-                      label: character.active
-                          ? 'Active character'
-                          : 'Use character',
-                      onPressed:
-                          !character.active &&
-                              character.canActivate &&
-                              _wardrobes.appearanceRevision != null &&
-                              character.outfit?.revision != null
-                          ? () => Navigator.pop(context, 'activate')
-                          : null,
-                    ),
-                    if (!character.canEdit)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(
-                          'Saved outfit is currently unavailable.',
-                          style: PixelText.body(
-                            size: 13,
-                            color: AppColors.of(context).textDark,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    _characterMenuContext = null;
-    if (!mounted || !current()) return;
-    if (action == 'edit') {
-      await _openCharacterWardrobe(character);
-    } else if (action == 'activate') {
-      setState(() => _characterActivating = true);
-      try {
-        await _wardrobes.activate(character);
-        if (mounted && current()) {
-          _showInfo(context, '${character.name} is active.');
-        }
-      } on ApiException catch (error) {
-        if (mounted && current()) {
-          _showError(context, error.message);
-          await _wardrobes.load();
-        }
-      } catch (_) {
-        if (mounted && current()) {
-          await _wardrobes.load();
-          if (mounted && current()) {
-            _showError(
-              context,
-              'Could not verify character activation. Please review the current look.',
-            );
-          }
-        }
-      } finally {
-        if (mounted && current()) setState(() => _characterActivating = false);
+    setState(() => _characterActivating = true);
+    try {
+      await _wardrobes.activate(character);
+      if (mounted && current()) {
+        _showInfo(context, '${character.name} is active.');
       }
+    } on ApiException catch (error) {
+      if (mounted && current()) {
+        _showError(context, error.message);
+        await _wardrobes.load();
+      }
+    } catch (_) {
+      if (mounted && current()) {
+        await _wardrobes.load();
+        if (mounted && current()) {
+          _showError(
+            context,
+            'Could not verify character activation. Please review the current look.',
+          );
+        }
+      }
+    } finally {
+      if (mounted && current()) setState(() => _characterActivating = false);
     }
   }
 
@@ -2429,11 +2426,31 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   /// malformed row, an absent key — resolves to "no character equipped" rather
   /// than throwing. The backend may be a different version than this build.
   Future<ShopCategory?> _openStoreCosmeticSheet(
-    Map<String, dynamic> item,
-  ) async {
+    Map<String, dynamic> item, {
+    bool Function()? canAct,
+  }) async {
     Future<void>? operation;
     var getCoins = false, preview = false;
     final generation = _shopSessionGeneration;
+    final userId = widget.authService.userId;
+    final token = widget.authService.authToken;
+    var acted = false;
+    bool claimAction() {
+      if (acted ||
+          _saving ||
+          (canAct != null && !canAct()) ||
+          token == null ||
+          !_sessionIsCurrent(
+            generation: generation,
+            userId: userId,
+            token: token,
+          )) {
+        return false;
+      }
+      acted = true;
+      return true;
+    }
+
     final itemId = wardrobeString(item['id']);
     final canOfferPreview =
         itemId != null && wardrobeSlots.contains(item['slot']);
@@ -2443,6 +2460,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       variant: PillButtonVariant.secondary,
       fullWidth: true,
       onPressed: () {
+        if (!claimAction()) return;
         Navigator.of(context).pop();
         preview = true;
       },
@@ -2525,6 +2543,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             onPressed: _saving
                 ? null
                 : () {
+                    if (!claimAction()) return;
                     Navigator.of(context).pop();
                     operation = _purchase(item);
                   },
@@ -2540,6 +2559,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             onPressed: _saving
                 ? null
                 : () {
+                    if (!claimAction()) return;
                     _shopActionContext = adContext;
                     Navigator.of(context).pop();
                     operation = _unlockCosmeticWithAds(item, adsNeeded);
@@ -2552,6 +2572,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             fontSize: 14,
             fullWidth: true,
             onPressed: () {
+              if (!claimAction()) return;
               Navigator.of(context).pop();
               getCoins = true;
               _openGetCoins();

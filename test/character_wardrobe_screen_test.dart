@@ -388,7 +388,7 @@ class UnsupportedWardrobeApi extends WardrobeApi {
   }) async => {
     'coins': 1000,
     'items': [
-      {...corgi, 'owned': false},
+      {...corgi, 'owned': false, 'canPurchase': true},
     ],
     'ownedItemIds': [],
     'equipped': {},
@@ -534,10 +534,7 @@ Future<void> openWardrobe(WidgetTester tester, {String key = 'default'}) async {
   }
   await tester.ensureVisible(find.byKey(Key('shop-character-$key')));
   await tester.pump();
-  await tester.tap(find.byKey(Key('shop-character-$key')));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.text('Edit outfit'));
+  await tester.tap(find.byKey(Key('shop-character-edit-$key')));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
 }
@@ -879,10 +876,9 @@ void main() {
         final api = LostActivationApi(commit);
         await pumpWardrobeShop(tester, api);
         final card = find.byKey(const Key('shop-character-character-corgi'));
-        await tester.tap(card);
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-        await tester.tap(find.text('Use character'));
+        await tester.tap(
+          find.byKey(const Key('shop-character-equip-character-corgi')),
+        );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         expect(api.activations, 1);
@@ -963,26 +959,17 @@ void main() {
         final api = UnsupportedWardrobeApi(status);
         await pumpWardrobeShop(tester, api);
         expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
-        await tester.tap(find.byKey(const Key('shop-character-default')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
         expect(
           tester
-              .widget<PillButton>(
-                find.ancestor(
-                  of: find.text('Edit outfit'),
-                  matching: find.byType(PillButton),
-                ),
+              .widget<InkWell>(
+                find.byKey(const Key('shop-character-edit-default')),
               )
-              .onPressed,
+              .onTap,
           isNull,
         );
         expect(find.text('Use character'), findsNothing);
-        Navigator.of(tester.element(find.text('Edit outfit'))).pop();
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(
-          find.byKey(const Key('shop-character-character-corgi')),
+          find.byKey(const Key('shop-character-buy-character-corgi')),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
@@ -1259,10 +1246,9 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
       }
-      await tester.tap(card);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.tap(find.text('Use character'));
+      await tester.tap(
+        find.byKey(const Key('shop-character-equip-character-corgi')),
+      );
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(api.activations, 1);
@@ -1289,24 +1275,17 @@ void main() {
     ) async {
       final api = MalformedWardrobeApi(fault);
       await pumpWardrobeShop(tester, api);
-      await tester.tap(find.byKey(const Key('shop-character-default')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
       if (fault == 'ownership') {
-        expect(find.text('Edit outfit'), findsOneWidget);
         expect(
-          tester
-              .widget<PillButton>(
-                find.ancestor(
-                  of: find.text('Edit outfit'),
-                  matching: find.byType(PillButton),
-                ),
-              )
-              .onPressed,
-          isNull,
+          find.byKey(const Key('shop-character-edit-default')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('shop-character-equip-default')),
+          findsNothing,
         );
       } else {
-        await tester.tap(find.text('Edit outfit'));
+        await tester.tap(find.byKey(const Key('shop-character-edit-default')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(
@@ -1329,24 +1308,42 @@ void main() {
       expect(api.activations, 0);
     });
   }
-  testWidgets('owned character menu cannot activate after an account switch', (
-    tester,
-  ) async {
-    final api = WardrobeApi();
-    await pumpWardrobeShop(tester, api);
-    await tester.tap(find.byKey(const Key('shop-character-character-corgi')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    final auth = tester
-        .widget<ShopTab>(find.byType(ShopTab, skipOffstage: false))
-        .authService;
-    await auth.syncFromBackendUser({
-      'id': 'other-user',
-      'coins': 500,
-    }, authoritative: true);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Use character'), findsNothing);
-    expect(api.activations, 0);
-  });
+  testWidgets(
+    'stale owned character controls cannot act after an account switch',
+    (tester) async {
+      final api = WardrobeApi();
+      await pumpWardrobeShop(tester, api);
+      final staleEquip = tester
+          .widget<InkWell>(
+            find.byKey(const Key('shop-character-equip-character-corgi')),
+          )
+          .onTap;
+      final staleEdit = tester
+          .widget<InkWell>(
+            find.byKey(const Key('shop-character-edit-character-corgi')),
+          )
+          .onTap;
+      final staleBuy = tester
+          .widget<InkWell>(
+            find.byKey(const Key('shop-character-buy-locked-corgi')),
+          )
+          .onTap;
+      final auth = tester
+          .widget<ShopTab>(find.byType(ShopTab, skipOffstage: false))
+          .authService;
+      await auth.syncFromBackendUser({
+        'id': 'other-user',
+        'coins': 500,
+      }, authoritative: true);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      staleEquip!();
+      staleEdit!();
+      staleBuy!();
+      await tester.pump();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byKey(const Key('wardrobe-preview')), findsNothing);
+      expect(api.activations, 0);
+    },
+  );
 }

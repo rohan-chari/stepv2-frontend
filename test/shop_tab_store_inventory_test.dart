@@ -784,14 +784,11 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'INVENTORY');
     await _selectCategory(tester, 'CHARACTERS');
-    await tester.tap(find.byKey(const Key('shop-character-default')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
     expect(
-      find.text('The original. Steady, sociable, and always in your corner.'),
+      find.byKey(const Key('shop-character-edit-default')),
       findsOneWidget,
     );
+    expect(find.byType(BottomSheet), findsNothing);
     expect(find.textContaining('ability'), findsNothing);
     expect(find.textContaining('bonus'), findsNothing);
   });

@@ -39,7 +39,7 @@ void main() {
       'auth_coins': 100,
     });
   });
-  for (final width in [300.0, 390.0, 1600.0]) {
+  for (final width in [300.0, 360.0, 375.0, 390.0, 600.0, 1600.0]) {
     for (final scale in [1.0, 1.6]) {
       for (final dark in [false, true]) {
         testWidgets(
@@ -55,7 +55,14 @@ void main() {
             );
             final power = find.byKey(const Key('shop-product-card')).first;
             final character = find.byKey(const Key('shop-character-default'));
-            expect(tester.getSize(character), tester.getSize(power));
+            if ([360.0, 375.0, 600.0].contains(width) && scale == 1) {
+              expect(
+                tester.getSize(character).width,
+                greaterThanOrEqualTo(110),
+              );
+            } else {
+              expect(tester.getSize(character), tester.getSize(power));
+            }
             expect(
               tester.getSize(find.byKey(const Key('shop-cosmetic-grid'))).width,
               lessThanOrEqualTo(1000),
@@ -63,7 +70,7 @@ void main() {
             for (final description in [
               'Stock up on coins for powerups and accessories.',
               'Buy powerups for races. The badge shows how many you own.',
-              'Tap a character to customize its outfit or unlock a new one.',
+              'Edit an outfit, equip a character, or buy one with coins.',
             ]) {
               expect(find.text(description), findsOneWidget);
             }
@@ -143,8 +150,13 @@ void main() {
                       'owned': owned,
                       'active': state.active,
                       'canPurchase': state.purchasable,
+                      'canEdit': owned,
+                      'canActivate': owned,
+                      'item': {'priceCoins': 300},
                     }),
-                    onPressed: () => taps++,
+                    onEdit: () => taps++,
+                    onEquip: () => taps++,
+                    onBuy: () => taps++,
                   ),
                 ),
               ),
@@ -158,19 +170,28 @@ void main() {
                 ? 'ACTIVE'
                 : owned
                 ? 'OWNED'
-                : 'LOCKED',
+                : state.purchasable
+                ? '300'
+                : 'Unavailable',
           ),
           findsOneWidget,
         );
         expect(
           find.bySemanticsLabel(
-            RegExp('Turtle, ${owned ? 'owned' : 'locked'}'),
+            RegExp('Turtle, ${owned ? 'owned' : 'unowned'}'),
           ),
           findsOneWidget,
         );
         expect(find.byKey(const Key('locked-shop-art-shade')), findsNothing);
-        await tester.tap(find.byType(ShopCharacterCard));
-        expect(taps, 1);
+        if (owned || state.purchasable) {
+          await tester.tap(
+            find.byKey(Key('shop-character-${owned ? 'edit' : 'buy'}-turtle')),
+          );
+          expect(taps, 1);
+        } else {
+          expect(find.byType(InkWell), findsNothing);
+          expect(taps, 0);
+        }
         semantics.dispose();
         expect(tester.takeException(), isNull);
       },

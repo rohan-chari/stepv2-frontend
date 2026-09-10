@@ -1577,6 +1577,24 @@ coin_transactions`.
 
 ## 6. Cosmetics — `DB shop_items`, verified 2026-08-08
 
+### Compact character actions verification — 2026-09-10 (local code/spec)
+
+The compact Edit/Equip/Buy proposal changes presentation and navigation only;
+it introduces no price, reward, discount, or purchase-handler changes. For an
+identical purchase sequence the coin-source and coin-sink deltas are both 0.
+Actual purchase frequency after improved price visibility is unmeasured.
+Source: `docs/compact-character-actions-requirements.md`.
+
+Reverified backend `src/modules/cosmetics/purchaseShopItem.js:59-166` and
+`src/modules/billing/services/memberPrice.js:10-16`: the backend calculates
+the payable quote, rejects a mismatching supplied quote, serializes purchases
+with a user-row lock, returns stored successful request replays, and charges
+0 additional coins for existing ownership. Frontend
+`lib/models/character_wardrobe.dart:17` accepts zero and rejects negative,
+fractional, nonnumeric, or nonfinite quotes. Live catalog prices and income
+distributions were not queried; this review establishes no new price or
+affordability estimate.
+
 ### Wardrobe planning verification — 2026-09-09 (local code only)
 
 These are current handler properties, not a fresh production catalog or

@@ -60,7 +60,7 @@ void main() {
   });
   for (final width in [320.0, 390.0, 800.0]) {
     testWidgets(
-      'Featured starts with coins and merchandise sizes match at $width',
+      'Featured starts with coins and character actions fit at $width',
       (tester) async {
         addTearDown(tester.view.reset);
         await pumpShop(tester, billing: FakeBilling(), width: width);
@@ -82,8 +82,13 @@ void main() {
         final character = tester.getSize(
           find.byKey(const Key('shop-character-default')),
         );
-        expect(character.width, closeTo(powerup.width, .01));
-        expect(character.height, closeTo(powerup.height, .01));
+        if (width == 320) {
+          expect(character.width, closeTo((width - 32 - 12) / 2, .01));
+          expect(character.height, closeTo(character.width / .68, .01));
+        } else {
+          expect(character.width, closeTo(powerup.width, .01));
+          expect(character.height, closeTo(powerup.height, .01));
+        }
         if (width < 360) {
           expect(powerup.width, closeTo((width - 32 - 24) / 3, .01));
         }

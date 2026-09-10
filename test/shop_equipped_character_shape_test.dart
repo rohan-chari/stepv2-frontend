@@ -153,9 +153,18 @@ void main() {
         ),
         findsNothing,
       );
-      await tester.tap(find.byKey(const Key('shop-character-default')));
-      await tester.pump(const Duration(milliseconds: 180));
-      expect(find.text('Use character'), findsOneWidget);
+      expect(
+        find.byKey(const Key('shop-character-equip-default')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<InkWell>(
+              find.byKey(const Key('shop-character-equip-default')),
+            )
+            .onTap,
+        isNotNull,
+      );
     },
   );
 

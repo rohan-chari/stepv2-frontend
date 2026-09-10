@@ -38,6 +38,7 @@ const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
     version: '2.3.13',
     title: 'A CLEARER VIEW',
     bullets: <String>[
+      'See character prices in the Shop and edit or equip your characters directly from their cards.',
       'Race with up to 10 players on each side, with scrollable team rosters.',
       'Watch an optional ad for bonus coins directly below Today’s Coins on Home.',
       'The Shop tutorial now highlights the full Store and Inventory switcher.',
