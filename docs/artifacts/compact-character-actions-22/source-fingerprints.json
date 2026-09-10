@@ -374,7 +374,7 @@
   "lib/screens/tabs/profile_tab.dart": "339a3c386bbf29013669ef550fae24b3adcd28f8906278afe2655b4301527286",
   "lib/screens/tabs/races_tab.dart": "4dd9d9c3042ed47a7f1ea51f0e1cfa2675a7c954b8a52900fdc336a3c518efbd",
   "lib/screens/tabs/ranked_tab.dart": "4fa412f166c05362f32d5ca282c8c1bb8c917117199fdcae1c040c933b94c08b",
-  "lib/screens/tabs/shop_tab.dart": "3b96271b72dd6ac1f64947b7a9d5ad5c2bbcb71d71cdabb31674a207ff68f07a",
+  "lib/screens/tabs/shop_tab.dart": "f2f81480e7715898025d99c053aedd2e57857f7c5021c81d577d5755f3d0542e",
   "lib/screens/tournament_detail_screen.dart": "54f1c696fcc36978a57bfedb0daa8e7e1dc9a0f27be74643897033b5b1c16a4b",
   "lib/screens/update_required_screen.dart": "3bcd99ec5da780871db66d5a99e71db3e57e38f60f03171ebdf6f0075b198b35",
   "lib/services/activation_analytics_service.dart": "b5feb9b2beaf18750c2ff523533b7b9df49096a372248b693ae5725c6efdb893",

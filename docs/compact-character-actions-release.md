@@ -23,7 +23,7 @@ minimum-width fixes. Five real-widget visual captures passed (390/375/360px,
 Full suite:3395passed/41failed. Exactly36failures match the previously
 recorded unrelated Admin baseline; five assertions still targeted the removed
 menu/icon/geometry and were updated to the requested direct actions. Final
-rerun of all15affected suites:295/295passed, including all39new regressions.
+rerun of all12affected suites:295/295passed, including all39new regressions.
 No remaining change-related failures. Signed artifact/submission verification
 is in progress.
 Manual placement checklist: [requirements](compact-character-actions-requirements.md#manual-ui-placement-test-plan).
