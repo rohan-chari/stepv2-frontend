@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/animals.dart';
@@ -8177,6 +8178,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return 'Banked $bankedCoins coins';
   }
 
+  String? _trailMineSubtitle(Map<String, dynamic> effect) {
+    if (effect['type'] != 'TRAIL_MINE') return null;
+    final mine = effect['trailMine'];
+    if (mine is! Map) return null;
+    final position = mine['positionSteps'];
+    if (position is! num || !position.isFinite || position < 0) return null;
+    return 'Placed at ${NumberFormat('#,##0.################', 'en_US').format(position)} steps';
+  }
+
   Widget _effectRow(
     Map<String, dynamic> e, {
     required Color tint,
@@ -8194,7 +8204,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // static copy unchanged — the field and every subfield are read defensively
     // and parsed num-safely, since JSON numbers aren't guaranteed to be `int`.
     final desc =
-        _piggyBankSubtitle(e) ?? PowerupCopy.effectRailSubtitleFor(type);
+        _trailMineSubtitle(e) ??
+        _piggyBankSubtitle(e) ??
+        PowerupCopy.effectRailSubtitleFor(type);
     // A debuff leads with who did it — the attacker matters more than the
     // mechanic, and leading keeps the name safe from end-ellipsis.
     final attacker = isBoost

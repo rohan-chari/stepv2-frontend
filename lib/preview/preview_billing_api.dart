@@ -15,6 +15,27 @@ class PreviewBillingApi extends DemoRaceApiService {
     seedRaceInventory();
   }
 
+  @override
+  Future<Map<String, dynamic>> fetchShopItemPreview({
+    required String identityToken,
+    required String itemId,
+  }) async {
+    final candidate = _cosmetics
+        .where((item) => item['id'] == itemId && item['slot'] != 'CHARACTER')
+        .firstOrNull;
+    return {
+      'itemId': itemId, 'canPreview': candidate != null,
+      'unavailableReason': candidate == null ? 'no_compatible_character' : null,
+      'usedFallbackCharacter':
+          candidate != null && _activeCharacter != 'default',
+      'character': candidate == null
+          ? null
+          : {'characterKey': 'default', 'name': 'Capybara', 'item': null},
+      // Explicit offline server fixture: only this candidate is worn.
+      'accessories': [?candidate],
+    };
+  }
+
   final PreviewBillingController controller;
   final TutorialPreviewBackendApiService _profile =
       TutorialPreviewBackendApiService();

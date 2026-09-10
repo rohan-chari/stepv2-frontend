@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:step_tracker/tutorial/tutorial_preview_data.dart';
+import 'package:step_tracker/demo/demo_race_api_service.dart';
+import 'package:step_tracker/demo/demo_race_engine.dart';
+import 'package:step_tracker/preview/preview_billing_api.dart';
+import 'package:step_tracker/preview/preview_billing_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
@@ -82,14 +87,19 @@ Future<AuthService> _auth() async {
   return auth;
 }
 
-Future<void> _pump(WidgetTester tester, _EffectsApi api) async {
+Future<void> _pump(
+  WidgetTester tester,
+  BackendApiService api, {
+  AuthService? auth,
+  String raceId = 'race-fx',
+}) async {
   await tester.binding.setSurfaceSize(const Size(430, 2000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
       home: RaceDetailScreen(
-        authService: await _auth(),
-        raceId: 'race-fx',
+        authService: auth ?? await _auth(),
+        raceId: raceId,
         backendApiService: api,
       ),
     ),
@@ -101,6 +111,86 @@ Future<void> _pump(WidgetTester tester, _EffectsApi api) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('owner Trail Mine shows server placement until used', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _EffectsApi([
+        {
+          'type': 'TRAIL_MINE',
+          'sourceUserId': 'me',
+          'targetUserId': 'me',
+          'onSelf': true,
+          'trailMine': {'positionSteps': 12345},
+        },
+      ]),
+    );
+    expect(find.text('Trail Mine'), findsOneWidget);
+    expect(find.text('Placed at 12,345 steps'), findsOneWidget);
+    expect(find.text('Until used'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  for (final position in [null, -1, double.nan, 'invalid', 12345.5]) {
+    testWidgets(
+      'Trail Mine malformed placement keeps generic effect: $position',
+      (tester) async {
+        await _pump(
+          tester,
+          _EffectsApi([
+            {
+              'type': 'TRAIL_MINE',
+              'sourceUserId': 'me',
+              'targetUserId': 'me',
+              'onSelf': true,
+              if (position != null) 'trailMine': {'positionSteps': position},
+            },
+          ]),
+        );
+        expect(find.text('Trail Mine'), findsOneWidget);
+        expect(find.text('Until used'), findsOneWidget);
+        expect(
+          find.textContaining('Placed at'),
+          position == 12345.5 ? findsOneWidget : findsNothing,
+        );
+        if (position == 12345.5) {
+          expect(find.text('Placed at 12,345.5 steps'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  for (final kind in ['tutorial', 'demo', 'billing']) {
+    testWidgets('$kind real race mirror renders owner mine placement', (
+      tester,
+    ) async {
+      final billing = PreviewBillingController();
+      addTearDown(billing.dispose);
+      final auth = kind == 'tutorial'
+          ? TutorialPreviewAuthService()
+          : billing.auth;
+      final BackendApiService api = kind == 'tutorial'
+          ? TutorialPreviewBackendApiService()
+          : kind == 'demo'
+          ? DemoRaceApiService(
+              DemoRaceEngine(myUserId: billing.userId, myDisplayName: 'Demo'),
+            )
+          : PreviewBillingApi(billing);
+      await _pump(
+        tester,
+        api,
+        auth: auth,
+        raceId: kind == 'tutorial'
+            ? tutorialPreviewRaceId
+            : 'billing-preview-race',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Trail Mine'), findsOneWidget);
+      expect(find.text('Placed at 21,000 steps'), findsOneWidget);
+      expect(find.text('Until used'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('effects on me split into BOOSTS and DEBUFFS with attribution', (
     tester,
   ) async {

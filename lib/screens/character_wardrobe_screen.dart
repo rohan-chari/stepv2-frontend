@@ -12,7 +12,6 @@ import '../widgets/info_toast.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/game_container.dart';
-import '../widgets/locked_shop_art.dart';
 import '../widgets/home_hero_scene.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/shop_category_bar.dart';
@@ -876,9 +875,8 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                   Column(
                     children: [
                       Expanded(
-                        child: LockedShopArt(
+                        child: KeyedSubtree(
                           key: Key('wardrobe-art-${item.id}'),
-                          locked: !item.owned,
                           child: AccessoryThumbnail(
                             assetKey:
                                 wardrobeString(item.item['assetKey']) ?? '',

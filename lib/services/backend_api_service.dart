@@ -6297,6 +6297,17 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Additive read-only preview; callers render unavailable on older backends.
+  Future<Map<String, dynamic>> fetchShopItemPreview({
+    required String identityToken,
+    required String itemId,
+  }) async => _decodeJsonResponse(
+    await _sendGetRequest(
+      path: '/shop/items/${Uri.encodeComponent(itemId)}/preview',
+      identityToken: identityToken,
+    ),
+  );
+
   Future<Map<String, dynamic>> fetchShopCharacters({
     required String identityToken,
     int limit = 24,

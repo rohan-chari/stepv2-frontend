@@ -192,6 +192,7 @@ void main() {
       await tap(tester, tile);
       expect(api.wardrobeOpened, isNull);
       expect(find.text('BUY · 200'), findsOneWidget);
+      expect(find.text('PREVIEW'), findsOneWidget);
       await tap(tester, find.text('BUY · 200'));
       expect(api.purchases, 1);
       expect(tile, findsNothing);

@@ -46,6 +46,12 @@ class TutorialPreviewAuthService extends AuthService {
 }
 
 class TutorialPreviewBackendApiService extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchShopItemPreview({
+    required String identityToken,
+    required String itemId,
+  }) async => tutorialAccessoryPreview(itemId);
+
   final Map<String, String> _socialState = <String, String>{
     'tutorial-maya': 'friends',
     'tutorial-sam': 'friends',
@@ -782,6 +788,34 @@ StepData tutorialPreviewStepData() {
   return StepData(steps: 13420, date: DateTime(now.year, now.month, now.day));
 }
 
+/// Explicit offline preview context; no live catalog or outfit is consulted.
+Map<String, dynamic> tutorialAccessoryPreview(String itemId) => {
+  'itemId': itemId,
+  'canPreview': itemId == 'tutorial-preview-baseball-cap',
+  'unavailableReason': itemId == 'tutorial-preview-baseball-cap'
+      ? null
+      : 'no_compatible_character',
+  'usedFallbackCharacter': false,
+  'character': itemId == 'tutorial-preview-baseball-cap'
+      ? {'characterKey': 'default', 'name': 'Capybara', 'item': null}
+      : null,
+  'accessories': [
+    if (itemId == 'tutorial-preview-baseball-cap')
+      {
+        'id': itemId,
+        'sku': 'baseball_cap',
+        'name': 'Baseball Cap',
+        'slot': 'HEAD',
+        'assetKey': 'baseball_cap',
+        'renderMetadata': {
+          'offsetX': -0.01,
+          'offsetY': 0.02,
+          'rotation': -0.08,
+        },
+      },
+  ],
+};
+
 /// A believable equipped-capybara loadout for the home hero preview.
 const List<Map<String, dynamic>> tutorialPreviewAccessories = [
   {
@@ -1193,6 +1227,14 @@ Map<String, dynamic> tutorialPreviewRaceProgress() {
         {'id': 'pw-box-1', 'status': 'MYSTERY_BOX'},
       ],
       'activeEffects': [
+        {
+          'type': 'TRAIL_MINE',
+          'onSelf': true,
+          'sourceUserId': tutorialPreviewUserId,
+          'targetUserId': tutorialPreviewUserId,
+          'expiresAt': null,
+          'trailMine': {'positionSteps': 21000},
+        },
         {
           'type': 'RUNNERS_HIGH',
           'onSelf': true,

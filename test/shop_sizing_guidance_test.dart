@@ -67,7 +67,10 @@ void main() {
             ]) {
               expect(find.text(description), findsOneWidget);
             }
-            expect(find.byKey(const Key('shop-membership-toggle')), findsNothing);
+            expect(
+              find.byKey(const Key('shop-membership-toggle')),
+              findsNothing,
+            );
             expect(find.textContaining('Bara+'), findsNothing);
             expect(tester.takeException(), isNull);
           },
@@ -121,68 +124,56 @@ void main() {
   ]) {
     final owned = state.owned;
 
-    testWidgets('character lock preserves tap and ownership semantics $state', (
-      tester,
-    ) async {
-      var taps = 0;
-      final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 112,
-                height: 165,
-                child: ShopCharacterCard(
-                  character: ShopCharacter.fromJson({
-                    'characterKey': 'turtle',
-                    'name': 'Turtle',
-                    'owned': owned,
-                    'active': state.active,
-                    'canPurchase': state.purchasable,
-                  }),
-                  onPressed: () => taps++,
+    testWidgets(
+      'clear character artwork preserves tap and ownership semantics $state',
+      (tester) async {
+        var taps = 0;
+        final semantics = tester.ensureSemantics();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 112,
+                  height: 165,
+                  child: ShopCharacterCard(
+                    character: ShopCharacter.fromJson({
+                      'characterKey': 'turtle',
+                      'name': 'Turtle',
+                      'owned': owned,
+                      'active': state.active,
+                      'canPurchase': state.purchasable,
+                    }),
+                    onPressed: () => taps++,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-      expect(
-        find.byIcon(Icons.lock_rounded),
-        owned ? findsNothing : findsOneWidget,
-      );
-      expect(
-        find.text(
-          state.active
-              ? 'ACTIVE'
-              : owned
-              ? 'OWNED'
-              : 'LOCKED',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.bySemanticsLabel(RegExp('Turtle, ${owned ? 'owned' : 'locked'}')),
-        findsOneWidget,
-      );
-      if (!owned) {
-        final lock = find.byIcon(Icons.lock_rounded);
-        final art = find.byKey(const Key('shop-character-art'));
-        expect(tester.getCenter(lock), tester.getCenter(art));
-        expect(tester.widget<Icon>(lock).color, AppColors.pillGold);
-        final shade = tester.widget<ColoredBox>(
-          find.byKey(const Key('locked-shop-art-shade')),
         );
-        expect(shade.color, Colors.black.withValues(alpha: .16));
-        expect(find.byKey(const Key('locked-shop-art-shade')), findsOneWidget);
-      } else {
+        expect(find.byIcon(Icons.lock_rounded), findsNothing);
+        expect(
+          find.text(
+            state.active
+                ? 'ACTIVE'
+                : owned
+                ? 'OWNED'
+                : 'LOCKED',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel(
+            RegExp('Turtle, ${owned ? 'owned' : 'locked'}'),
+          ),
+          findsOneWidget,
+        );
         expect(find.byKey(const Key('locked-shop-art-shade')), findsNothing);
-      }
-      await tester.tap(find.byType(ShopCharacterCard));
-      expect(taps, 1);
-      semantics.dispose();
-      expect(tester.takeException(), isNull);
-    });
+        await tester.tap(find.byType(ShopCharacterCard));
+        expect(taps, 1);
+        semantics.dispose();
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }

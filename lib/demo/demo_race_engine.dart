@@ -607,6 +607,15 @@ class DemoRaceEngine {
           for (final row in _inventory) Map<String, dynamic>.from(row),
         ],
         'activeEffects': [
+          if (!_completed)
+            {
+              'type': 'TRAIL_MINE',
+              'onSelf': true,
+              'sourceUserId': myUserId,
+              'targetUserId': myUserId,
+              'expiresAt': null,
+              'trailMine': {'positionSteps': 21000},
+            },
           if (_shieldArmed)
             {
               'type': 'COMPRESSION_SOCKS',

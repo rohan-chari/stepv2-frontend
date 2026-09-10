@@ -1,4 +1,5 @@
 import '../../widgets/game_toast.dart';
+import '../../widgets/accessory_preview_sheet.dart';
 import '../../models/character_wardrobe.dart';
 import '../../services/character_wardrobe_controller.dart';
 import '../../widgets/shop_character_card.dart';
@@ -2431,7 +2432,47 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     Map<String, dynamic> item,
   ) async {
     Future<void>? operation;
-    var getCoins = false;
+    var getCoins = false, preview = false;
+    final generation = _shopSessionGeneration;
+    final itemId = wardrobeString(item['id']);
+    final canOfferPreview =
+        itemId != null && wardrobeSlots.contains(item['slot']);
+    Widget previewButton() => PillButton(
+      label: 'PREVIEW',
+      icon: Icons.visibility_outlined,
+      variant: PillButtonVariant.secondary,
+      fullWidth: true,
+      onPressed: () {
+        Navigator.of(context).pop();
+        preview = true;
+      },
+    );
+    Future<void> showPreview() async {
+      if (!mounted ||
+          generation != _shopSessionGeneration ||
+          !preview ||
+          itemId == null) {
+        return;
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: AppColors.of(context).parchment,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .85,
+        ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => AccessoryPreviewSheet(
+          itemId: itemId,
+          itemName: wardrobeString(item['name']) ?? 'Accessory',
+          api: _backendApiService,
+          auth: widget.authService,
+        ),
+      );
+    }
+
     final name = item['name'] as String? ?? 'Accessory';
     final rawPrice = item['priceCoins'];
     if (!_validCoinQuote(rawPrice)) {
@@ -2439,7 +2480,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         art: _cosmeticArt(item),
         name: name,
         description: 'Price is currently unavailable. Please try again.',
+        actions: [if (canOfferPreview) previewButton()],
       );
+      await showPreview();
       return null;
     }
     final price = (rawPrice as num).toInt();
@@ -2459,6 +2502,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           ? item['description'] as String
           : '',
       actions: [
+        if (canOfferPreview) ...[previewButton(), const SizedBox(height: 10)],
         if (_memberPriceCopy(item) case final copy?)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -2519,6 +2563,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       if (_shopActionContext != adContext) _disposeShopAdTarget();
     });
     await operation;
+    await showPreview();
     return getCoins ? ShopCategory.featured : null;
   }
 

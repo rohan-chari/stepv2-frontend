@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../models/character_wardrobe.dart';
 import '../styles.dart';
 import 'race_ui.dart';
-import 'locked_shop_art.dart';
 import 'pill_button.dart';
 
 class ShopCharacterCard extends StatelessWidget {
@@ -44,9 +43,8 @@ class ShopCharacterCard extends StatelessWidget {
               Column(
                 children: [
                   Expanded(
-                    child: LockedShopArt(
+                    child: KeyedSubtree(
                       key: const Key('shop-character-art'),
-                      locked: !character.owned,
                       child: LayoutBuilder(
                         builder: (context, constraints) => Center(
                           child: Transform.scale(

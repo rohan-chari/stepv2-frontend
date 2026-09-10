@@ -1,5 +1,4 @@
 import 'package:step_tracker/widgets/home_hero_scene.dart';
-import 'package:step_tracker/widgets/locked_shop_art.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
 import 'support/shop_navigation.dart';
 import 'package:flutter/foundation.dart';
@@ -561,7 +560,7 @@ void main() {
     });
   });
   testWidgets(
-    'wardrobe title is centered, gold Save stands alone, and Locked artwork has a lock overlay',
+    'wardrobe title is centered, gold Save stands alone, and unowned artwork has no lock or scrim',
     (tester) async {
       final api = WardrobeApi()..hatOwned = false;
       await pumpWardrobeShop(tester, api);
@@ -583,16 +582,9 @@ void main() {
       final tile = find.byKey(const Key('wardrobe-item-shop-baseball-cap'));
       expect(
         find.descendant(of: tile, matching: find.byIcon(Icons.lock_rounded)),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(
-        tester
-            .widget<LockedShopArt>(
-              find.byKey(const Key('wardrobe-art-shop-baseball-cap')),
-            )
-            .locked,
-        isTrue,
-      );
+      expect(find.byKey(const Key('locked-shop-art-shade')), findsNothing);
       await tester.tap(tile);
       await tester.pump();
       expect(
@@ -622,14 +614,7 @@ void main() {
       await openWardrobe(tester);
       expect(find.text('Back to Characters'), findsNothing);
       expect(find.byKey(const Key('wardrobe-back')), findsOneWidget);
-      expect(
-        tester
-            .widget<LockedShopArt>(
-              find.byKey(const Key('wardrobe-art-shop-baseball-cap')),
-            )
-            .locked,
-        isFalse,
-      );
+      expect(find.byKey(const Key('locked-shop-art-shade')), findsNothing);
       final stage = find.byKey(const Key('wardrobe-preview'));
       expect(
         find.descendant(of: stage, matching: find.byType(HomeHeroScene)),

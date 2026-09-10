@@ -1,5 +1,6 @@
 import '../services/backend_api_service.dart';
 import '../models/race_resolution_status.dart';
+import '../tutorial/tutorial_preview_data.dart' show tutorialAccessoryPreview;
 import 'demo_race_engine.dart';
 
 /// A fake backend for the REAL `RaceDetailScreen` (spec §5.1).
@@ -16,6 +17,12 @@ import 'demo_race_engine.dart';
 /// settlement logic.
 class DemoRaceApiService extends BackendApiService {
   DemoRaceApiService(this.engine);
+
+  @override
+  Future<Map<String, dynamic>> fetchShopItemPreview({
+    required String identityToken,
+    required String itemId,
+  }) async => tutorialAccessoryPreview(itemId);
 
   final DemoRaceEngine engine;
   final Map<String, String> _socialState = <String, String>{};
