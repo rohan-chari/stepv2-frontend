@@ -4,7 +4,7 @@ Locked character cards and wardrobe accessory tiles now use the existing gold bu
 
 Validation: two new visual expectations failed before the change; all 59 focused Shop/wardrobe tests passed afterward. Flutter analysis is clean. Independent review approved the change. The known 36 baseline admin test failures from build 19 were not rerun for this localized styling change.
 
-Release target: iOS 2.3.13 (20), matching Android 203150. Build/upload and replacement App Review submission are pending. Backend unchanged; no API or ownership-policy changes. Existing supported-content behavior remains compatible with older clients.
+Release target: iOS 2.3.13 (20), matching Android 203150. Apple verified the uploaded build as VALID / IN_BETA_TESTING, with membership in the existing bara testers group confirmed at 2026-09-10 21:31:31 UTC. Build ID: e6413cff-8588-4440-b6cf-4ff1ce0a0ba7. The next authorized feature release will remove this lock treatment per the user’s subsequent design change. App Review submission is excluded per the user’s latest instruction; build 19’s existing submission remains untouched. Backend unchanged; no API or ownership-policy changes. Existing supported-content behavior remains compatible with older clients.
 
 ## Manual checklist
 

@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-09-10T20:57:44.792Z",
+  "appVersion": {
+    "id": "c7899e0d-bed5-4768-8754-f78aa9c655e9",
+    "version": "2.3.13",
+    "state": "WAITING_FOR_REVIEW",
+    "releaseType": "MANUAL",
+    "buildId": "4aeba851-b067-45c6-a3d6-76837f109ea0",
+    "build": "19"
+  },
+  "build20Submitted": false,
+  "reason": "User canceled App Review replacement; TestFlight-only upload remains authorized"
+}

@@ -1,0 +1,74 @@
+{
+  "sourceCommit": "827294f",
+  "ios": {
+    "version": "2.3.13",
+    "build": "20",
+    "compiled_sha256": "e49603eb57137b33a812c0830a12be468ad4734055f3e352464bdc2e028560f7",
+    "archive_compiled_sha256": "582fa6c004b7756eececdd8ac74b54a15a258b8b46ff92f2fbd9eb91b5b01da6",
+    "macho": {
+      "16777228:0": {
+        "uuid": "0c7143a3f35537f44c4ff302a53bd420",
+        "sections": {
+          "__TEXT/__text": "37ced249d2327be87cd50ba4344947bf39097006995c203ff597a191c34278d4",
+          "__TEXT/__const": "87a62133124b61afc79a9e087646d5c34a46930f3747cecb7ebf5d296c9bf159",
+          "__TEXT/__unwind_info": "57478a95956e25ad315d397ff31f2f8704d80d95703978731ac3187b667038b3"
+        }
+      }
+    },
+    "signature_verified": true,
+    "apns": "production",
+    "debuggable": false,
+    "required_configuration_verified": true,
+    "corekit_verified": true,
+    "native_gpp_decoder_verified": true,
+    "native_archive_export_match": true,
+    "current_ui_verified": true,
+    "assets": {
+      "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+      "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+      "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+      "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+    },
+    "sha256": "3248a7be76a1855b57045afe133d7b197d0c36807e117fa961aa78acca8f2dbf"
+  },
+  "android": {
+    "package": "com.rohanchari.steptracker",
+    "version": "2.3.13",
+    "version_code": "203150",
+    "billing_client": "8.3.0",
+    "bundle": "/Users/rohan/repos/stepv2-frontend/build/app/outputs/bundle/prodRelease/app-prod-release.aab",
+    "sha256": "d0e94408f8f649de278b502871c06cc0a08d3de02caffa4147998f6d68aa243b",
+    "upload_certificate_sha256": "CF:06:4C:DD:CA:14:CB:6B:27:91:BC:86:77:39:EF:14:EC:0E:AE:13:3C:68:E2:71:30:E5:0D:0F:8B:EE:14:3A",
+    "signature_verified": true,
+    "debuggable": false,
+    "production_admob_app_verified": true,
+    "fresh_native_libraries": {
+      "arm64-v8a": {
+        "packaged_sha256": "f6e450bf6188dc14c32ff1300c37ecd7e64f1f39f5456127d5167aad0f54b4f9",
+        "fresh_compiler_sha256": "e389475ddc3768d5d53bbf46e1603506bd3722dd549071bd6d21aad881871744",
+        "all_allocated_sections_match": true
+      },
+      "armeabi-v7a": {
+        "packaged_sha256": "255a4ad793bebed7cc8dde808728c2f6a3eeaa514c433127a6fc2e48f6930c55",
+        "fresh_compiler_sha256": "a4e063fe9ccde7b7d94f4be6d27bb7de13e01b0176f6a6242173d8d002b467d1",
+        "all_allocated_sections_match": true
+      },
+      "x86_64": {
+        "packaged_sha256": "93838e11ac51cb1e3e6ec723b386c36a8f8345450dd572cc9f2f36cac34e9f83",
+        "fresh_compiler_sha256": "820f241acd1e17994b7edd95203d18cb579ee2a707f42023f873d99d8737bf80",
+        "all_allocated_sections_match": true
+      }
+    },
+    "current_ui_verified": true,
+    "assets": {
+      "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+      "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+      "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+      "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+    }
+  },
+  "focusedTestsPassed": 59,
+  "analysis": "clean",
+  "review": "approved",
+  "backendChanged": false
+}
