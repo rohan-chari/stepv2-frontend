@@ -4,7 +4,7 @@ Character names are centered; the persistent footer has only Save outfit (yellow
 
 No backend/API, prices, rewards, product identifiers or fulfillment behavior changed. Older binaries remain compatible. Both platforms share these widgets; billing retains pending, account and route guards.
 
-Reviewer: SHIP, no outstanding findings. Regression coverage includes semantic checkout and duplicate prevention, sorting including owned-only inventory, locks, centered headers, custom prompts and retained wardrobe guards. Full-suite and release results are recorded with the release evidence.
+Reviewer: SHIP, no outstanding findings. Regression coverage includes semantic checkout and duplicate prevention, sorting including owned-only inventory, locks, centered headers, custom prompts and retained wardrobe guards. Final full Flutter suite: **3,315 passed**; `flutter analyze`: **No issues found**. Runtime source: `12bf042`. Release results are recorded with the release evidence.
 
 Actual widget captures: [Shop](artifacts/shop-polish-2026-09-10/) and [wardrobe](artifacts/shop-wardrobe-polish-2026-09-10/), light/dark at normal and 1.6 text scale. Fixture prices do not charge money.
 
