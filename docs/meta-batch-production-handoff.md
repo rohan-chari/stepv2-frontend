@@ -1,3 +1,6 @@
+> Released backend and uploaded iOS on 2026-09-10; see
+> [release audit](meta-batch-release-2026-09-10.md) for actual results.
+
 # Meta, Shop, artwork and Red Card production handoff
 
 Status: preparation in progress; not production authorization. See

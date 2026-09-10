@@ -344,7 +344,7 @@ and verified. Do not stop at instructions to drag the IPA into Transporter.
 its destination to upload and pin the verified build number:
 
 ```bash
-# Populate these variables from the existing machine-local configuration.
+# Load these references from ignored local .env (the private .p8 stays outside the repo).
 : "${ASC_API_KEY_PATH:?Load the existing App Store Connect key path}"
 : "${ASC_API_KEY_ID:?Load the existing App Store Connect key ID}"
 : "${ASC_API_ISSUER_ID:?Load the existing App Store Connect issuer ID}"

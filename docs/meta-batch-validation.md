@@ -1,3 +1,6 @@
+> Released backend and uploaded iOS on 2026-09-10; see
+> [release audit](meta-batch-release-2026-09-10.md) for actual results.
+
 # Current release status — 2026-09-10
 
 User authorized backend production deployment if the documented failures are
