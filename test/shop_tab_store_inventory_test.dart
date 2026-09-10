@@ -360,7 +360,7 @@ void main() {
     expect(
       target
           .shift(overlayOrigin)
-          .contains(tester.getCenter(find.text('Characters & Accessories'))),
+          .contains(tester.getCenter(find.text('Characters'))),
       isFalse,
     );
   });
@@ -663,7 +663,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    for (final label in ['Featured', 'Characters & Accessories']) {
+    for (final label in ['Featured', 'Characters']) {
       expect(
         tester.widget<Text>(find.text(label)).style?.color,
         AppPalette.night.textLight,

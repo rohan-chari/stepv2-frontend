@@ -12,10 +12,12 @@ class _StashApi extends BackendApiService {
   _StashApi({
     this.stashType = 'TRAIL_MIX',
     this.rejectUse = false,
+    this.decoyCooldown = false,
   }) : _stashQuantity = 2;
 
   final String stashType;
   final bool rejectUse;
+  final bool decoyCooldown;
   int redeemCalls = 0;
   int? lastUpgradeLevel;
   int _stashQuantity;
@@ -122,9 +124,16 @@ class _StashApi extends BackendApiService {
     String? targetEffectId,
     int upgradeLevel = 0,
   }) async {
-    if (rejectUse) {
+    if (rejectUse || decoyCooldown) {
       // Mirrors the current backend's rejected-redeemed-item refund.
       _stashQuantity++;
+      if (decoyCooldown) {
+        throw const ApiException(
+          'Wait 1 hour after your Decoy pops before using another in this race',
+          statusCode: 409,
+          code: 'DECOY_COOLDOWN',
+        );
+      }
       throw const ApiException('Quick Rinse is on cooldown', statusCode: 409);
     }
     lastUpgradeLevel = upgradeLevel;
@@ -242,6 +251,30 @@ void main() {
     // The authoritative follow-up read restores a server-refunded redeemed
     // item to the account-wide stash rather than leaving it in a race slot.
     expect(find.text('Trail Mix x2'), findsOneWidget);
+  });
+
+  testWidgets('Decoy cooldown shows server wait and restores refunded stash', (
+    tester,
+  ) async {
+    final api = _StashApi(stashType: 'DECOY', decoyCooldown: true);
+    await _pump(tester, api);
+    await tester.tap(find.byKey(const Key('stash-use-DECOY')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('Wait 1 hour after it pops'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('stash-confirm-use')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.redeemCalls, 1);
+    expect(find.text('Decoy x2'), findsOneWidget);
+    expect(
+      find.text(
+        'Wait 1 hour after your Decoy pops before using another in this race',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   // Pocket Watch is shop-only, so the stash is its main entry point: it must

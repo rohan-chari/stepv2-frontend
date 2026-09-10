@@ -46,17 +46,21 @@ class ShopCharacterCard extends StatelessWidget {
                       locked: !character.owned,
                       child: LayoutBuilder(
                         builder: (context, constraints) => Center(
-                          child: RacerAvatar(
-                            rank: 1,
-                            size: constraints.biggest.shortestSide.clamp(
-                              24,
-                              240,
+                          child: Transform.scale(
+                            key: const Key('shop-character-art-scale'),
+                            scale: 1.1,
+                            child: RacerAvatar(
+                              rank: 1,
+                              size: constraints.biggest.shortestSide.clamp(
+                                24,
+                                240,
+                              ),
+                              showMedalRing: false,
+                              animal: character.animal,
+                              accessories: character.owned
+                                  ? character.outfit?.items ?? []
+                                  : [],
                             ),
-                            showMedalRing: false,
-                            animal: character.animal,
-                            accessories: character.owned
-                                ? character.outfit?.items ?? []
-                                : [],
                           ),
                         ),
                       ),

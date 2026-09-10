@@ -43,7 +43,7 @@ import '../../services/meta_app_events_service.dart';
 // Powerup types retired from Store and Inventory. Old-backend residue is
 // filtered defensively; historical race Activity remains readable elsewhere.
 const _hiddenPowerupInventoryTypes = {'IMPOSTER'};
-const _notForSalePowerupTypes = {'IMPOSTER', 'DECOY'};
+const _notForSalePowerupTypes = {'IMPOSTER'};
 
 /// The watch-ads-to-unlock rules (spec §7 / contract §4.3).
 ///
@@ -209,6 +209,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   final _coinsKey = GlobalKey();
   final _powerupsKey = GlobalKey();
   final _charactersKey = GlobalKey();
+  final _accessoriesKey = GlobalKey();
   final _featuredKey = GlobalKey();
   final _headerKey = GlobalKey();
   double _toastTop = 100;
@@ -348,6 +349,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       api: _backendApiService,
       auth: widget.authService,
       onAppearanceChanged: (appearance) {
+        // A wardrobe projection is not a shop catalog. Keep initial loading
+        // and failed catalog reads intact until actual merchandise arrives.
+        if (_catalog == null) {
+          widget.onShopChanged?.call(appearance);
+          return;
+        }
         _shopStateEpoch++;
         _catalogRequestGeneration++;
         final next = {...?_catalog, ...appearance};
@@ -563,7 +570,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   ];
   static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
-    'Scroll from Featured coins to Powerups, then Characters & Accessories. Powerup badges show how many you own.',
+    'Scroll from Featured coins to Powerups, then Characters and Accessories. Powerup badges show how many you own.',
     'Owned and locked characters share one collection. Open an owned character to edit its saved outfit or make it active.',
   ];
 
@@ -1600,11 +1607,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                                       _buildItemsHeader(),
                                       _buildBody(),
                                       _buildSectionHeader(
-                                        'Characters & Accessories',
+                                        'Characters',
                                         'characters',
                                         _charactersKey,
                                       ),
                                       _buildCharacters(),
+                                      _buildSectionHeader(
+                                        'Accessories',
+                                        'accessories',
+                                        _accessoriesKey,
+                                      ),
+                                      _buildAccessories(),
                                       SizedBox(
                                         height:
                                             MediaQuery.paddingOf(
@@ -1813,9 +1826,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       _focusFeatured(ShopFocus.coins);
       return;
     }
-    _scrollToSection(
-      category == _ShopCategory.powerups ? _powerupsKey : _charactersKey,
-    );
+    _scrollToSection(switch (category) {
+      _ShopCategory.powerups => _powerupsKey,
+      _ShopCategory.accessories => _accessoriesKey,
+      _ => _charactersKey,
+    });
   }
 
   Widget _buildSectionHeader(String title, String id, GlobalKey anchor) {
@@ -1823,6 +1838,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final description = switch (id) {
       'featured' => 'Stock up on coins for powerups and accessories.',
       'powerups' => 'Buy powerups for races. The badge shows how many you own.',
+      'accessories' =>
+        'Unlock a new accessory or edit your active character’s outfit.',
       _ => 'Tap a character to customize its outfit or unlock a new one.',
     };
     return Padding(
@@ -1933,6 +1950,116 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           ),
       ],
     );
+  }
+
+  Widget _buildAccessories() {
+    final state = _catalogState;
+    final active = _wardrobes.characters.values
+        .where((character) => character.active && character.canEdit)
+        .firstOrNull;
+    final canEdit =
+        active != null &&
+        (_wardrobes.state == WardrobeLoadState.loaded ||
+            _wardrobes.state == WardrobeLoadState.paging);
+    final items = _safeShopItems(_catalog?['items'])
+        .where(
+          (item) =>
+              wardrobeSlots.contains(item['slot']) &&
+              !_isCosmeticOwned(item) &&
+              !_isCosmeticEquipped(item) &&
+              item['earnOnly'] != true,
+        )
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (state.shouldShowInitialLoading || (_loading && _catalog == null))
+          const KeyedSubtree(
+            key: Key('shop-accessories-loading'),
+            child: _ShopLoadingSkeleton(cosmetic: true),
+          )
+        else if (state.isError && !state.hasData)
+          Padding(
+            key: const Key('shop-accessories-error'),
+            padding: const EdgeInsets.all(16),
+            child: LoadErrorPanel(
+              title: 'Couldn’t load accessories',
+              message: state.error ?? 'Check your connection and try again.',
+              onRetry: _loadCatalog,
+            ),
+          )
+        else if (items.isEmpty)
+          _buildEmptyState(
+            icon: Icons.checkroom_rounded,
+            message: 'No accessories for sale right now.',
+          )
+        else
+          ShopProductGrid(
+            gridKey: const Key('shop-accessories-grid'),
+            spaciousPowerups: true,
+            children: [for (final item in items) _storeCosmeticTile(item)],
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: PillButton(
+            key: const Key('shop-edit-outfit'),
+            label: 'EDIT OUTFIT',
+            icon: Icons.checkroom_rounded,
+            onPressed: canEdit ? () => _openCharacterWardrobe(active) : null,
+          ),
+        ),
+        if (!canEdit &&
+            _wardrobes.state != WardrobeLoadState.loading &&
+            _wardrobes.state != WardrobeLoadState.initial)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              'Saved outfit is currently unavailable.',
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textLight,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _storeCosmeticTile(Map<String, dynamic> item) {
+    final price = item['priceCoins'] is num
+        ? (item['priceCoins'] as num).toInt()
+        : 0;
+    void openSheet() => unawaited(_openStoreCosmeticSheet(item));
+    return KeyedSubtree(
+      key: Key('shop-accessory-${item['id']}'),
+      child: _ShopTile(
+        art: _cosmeticArt(item),
+        name: wardrobeString(item['name']) ?? 'Accessory',
+        stripLabel: _memberPriceCopy(item) != null ? '$price · PLUS' : '$price',
+        stripLeading: const CoinGlyph(),
+        stripEnabled: !_saving,
+        onStrip: openSheet,
+        onTap: openSheet,
+      ),
+    );
+  }
+
+  Future<void> _openCharacterWardrobe(ShopCharacter character) async {
+    final generation = _shopSessionGeneration;
+    final category = await Navigator.of(context).push<ShopCategory>(
+      MaterialPageRoute(
+        builder: (_) => CharacterWardrobeScreen(
+          character: character,
+          controller: _wardrobes,
+          onBuy: _openStoreCosmeticSheet,
+        ),
+      ),
+    );
+    if (mounted && generation == _shopSessionGeneration && category != null) {
+      _selectCategory(
+        _ShopCategory.values.firstWhere((value) => value.name == category.name),
+      );
+    }
   }
 
   List<ShopCharacter> _legacyCharacterRows() {
@@ -2058,22 +2185,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     _characterMenuContext = null;
     if (!mounted || !current()) return;
     if (action == 'edit') {
-      final category = await Navigator.of(context).push<ShopCategory>(
-        MaterialPageRoute(
-          builder: (_) => CharacterWardrobeScreen(
-            character: character,
-            controller: _wardrobes,
-            onBuy: _openStoreCosmeticSheet,
-          ),
-        ),
-      );
-      if (mounted && current() && category != null) {
-        _selectCategory(
-          _ShopCategory.values.firstWhere(
-            (value) => value.name == category.name,
-          ),
-        );
-      }
+      await _openCharacterWardrobe(character);
     } else if (action == 'activate') {
       setState(() => _characterActivating = true);
       try {
@@ -3394,6 +3506,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
 
     return _ShopTile(
+      artScale: .8,
       art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
@@ -3473,6 +3586,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     // fallback (a future backend powerup this build has no copy for).
     final description = PowerupCopy.descriptionFor(type);
     return _ShopTile(
+      artScale: .8,
       art: _powerupArt(type),
       name: name,
       badge: 'x$quantity',
@@ -3699,12 +3813,14 @@ class _ShopTile extends StatelessWidget {
     this.stripIcon,
     this.stripLeading,
     this.badge,
+    this.artScale = 1,
   }) : assert(
          stripIcon != null || stripLeading != null,
          'the strip needs a glyph',
        );
 
   final Widget art;
+  final double artScale;
   final String name;
 
   final String stripLabel;
@@ -3799,7 +3915,7 @@ class _ShopTile extends StatelessWidget {
                             // its padding so thumbs and effects cannot clip.
                             child: Transform.scale(
                               key: const Key('shop-tile-art-scale'),
-                              scale: 1,
+                              scale: artScale,
                               child: art,
                             ),
                           ),

@@ -139,7 +139,7 @@ void main() {
   setUp(() => PowerupCopy.resetForTest());
 
   group('shop render', () {
-    testWidgets('saleable wave-5 powerups render without retired Decoy', (
+    testWidgets('saleable wave-5 powerups include restored Decoy', (
       tester,
     ) async {
       final auth = await _auth();
@@ -150,12 +150,11 @@ void main() {
       );
 
       for (final entry in _wave5.entries) {
-        if (entry.key == 'DECOY') continue;
         expect(find.text(entry.value), findsWidgets, reason: entry.value);
         // The failure mode this batch guards: a raw enum string in the UI.
         expect(find.text(entry.key), findsNothing, reason: entry.key);
       }
-      expect(find.text('Decoy'), findsNothing);
+      expect(find.text('Decoy'), findsOneWidget);
     });
   });
 

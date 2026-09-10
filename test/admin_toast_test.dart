@@ -9,7 +9,10 @@ import 'package:step_tracker/widgets/powerup_icon.dart';
 /// the hub's DEBUG section, which ships collapsed. Opening it is the only
 /// change here — every assertion below is the one that already shipped.
 Future<void> _openDebug(WidgetTester tester) async {
-  final header = find.byKey(const Key('admin-section-header-DEBUG'));
+  await tester.tap(find.text('Tools'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  final header = find.text('Debugging');
   await tester.ensureVisible(header);
   await tester.pump();
   await tester.tap(header);

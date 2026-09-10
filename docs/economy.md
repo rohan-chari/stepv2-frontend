@@ -389,6 +389,49 @@ Five Decoy-bound `powerup_unlock` ad grants exist; one verified grant remains
 unconsumed. Sources: `DB powerup_shop_items`, `powerup_purchase_requests`,
 `coin_transactions`, `race_powerups`, and `ad_reward_grants`.
 
+### 3.1a Decoy restoration baseline — verified 2026-09-10
+
+Production was inspected using an explicit read-only transaction. Current
+`powerup_shop_items` row: `POWERUP_DECOY`, **75 coins**, `active=false`,
+`test_only=false`, `daily_reward_eligible=false`. This supersedes the live
+75-coin active snapshot above. Backend `prisma/seed.js` still specifies
+150 coins, active and test-only; the stored row is the runtime authority.
+Live `balance_config` **v5** includes DECOY in RARE with type weight **0.5**
+and trailing downweight **0.5**, and excludes DECOY from `storeOnlyTypes`.
+The restoration request sets the base shop price to **150 coins**, preserving
+race drops and daily-spin exclusion, and requests a **60-minute cooldown after
+consumption**. These are requested values, not verified deployed behavior.
+At this inspection, `usePowerup.js` prevents overlapping live Decoys and sets
+24-hour expiry, but has no post-consumption cooldown. Consumption occurs in
+both `consumeDecoy` and the Power Outage bulk-expiration path. Natural expiry
+is distinct from attack consumption. A population pop-rate aggregate hit its
+15-second read timeout; no measured pop-rate claim is available.
+
+Fresh retained-account baseline, **2026-08-11 inclusive to 2026-09-10
+exclusive**, excludes review accounts. `steps.steps > 0` defines an active day;
+percentiles are of each user's mean steps and recurring receipts divided by
+that user's active days. SQL performs all date math on database dates.
+
+| Metric | Value | Source of truth |
+|---|---:|---|
+| Step-active users / days | 1,362 / 20,053 | DB `steps × users` |
+| Steps per active day, p10 / p50 / p90 | 2,257.79 / 6,046.53 / 11,715.03 | DB `steps × users` |
+| Recurring coins per active day, p10 / p50 / p90 | 0 / 11.9615 / 95.40 | DB `coin_transactions × steps × users` |
+| Gross positive / negative ledger per day | +45,690.50 / −21,205.63 | DB `coin_transactions × users`, 42,323 rows |
+| Requested base price / existing 15% member price | 150 / 128 coins | Request; CODE `billing/services/memberPrice.js` (`base − floor(base × 0.15)`) |
+| Base-price affordability, p50 / p90 | 12.54 / 1.57 active days | 150 divided by measured recurring rates |
+| Member-price affordability, p50 / p90 | 10.70 / 1.34 active days | 128 divided by measured recurring rates |
+
+Recurring reasons were verified before filtering: `ad_coin_reward`,
+`ad_extra_spin`, `daily_reward`, `powerup_discard`, `race_payout_ad_double`,
+`race_prize_pool_payout`, `step_milestone`, `tournament_champion_reward`,
+`tournament_prize_pool_payout`. Purchases, tutorial/referral/admin/support,
+refunds and redistributed buy-in receipts are excluded. Gross ledger flow is
+not net new mint. At p10 the recurring-income denominator is zero. If normal
+and member Decoy purchases/day are D and M, the direct additional sink versus
+the disabled shop is **150D + 128M coins/day**, before substitution for other
+purchases. Race-box odds and direct coin issuance are unchanged by restoration.
+
 ### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-19
 
 Batch 2026-08-09 landed as config **version 4**. The live row now differs from

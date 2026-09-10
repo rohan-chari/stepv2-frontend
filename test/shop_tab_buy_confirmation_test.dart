@@ -338,6 +338,8 @@ void main() {
     await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -441,6 +443,8 @@ void main() {
     await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -453,6 +457,8 @@ void main() {
     await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -519,6 +525,8 @@ void main() {
     await selectShopCategory(tester, 'POWERUPS');
     await tester.ensureVisible(find.text('Signal Jammer'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Signal Jammer'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -589,7 +597,13 @@ void main() {
     await _selectSegment(tester, 'STORE');
     await _selectCategory(tester, 'ACCESSORIES');
 
-    expect(find.text('Blue Hat'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('wardrobe-item-item-hat')),
+        matching: find.text('Blue Hat'),
+      ),
+      findsOneWidget,
+    );
     expect(api.powerupCatalogReads, 0);
     expect(api.inventoryReads, 0);
   });
@@ -614,7 +628,13 @@ void main() {
       await _selectSegment(tester, 'STORE');
       await _selectCategory(tester, 'ACCESSORIES');
 
-      expect(find.text('Blue Hat'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('wardrobe-item-item-hat')),
+          matching: find.text('Blue Hat'),
+        ),
+        findsOneWidget,
+      );
       expect(api.powerupCatalogReads, 0);
       expect(api.inventoryReads, 0);
     },

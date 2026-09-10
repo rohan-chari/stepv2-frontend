@@ -91,6 +91,35 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets(
+    'preview shows restored Decoy and direct discounted accessories',
+    (tester) async {
+      final controller = PreviewBillingController();
+      controller.setScenario(PreviewBillingScenario.monthly);
+      addTearDown(controller.dispose);
+      await launch(tester, controller);
+      expect(find.text('Decoy'), findsOneWidget);
+      expect(find.byKey(const Key('shop-section-accessories')), findsOneWidget);
+      final accessory = find.byKey(const Key('shop-accessory-baseball_cap'));
+      await tester.ensureVisible(accessory);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(accessory);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('BUY · 170'), findsOneWidget);
+      await tester.ensureVisible(find.text('BUY · 170'));
+      await tester.pump();
+      await tester.tap(find.text('BUY · 170'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(controller.ownedCosmetics, contains('baseball_cap'));
+      expect(accessory, findsNothing);
+      expect(find.byKey(const Key('shop-edit-outfit')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('all coin offers render in the real Shop coins section', (
     tester,
   ) async {

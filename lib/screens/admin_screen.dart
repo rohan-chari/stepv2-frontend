@@ -798,19 +798,22 @@ class _AdminToolGroupState extends State<_AdminToolGroup> {
   @override
   Widget build(BuildContext context) => AdminCard(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-    child: ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      childrenPadding: const EdgeInsets.only(bottom: 12),
-      title: Text(switch (widget.title) {
-        'CONFIG' => 'Configuration',
-        'INBOX' => 'Inbox',
-        _ => 'Debugging',
-      }, style: adminText(context, size: 17, strong: true)),
-      onExpansionChanged: (open) {
-        if (open && !_opened) setState(() => _opened = true);
-      },
-      maintainState: true,
-      children: [if (_opened) widget.child],
+    child: Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 12),
+        title: Text(switch (widget.title) {
+          'CONFIG' => 'Configuration',
+          'INBOX' => 'Inbox',
+          _ => 'Debugging',
+        }, style: adminText(context, size: 17, strong: true)),
+        onExpansionChanged: (open) {
+          if (open && !_opened) setState(() => _opened = true);
+        },
+        maintainState: true,
+        children: [if (_opened) widget.child],
+      ),
     ),
   );
 }

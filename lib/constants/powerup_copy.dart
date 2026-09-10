@@ -655,7 +655,7 @@ abstract final class PowerupCopy {
     'MYSTERY_POTION':
         'Drink up for a random effect. It could be a boost, an attack on a rival, or a nasty surprise',
     'DECOY':
-        'Set a decoy that redirects the next single-target attack aimed at you to another racer',
+        'Set a decoy that redirects the next single-target attack aimed at you to another racer. Wait 1 hour after it pops before using another in this race',
     'POWER_OUTAGE':
         "Cut the power on every rival. No one else can use powerups for 30 minutes. Compression Socks keep a racer online",
     'UMBRELLA': 'Stay dry for 12 hours. Immune to Rainstorm and Power Outage',
@@ -984,7 +984,7 @@ abstract final class PowerupCopy {
       samePowerup: SamePowerupStacking.blocked,
       otherEffects: OtherEffectsStacking.conditional,
       summary:
-          'Only one Decoy can be active. Defense resolves Mirror before Decoy, then Compression Socks; the next eligible targeted attack redirects or is absorbed.',
+          'Only one Decoy can be active. Defense resolves Mirror before Decoy, then Compression Socks; the next eligible targeted attack redirects or is absorbed. After it pops, wait 1 hour before using another Decoy in this race.',
     ),
     'POWER_OUTAGE': PowerupStackingRule(
       samePowerup: SamePowerupStacking.limited,

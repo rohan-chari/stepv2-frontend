@@ -336,6 +336,7 @@ class PreviewBillingApi extends DemoRaceApiService {
   };
   List<Map<String, dynamic>> get _powerups => [
     for (final entry in const [
+      ('DECOY', 'Decoy', 150),
       ('GHOST_PEPPER', 'Ghost Pepper', 200),
       ('PROTEIN_SHAKE', 'Protein Shake', 100),
       ('POCKET_WATCH', 'Pocket Watch', 300),

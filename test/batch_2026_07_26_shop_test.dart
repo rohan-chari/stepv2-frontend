@@ -196,7 +196,7 @@ void main() {
       final artScale = tester.widget<Transform>(
         find.byKey(const Key('shop-tile-art-scale')).first,
       );
-      expect(artScale.transform.getMaxScaleOnAxis(), closeTo(1, 0.001));
+      expect(artScale.transform.entry(0, 0), closeTo(.8, 0.001));
     });
 
     testWidgets('narrow phones keep a usable art window for three columns', (
