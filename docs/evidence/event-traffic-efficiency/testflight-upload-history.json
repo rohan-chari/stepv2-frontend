@@ -1,0 +1,28 @@
+{
+  "version": "2.3.13",
+  "build": "12",
+  "attempts": [
+    {
+      "at": "2026-09-10T03:58:54Z",
+      "authentication": "signed-in Xcode account",
+      "exitCode": 70,
+      "outcome": "Failed to Use Accounts"
+    },
+    {
+      "at": "2026-09-10T04:09:14Z",
+      "authentication": "signed-in Xcode account",
+      "exitCode": 70,
+      "outcome": "Failed to Use Accounts"
+    },
+    {
+      "at": "2026-09-10T04:14:21Z",
+      "authentication": "existing App Store Connect API key",
+      "exitCode": 0,
+      "outcome": "Upload succeeded; EXPORT SUCCEEDED"
+    }
+  ],
+  "symbolWarnings": [
+    "AppLovinSDK.framework missing dSYM",
+    "FBAudienceNetwork.framework missing dSYM"
+  ]
+}

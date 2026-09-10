@@ -370,10 +370,11 @@ code. **Never ship one platform without the other.**
   `firebase_*`) still links into the other's build. Build and verify **both**
   before considering a build/release change done.
 - The phrase **"push to App Store Connect"** explicitly authorizes uploading
-  the current verified iOS archive through the Apple account already signed
-  into Xcode. Follow `DEPLOYMENT.md` and perform the upload automatically after
-  the matching Android artifact is built and verified. Upload does not also
-  authorize App Review submission or customer release.
+  the current verified iOS archive. Prefer the existing configured App Store
+  Connect API key; use the signed-in Xcode account as fallback. Follow
+  `DEPLOYMENT.md` and upload automatically after the matching Android artifact
+  is built and verified. Upload does not also authorize App Review submission
+  or customer release.
 
 ## Workflow routing (skills & subagents)
 

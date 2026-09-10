@@ -306,31 +306,54 @@ Android Liftoff Banner Reference ID: <pending>
 ### Push the archive to App Store Connect
 
 The phrase **"push to App Store Connect"** is explicit authorization to upload
-the current verified Bara production archive using the Apple account already
-signed into Xcode on this Mac. Do this automatically; do not stop at telling
-the user to drag the IPA into Transporter. For a production release, first
-build and verify the matching Android AAB as required by the lockstep rule.
+the current verified Bara production archive. Use the **existing App Store
+Connect API key configured on this Mac** as the preferred authentication path.
+Resolve its file path, key ID and issuer ID from the gitignored
+`CLAUDE.local.md`; never print or commit private-key contents. Do not request a
+new key when an existing configured key is available. If no API key is
+configured, use the Apple account already signed into Xcode.
 
-`flutter build ipa` creates both the signed archive and an export-options plist.
-Change that generated plist from a local export to an App Store Connect upload,
-then let Xcode authenticate with its existing account:
+Perform the upload automatically after the matching Android artifact is built
+and verified. Do not stop at instructions to drag the IPA into Transporter.
+`flutter build ipa` creates the signed archive and export-options plist. Set
+its destination to upload and pin the verified build number:
 
 ```bash
+# Populate these variables from the existing machine-local configuration.
+: "${ASC_API_KEY_PATH:?Load the existing App Store Connect key path}"
+: "${ASC_API_KEY_ID:?Load the existing App Store Connect key ID}"
+: "${ASC_API_ISSUER_ID:?Load the existing App Store Connect issuer ID}"
+
 plutil -replace destination -string upload \
+  build/ios/ipa/ExportOptions.plist
+plutil -replace manageAppVersionAndBuildNumber -bool false \
   build/ios/ipa/ExportOptions.plist
 
 xcodebuild -exportArchive \
   -archivePath build/ios/archive/Runner.xcarchive \
   -exportPath build/ios/upload \
   -exportOptionsPlist build/ios/ipa/ExportOptions.plist \
-  -allowProvisioningUpdates
+  -allowProvisioningUpdates \
+  -authenticationKeyPath "$ASC_API_KEY_PATH" \
+  -authenticationKeyID "$ASC_API_KEY_ID" \
+  -authenticationKeyIssuerID "$ASC_API_ISSUER_ID"
 ```
 
+For the signed-in-account fallback, omit the three authentication-key arguments.
+A GUI account working does not establish that command-line export has App Store
+Connect access. If that fallback reports `Failed to Use Accounts`, use the
+existing configured API key without asking for another upload authorization.
+If neither configured authentication path works, report the exact blocker and
+the account/key action required; never invent credentials or expose tokens.
+
 Success requires both `Upload succeeded` and `** EXPORT SUCCEEDED **` in the
-output. Report the uploaded version/build and any symbol warnings. If Xcode has
-no authenticated account or Apple requires interactive account action, stop
-and report that exact blocker; never invent or request an API key when the
-signed-in Xcode path is available.
+output. Report the uploaded version/build and any symbol warnings. For an
+explicit TestFlight request, also wait for Apple processing to become `VALID`,
+complete any verified unchanged export-compliance declaration, assign the build
+to the existing internal tester group if needed, and confirm
+`IN_BETA_TESTING` and group membership. An upload alone is not proof that testers
+can install the build. Do not invite new testers or submit an external beta
+review without authorization.
 
 This phrase authorizes **binary upload only**. It does not authorize selecting
 the build for App Review, submitting it for review, changing phased-release

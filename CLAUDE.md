@@ -326,10 +326,10 @@ platforms are coupled in non-obvious ways: a dependency added for one (e.g.
 before considering a build/release change done. See `DEPLOYMENT.md`.
 
 The phrase **"push to App Store Connect"** explicitly authorizes uploading the
-current verified iOS archive through the Apple account already signed into
-Xcode. Follow `DEPLOYMENT.md` and perform the upload automatically after the
-matching Android artifact is built and verified. Upload does not also authorize
-App Review submission or customer release.
+current verified iOS archive. Prefer the existing configured App Store Connect
+API key; use the signed-in Xcode account as fallback. Follow `DEPLOYMENT.md` and
+upload automatically after the matching Android artifact is built and verified.
+Upload does not also authorize App Review submission or customer release.
 
 ## Production and staging operations
 
