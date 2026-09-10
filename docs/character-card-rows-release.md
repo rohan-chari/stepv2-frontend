@@ -33,4 +33,17 @@ suites pass after correction. Analysis and diff-check clean, independent review
 SHIP. Five real-widget captures pass and were inspected (390/375/360px,
 320px at1.6text scale, night). Screenshots use preview fixture prices; actual
 prices remain backend-controlled. Prior36Admin baseline failures not rerun.
-Artifact and final submission verification in progress.
+Sourceaa300c2;544source/config fingerprints matched before upload. Signed
+artifacts iOS2.3.13(23) and Android203153 verified, including required README
+configuration, signature, archive/export matching and all3AndroidABI freshness.
+No Play upload. Upload succeeded with the existing nonblocking AppLovin/Meta dSYM warnings.
+Apple buildb865f4c8-c4b4-4cea-9db3-3766c73628ce confirmed VALID/IN_BETA_TESTING
+in bara testers at2026-09-10T23:23:37Z. Encryption declaration unchanged.
+
+Replaced build22 review with6fe7d65d-02a1-4141-9e72-cfeab39bbedf,
+submitted2026-09-10T23:24:42.914Z. Final readback confirms WAITING_FOR_REVIEW,
+selectedbuild23, and exactly four items: app version plus500/3000/7500
+coin packs. All three purchase products WAITING_FOR_REVIEW. Apple product
+names/localizations, complete review screenshots, configured USD0.99/4.99/9.99
+prices and RevenueCat names verified. Manual customer release retained;
+Bara+ drafts not submitted. No customer release or Play upload.

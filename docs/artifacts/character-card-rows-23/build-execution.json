@@ -1,0 +1,36 @@
+{
+  "sourceCommit": "aa300c2e84d324800c71065c5b8f687018b96ab6",
+  "builds": [
+    {
+      "platform": "iOS",
+      "exitCode": 0,
+      "startedAtEpoch": 1789081875.262576,
+      "elapsedSeconds": 107.74818801879883,
+      "defineKeys": [
+        "META_APP_ID",
+        "META_CLIENT_TOKEN",
+        "BACKEND_BASE_URL",
+        "REVENUECAT_IOS_API_KEY",
+        "ADMOB_EXTRA_SPIN_AD_UNIT_ID",
+        "ADMOB_BANNER_AD_UNIT_ID",
+        "ADMOB_BOX_TOP_BANNER_AD_UNIT_ID",
+        "ADMOB_BOX_REROLL_AD_UNIT_ID",
+        "ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID",
+        "ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID",
+        "ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID",
+        "GOOGLE_IOS_CLIENT_ID"
+      ]
+    },
+    {
+      "platform": "Android",
+      "exitCode": 0,
+      "startedAtEpoch": 1789081983.0847812,
+      "elapsedSeconds": 125.71181988716125,
+      "defineKeys": [
+        "BACKEND_BASE_URL",
+        "ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID",
+        "ADMOB_BANNER_AD_UNIT_ID_ANDROID"
+      ]
+    }
+  ]
+}
