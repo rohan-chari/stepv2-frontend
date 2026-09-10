@@ -10,8 +10,10 @@ Validation: five new real HTTP/Postgres/Redis tests and two malformed-state test
 
 ## App and release status
 
-Target: iOS 2.3.13 (19), Android 2.3.13 / 203149. App verification, signed builds and TestFlight processing are pending. Do not interpret this preparation record as a completed release.
+Target: iOS 2.3.13 (19), Android 2.3.13 / 203149. Runtime implementation and independent review are complete; signed builds and TestFlight processing are in progress. Do not interpret this preparation record as a completed release.
 
-The previous release's 36 unrelated admin design test failures were reproduced on baseline `eca6acf`; this followup will report its final test results separately.
+Final analysis is clean. The full Flutter run passed 3,316 tests and failed 40. All 36 previously documented admin design failures matched baseline `eca6acf` exactly. Four additional guide fixture expectations relied on compiled catalog membership; all four were corrected, and their isolated suites passed (18 guide tests and one Red Card test). No unrelated admin assertions were weakened. Focused authority, purchase, reward, responsive Shop and wardrobe checks passed, and independent review approved the runtime changes.
+
+The Shop now has pencil Edit buttons inside eligible owned character tiles, opening that character's wardrobe directly. The former bottom Edit outfit button is removed. Standard card geometry remains unchanged; large-text layouts gain height to keep the controls readable.
 
 Scope and the manual UI checklist are in [the requirements](backend-catalog-authority-requirements.md).

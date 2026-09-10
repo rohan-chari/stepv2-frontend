@@ -10,8 +10,26 @@ void main() {
     PowerupCopy.resetForTest();
   });
   testWidgets(
-    'guide shows Red Card maximum when server descriptions are absent',
+    'returned Red Card maximum survives a refresh with absent description',
     (tester) async {
+      await PowerupCopy.refresh(
+        fetch: () async => {
+          'powerups': [
+            {
+              'type': 'RED_CARD',
+              'name': 'Red Card',
+              'description': PowerupCopy.descriptionFor('RED_CARD'),
+            },
+          ],
+        },
+      );
+      await PowerupCopy.refresh(
+        fetch: () async => {
+          'powerups': [
+            {'type': 'RED_CARD', 'name': 'Red Card'},
+          ],
+        },
+      );
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: PowerupGuideSheet())),
       );
