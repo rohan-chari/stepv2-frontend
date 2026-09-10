@@ -8,32 +8,22 @@ class ShopProductGrid extends StatelessWidget {
     this.gridKey,
     this.compact = false,
     this.spaciousPowerups = false,
-    this.minCardWidth,
   });
   final List<Widget> children;
   final Key? gridKey;
   final bool compact;
   final bool spaciousPowerups;
-  final double? minCardWidth;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 600;
-      var spaciousColumns =
+      final spaciousColumns =
           MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
               constraints.maxWidth < 320
           ? 2
           : wide
           ? 5
           : 3;
-      if (minCardWidth case final minimum?) {
-        // Account for the actual column count, grid padding and 12px gaps.
-        final fittingColumns =
-            ((constraints.maxWidth.clamp(0, 1000) - 20) / (minimum + 12))
-                .floor()
-                .clamp(1, 5);
-        spaciousColumns = spaciousColumns.clamp(1, fittingColumns);
-      }
       final grid = GridView.count(
         key: gridKey,
         crossAxisCount: spaciousPowerups

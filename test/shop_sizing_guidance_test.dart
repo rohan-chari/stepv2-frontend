@@ -55,14 +55,7 @@ void main() {
             );
             final power = find.byKey(const Key('shop-product-card')).first;
             final character = find.byKey(const Key('shop-character-default'));
-            if ([360.0, 375.0, 600.0].contains(width) && scale == 1) {
-              expect(
-                tester.getSize(character).width,
-                greaterThanOrEqualTo(110),
-              );
-            } else {
-              expect(tester.getSize(character), tester.getSize(power));
-            }
+            expect(tester.getSize(character), tester.getSize(power));
             expect(
               tester.getSize(find.byKey(const Key('shop-cosmetic-grid'))).width,
               lessThanOrEqualTo(1000),
@@ -169,7 +162,7 @@ void main() {
             state.active
                 ? 'ACTIVE'
                 : owned
-                ? 'OWNED'
+                ? 'Equip'
                 : state.purchasable
                 ? '300'
                 : 'Unavailable',

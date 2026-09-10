@@ -6,6 +6,7 @@ import 'package:step_tracker/tutorial/spotlight_overlay.dart';
 import 'package:step_tracker/widgets/app_refresh_indicator.dart';
 import 'package:step_tracker/widgets/race_ui.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
+import 'package:step_tracker/widgets/shop_character_card.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1324,10 +1325,10 @@ void main() {
           )
           .onTap;
       final staleBuy = tester
-          .widget<InkWell>(
-            find.byKey(const Key('shop-character-buy-locked-corgi')),
+          .widget<ShopCharacterCard>(
+            find.byKey(const Key('shop-character-locked-corgi')),
           )
-          .onTap;
+          .onBuy;
       final auth = tester
           .widget<ShopTab>(find.byType(ShopTab, skipOffstage: false))
           .authService;

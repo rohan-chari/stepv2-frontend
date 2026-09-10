@@ -3,7 +3,9 @@ import '../models/character_wardrobe.dart';
 import '../styles.dart';
 import 'coin_glyph.dart';
 import 'race_ui.dart';
+import 'shop_tile_name.dart';
 
+/// Character merchandise uses the shop's art window, name band and action strips.
 class ShopCharacterCard extends StatelessWidget {
   const ShopCharacterCard({
     super.key,
@@ -20,123 +22,104 @@ class ShopCharacterCard extends StatelessWidget {
     final colors = AppColors.of(context);
     final price = wardrobeCoinPrice(character.item['priceCoins']);
     final purchasable = character.canPurchase && price != null;
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      label:
-          '${character.name}, ${character.owned ? 'owned' : 'unowned'}${character.active ? ', active' : ''}',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-        decoration: BoxDecoration(
-          color: colors.parchment,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: character.active
-                ? colors.pillGoldDark
-                : colors.parchmentBorder,
-            width: character.active ? 2 : 1,
-          ),
-        ),
+    final buy = purchasable ? onBuy : null;
+    final card = DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.parchmentBorder, width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: KeyedSubtree(
+              child: Container(
                 key: const Key('shop-character-art'),
-                child: LayoutBuilder(
-                  builder: (context, constraints) => Center(
-                    child: Transform.scale(
-                      key: const Key('shop-character-art-scale'),
-                      scale: 1.1,
-                      child: RacerAvatar(
-                        rank: 1,
-                        size: constraints.biggest.shortestSide.clamp(24, 240),
-                        showMedalRing: false,
-                        animal: character.animal,
-                        accessories: character.owned
-                            ? character.outfit?.items ?? []
-                            : [],
+                decoration: BoxDecoration(
+                  color: colors.parchmentDark,
+                  border: Border(
+                    bottom: BorderSide(color: colors.parchmentBorder, width: 1),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Center(
+                      child: Transform.scale(
+                        key: const Key('shop-character-art-scale'),
+                        scale: 1.1,
+                        child: RacerAvatar(
+                          rank: 1,
+                          size: constraints.biggest.shortestSide.clamp(24, 240),
+                          showMedalRing: false,
+                          animal: character.animal,
+                          accessories: character.owned
+                              ? character.outfit?.items ?? []
+                              : [],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-            Text(
-              character.name,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              style: PixelText.body(size: 13, color: colors.textDark),
+            Container(
+              key: Key('shop-character-name-${character.key}'),
+              height: 32,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: ShopTileName(name: character.name, color: colors.textDark),
             ),
-            const SizedBox(height: 4),
             if (character.owned) ...[
-              Text(
-                character.active ? 'ACTIVE' : 'OWNED',
-                style: PixelText.title(
-                  size: 10,
-                  color: character.active ? colors.coinDark : colors.textMid,
-                ),
-              ),
-              if (character.active)
-                _action(
-                  context,
-                  'edit',
-                  'Edit',
-                  character.canEdit ? onEdit : null,
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: _action(
-                        context,
-                        'edit',
-                        'Edit',
-                        character.canEdit ? onEdit : null,
-                      ),
-                    ),
-                    Expanded(
-                      child: _action(
-                        context,
-                        'equip',
-                        'Equip',
-                        character.canActivate ? onEquip : null,
-                        gold: true,
-                      ),
-                    ),
-                  ],
-                ),
-            ] else if (purchasable) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CoinGlyph(size: 14),
-                  const SizedBox(width: 3),
-                  Flexible(
-                    child: Text(
-                      '$price',
-                      style: PixelText.number(size: 13, color: colors.coinDark),
-                    ),
-                  ),
-                ],
+              _action(
+                context,
+                'edit',
+                'Edit',
+                character.canEdit ? onEdit : null,
+                gold: false,
               ),
               _action(
                 context,
-                'buy',
-                'Buy',
-                onBuy,
-                gold: true,
-                semanticLabel: 'Buy ${character.name} for $price coins',
+                'equip',
+                character.active ? 'ACTIVE' : 'Equip',
+                !character.active && character.canActivate ? onEquip : null,
               ),
             ] else
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Unavailable',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(size: 11, color: colors.textMid),
+              _strip(
+                context,
+                key: Key(
+                  purchasable
+                      ? 'shop-character-buy-${character.key}'
+                      : 'shop-character-unavailable-${character.key}',
                 ),
+                label: purchasable ? '$price' : 'Unavailable',
+                leading: purchasable ? const CoinGlyph() : null,
+                available: purchasable,
+                enabled: buy != null,
               ),
           ],
+        ),
+      ),
+    );
+    return Semantics(
+      container: true,
+      explicitChildNodes: character.owned,
+      button: !character.owned && purchasable,
+      enabled: !character.owned && purchasable ? buy != null : null,
+      onTap: !character.owned ? buy : null,
+      label:
+          '${character.name}, ${character.owned ? 'owned' : 'unowned'}${character.active ? ', active' : ''}${!character.owned && purchasable ? ', buy for $price coins' : ''}',
+      child: ExcludeSemantics(
+        excluding: !character.owned && purchasable,
+        child: GestureDetector(
+          excludeFromSemantics: true,
+          onTap: !character.owned ? buy : null,
+          child: card,
         ),
       ),
     );
@@ -147,59 +130,73 @@ class ShopCharacterCard extends StatelessWidget {
     String action,
     String label,
     VoidCallback? onTap, {
-    bool gold = false,
-    String? semanticLabel,
+    bool gold = true,
+  }) => Semantics(
+    button: true,
+    enabled: onTap != null,
+    onTap: onTap,
+    label: character.active && action == 'equip'
+        ? '${character.name} is active'
+        : '$label ${character.name}',
+    child: ExcludeSemantics(
+      child: InkWell(
+        key: Key('shop-character-$action-${character.key}'),
+        onTap: onTap,
+        child: _strip(
+          context,
+          label: label,
+          available: onTap != null,
+          enabled: onTap != null,
+          gold: gold,
+        ),
+      ),
+    ),
+  );
+
+  Widget _strip(
+    BuildContext context, {
+    Key? key,
+    required String label,
+    required bool available,
+    required bool enabled,
+    bool gold = true,
+    Widget? leading,
   }) {
     final colors = AppColors.of(context);
-    final id = 'shop-character-$action-${character.key}';
-    return Semantics(
-      button: true,
-      onTap: onTap,
-      enabled: onTap != null,
-      label: semanticLabel ?? '$label ${character.name}',
-      child: ExcludeSemantics(
-        child: InkWell(
-          key: Key(id),
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Center(
-                widthFactor: 1,
-                heightFactor: 1,
-                child: Opacity(
-                  opacity: onTap == null ? .5 : 1,
-                  child: Container(
-                    key: Key('$id-tag'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: gold ? colors.pillGold : colors.parchmentLight,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: gold
-                            ? colors.pillGoldDark
-                            : colors.parchmentBorder,
-                      ),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        style: PixelText.body(size: 10, color: colors.textDark),
-                      ),
-                    ),
-                  ),
-                ),
+    return Container(
+      key: key,
+      height: 26,
+      decoration: BoxDecoration(
+        color: !available
+            ? colors.parchmentDark
+            : gold
+            ? colors.pillGold.withValues(alpha: enabled ? .22 : .10)
+            : colors.parchment,
+        border: Border(
+          top: BorderSide(
+            color: available && gold
+                ? colors.pillGoldDark
+                : colors.parchmentBorder,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (leading != null) ...[leading, const SizedBox(width: 4)],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.title(
+                size: 13,
+                color: available ? colors.textDark : colors.textMid,
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

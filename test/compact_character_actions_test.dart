@@ -84,72 +84,53 @@ void main() {
       'tutorial_shop_seen': true,
     });
   });
-  testWidgets(
-    'owned cards edit and equip directly with compact accessible controls',
-    (tester) async {
-      final api = WardrobeApi();
-      final semantics = tester.ensureSemantics();
-      await pumpWardrobeShop(tester, api);
-      final edit = find.byKey(const Key('shop-character-edit-character-corgi'));
-      final equip = find.byKey(
-        const Key('shop-character-equip-character-corgi'),
-      );
-      expect(edit, findsOneWidget);
-      expect(equip, findsOneWidget);
-      for (final width in [360.0, 375.0, 390.0, 600.0]) {
-        tester.view.physicalSize = Size(width, 844);
-        await tester.pump();
-        expect(tester.getCenter(edit).dy, tester.getCenter(equip).dy);
-        expect(
-          tester.getSize(edit).width,
-          greaterThanOrEqualTo(48),
-          reason: 'Edit at $width',
-        );
-        expect(
-          tester.getSize(equip).width,
-          greaterThanOrEqualTo(48),
-          reason: 'Equip at $width',
-        );
-      }
-      tester.view.physicalSize = const Size(390, 844);
+  testWidgets('owned cards use stacked full-width merchandise action bands', (
+    tester,
+  ) async {
+    final api = WardrobeApi();
+    final semantics = tester.ensureSemantics();
+    await pumpWardrobeShop(tester, api);
+    final edit = find.byKey(const Key('shop-character-edit-character-corgi'));
+    final equip = find.byKey(const Key('shop-character-equip-character-corgi'));
+    expect(edit, findsOneWidget);
+    expect(equip, findsOneWidget);
+    for (final width in [360.0, 375.0, 390.0, 600.0]) {
+      tester.view.physicalSize = Size(width, 844);
       await tester.pump();
-      expect(tester.getCenter(edit).dy, tester.getCenter(equip).dy);
-      final equipNode = tester.getSemantics(
-        find.bySemanticsLabel('Equip Corgi'),
-      );
-      expect(
-        equipNode.getSemanticsData().hasAction(SemanticsAction.tap),
-        isTrue,
-      );
-      for (final control in [edit, equip]) {
-        expect(tester.getSize(control).height, greaterThanOrEqualTo(48));
-        expect(tester.getSize(control).width, greaterThanOrEqualTo(48));
-      }
-      final visual = find.byKey(
-        const Key('shop-character-edit-character-corgi-tag'),
-      );
-      expect(tester.getSize(visual).height, lessThan(36));
-      tester.binding.rootPipelineOwner.semanticsOwner!.performAction(
-        equipNode.id,
-        SemanticsAction.tap,
-      );
-      await tester.tap(equip);
-      await tester.pump();
+      final card = find.byKey(const Key('shop-character-character-corgi'));
+      expect(tester.getBottomLeft(edit).dy, tester.getTopLeft(equip).dy);
+      expect(tester.getSize(edit).width, tester.getSize(card).width);
+      expect(tester.getSize(equip).width, tester.getSize(card).width);
+      expect(tester.getSize(edit).height, 26);
+      expect(tester.getSize(equip).height, 26);
+    }
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pump();
+    expect(tester.getBottomLeft(edit).dy, tester.getTopLeft(equip).dy);
+    final equipNode = tester.getSemantics(find.bySemanticsLabel('Equip Corgi'));
+    expect(equipNode.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    expect(find.text('OWNED'), findsNothing);
+    expect(find.text('Buy'), findsNothing);
+    tester.binding.rootPipelineOwner.semanticsOwner!.performAction(
+      equipNode.id,
+      SemanticsAction.tap,
+    );
+    await tester.tap(equip);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.activations, 1);
+    expect(find.text('Use character'), findsNothing);
+    expect(find.text('Edit outfit'), findsNothing);
+    if (find.byKey(const Key('info-toast-shell')).evaluate().isNotEmpty) {
+      await tester.tap(find.byKey(const Key('info-toast-shell')));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(api.activations, 1);
-      expect(find.text('Use character'), findsNothing);
-      expect(find.text('Edit outfit'), findsNothing);
-      if (find.byKey(const Key('info-toast-shell')).evaluate().isNotEmpty) {
-        await tester.tap(find.byKey(const Key('info-toast-shell')));
-        await tester.pump(const Duration(milliseconds: 400));
-      }
-      await tester.tap(edit);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(const Key('wardrobe-preview')), findsOneWidget);
-      semantics.dispose();
-    },
-  );
+    }
+    await tester.tap(edit);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('wardrobe-preview')), findsOneWidget);
+    semantics.dispose();
+  });
   testWidgets('purchase confirmation cannot buy for a replacement account', (
     tester,
   ) async {
@@ -228,6 +209,30 @@ void main() {
             );
             if (validPrice && policy == true) {
               expect(buy, findsOneWidget);
+              final nameBand = find.byKey(
+                const Key('shop-character-name-locked-corgi'),
+              );
+              final art = find.descendant(
+                of: card,
+                matching: find.byKey(const Key('shop-character-art')),
+              );
+              expect(
+                tester.getSize(nameBand),
+                Size(tester.getSize(card).width, 32),
+              );
+              expect(tester.getSize(buy), Size(tester.getSize(card).width, 26));
+              expect(
+                tester.getBottomLeft(art).dy,
+                tester.getTopLeft(nameBand).dy,
+              );
+              expect(
+                tester.getBottomLeft(nameBand).dy,
+                tester.getTopLeft(buy).dy,
+              );
+              expect(
+                find.descendant(of: card, matching: find.text('Buy')),
+                findsNothing,
+              );
               expect(
                 find.descendant(of: card, matching: find.text('$price')),
                 findsOneWidget,

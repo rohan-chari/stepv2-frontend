@@ -82,13 +82,8 @@ void main() {
         final character = tester.getSize(
           find.byKey(const Key('shop-character-default')),
         );
-        if (width == 320) {
-          expect(character.width, closeTo((width - 32 - 12) / 2, .01));
-          expect(character.height, closeTo(character.width / .68, .01));
-        } else {
-          expect(character.width, closeTo(powerup.width, .01));
-          expect(character.height, closeTo(powerup.height, .01));
-        }
+        expect(character.width, closeTo(powerup.width, .01));
+        expect(character.height, closeTo(powerup.height, .01));
         if (width < 360) {
           expect(powerup.width, closeTo((width - 32 - 24) / 3, .01));
         }

@@ -3,6 +3,7 @@ import '../../widgets/accessory_preview_sheet.dart';
 import '../../models/character_wardrobe.dart';
 import '../../services/character_wardrobe_controller.dart';
 import '../../widgets/shop_character_card.dart';
+import '../../widgets/shop_tile_name.dart';
 import '../character_wardrobe_screen.dart';
 import '../../widgets/shop_category_bar.dart';
 import '../../services/billing_controller.dart';
@@ -566,7 +567,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   static const _tutorialTitles = ['EXPLORE THE SHOP', 'YOUR CHARACTERS'];
   static const _tutorialBodies = [
     'Scroll from Featured coins to Powerups, then Characters and Accessories. Powerup badges show how many you own.',
-    'Tap Edit to change an outfit, Equip to use a character, or Buy to unlock one.',
+    'Tap Edit to change an outfit, Equip to use a character, or its coin price to unlock one.',
   ];
 
   Element? _elementWithKey(Key key) {
@@ -1928,7 +1929,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         ShopProductGrid(
           spaciousPowerups: true,
           gridKey: const Key('shop-cosmetic-grid'),
-          minCardWidth: 110,
           children: [for (final row in rows) _characterCard(row)],
         ),
         if (_wardrobes.state == WardrobeLoadState.paging)
@@ -3986,7 +3986,7 @@ class _ShopTile extends StatelessWidget {
                 height: 32,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: _FittedTileName(
+                child: ShopTileName(
                   name: name,
                   color: AppColors.of(context).textDark,
                 ),
@@ -4043,61 +4043,6 @@ class _ShopTile extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The tile's item name at the largest size that still fits two lines.
-///
-/// The responsive redesign supports a larger nominal name size while this
-/// still picks the biggest size from [_sizes] whose
-/// two-line layout fits the tile, so the type gets bigger wherever there's room
-/// and never smaller than what shipped.
-class _FittedTileName extends StatelessWidget {
-  const _FittedTileName({required this.name, required this.color});
-
-  final String name;
-  final Color color;
-
-  /// Largest first. The floor is deliberately below the old 11pt: on the
-  /// narrowest phones a long name would otherwise still ellipsise.
-  static const _sizes = [13.0, 12.0, 11.0, 10.0, 9.0];
-
-  @override
-  Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    final direction = Directionality.of(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        var chosen = _sizes.last;
-        for (final size in _sizes) {
-          final painter = TextPainter(
-            text: TextSpan(
-              text: name,
-              style: PixelText.title(size: size),
-            ),
-            maxLines: 2,
-            textAlign: TextAlign.center,
-            textDirection: direction,
-            textScaler: textScaler,
-          )..layout(maxWidth: constraints.maxWidth);
-          final fits =
-              !painter.didExceedMaxLines &&
-              painter.height <= constraints.maxHeight;
-          painter.dispose();
-          if (fits) {
-            chosen = size;
-            break;
-          }
-        }
-        return Text(
-          name,
-          maxLines: 2,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style: PixelText.title(size: chosen, color: color),
-        );
-      },
     );
   }
 }
