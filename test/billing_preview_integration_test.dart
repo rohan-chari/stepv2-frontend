@@ -25,7 +25,7 @@ void main() {
 
   Future<void> exitShop(WidgetTester tester) async {
     await closeShopMembership(tester);
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byKey(const Key('shop-back')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();

@@ -1,7 +1,7 @@
 import 'support/legacy_shop_wardrobe_fixture.dart';
 import 'package:step_tracker/widgets/race_ui.dart';
 import 'package:step_tracker/widgets/home_course_track.dart'
-    show CapybaraSpriteWithAccessories;
+    show CapybaraSpriteWithAccessories, AnimatedCapybaraWithAccessories;
 import 'support/shop_navigation.dart';
 import 'dart:async';
 
@@ -416,8 +416,11 @@ Finder _selector(String id) => find.byKey(
 Finder _stage() => find.byKey(const Key('wardrobe-preview'));
 
 Iterable<String> _previewIds(WidgetTester tester) => tester
-    .widget<RacerAvatar>(
-      find.descendant(of: _stage(), matching: find.byType(RacerAvatar)),
+    .widget<AnimatedCapybaraWithAccessories>(
+      find.descendant(
+        of: _stage(),
+        matching: find.byType(AnimatedCapybaraWithAccessories),
+      ),
     )
     .accessories
     .map((row) => row['id'] as String);
@@ -436,7 +439,7 @@ Future<void> _save(WidgetTester tester) async {
 
 Future<void> _leaveWardrobe(WidgetTester tester, {bool discard = false}) async {
   await _dismissToasts(tester);
-  await tester.tap(find.text('Back to Characters'));
+  await tester.tap(find.byKey(const Key('wardrobe-back')));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
   if (discard) {
@@ -522,7 +525,7 @@ void main() {
       find.descendant(of: _selector('bunny'), matching: find.text('Selected')),
       findsNothing,
     );
-    expect(find.text('Saved outfit'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
   });
 
   testWidgets(
@@ -549,7 +552,7 @@ void main() {
         api.catalog['equipped'],
         containsPair('HEAD', containsPair('id', 'cowboy')),
       );
-      expect(find.text('Trying on'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
       expect(
         find.text('Could not verify the save. Your draft is kept.'),
         findsOneWidget,
@@ -579,7 +582,7 @@ void main() {
       find.descendant(of: _selector('bunny'), matching: find.text('Selected')),
       findsNothing,
     );
-    expect(find.text('Saved outfit'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
   });
 
   testWidgets(
@@ -645,7 +648,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 180));
 
     expect(
-      find.descendant(of: _stage(), matching: find.text('Trying on')),
+      find.descendant(
+        of: _stage(),
+        matching: find.byKey(const Key('wardrobe-unsaved-status')),
+      ),
       findsOneWidget,
     );
     expect(find.text('Buy · 425'), findsOneWidget);
@@ -700,7 +706,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
 
     expect(api.purchaseWrites, 1);
-    expect(find.text('Trying on'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
     expect(find.text('Purchase failed.'), findsOneWidget);
     expect(api.equipWrites, 0);
   });
@@ -713,8 +719,8 @@ void main() {
     await _open(tester, section: 'STORE', category: 'ACCESSORIES');
     await tester.tap(_selector('moon-pack'));
     await tester.pump();
-    expect(find.text('Trying on'), findsOneWidget);
-    await tester.tap(find.text('Back to Characters'));
+    expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('wardrobe-back')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Discard outfit changes?'), findsOneWidget);
@@ -725,7 +731,7 @@ void main() {
     await _leaveWardrobe(tester, discard: true);
     expect(_stage(), findsNothing);
     await _open(tester, section: 'STORE', category: 'ACCESSORIES');
-    expect(find.text('Saved outfit'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
     expect(_previewIds(tester), isNot(contains('moon-pack')));
     expect(api.equipWrites, 0);
     expect(api.purchaseWrites, 0);
@@ -782,10 +788,11 @@ void main() {
     tester.widget<ListView>(find.byType(ListView).last).controller!.jumpTo(0);
     await tester.pump();
     expect(_previewIds(tester), contains('moon-pack'));
-    expect(
+    for (final switcher in tester.widgetList<AnimatedSwitcher>(
       find.descendant(of: _stage(), matching: find.byType(AnimatedSwitcher)),
-      findsNothing,
-    );
+    )) {
+      expect(switcher.duration, Duration.zero);
+    }
     expect(
       tester
           .widget<CapybaraSpriteWithAccessories>(
@@ -850,7 +857,7 @@ void main() {
     await tester.pump();
     expect(_previewIds(tester), contains('cowboy'));
     expect(_previewIds(tester), isNot(contains('bunny')));
-    expect(find.text('Saved outfit'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
   });
 
   testWidgets('stale refresh cannot overwrite malformed-save recovery state', (
@@ -894,7 +901,7 @@ void main() {
     await tester.pump();
     expect(_previewIds(tester), contains('bunny'));
     expect(_previewIds(tester), isNot(contains('cowboy')));
-    expect(find.text('Saved outfit'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
   });
 
   testWidgets(
@@ -1028,7 +1035,7 @@ void main() {
       await _open(tester, section: 'STORE', category: 'ACCESSORIES');
       await tester.tap(_selector('moon-pack'));
       await tester.pump();
-      expect(find.text('Trying on'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
       final refreshed = _catalog();
       refreshed['items'] = (refreshed['items'] as List)
           .where((item) => item is! Map || item['id'] != 'moon-pack')
@@ -1049,7 +1056,7 @@ void main() {
       expect(api.equipWrites, 0);
       await tester.tap(find.text('Reset'));
       await tester.pump();
-      expect(find.text('Saved outfit'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
       expect(_previewIds(tester), contains('cowboy'));
       expect(_previewIds(tester), isNot(contains('moon-pack')));
     },

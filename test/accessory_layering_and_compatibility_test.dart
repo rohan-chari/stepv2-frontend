@@ -304,7 +304,11 @@ void main() {
     await selectShopCategory(tester, 'ACCESSORIES');
     expect(find.text('Knight Helmet'), findsOneWidget);
     expect(find.text('3D Glasses'), findsOneWidget);
-    expect(find.text('Selected'), findsOneWidget);
+    expect(
+      find.byKey(const Key('wardrobe-selected-knight-helmet')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('wardrobe-selected-glasses-3d')), findsNothing);
     await tester.ensureVisible(find.text('3D Glasses'));
     await tester.tap(find.text('3D Glasses'));
     await tester.pump(const Duration(milliseconds: 180));
@@ -315,10 +319,19 @@ void main() {
       find.text('That accessory conflicts with Knight Helmet.'),
       findsOneWidget,
     );
-    expect(find.text('Selected'), findsNWidgets(2));
+    expect(
+      find.byKey(const Key('wardrobe-selected-knight-helmet')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('wardrobe-selected-glasses-3d')),
+      findsOneWidget,
+    );
     expect(api.fixtureSaves, 1);
     expect(api.fixtureEquipment, isNull);
     expect(find.text('Save outfit'), findsOneWidget);
-    expect(find.text('Trying on'), findsOneWidget);
+    expect(find.byTooltip('Outfit not saved'), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
+    expect(find.byKey(const Key('wardrobe-saved-status')), findsNothing);
   });
 }

@@ -1,0 +1,93 @@
+{
+  "capture": "Actual final animated Home-scene wardrobe with bundled fonts; accessory fixtures, not live data",
+  "images": {
+    "dark-1.0-bottom.png": {
+      "sha256": "215fa93719264c84eb33896dff73142ae8b8ed431ef829861aeedfb8bfdcb16f",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-selected.png": {
+      "sha256": "fc9997609ab603b60842ca733a2d788341d806410bf9fc8f35d31c2a3ffa5adb",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.0-top.png": {
+      "sha256": "4543ffa8c7744e1c777b59b46886ca5f79b8c56cf96ea4c0b019e0c72cf3cfd8",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-bottom.png": {
+      "sha256": "4615c8dd9f3073fccee1dc969a54d03a4610d295c7accc46d1ce5e6afb22fe1b",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-selected.png": {
+      "sha256": "b3d6292e5d81307b280779bd1e1120cd5b76f56ef0c97d2c53e9b46e8dd0352b",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "dark-1.6-top.png": {
+      "sha256": "d9e4d20ade04ea74c83f5e552514519f8b170270e80ad872034a2db8b35b5ced",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-bottom.png": {
+      "sha256": "2f3b1cb15fe41901bbfc51ae8c06b20a85f2819e3890df7de253364a53f440e2",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-selected.png": {
+      "sha256": "844aa5874e84a776851bc90a487fba8178e58fff47d46b62866279b542724c9b",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.0-top.png": {
+      "sha256": "a556fb45a00f0c1273636f0f3c650209c2c02c22cb029e5dc169bf7dc4b2eaf6",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-bottom.png": {
+      "sha256": "24c826beb5e92731898510e8abca6543f01074fcb4a827035d2ce4e3fb16148f",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-selected.png": {
+      "sha256": "aa73a8cc08703693a8066b3ff24b65f30b56027d60522921bddd584998ca0762",
+      "size": [
+        780,
+        1688
+      ]
+    },
+    "light-1.6-top.png": {
+      "sha256": "c5b62dfff8e7ac61594e701aefd7358459a0b96ef017501906517bec9352cac8",
+      "size": [
+        780,
+        1688
+      ]
+    }
+  },
+  "sourceHashes": {
+    "lib/screens/character_wardrobe_screen.dart": "4842b042a86386510acb91e8e50f5435e32149386927aa6375fbb0a7d1b9f87d",
+    "lib/widgets/home_hero_scene.dart": "c33287040868b387d5874ffa87271ed043d8f3acd1cb7bbe14b01d6657c6d507"
+  }
+}

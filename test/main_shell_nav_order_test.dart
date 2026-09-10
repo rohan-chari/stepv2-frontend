@@ -2588,7 +2588,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         expect(api.equipWrites, 1);
-        await tester.tap(find.text('Back to Characters'));
+        await tester.tap(find.byKey(const Key('wardrobe-back')));
         await tester.pump();
         // The editor enables PopScope at endOfFrame before starting the
         // platform route's reverse transition.

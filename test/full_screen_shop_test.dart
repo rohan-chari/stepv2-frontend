@@ -64,7 +64,12 @@ void main() {
       expect(find.byKey(const Key('shop-bottom-navigation')), findsNothing);
       expect(find.byKey(const Key('shop-section-featured')), findsOneWidget);
       expect(find.byKey(const Key('preview-nav-shop')), findsNothing);
-      await tester.tap(find.text('Back'));
+      expect(find.text('Back'), findsNothing);
+      final back = find.byKey(const Key('shop-back'));
+      expect(back, findsOneWidget);
+      expect(tester.getSize(back).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(back).height, greaterThanOrEqualTo(48));
+      await tester.tap(back);
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(find.byKey(const Key('preview-nav-shop')), findsOneWidget);

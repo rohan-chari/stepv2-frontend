@@ -1,3 +1,5 @@
+import 'package:step_tracker/widgets/home_hero_scene.dart';
+import 'package:step_tracker/widgets/home_course_track.dart';
 import 'support/shop_navigation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:step_tracker/tutorial/spotlight_overlay.dart';
@@ -558,6 +560,54 @@ void main() {
     });
   });
   testWidgets(
+    'walking Home scene exposes saved state and explains unsaved draft with selected badge',
+    (tester) async {
+      await pumpWardrobeShop(tester, WardrobeApi());
+      await openWardrobe(tester);
+      expect(find.text('Back to Characters'), findsNothing);
+      expect(find.byKey(const Key('wardrobe-back')), findsOneWidget);
+      final stage = find.byKey(const Key('wardrobe-preview'));
+      expect(
+        find.descendant(of: stage, matching: find.byType(HomeHeroScene)),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
+      expect(find.text('Saved outfit'), findsNothing);
+      final spriteFinder = find.descendant(
+        of: stage,
+        matching: find.byType(CapybaraSpriteWithAccessories),
+      );
+      final before = tester
+          .widget<CapybaraSpriteWithAccessories>(spriteFinder)
+          .frameIndex;
+      await tester.pump(const Duration(milliseconds: 140));
+      expect(
+        tester.widget<CapybaraSpriteWithAccessories>(spriteFinder).frameIndex,
+        isNot(before),
+      );
+      await tester.tap(
+        find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const Key('wardrobe-selected-shop-baseball-cap')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
+      expect(find.text('Trying on'), findsNothing);
+      await tester.tap(find.byKey(const Key('wardrobe-unsaved-status')));
+      await tester.pump();
+      expect(find.textContaining('have not been saved'), findsOneWidget);
+      await tester.tap(find.text('Reset'));
+      await tester.pump();
+      expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
+      expect(
+        find.byKey(const Key('wardrobe-selected-shop-baseball-cap')),
+        findsNothing,
+      );
+    },
+  );
+  testWidgets(
     'Owned and Unowned sections keep Save outfit fixed while accessories scroll',
     (tester) async {
       final api = SectionedAccessoriesApi();
@@ -658,7 +708,7 @@ void main() {
       await pumpWardrobeShop(tester, api);
       await openWardrobe(tester);
       await platformBack(tester);
-      expect(find.text('Back to Characters'), findsNothing);
+      expect(find.byKey(const Key('wardrobe-back')), findsNothing);
       expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
       await platformBack(tester);
       expect(find.text('App host'), findsOneWidget);
@@ -672,7 +722,7 @@ void main() {
       );
       await tester.pump();
       await platformBack(tester);
-      expect(find.text('Back to Characters'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-back')), findsOneWidget);
       if (debugDefaultTargetPlatformOverride == TargetPlatform.iOS) {
         expect(find.text('Discard outfit changes?'), findsNothing);
       } else {
@@ -681,13 +731,13 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
       }
-      await tester.tap(find.text('Back to Characters'));
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Keep editing'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Trying on'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
       expect(api.saves, 0);
 
       // An outstanding save cannot be abandoned through header/system/edge Back.
@@ -696,13 +746,10 @@ void main() {
       await tester.tap(find.text('Save outfit'));
       await tester.pump();
       await platformBack(tester);
-      expect(find.text('Back to Characters'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-back')), findsOneWidget);
       expect(find.text('Discard outfit changes?'), findsNothing);
-      final back = tester.widget<TextButton>(
-        find.ancestor(
-          of: find.text('Back to Characters'),
-          matching: find.byType(TextButton),
-        ),
+      final back = tester.widget<IconButton>(
+        find.byKey(const Key('wardrobe-back')),
       );
       expect(back.onPressed, isNull);
       expect(api.saves, 1);
@@ -715,7 +762,7 @@ void main() {
       await tester.tap(find.text('Keep editing'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('Back to Characters'));
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Discard changes'));
@@ -723,7 +770,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('Back to Characters'), findsNothing);
+      expect(find.byKey(const Key('wardrobe-back')), findsNothing);
       expect(find.byKey(const Key('shop-character-default')), findsOneWidget);
       expect(api.activations, 0);
     },
@@ -846,11 +893,11 @@ void main() {
       await tester.pump();
       expect(api.firstPages, 2);
       expect(find.text('Stale page hat'), findsNothing);
-      expect(find.text('Trying on'), findsOneWidget);
-      final avatar = tester.widget<RacerAvatar>(
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
+      final avatar = tester.widget<AnimatedCapybaraWithAccessories>(
         find.descendant(
           of: find.byKey(const Key('wardrobe-preview')),
-          matching: find.byType(RacerAvatar),
+          matching: find.byType(AnimatedCapybaraWithAccessories),
         ),
       );
       expect(avatar.accessories.single['id'], hat['id']);
@@ -895,8 +942,8 @@ void main() {
         expect(api.activations, 0);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        expect(find.text('Back'), findsOneWidget);
-        await tester.tap(find.text('Back'));
+        expect(find.byKey(const Key('shop-back')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('shop-back')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.text('App host'), findsOneWidget);
@@ -950,7 +997,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Reset'));
       await tester.pump();
-      expect(find.text('Saved outfit'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
     },
   );
   testWidgets(
@@ -963,7 +1010,7 @@ void main() {
         find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
       );
       await tester.pump();
-      await tester.tap(find.text('Back to Characters'));
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
       await tester.pump();
       expect(find.text('Discard changes'), findsOneWidget);
       await tester.tap(find.text('Keep editing'));
@@ -1037,13 +1084,13 @@ void main() {
       }, authoritative: true);
       await tester.pump();
       expect(auth.userId, 'other-user');
-      await tester.tap(find.text('Back to Characters'));
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
       expect(find.byKey(const Key('wardrobe-preview')), findsNothing);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Back to Characters'), findsNothing);
+      expect(find.byKey(const Key('wardrobe-back')), findsNothing);
       api.delayed!.complete({});
       await tester.pump();
       expect(find.text('Outfit saved.'), findsNothing);
@@ -1074,7 +1121,10 @@ void main() {
           expect(find.text('Keep editing'), findsOneWidget);
           await tester.tap(find.text('Keep editing'));
           await tester.pump();
-          expect(find.text('Trying on'), findsOneWidget);
+          expect(
+            find.byKey(const Key('wardrobe-unsaved-status')),
+            findsOneWidget,
+          );
         }
       },
     );
@@ -1089,7 +1139,7 @@ void main() {
         find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
       );
       await tester.pump();
-      expect(find.text('Trying on'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsOneWidget);
       await tester.tap(find.text('Buy · 200'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -1111,7 +1161,7 @@ void main() {
         find.byKey(const Key('wardrobe-item-shop-baseball-cap')),
       );
       await tester.pump();
-      await tester.tap(find.text('Back to Characters'));
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
       await tester.pump();
       await tester.tap(find.text('Discard changes'));
       await tester.pump();
@@ -1133,7 +1183,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Save outfit'));
       await tester.pump();
-      await tester.tap(find.text('Back to Characters'));
+      await tester.tap(find.byKey(const Key('wardrobe-back')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 400));
@@ -1167,7 +1217,7 @@ void main() {
       final auth = tester.widget<ShopTab>(find.byType(ShopTab)).authService;
       expect(auth.coins, 100);
       await openWardrobe(tester, key: 'character-corgi');
-      expect(find.text('Saved outfit'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
       expect(api.outfits['character-corgi']?['HEAD'], hat['id']);
     },
   );

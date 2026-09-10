@@ -23,6 +23,24 @@ runtime flag, API change, subscription cancellation, or backend deployment.
 Produced by the UI-test-planner; these are device checks for the owner, separate
 from automated verification.
 
+Latest additions: Shop and wardrobe back controls are icon-only. The preview
+uses the existing Home day/night environment and walking draft character. A
+top-right green check means saved; a red information icon means unsaved and opens
+an explanation. Selected accessories have an explicit badge as well as the
+selected border/status. The old preview-state text is removed.
+
+- Check one arrow in each header, no Back/Back to Characters text, comfortable
+  tap areas, and one labeled VoiceOver/TalkBack focus target.
+- Preview Capybara, Corgi and Turtle with large accessories: feet align with the
+  ground during the walk, outfit art stays inside the scene, and no old white
+  card or duplicate avatar remains. Check both day and night and reduced motion.
+- Select an accessory: its marker stays inside the tile without covering art or
+  labels. Tap the red information icon; the explanation and dismissal control fit
+  above the footer. Saving/resetting restores the green check appropriately.
+- Tutorial highlights must surround the new scene, floating Save, ownership
+  sections and arrow-only back control. The scene status icon and coach controls
+  must remain clear of one another.
+
 1. **Home → Shop:** Featured, Powerups, Characters & Accessories appear in order
    with descriptions. Powerup and character cards match dimensions and columns.
    Only unowned characters have locks, contained within the card. No Bara+ row,

@@ -1,85 +1,85 @@
 {
-  "capture": "Actual Flutter Shop after Bara+ entry removal, bundled fonts, offline billing fixtures; not live purchase proof",
+  "capture": "Actual Flutter Shop after Bara+ removal and icon-only back, bundled fonts, offline billing fixtures; not live purchase proof",
   "images": {
     "dark-1.0-characters.png": {
-      "sha256": "dc2b968d4857ae6222bfeace3b5142869999834be2b16a68a04c90bdb3421a89",
+      "sha256": "4b76aec532eab3a749f942af72567103e2c5abf7fd147393bae6af77ba6a9e8b",
       "size": [
         780,
         1688
       ]
     },
     "dark-1.0-featured.png": {
-      "sha256": "d09c3f6992c2b28c8d6624ccd1a3596f854494dd5071f2212218d5f2b14fbdda",
+      "sha256": "0420a17c6f6069bf85aa8e9c10baaf155da77546f271457b2de3b8d57dc57dbe",
       "size": [
         780,
         1688
       ]
     },
     "dark-1.0-powerups.png": {
-      "sha256": "80a125049b3428ad1c4092da378059ded80628b1b3a78696fc006cb1f6b83291",
+      "sha256": "520983ab7c8b8fa9a7b8ba535250ee45785663d71be35f3ec9e8945a4ff4e7cf",
       "size": [
         780,
         1688
       ]
     },
     "dark-1.6-characters.png": {
-      "sha256": "86cda6e60452550b1d74770bb5aac85a1befa2707521c34eca72b20be349e5ae",
+      "sha256": "d36173be3991b85d1e42ba7c40d4e9429e46cbee423d5c2676da1517787b69fe",
       "size": [
         780,
         1688
       ]
     },
     "dark-1.6-featured.png": {
-      "sha256": "f2a7f4c50aa9b9a49c4c36ea0e3697a29191cddc1a1df321d83ef009acc7b4f7",
+      "sha256": "755744a7be5dd8d5c6086ba8bd34059e8c720637b2517fc109e9ca2660a2155e",
       "size": [
         780,
         1688
       ]
     },
     "dark-1.6-powerups.png": {
-      "sha256": "b5c9348b05a63f8f365f22f829e8837b01157da2c22a1857a202d769c8988137",
+      "sha256": "c066ba1605e44a8eb24f30e7b7ceaabfb19fb2d53369fb44b1f35f9f9972069f",
       "size": [
         780,
         1688
       ]
     },
     "light-1.0-characters.png": {
-      "sha256": "1fc3ba1001d0acf3d77f5d4b96173f5251b5f3a8a61ec14b41a3fe0309c419a2",
+      "sha256": "ba6ac94127243dc5ef81284861497802661bc90fa7b7bb026b6ed6dcab7a8950",
       "size": [
         780,
         1688
       ]
     },
     "light-1.0-featured.png": {
-      "sha256": "0436559444607c9606d0dfe77731e6f4e86613358da2629f441120dc6fd1b3a1",
+      "sha256": "20f9a1afbaf9272a72383799a8d2ec2cddf64d6f27826999f8c9a13d6297c84b",
       "size": [
         780,
         1688
       ]
     },
     "light-1.0-powerups.png": {
-      "sha256": "23e7cba2762544d0aa34b2431945b6c59b45213e121c6a23dcc06d5fe4ee70cd",
+      "sha256": "0230df5bbad72c88266f5e55d9bbdf82ebd1272f829ea171db65710dc14ce891",
       "size": [
         780,
         1688
       ]
     },
     "light-1.6-characters.png": {
-      "sha256": "3f6b1420a06b8f2298e998ca1d6946e5623ae9264e1bdeed06541198f80c5c46",
+      "sha256": "5ac5b8fdc5edf7d65c8048f8a7402d1f106afb295495c77f3730225ee298a5b8",
       "size": [
         780,
         1688
       ]
     },
     "light-1.6-featured.png": {
-      "sha256": "6640f48cdca538d4ba6a233e1657c814002a7d29f9e27dabe578772924ef3ae1",
+      "sha256": "88b1d676c1312f3067ff633690105d02fa9226afffa3f5e8d61f98afc3528b0e",
       "size": [
         780,
         1688
       ]
     },
     "light-1.6-powerups.png": {
-      "sha256": "a93f9f82355629c60bc0c6910356a287fc9cf3b32d2dd8c1e1a8cf37c025f45b",
+      "sha256": "1290d791e763a4c3ea91e0892bcdc4a9f6d8277eb3bb8de7c352daf548fcd7d5",
       "size": [
         780,
         1688
@@ -87,7 +87,7 @@
     }
   },
   "sourceHashes": {
-    "lib/screens/tabs/shop_tab.dart": "a81b06b813c05521e0201b0890e65957787a42d01ce8994ec627419d00aee7c7",
+    "lib/screens/tabs/shop_tab.dart": "a6667b88cd63c742ca087c239d49d01c9d260507969798b6eee6a28aa1995ee7",
     "lib/widgets/shop_character_card.dart": "f8ecc4ccb9c70acbfe510b9bf90e5863a64cfd67cafffd7a9380727ef09debf4",
     "lib/widgets/shop_product_grid.dart": "e3a265e4ec0c9ca338db9f2bad162b8c0b08b2c2e4ec264dfebc2cec2434da22"
   }

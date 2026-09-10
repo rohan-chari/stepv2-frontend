@@ -510,7 +510,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('Back to Characters'));
+    await tester.tap(find.byKey(const Key('wardrobe-back')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Discard changes'));
     await tester.pump();

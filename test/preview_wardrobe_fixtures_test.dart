@@ -36,7 +36,7 @@ void main() {
       await selectShopCategory(tester, 'ACCESSORIES');
       expect(find.text('Other owned items'), findsNothing);
       expect(find.byKey(const Key('wardrobe-item-baseball_cap')), findsNothing);
-      expect(find.text('Trying on'), findsNothing);
+      expect(find.byKey(const Key('wardrobe-unsaved-status')), findsNothing);
       expect(find.textContaining('Buy ·'), findsNothing);
       await tester.ensureVisible(
         find.byKey(const Key('wardrobe-item-sunglasses')),
@@ -49,11 +49,11 @@ void main() {
       await tester.tap(find.text('Reset'));
       await tester.pump();
       await tester.scrollUntilVisible(
-        find.text('Saved outfit'),
+        find.byKey(const Key('wardrobe-saved-status')),
         -200,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('Saved outfit'), findsOneWidget);
+      expect(find.byKey(const Key('wardrobe-saved-status')), findsOneWidget);
       expect(
         controller.ownedCosmetics,
         containsAll(['baseball_cap', 'sunglasses', 'gold_chain']),

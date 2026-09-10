@@ -4,7 +4,28 @@
 
 # Shop sizing and billing repair validation — 2026-09-10
 
-## Latest additions
+## Final animated-preview additions
+
+The owner added icon-only Shop/wardrobe back controls, a clearer accessory
+selection state, and the Home environment with the walking draft character.
+These reuse the existing scene and renderer; no shared renderer or artwork was
+changed. Day/night and reduced motion follow the current app settings. Selected
+accessories have a stronger border and check badge. One top-right status icon
+replaces the old preview-state text: green check for saved, red information for
+unsaved, with a tap explanation. Existing outfit preservation and save/purchase
+safeguards remain.
+
+The initial build14 archive completed before these additions; it was never
+uploaded and is superseded by a rebuilt archive of the final source. Final scene
+captures are in `artifacts/shop-outfit-scene-2026-09-10/`; the earlier
+`shop-outfit-repair-2026-09-10/` images document the superseded white-card layout.
+Latest independent review: **SHIP**, no issues,52 independently passing tests.
+Targeted results:50 wardrobe tests,128 external navigation/billing/cosmetic tests,
+and2 Shop tests passed. Final combined full suite: **3,309 passed, zero failures**
+(2m08s), `/tmp/bara-shop14-scene-full-test.log`. Final analysis clean (7.4s),
+`/tmp/bara-shop14-scene-analyze.log`.
+
+## Earlier additions
 
 Bara+ entry points are commented out in Shop, Get Coins, Profile and billing
 preview navigation; existing discounts, subscription handling and reconciliation

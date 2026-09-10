@@ -11,7 +11,8 @@ import '../widgets/accessory_thumbnail.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
-import '../widgets/race_ui.dart';
+import '../widgets/home_hero_scene.dart';
+import '../widgets/home_course_track.dart';
 import '../widgets/shop_category_bar.dart';
 import '../widgets/shop_product_grid.dart';
 
@@ -465,21 +466,13 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                       ),
                       child: Row(
                         children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextButton.icon(
-                              onPressed: _busy ? null : () => _leave(),
-                              icon: Icon(
-                                Icons.arrow_back,
-                                color: colors.textLight,
-                              ),
-                              label: Text(
-                                'Back to Characters',
-                                style: PixelText.body(
-                                  size: 13,
-                                  color: colors.textLight,
-                                ),
-                              ),
+                          IconButton(
+                            key: const Key('wardrobe-back'),
+                            tooltip: 'Back to Characters',
+                            onPressed: _busy ? null : () => _leave(),
+                            icon: Icon(
+                              Icons.arrow_back,
+                              color: colors.textLight,
                             ),
                           ),
                           Expanded(
@@ -516,81 +509,61 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                   if (_saved != null) ...[
                                     KeyedSubtree(
                                       key: _previewKey,
-                                      child: Container(
-                                        key: const Key('wardrobe-preview'),
-                                        margin: const EdgeInsets.symmetric(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
                                           horizontal: 16,
                                         ),
-                                        constraints: const BoxConstraints(
-                                          minHeight: 210,
-                                        ),
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: colors.parchment,
+                                        child: ClipRRect(
                                           borderRadius: BorderRadius.circular(
                                             16,
                                           ),
-                                          border: Border.all(
-                                            color: colors.parchmentBorder,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width:
-                                                  MediaQuery.sizeOf(
-                                                        context,
-                                                      ).width <
-                                                      360
-                                                  ? 120
-                                                  : 140,
-                                              height: 160,
-                                              child: RacerAvatar(
-                                                rank: 1,
-                                                size: 132,
-                                                showMedalRing: false,
-                                                animal: widget.character.animal,
-                                                accessories: [
-                                                  for (final id
-                                                      in _draft.values
-                                                          .whereType<String>())
-                                                    ?itemRecords[id],
-                                                ],
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
+                                          child: SizedBox(
+                                            key: const Key('wardrobe-preview'),
+                                            height: 240,
+                                            child: HomeHeroScene(
+                                              groundHeight: 54,
+                                              groundScrollSpeed: 26,
+                                              excludeBackgroundSemantics: true,
+                                              child: Stack(
                                                 children: [
-                                                  _text(
-                                                    _dirty
-                                                        ? 'Trying on'
-                                                        : 'Saved outfit',
-                                                    size: 16,
+                                                  Positioned(
+                                                    left: 0,
+                                                    right: 0,
+                                                    bottom: 54 - 4 - 150 * .22,
+                                                    child: Center(
+                                                      child: AnimatedCapybaraWithAccessories(
+                                                        size: 150,
+                                                        stepDuration:
+                                                            const Duration(
+                                                              milliseconds: 720,
+                                                            ),
+                                                        animate:
+                                                            !MediaQuery.disableAnimationsOf(
+                                                              context,
+                                                            ),
+                                                        animal: widget
+                                                            .character
+                                                            .animal,
+                                                        accessories: [
+                                                          for (final id
+                                                              in _draft.values
+                                                                  .whereType<
+                                                                    String
+                                                                  >())
+                                                            ?itemRecords[id],
+                                                        ],
+                                                      ),
+                                                    ),
                                                   ),
-                                                  if (selected != null) ...[
-                                                    const SizedBox(height: 8),
-                                                    _text(
-                                                      wardrobeString(
-                                                            selected
-                                                                .item['name'],
-                                                          ) ??
-                                                          'Accessory',
-                                                    ),
-                                                  ],
-                                                  if (_hasUnowned) ...[
-                                                    const SizedBox(height: 8),
-                                                    _text(
-                                                      'Buy the previewed items before saving.',
-                                                    ),
-                                                  ],
+                                                  Positioned(
+                                                    top: 8,
+                                                    right: 8,
+                                                    child: _saveStatus(),
+                                                  ),
                                                 ],
                                               ),
                                             ),
-                                          ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -686,6 +659,41 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _saveStatus() {
+    final colors = AppColors.of(context);
+    return Material(
+      color: colors.parchment,
+      shape: const CircleBorder(),
+      child: _dirty
+          ? IconButton(
+              key: const Key('wardrobe-unsaved-status'),
+              tooltip: 'Outfit not saved',
+              onPressed: () => _info(
+                _hasUnowned
+                    ? 'Your outfit changes have not been saved. Buy the previewed items, then tap Save outfit.'
+                    : 'Your outfit changes have not been saved. Tap Save outfit to keep this look.',
+              ),
+              icon: Icon(
+                Icons.info_outline_rounded,
+                color: colors.error,
+                size: 24,
+              ),
+            )
+          : Semantics(
+              key: const Key('wardrobe-saved-status'),
+              label: 'Outfit saved',
+              child: SizedBox.square(
+                dimension: 48,
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  color: colors.successText,
+                  size: 24,
+                ),
+              ),
+            ),
     );
   }
 
@@ -812,42 +820,68 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                 color: AppColors.of(context).parchment,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  width: _draft[item.slot] == item.id ? 2 : 1,
+                  width: _draft[item.slot] == item.id ? 3 : 1,
                   color: _draft[item.slot] == item.id
                       ? AppColors.of(context).pillGoldDark
                       : AppColors.of(context).parchmentBorder,
                 ),
               ),
-              child: Column(
+              child: Stack(
                 children: [
-                  Expanded(
-                    child: AccessoryThumbnail(
-                      assetKey: wardrobeString(item.item['assetKey']) ?? '',
-                      animationFrames: AccessoryThumbnail.framesOf(item.item),
-                      errorBuilder: (_, error, stack) =>
-                          const Icon(Icons.checkroom),
-                    ),
+                  Column(
+                    children: [
+                      Expanded(
+                        child: AccessoryThumbnail(
+                          assetKey: wardrobeString(item.item['assetKey']) ?? '',
+                          animationFrames: AccessoryThumbnail.framesOf(
+                            item.item,
+                          ),
+                          errorBuilder: (_, error, stack) =>
+                              const Icon(Icons.checkroom),
+                        ),
+                      ),
+                      Text(
+                        wardrobeString(item.item['name']) ?? 'Accessory',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.of(context).textDark,
+                        ),
+                      ),
+                      if (item.canPurchase)
+                        _text('${item.item['priceCoins'] ?? 0} coins', size: 10)
+                      else
+                        _text(
+                          item.canSelect
+                              ? (_draft[item.slot] == item.id
+                                    ? 'Selected'
+                                    : 'Owned')
+                              : 'Unavailable',
+                          size: 10,
+                        ),
+                    ],
                   ),
-                  Text(
-                    wardrobeString(item.item['name']) ?? 'Accessory',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: PixelText.body(
-                      size: 11,
-                      color: AppColors.of(context).textDark,
-                    ),
-                  ),
-                  if (item.canPurchase)
-                    _text('${item.item['priceCoins'] ?? 0} coins', size: 10)
-                  else
-                    _text(
-                      item.canSelect
-                          ? (_draft[item.slot] == item.id
-                                ? 'Selected'
-                                : 'Owned')
-                          : 'Unavailable',
-                      size: 10,
+                  if (_draft[item.slot] == item.id)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: ExcludeSemantics(
+                        child: Container(
+                          key: Key('wardrobe-selected-${item.id}'),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: AppColors.of(context).pillGold,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.check_rounded,
+                            size: 16,
+                            color: AppColors.of(context).textDark,
+                          ),
+                        ),
+                      ),
                     ),
                 ],
               ),

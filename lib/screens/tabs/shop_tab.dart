@@ -1708,18 +1708,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (showBackButton) ...[
-                    TextButton.icon(
-                      label: Text(
-                        'Back',
-                        style: PixelText.body(
-                          size: 13,
-                          color: AppColors.of(context).textLight,
-                        ),
+                    IconButton(
+                      key: const Key('shop-back'),
+                      tooltip: 'Back',
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
                       ),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
-                        padding: EdgeInsets.zero,
-                      ),
+                      padding: EdgeInsets.zero,
                       icon: Icon(
                         Icons.arrow_back,
                         color: AppColors.of(context).textLight,
