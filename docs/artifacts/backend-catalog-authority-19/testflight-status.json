@@ -1,0 +1,16 @@
+{
+  "found": true,
+  "id": "4aeba851-b067-45c6-a3d6-76837f109ea0",
+  "version": "2.3.13",
+  "build": "19",
+  "processing": "VALID",
+  "beta": "IN_BETA_TESTING",
+  "uploadedDate": "2026-09-10T13:34:11-07:00",
+  "usesNonExemptEncryption": false,
+  "checkedAt": "2026-09-10T20:39:59.772Z",
+  "internalGroup": {
+    "id": "944d87b7-f952-438f-9703-173504ca4f1d",
+    "name": "bara testers",
+    "buildPresent": true
+  }
+}

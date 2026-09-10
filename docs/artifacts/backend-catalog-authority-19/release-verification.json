@@ -1,0 +1,79 @@
+{
+  "runtimeCommit": "d8d26ca",
+  "buildSourceCommit": "e85d5a097a00edf078f223590be0305376386119",
+  "sourceFingerprintsUnchanged": true,
+  "ios": {
+    "version": "2.3.13",
+    "build": "19",
+    "compiled_sha256": "0122287acdc2aa77a94eadfb86405f5b2fd7b46c022e3f5f4cf68c1064d8e6bd",
+    "archive_compiled_sha256": "31360650d0cc209a3bfd1f68432cdd3e356db1b76ca055ad3f957b734a6bbd05",
+    "macho": {
+      "16777228:0": {
+        "uuid": "0c7143a38d7ad7004c4ff302a0a92414",
+        "sections": {
+          "__TEXT/__text": "e5240d1db58986e2741cd5eef70b0fc4c541b9553493d07260311b17d7166dab",
+          "__TEXT/__const": "b6406691c972a7304bb2202516c6d6b8b1f7987b0ae76f7cf1c8a370be2dade2",
+          "__TEXT/__unwind_info": "ae1f4a5f2976e4eeeaa4fc132367fd419f19697a7aef1a2b745c284e4ff2c08d"
+        }
+      }
+    },
+    "signature_verified": true,
+    "apns": "production",
+    "debuggable": false,
+    "required_configuration_verified": true,
+    "corekit_verified": true,
+    "native_gpp_decoder_verified": true,
+    "native_archive_export_match": true,
+    "current_ui_verified": true,
+    "assets": {
+      "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+      "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+      "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+      "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+    },
+    "sha256": "4a7f4c8dbe3370959175f682ea95990e86ed906ad21ee3efd2f1ddfcb72c52dd"
+  },
+  "android": {
+    "package": "com.rohanchari.steptracker",
+    "version": "2.3.13",
+    "version_code": "203149",
+    "billing_client": "8.3.0",
+    "bundle": "/Users/rohan/repos/stepv2-frontend/build/app/outputs/bundle/prodRelease/app-prod-release.aab",
+    "sha256": "1e6c13712817d4222270f3472f35ac622afd8d692c8966b7a4fde97593bc5edb",
+    "upload_certificate_sha256": "CF:06:4C:DD:CA:14:CB:6B:27:91:BC:86:77:39:EF:14:EC:0E:AE:13:3C:68:E2:71:30:E5:0D:0F:8B:EE:14:3A",
+    "signature_verified": true,
+    "debuggable": false,
+    "production_admob_app_verified": true,
+    "fresh_native_libraries": {
+      "arm64-v8a": {
+        "packaged_sha256": "b6e20478a097fd2b9b0d015d6a4919a229acd8175c181fb301b5d0c4504da783",
+        "fresh_compiler_sha256": "9630cec9caeb2f11967e50036b4e8c92eef165ad85669925aa1453aea73f28dd",
+        "all_allocated_sections_match": true
+      },
+      "armeabi-v7a": {
+        "packaged_sha256": "358d2dcb3f786ad759723e2a56b2eaa849dcc8d926b3ee901971e73fb8111fbc",
+        "fresh_compiler_sha256": "f4deddfbe3b85cdc1808b9c7b1398a6ff2bbf10aa0665f3e83d207e8fb0cbb03",
+        "all_allocated_sections_match": true
+      },
+      "x86_64": {
+        "packaged_sha256": "f540b1ab3d08919c1a61fbe03752c5b4cd3931a2eaf4d478bbfa88b08b9c3ef9",
+        "fresh_compiler_sha256": "a1638dc80ed47be2f5f3379ce453e88b202a5d4b65fd4dc455fe624776daf08f",
+        "all_allocated_sections_match": true
+      }
+    },
+    "current_ui_verified": true,
+    "assets": {
+      "assets/images/powerups/hitchhike.png": "6fbfe79192cf33da51b4ef14c49ee81bcea0d3f6cc9b5f6206c72a500a0d55c7",
+      "assets/images/powerups/hitchhike_thumb.png": "3bcf04acb84fb59ca0afd8063a161bd64b185570f90498063b7a6aa69aba4eaa",
+      "assets/images/turtle_walk_right.png": "a87ad177f0a048147465f127de10db147d036c9a4f1fbd7d2a0a67fd3ad6fccd",
+      "assets/images/accessories/turtle_shell.png": "232f40f7fc9009f383b5cd5814bd1a3cf6bcd3ba918fe92efbd28354780abdc9"
+    }
+  },
+  "uploadSucceededAt": "2026-09-10T20:32:50.200Z",
+  "knownNonblockingSymbolWarnings": [
+    "AppLovinSDK",
+    "FBAudienceNetwork"
+  ],
+  "flutterAnalyze": "clean",
+  "backendRuntime": "aa14b99"
+}
