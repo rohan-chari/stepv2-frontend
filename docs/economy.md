@@ -1577,6 +1577,84 @@ coin_transactions`.
 
 ## 6. Cosmetics — `DB shop_items`, verified 2026-08-08
 
+### Backpack retirement/refund audit — 2026-09-10 (production snapshot)
+
+Snapshot read at 2026-09-11T00:00:20.457Z (September 10 local), temporary
+evidence `/tmp/backpack-refund-audit.json`: Backpack is active/test-only,
+with one current owner, one successful 1,000-coin purchase, and a matching
+−1,000 `shop_purchase` ledger row for that owner/item. Equipment, saved
+outfits, ad/daily grants and billing release/grant reference counts are all
+0. Other refund rows in the snapshot reference other items/events; they are
+not evidence of a Backpack refund.
+
+The explicitly requested one-off removal plus refund restores 1,000 coins
+in total and removes one ownership; purchase plus refund nets 0 coins.
+An idempotent repeat must add 0 coins. Disabling this test-only item changes
+the public daily accessory pool by 0 items. Preserve the item, historical
+purchase/replay records, and artwork. These are audited proposed deltas,
+not evidence that the mutation has run. Source: production aggregate and
+transaction snapshot; no user identifiers reproduced here.
+
+### General accessory lifecycle planning — 2026-09-10 (code/spec)
+
+Unlike the bounded test-only cleanup below, general Active/channel changes
+can change the production reward pool without changing any price. A user
+whose last eligible unowned accessory is removed moves to the existing
+empty-pool behavior. Code-derived differences, holding streak/config and
+powerup pool fixed, are:
+
+- Legacy six-day claim: day-six coin grant rises from 0 to 100, equivalent
+  to +100/6 = 16.67 coins per claimed cycle day, while losing the accessory.
+  Source: `src/modules/economy/constants/dailyReward.js:4-6` and
+  `commands/claimDailyReward.js:100-121` in the backend economy module.
+- Box with a nonempty powerup pool: let R be the rare probability, s the
+  effective rare coin share and F the rare coin amount. Removing the last
+  accessory changes coin EV by +0.5 R s F and powerup awards by
+  +0.5 R (1-s) per box. Accessory awards decrease by 0.5 R per box.
+- Box without a powerup pool: rare folds into uncommon when accessories
+  become empty, increasing coin EV by R U per box, where U is the uncommon
+  coin amount, while accessory awards decrease by R.
+
+Box sources: backend `src/modules/economy/dailyBoxOdds.js` functions
+`dailyBoxOddsForPool`, `rarePrizeMix`, and `coinAmountForTier`. These are
+conditional formulas, not measured production deltas; current stored config,
+effective environment overrides, affected-user distributions, prices and
+claim frequencies were not queried for this feature review. Nonempty pool
+changes also renormalize individual prize probabilities via
+`pickProbabilities`, even when coin EV is unchanged.
+
+Current pending-grant paths differ: backend
+`src/modules/billing/models/billingState.js:66-76` skips inactive/test-only
+release items, while `src/modules/cosmetics/grantLegendCosmetic.js:11-21`
+grants its existing SKU without checking active. Cosmetic ad redemption
+requires an active/channel-eligible item before consuming verified watches
+(`src/modules/cosmetics/unlockShopItemWithAds.js`). Thus existing ownership
+protection alone does not establish protection of all unfulfilled rewards.
+The proposed lifecycle spec must distinguish future acquisition eligibility
+from durable already-earned obligations and serialize retirement with grants.
+
+### Unused-accessory retirement audit — 2026-09-10
+
+Production aggregate snapshot supplied for this audit, read at
+2026-09-10T23:38:40.165Z (`/tmp/accessory-ownership-audit.json`, temporary
+uncommitted evidence): 67 accessory rows, 29 with current ownership,
+equipment, or saved-outfit references, and 38 with none of those references.
+Of the 38 candidates, 33 are active; all 33 are test-only. Deactivating only
+these candidates leaves the eligible daily accessory pool at 18 items before
+and after, with the same membership for every user. Consequently the daily
+box, extra daily box, and legacy daily reward distributions are unchanged
+for a fixed user state: coin/reward EV delta is 0. Source: backend
+`src/modules/cosmetics/getUnownedAccessoryPool.js:10-27`, used by those three
+claim handlers, and the production aggregate snapshot. No live payout or
+price assumptions are needed for this equality.
+
+The candidate set has zero billing release/grant references. Jetpack,
+Peacock Tail, and Skateboard each have one historical purchase despite zero
+current ownership/equipment/saved references. This is a retirement audit,
+not evidence that their historical rows or artwork are unused. The snapshot
+alone does not exclude purchases arriving after its read time. No production
+state was changed by this audit.
+
 ### Compact character actions verification — 2026-09-10 (local code/spec)
 
 The compact Edit/Equip/Buy proposal changes presentation and navigation only;

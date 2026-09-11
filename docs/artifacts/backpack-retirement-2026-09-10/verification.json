@@ -1,0 +1,28 @@
+{
+  "verifiedAt": "2026-09-11T00:41:50.042Z",
+  "inactive": true,
+  "ownershipRemoved": true,
+  "purchaseHistoryPreserved": true,
+  "artReferencesPreserved": true,
+  "catalogs": [
+    {
+      "channel": "prod",
+      "status": 200,
+      "backpackAbsent": true,
+      "ownershipAbsent": true
+    },
+    {
+      "channel": "testflight",
+      "status": 200,
+      "backpackAbsent": true,
+      "ownershipAbsent": true
+    }
+  ],
+  "refundCandidates": [
+    {
+      "amount": 1000,
+      "reason": "shop_refund",
+      "ref_id": "b9e3a35c-c20a-4beb-a04c-93fec8b221a0"
+    }
+  ]
+}
