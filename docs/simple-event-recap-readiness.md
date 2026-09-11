@@ -1,9 +1,11 @@
 # Simple event recap — implementation and production-readiness evidence
 
-Status: implementation and independent review complete; recap-specific release
-checks pass. Nothing deployed. Repository-wide baseline failures and unperformed
-physical-device checks are explicitly disclosed below; this is not an all-green
-repository claim or authorization to deploy.
+Status: ready for backend production deployment approval. Implementation and
+independent review are complete; recap-specific release checks pass. On
+2026-09-11 the user explicitly chose to track the baseline test failures
+separately. Nothing deployed. Physical-device checks remain part of the new app
+release checklist; this is not an all-green repository claim or authorization
+to deploy or upload apps.
 
 Approved behavior and cleanup: [requirements](simple-event-recap-requirements.md).
 Backend API contract: backend repository `docs/simple-event-recap-api-contract.md`.
@@ -52,8 +54,10 @@ Production-wide CPU savings require post-deployment measurement under comparable
   suites retain four independently reproduced baseline failures (dependency
   closure, display artifact claim, Drill Sergeant impact and enrollment timezone),
   plus a protected PG18 foreign-key SQLSTATE expectation. No assertion was
-  weakened or skipped. These require explicit release-risk acceptance or a
-  separate repair task; do not describe the entire repository as green.
+  weakened or skipped. The user explicitly chose separate tracking on
+  2026-09-11; see [the follow-up register](existing-test-failures-2026-09-11.md).
+  These specific existing failures no longer block this recap release. Do not
+  describe the entire repository as green or extend this decision to new failures.
 - Backend full units: 3,361 passed. Dedicated replacement/migration/cache group:
   27 passed. Broader shared group: 122/125 passed, with the three baseline failures
   above (enrollment and PG18 check were separate runs).
