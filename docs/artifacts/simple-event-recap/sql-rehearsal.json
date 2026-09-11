@@ -1,0 +1,59 @@
+{
+  "success": true,
+  "results": [
+    {
+      "file": "scripts/simple-event-recap-verify.sql",
+      "expectedRejection": "retired recap trigger remains installed"
+    },
+    {
+      "file": "prisma/migrations/20260911120000_simple_event_recap_expand/migration.sql",
+      "passed": true
+    },
+    {
+      "stampConstraint": "partially populated count/revision with null policy rejected"
+    },
+    {
+      "file": "scripts/simple-event-recap-cutover.sql",
+      "expectedRejection": "stop and drain ALL database clients"
+    },
+    {
+      "file": "scripts/simple-event-recap-cutover.sql",
+      "passed": true
+    },
+    {
+      "file": "scripts/simple-event-recap-cutover.sql",
+      "passed": true
+    },
+    {
+      "copy": "all six IDs/numbers/expiry/ack preserved; four ineligible suppressed; rerun safe"
+    },
+    {
+      "sourceMutations": "INSERT/UPDATE/DELETE both raw source tables: zero capture journal/revision/work changes"
+    },
+    {
+      "notificationRecovery": "entitlement change + bounded seed/revalidation intact; no summary candidates"
+    },
+    {
+      "retainedDescendantDeletion": "1000 points + plan/progress/transfer/owner deleted; unrelated owner preserved",
+      "elapsedMs": 1.1597090000000208
+    },
+    {
+      "retention": "actual replacement retention removed one expired entitlement, preserved all six copied results for B audit"
+    },
+    {
+      "file": "scripts/simple-event-recap-final-drop.sql",
+      "expectedRejection": "at least seven days ago"
+    },
+    {
+      "file": "scripts/simple-event-recap-final-drop.sql",
+      "passed": true
+    },
+    {
+      "finalDrop": "all21 retired tables gone; one audited expired orphan copy removed, five unrelated copied recaps and notification recovery retained"
+    },
+    {
+      "file": "scripts/simple-event-recap-final-drop.sql",
+      "passed": true
+    }
+  ]
+}

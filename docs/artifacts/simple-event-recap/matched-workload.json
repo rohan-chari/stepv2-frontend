@@ -1,0 +1,756 @@
+{
+  "description": "Synthetic local matched workload, not production CPU guarantee",
+  "finalCodeDelta": "After the stable measured source, operational snapshots switched summariesFinalized from retired global_event_user_summaries to event_recaps. This diagnostic path is separately verified after final drop; no measured step/recap/scoring path changed.",
+  "runs": [
+    {
+      "name": "baseline-r1",
+      "rawSha256": "511d28f8edd05d649f56df9468100dea3528b5ac967cc983a6492104b7648565",
+      "revision": "9b08e5f9b50250cae431177e67e73e24dd6b2b34",
+      "trace": {
+        "users": 6,
+        "sharedRaces": 3,
+        "samplesPerUser": 6,
+        "rawStepsPerUser": 60,
+        "eventSeconds": 1800,
+        "idleSeconds": 65
+      },
+      "success": true,
+      "dbCpuSeconds": 0.9900000000000002,
+      "completionMs": 6095,
+      "phaseSql": {
+        "startup-and-start": {
+          "commands": 338,
+          "elapsedMs": 413.9971799999995
+        },
+        "wait-event-end": {
+          "commands": 114,
+          "elapsedMs": 61.21120600000086
+        },
+        "end": {
+          "commands": 34,
+          "elapsedMs": 23.144328999998834
+        },
+        "app-open-sync-and-recap": {
+          "commands": 3064,
+          "elapsedMs": 638.7349970001596
+        },
+        "outcome-http": {
+          "commands": 879,
+          "elapsedMs": 263.48283600005016
+        },
+        "settled-idle": {
+          "commands": 837,
+          "elapsedMs": 389.73211599991555
+        }
+      },
+      "wal": [
+        {
+          "label": "before",
+          "lsn": "0/24DBE08"
+        },
+        {
+          "label": "before-idle",
+          "lsn": "0/26200F8"
+        },
+        {
+          "label": "after-idle",
+          "lsn": "0/2661720"
+        },
+        {
+          "label": "final",
+          "lsn": "0/2661720"
+        }
+      ],
+      "outcomes": [
+        {
+          "user": 0,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 1,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 2,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 3,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 4,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 5,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        }
+      ],
+      "limitations": [
+        "Synthetic local trace, not a production CPU/capacity guarantee.",
+        "SQL timings include waits, not CPU.",
+        "OS CPU sampling is cumulative process-time at 10ms precision; exited processes between samples may be missed.",
+        "Fixtures and outcome observer queries excluded from application SQL; observers still use DB resources.",
+        "Legacy counterfactual and simple recaps intentionally differ in general; this no-powerup trace should agree.",
+        "Table statistics excluded: asynchronous flush contains fixture cleanup deltas."
+      ]
+    },
+    {
+      "name": "baseline-r2",
+      "rawSha256": "c9d40aad945150603e8f8bf2fecc11a2e8f692840ad21cc677f1b6270943df98",
+      "revision": "9b08e5f9b50250cae431177e67e73e24dd6b2b34",
+      "trace": {
+        "users": 6,
+        "sharedRaces": 3,
+        "samplesPerUser": 6,
+        "rawStepsPerUser": 60,
+        "eventSeconds": 1800,
+        "idleSeconds": 65
+      },
+      "success": true,
+      "dbCpuSeconds": 1.09,
+      "completionMs": 6124,
+      "phaseSql": {
+        "startup-and-start": {
+          "commands": 343,
+          "elapsedMs": 368.4349269999993
+        },
+        "wait-event-end": {
+          "commands": 114,
+          "elapsedMs": 89.52774900000895
+        },
+        "end": {
+          "commands": 47,
+          "elapsedMs": 45.22279100000378
+        },
+        "app-open-sync-and-recap": {
+          "commands": 3047,
+          "elapsedMs": 630.7243699999708
+        },
+        "outcome-http": {
+          "commands": 879,
+          "elapsedMs": 226.71837099992263
+        },
+        "settled-idle": {
+          "commands": 837,
+          "elapsedMs": 434.89712800014604
+        }
+      },
+      "wal": [
+        {
+          "label": "before",
+          "lsn": "0/2688E00"
+        },
+        {
+          "label": "before-idle",
+          "lsn": "0/27B21E0"
+        },
+        {
+          "label": "after-idle",
+          "lsn": "0/28D89E0"
+        },
+        {
+          "label": "final",
+          "lsn": "0/28D89E0"
+        }
+      ],
+      "outcomes": [
+        {
+          "user": 0,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 1,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 2,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 3,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 4,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 5,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        }
+      ],
+      "limitations": [
+        "Synthetic local trace, not a production CPU/capacity guarantee.",
+        "SQL timings include waits, not CPU.",
+        "OS CPU sampling is cumulative process-time at 10ms precision; exited processes between samples may be missed.",
+        "Fixtures and outcome observer queries excluded from application SQL; observers still use DB resources.",
+        "Legacy counterfactual and simple recaps intentionally differ in general; this no-powerup trace should agree.",
+        "Table statistics excluded: asynchronous flush contains fixture cleanup deltas."
+      ]
+    },
+    {
+      "name": "baseline-r3",
+      "rawSha256": "8a8ef144ff4bfec73787cf7090e113b5a3f898b596b8a286015e486fb9859094",
+      "revision": "9b08e5f9b50250cae431177e67e73e24dd6b2b34",
+      "trace": {
+        "users": 6,
+        "sharedRaces": 3,
+        "samplesPerUser": 6,
+        "rawStepsPerUser": 60,
+        "eventSeconds": 1800,
+        "idleSeconds": 65
+      },
+      "success": true,
+      "dbCpuSeconds": 1.1100000000000003,
+      "completionMs": 6124,
+      "phaseSql": {
+        "startup-and-start": {
+          "commands": 343,
+          "elapsedMs": 407.4379519999965
+        },
+        "wait-event-end": {
+          "commands": 114,
+          "elapsedMs": 89.79141999999592
+        },
+        "end": {
+          "commands": 43,
+          "elapsedMs": 38.90949899998668
+        },
+        "app-open-sync-and-recap": {
+          "commands": 3052,
+          "elapsedMs": 625.3520269999717
+        },
+        "outcome-http": {
+          "commands": 879,
+          "elapsedMs": 226.68416499996965
+        },
+        "settled-idle": {
+          "commands": 839,
+          "elapsedMs": 436.58600200004
+        }
+      },
+      "wal": [
+        {
+          "label": "before",
+          "lsn": "0/29196E8"
+        },
+        {
+          "label": "before-idle",
+          "lsn": "0/2A48AA0"
+        },
+        {
+          "label": "after-idle",
+          "lsn": "0/2AC2320"
+        },
+        {
+          "label": "final",
+          "lsn": "0/2AC2320"
+        }
+      ],
+      "outcomes": [
+        {
+          "user": 0,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 1,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 2,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 3,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 4,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 5,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        }
+      ],
+      "limitations": [
+        "Synthetic local trace, not a production CPU/capacity guarantee.",
+        "SQL timings include waits, not CPU.",
+        "OS CPU sampling is cumulative process-time at 10ms precision; exited processes between samples may be missed.",
+        "Fixtures and outcome observer queries excluded from application SQL; observers still use DB resources.",
+        "Legacy counterfactual and simple recaps intentionally differ in general; this no-powerup trace should agree.",
+        "Table statistics excluded: asynchronous flush contains fixture cleanup deltas."
+      ]
+    },
+    {
+      "name": "candidate-release1",
+      "rawSha256": "c233cc9c579990278828d6f4225230e3844595bafc40a014ed657bc7765af703",
+      "revision": "2f8503dda0baacd726b82a65fdd05b486f847836",
+      "sourceFingerprint": "97588129be335bc6c143ec7fa07c7406d8dd397b7440215ca6dab6d57c39789e",
+      "sourceUnchanged": true,
+      "trace": {
+        "users": 6,
+        "sharedRaces": 3,
+        "samplesPerUser": 6,
+        "rawStepsPerUser": 60,
+        "eventSeconds": 1800,
+        "idleSeconds": 65
+      },
+      "success": true,
+      "dbCpuSeconds": 0.69,
+      "completionMs": 6091,
+      "phaseSql": {
+        "startup-and-start": {
+          "commands": 315,
+          "elapsedMs": 340.64398500000584
+        },
+        "wait-event-end": {
+          "commands": 114,
+          "elapsedMs": 65.1401229999974
+        },
+        "end": {
+          "commands": 32,
+          "elapsedMs": 16.252542999998695
+        },
+        "app-open-sync-and-recap": {
+          "commands": 509,
+          "elapsedMs": 257.11532100003024
+        },
+        "outcome-http": {
+          "commands": 872,
+          "elapsedMs": 235.4962409999971
+        },
+        "settled-idle": {
+          "commands": 807,
+          "elapsedMs": 280.1230050000195
+        }
+      },
+      "wal": [
+        {
+          "label": "before",
+          "lsn": "0/851C880"
+        },
+        {
+          "label": "before-idle",
+          "lsn": "0/8560168"
+        },
+        {
+          "label": "after-idle",
+          "lsn": "0/8625968"
+        },
+        {
+          "label": "final",
+          "lsn": "0/86259B0"
+        }
+      ],
+      "outcomes": [
+        {
+          "user": 0,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 1,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 2,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 3,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 4,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 5,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        }
+      ],
+      "limitations": [
+        "Synthetic local trace, not a production CPU/capacity guarantee.",
+        "SQL timings include waits, not CPU.",
+        "OS CPU sampling is cumulative process-time at 10ms precision; exited processes between samples may be missed.",
+        "Fixtures and outcome observer queries excluded from application SQL; observers still use DB resources.",
+        "Legacy counterfactual and simple recaps intentionally differ in general; this no-powerup trace should agree.",
+        "Table statistics excluded: asynchronous flush contains fixture cleanup deltas."
+      ]
+    },
+    {
+      "name": "candidate-release2",
+      "rawSha256": "3b2c1c03d20549a9348517c8d9588ad2af83bad8a5650ed17fca08f49271106b",
+      "revision": "2f8503dda0baacd726b82a65fdd05b486f847836",
+      "sourceFingerprint": "97588129be335bc6c143ec7fa07c7406d8dd397b7440215ca6dab6d57c39789e",
+      "sourceUnchanged": true,
+      "trace": {
+        "users": 6,
+        "sharedRaces": 3,
+        "samplesPerUser": 6,
+        "rawStepsPerUser": 60,
+        "eventSeconds": 1800,
+        "idleSeconds": 65
+      },
+      "success": true,
+      "dbCpuSeconds": 0.8800000000000002,
+      "completionMs": 6088,
+      "phaseSql": {
+        "startup-and-start": {
+          "commands": 314,
+          "elapsedMs": 336.4944540000007
+        },
+        "wait-event-end": {
+          "commands": 114,
+          "elapsedMs": 75.48417199999494
+        },
+        "end": {
+          "commands": 32,
+          "elapsedMs": 16.021876999991946
+        },
+        "app-open-sync-and-recap": {
+          "commands": 513,
+          "elapsedMs": 231.15912499999467
+        },
+        "outcome-http": {
+          "commands": 872,
+          "elapsedMs": 239.77566799994747
+        },
+        "settled-idle": {
+          "commands": 807,
+          "elapsedMs": 433.0095810001003
+        }
+      },
+      "wal": [
+        {
+          "label": "before",
+          "lsn": "0/8642140"
+        },
+        {
+          "label": "before-idle",
+          "lsn": "0/86A7938"
+        },
+        {
+          "label": "after-idle",
+          "lsn": "0/86D06C8"
+        },
+        {
+          "label": "final",
+          "lsn": "0/86D06C8"
+        }
+      ],
+      "outcomes": [
+        {
+          "user": 0,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 1,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 2,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 3,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 4,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 5,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        }
+      ],
+      "limitations": [
+        "Synthetic local trace, not a production CPU/capacity guarantee.",
+        "SQL timings include waits, not CPU.",
+        "OS CPU sampling is cumulative process-time at 10ms precision; exited processes between samples may be missed.",
+        "Fixtures and outcome observer queries excluded from application SQL; observers still use DB resources.",
+        "Legacy counterfactual and simple recaps intentionally differ in general; this no-powerup trace should agree.",
+        "Table statistics excluded: asynchronous flush contains fixture cleanup deltas."
+      ]
+    },
+    {
+      "name": "candidate-release3",
+      "rawSha256": "57e945d89acb9ed184c76b945011d76ee71b72ef46bce492b460470e5b3e984b",
+      "revision": "2f8503dda0baacd726b82a65fdd05b486f847836",
+      "sourceFingerprint": "97588129be335bc6c143ec7fa07c7406d8dd397b7440215ca6dab6d57c39789e",
+      "sourceUnchanged": true,
+      "trace": {
+        "users": 6,
+        "sharedRaces": 3,
+        "samplesPerUser": 6,
+        "rawStepsPerUser": 60,
+        "eventSeconds": 1800,
+        "idleSeconds": 65
+      },
+      "success": true,
+      "dbCpuSeconds": 0.9300000000000003,
+      "completionMs": 6095,
+      "phaseSql": {
+        "startup-and-start": {
+          "commands": 313,
+          "elapsedMs": 341.1939969999934
+        },
+        "wait-event-end": {
+          "commands": 114,
+          "elapsedMs": 62.363085999999385
+        },
+        "end": {
+          "commands": 32,
+          "elapsedMs": 16.337665999999444
+        },
+        "app-open-sync-and-recap": {
+          "commands": 510,
+          "elapsedMs": 270.2575249999645
+        },
+        "outcome-http": {
+          "commands": 872,
+          "elapsedMs": 255.36706799993408
+        },
+        "settled-idle": {
+          "commands": 809,
+          "elapsedMs": 454.5757469999771
+        }
+      },
+      "wal": [
+        {
+          "label": "before",
+          "lsn": "0/86DE828"
+        },
+        {
+          "label": "before-idle",
+          "lsn": "0/8723738"
+        },
+        {
+          "label": "after-idle",
+          "lsn": "0/874E318"
+        },
+        {
+          "label": "final",
+          "lsn": "0/874E318"
+        }
+      ],
+      "outcomes": [
+        {
+          "user": 0,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 1,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 2,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 3,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 4,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        },
+        {
+          "user": 5,
+          "recap": 180,
+          "scores": [
+            120,
+            120,
+            120
+          ]
+        }
+      ],
+      "limitations": [
+        "Synthetic local trace, not a production CPU/capacity guarantee.",
+        "SQL timings include waits, not CPU.",
+        "OS CPU sampling is cumulative process-time at 10ms precision; exited processes between samples may be missed.",
+        "Fixtures and outcome observer queries excluded from application SQL; observers still use DB resources.",
+        "Legacy counterfactual and simple recaps intentionally differ in general; this no-powerup trace should agree.",
+        "Table statistics excluded: asynchronous flush contains fixture cleanup deltas."
+      ]
+    }
+  ]
+}
