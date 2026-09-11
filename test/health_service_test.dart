@@ -26,7 +26,76 @@ class _FakeHealth extends Health {
   }
 }
 
+class _RecapPlatformHealth extends _FakeHealth {
+  _RecapPlatformHealth(super.stepResults, {this.permission = true});
+  final bool? permission;
+  @override
+  Future<bool?> hasPermissions(
+    List<HealthDataType> types, {
+    List<HealthDataAccess>? permissions,
+  }) async => permission;
+  @override
+  Future<List<HealthDataPoint>> getHealthDataFromTypes({
+    required List<HealthDataType> types,
+    Map<HealthDataType, HealthDataUnit>? preferredUnits,
+    required DateTime startTime,
+    required DateTime endTime,
+    List<RecordingMethod> recordingMethodsToFilter = const [],
+  }) async {
+    expect(
+      recordingMethodsToFilter,
+      containsAll([
+        RecordingMethod.automatic,
+        RecordingMethod.active,
+        RecordingMethod.unknown,
+      ]),
+    );
+    return [];
+  }
+}
+
 void main() {
+  for (final android in [false, true]) {
+    for (final steps in <int?>[1000, 0, null]) {
+      test(
+        'recap platform aggregate Android=$android preserves raw $steps and exact UTC window',
+        () async {
+          final native = _RecapPlatformHealth([steps]);
+          final service = HealthService(
+            health: native,
+            isAndroidForTesting: android,
+          );
+          final start = DateTime.utc(2026, 9, 11, 22, 10);
+          final end = start.add(const Duration(minutes: 30));
+          expect(await service.getRawStepsInInterval(start, end), steps);
+          expect(native.capturedStarts, [start]);
+          expect(native.capturedEnds, [end]);
+          expect(native.capturedIncludeManualEntry, [android]);
+        },
+      );
+    }
+  }
+  for (final permission in <bool?>[false, null]) {
+    test(
+      'recap Android permission $permission defers before native aggregate',
+      () async {
+        final native = _RecapPlatformHealth([1000], permission: permission);
+        final service = HealthService(
+          health: native,
+          isAndroidForTesting: true,
+        );
+        final start = DateTime.utc(2026, 9, 11, 22);
+        expect(
+          await service.getRawStepsInInterval(
+            start,
+            start.add(const Duration(minutes: 30)),
+          ),
+          isNull,
+        );
+        expect(native.capturedStarts, isEmpty);
+      },
+    );
+  }
   test('Android null aggregate is an error, never a fabricated zero', () async {
     final service = HealthService(
       health: _FakeHealth([null]),

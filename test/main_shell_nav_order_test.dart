@@ -197,6 +197,155 @@ class _FailingHealthService extends _FakeHealthService {
   Future<StepData> getStepsToday() async => throw StateError('health failed');
 }
 
+class _RecapHealth extends _FakeHealthService {
+  _RecapHealth(this.events, {this.rawSteps = 1000});
+  final List<String> events;
+  int? rawSteps;
+  Completer<int?>? pending;
+  DateTime? start;
+  DateTime? end;
+  List<StepSampleData> samples = [];
+
+  @override
+  Future<List<StepSampleData>> getHourlySteps({
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async => samples;
+
+  @override
+  Future<int?> getRawStepsInInterval(DateTime start, DateTime end) async {
+    events.add('health-window');
+    this.start = start;
+    this.end = end;
+    return pending == null ? rawSteps : pending!.future;
+  }
+}
+
+class _RecapApi extends _FakeBackendApiService {
+  _RecapApi({super.homeInvitePreflight});
+  @override
+  Future<Map<String, dynamic>> fetchFriends({
+    required String identityToken,
+  }) async => {
+    'friends': [],
+    'pending': {'incoming': [], 'outgoing': []},
+  };
+  final List<String> events = [];
+  StepSyncV2Kind syncKind = StepSyncV2Kind.current;
+  Map<String, dynamic>? candidate;
+  Completer<Map<String, dynamic>?>? pendingGet;
+  Completer<Map<String, dynamic>?>? pendingPost;
+  int? postedRaw;
+  String? postedEventId;
+  int? postedRevision;
+  int gets = 0;
+  int posts = 0;
+  Completer<StepSyncV2Result>? pendingSync;
+  bool failSamples = false;
+
+  @override
+  Future<void> recordSteps({
+    required String identityToken,
+    required StepData stepData,
+    bool skipRaceResolution = false,
+  }) async {
+    events.add('legacy-total');
+  }
+
+  @override
+  Future<void> recordStepSamples({
+    required String identityToken,
+    required List<StepSampleData> samples,
+  }) async {
+    events.add('legacy-samples');
+    if (failSamples) throw StateError('sample upload failed');
+  }
+
+  @override
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+    bool homePull = false,
+  }) async {
+    events.add('sync');
+    if (pendingSync != null) return pendingSync!.future;
+    return StepSyncV2Result(kind: syncKind);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> fetchEventRecap({
+    required String identityToken,
+  }) async {
+    events.add('get');
+    gets++;
+    return pendingGet == null ? candidate : pendingGet!.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> finalizeEventRecap({
+    required String identityToken,
+    required String eventId,
+    required int revision,
+    required int rawSteps,
+  }) async {
+    events.add('post');
+    posts++;
+    postedRaw = rawSteps;
+    postedEventId = eventId;
+    postedRevision = revision;
+    if (pendingPost != null) return pendingPost!.future;
+    candidate = rawSteps == 0
+        ? {'state': 'none'}
+        : {
+            'state': 'ready',
+            'globalEventSummary': _globalEventSummary(
+              extraRaceSteps: rawSteps * 3,
+            ),
+          };
+    return candidate;
+  }
+}
+
+Map<String, dynamic> _recapCandidate() {
+  final now = DateTime.now().toUtc();
+  return {
+    'state': 'pending',
+    'event': {
+      'id': 'event-1',
+      'revision': 3,
+      'raceCount': 3,
+      'startsAt': now.subtract(const Duration(minutes: 40)).toIso8601String(),
+      'endsAt': now.subtract(const Duration(minutes: 10)).toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 1)).toIso8601String(),
+    },
+  };
+}
+
+Future<AuthService> _mountRecap(
+  WidgetTester tester,
+  _RecapApi api,
+  _RecapHealth health,
+) async {
+  final auth = await _authService();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('last_seen_whats_new_version', '2.3.0');
+  await tester.pumpWidget(
+    MaterialApp(
+      home: MainShell(
+        authService: auth,
+        healthService: health,
+        backendApiService: api,
+        backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+      ),
+    ),
+  );
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  return auth;
+}
+
 class _GrantHealthOnRequest extends _FakeHealthService {
   @override
   Future<bool> restoreHealthAuthState() async => false;
@@ -675,91 +824,6 @@ class _RacesTabRevealApi extends _FakeBackendApiService {
   }
 }
 
-class _SummaryWorkPollingApi extends _FakeBackendApiService {
-  _SummaryWorkPollingApi({
-    required this.statuses,
-    this.includeRaceJob = false,
-    List<GlobalEventSummaryWorkReceipt?>? syncReceipts,
-  }) : syncReceipts = syncReceipts == null
-           ? null
-           : List<GlobalEventSummaryWorkReceipt?>.of(syncReceipts);
-
-  final List<GlobalEventSummaryWorkStatus?> statuses;
-  final bool includeRaceJob;
-  final List<GlobalEventSummaryWorkReceipt?>? syncReceipts;
-  int workStatusCalls = 0;
-  int raceStatusCalls = 0;
-  int homeRaceCardCalls = 0;
-  int syncCalls = 0;
-  final List<bool> homePulls = [];
-
-  GlobalEventSummaryWorkReceipt get _defaultReceipt =>
-      GlobalEventSummaryWorkReceipt(
-        id: 'summary-work-1',
-        state: GlobalEventSummaryWorkState.waitingRaces,
-        expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-      );
-
-  @override
-  Future<StepSyncV2Result> recordStepSyncV2({
-    required String identityToken,
-    required String idempotencyKey,
-    required Map<String, dynamic> payload,
-    bool homePull = false,
-  }) async {
-    syncCalls++;
-    homePulls.add(homePull);
-    final scriptedReceipts = syncReceipts;
-    final receipt = scriptedReceipts == null
-        ? _defaultReceipt
-        : scriptedReceipts.isEmpty
-        ? null
-        : scriptedReceipts.removeAt(0);
-    return StepSyncV2Result(
-      kind: StepSyncV2Kind.current,
-      jobId: includeRaceJob ? 'race-job-1' : null,
-      generation: includeRaceJob ? 7 : null,
-      globalEventSummaryWork: receipt,
-    );
-  }
-
-  @override
-  Future<GlobalEventSummaryWorkStatus?> fetchGlobalEventSummaryWorkStatus({
-    required String identityToken,
-    required String workId,
-  }) async {
-    workStatusCalls++;
-    if (statuses.isEmpty) return null;
-    return statuses.removeAt(0);
-  }
-
-  @override
-  Future<RaceResolutionStatus> fetchRaceResolutionStatus({
-    required String identityToken,
-    required String jobId,
-    required int generation,
-  }) async {
-    raceStatusCalls++;
-    return const RaceResolutionStatus(RaceResolutionState.queued);
-  }
-
-  @override
-  Future<Map<String, dynamic>> fetchHomeRaceCard({
-    required String identityToken,
-    bool usePersistedTotals = false,
-  }) async {
-    homeRaceCardCalls++;
-    return {
-      'state': 'EMPTY',
-      if (homeRaceCardCalls >= 2)
-        'globalEventSummary': _globalEventSummary(
-          id: 'summary-from-work',
-          validForMs: 3600000,
-        ),
-    };
-  }
-}
-
 class _SyncRefreshApi extends _FakeBackendApiService {
   int fullCalls = 0;
   int narrowCalls = 0;
@@ -770,14 +834,14 @@ class _SyncRefreshApi extends _FakeBackendApiService {
   final Completer<RaceResolutionStatus> completion = Completer();
   final Completer<Map<String, dynamic>> narrow = Completer();
   bool resolved = true;
-  bool includeSummaryWork = false;
   int friendsCalls = 0;
   int catalogCalls = 0;
   final List<Future<Map<String, dynamic>>> fullScripts = [];
   final List<Future<Map<String, dynamic>>> narrowScripts = [];
   final List<Future<Map<String, dynamic>>> catalogScripts = [];
   final List<Future<Map<String, dynamic>>> friendScripts = [];
-  final Completer<GlobalEventSummaryWorkStatus?> summaryStatus = Completer();
+  final Completer<Map<String, dynamic>?> recap = Completer();
+  bool deferRecap = false;
 
   Map<String, dynamic> get fullPayload => {
     'contract': 'home-shell-v1',
@@ -811,15 +875,13 @@ class _SyncRefreshApi extends _FakeBackendApiService {
       kind: StepSyncV2Kind.current,
       jobId: 'job',
       generation: 1,
-      globalEventSummaryWork: includeSummaryWork ? _summaryWorkReceipt() : null,
     );
   }
 
   @override
-  Future<GlobalEventSummaryWorkStatus?> fetchGlobalEventSummaryWorkStatus({
+  Future<Map<String, dynamic>?> fetchEventRecap({
     required String identityToken,
-    required String workId,
-  }) => summaryStatus.future;
+  }) async => deferRecap ? recap.future : null;
 
   @override
   Future<RaceResolutionStatus> fetchRaceResolutionStatus({
@@ -921,14 +983,6 @@ Map<String, dynamic> _globalEventSummary({
   'expiresAt': expiresAt,
   'validForMs': validForMs,
 };
-
-GlobalEventSummaryWorkReceipt _summaryWorkReceipt({DateTime? expiresAt}) =>
-    GlobalEventSummaryWorkReceipt(
-      id: 'summary-work-1',
-      state: GlobalEventSummaryWorkState.waitingRaces,
-      expiresAt:
-          expiresAt ?? DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
 
 class _AccountSwitchRaceCardApi extends _FakeBackendApiService {
   final Completer<Map<String, dynamic>> oldAccount = Completer();
@@ -1198,6 +1252,383 @@ class _RecordingInterstitialCoordinator
 }
 
 void main() {
+  testWidgets(
+    'simple recap syncs then reads exact event window and saves once',
+    (tester) async {
+      final api = _RecapApi()..candidate = _recapCandidate();
+      final window = api.candidate!['event'] as Map;
+      final health = _RecapHealth(api.events);
+      await _mountRecap(tester, api, health);
+      expect(api.events, ['sync', 'get', 'health-window', 'post']);
+      expect(health.start, DateTime.parse(window['startsAt']));
+      expect(health.end, DateTime.parse(window['endsAt']));
+      expect(api.postedRaw, 1000);
+      expect(api.postedEventId, 'event-1');
+      expect(api.postedRevision, 3);
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      expect(find.text('+3,000 steps'), findsOneWidget);
+      expect(find.text('extra steps gained across all races'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(api.globalSummaryAckCalls, 1);
+      await tester.pump(const Duration(seconds: 20));
+      expect(api.gets, 1);
+      expect(api.posts, 1);
+    },
+  );
+
+  for (final kind in [
+    StepSyncV2Kind.failed,
+    StepSyncV2Kind.ambiguousFailure,
+    StepSyncV2Kind.persistedStatusUnknown,
+    StepSyncV2Kind.cooldown,
+  ]) {
+    testWidgets('simple recap defers after $kind sync', (tester) async {
+      final api = _RecapApi()
+        ..candidate = _recapCandidate()
+        ..syncKind = kind;
+      await _mountRecap(tester, api, _RecapHealth(api.events));
+      expect(api.gets, 0);
+      expect(api.posts, 0);
+      expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    });
+  }
+
+  for (final raw in <int?>[null, 0]) {
+    testWidgets('simple recap distinguishes raw $raw from failure', (
+      tester,
+    ) async {
+      final api = _RecapApi()..candidate = _recapCandidate();
+      await _mountRecap(tester, api, _RecapHealth(api.events, rawSteps: raw));
+      expect(api.gets, 1);
+      expect(api.posts, raw == null ? 0 : 1);
+      expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    });
+  }
+
+  testWidgets('simple recap discards health response after sign-out', (
+    tester,
+  ) async {
+    final api = _RecapApi()..candidate = _recapCandidate();
+    final health = _RecapHealth(api.events)..pending = Completer<int?>();
+    final auth = await _mountRecap(tester, api, health);
+    expect(api.gets, 1);
+    await auth.signOut();
+    health.pending!.complete(1000);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.posts, 0);
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+  });
+
+  for (final response in <Map<String, dynamic>?>[
+    null,
+    {},
+    {'state': 'none'},
+    {'state': 'unknown'},
+    {'state': 'pending'},
+    {
+      'state': 'pending',
+      'event': {'id': 'event-1'},
+    },
+    {'state': 'ready', 'globalEventSummary': null},
+  ]) {
+    testWidgets('simple recap malformed or unavailable $response defers', (
+      tester,
+    ) async {
+      final api = _RecapApi()..candidate = response;
+      await _mountRecap(tester, api, _RecapHealth(api.events));
+      expect(api.events, ['sync', 'get']);
+      expect(api.posts, 0);
+      expect(find.byType(HomeTab), findsOneWidget);
+      expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    });
+  }
+
+  testWidgets('simple recap never reads an expired previous-day candidate', (
+    tester,
+  ) async {
+    final candidate = _recapCandidate();
+    final event = candidate['event'] as Map;
+    final yesterday = DateTime.now().toUtc().subtract(const Duration(days: 1));
+    event['startsAt'] = yesterday
+        .subtract(const Duration(hours: 1))
+        .toIso8601String();
+    event['endsAt'] = yesterday
+        .subtract(const Duration(minutes: 30))
+        .toIso8601String();
+    event['expiresAt'] = yesterday.toIso8601String();
+    final api = _RecapApi()..candidate = candidate;
+    await _mountRecap(tester, api, _RecapHealth(api.events));
+    expect(api.events, ['sync', 'get']);
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+  });
+
+  testWidgets('simple recap coalesces refresh while window read is pending', (
+    tester,
+  ) async {
+    final api = _RecapApi()..candidate = _recapCandidate();
+    final health = _RecapHealth(api.events)..pending = Completer<int?>();
+    await _mountRecap(tester, api, health);
+    final refresh = tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh();
+    await tester.pump();
+    await refresh;
+    expect(api.gets, 1);
+    expect(api.events.where((e) => e == 'health-window').length, 1);
+    health.pending!.complete(1000);
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(api.posts, 1);
+    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  for (final retry in ['refresh', 'resume']) {
+    testWidgets('simple recap retries missing input only on a later $retry', (
+      tester,
+    ) async {
+      final api = _RecapApi()..candidate = _recapCandidate();
+      final health = _RecapHealth(api.events, rawSteps: null);
+      await _mountRecap(tester, api, health);
+      await tester.pump(const Duration(seconds: 20));
+      expect(api.gets, 1);
+      health.rawSteps = 1000;
+      if (retry == 'refresh') {
+        await tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh();
+      } else {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(api.gets, 2);
+      expect(api.posts, 1);
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 400));
+    });
+  }
+
+  for (final boundary in ['sync', 'get', 'health', 'post']) {
+    for (final interruption in [
+      'sign-out',
+      'account switch',
+      'dispose',
+      'background',
+    ]) {
+      testWidgets('simple recap discards $boundary after $interruption', (
+        tester,
+      ) async {
+        final api = _RecapApi()..candidate = _recapCandidate();
+        if (boundary == 'sync') api.pendingSync = Completer<StepSyncV2Result>();
+        if (boundary == 'get') {
+          api.pendingGet = Completer<Map<String, dynamic>?>();
+        }
+        if (boundary == 'post') {
+          api.pendingPost = Completer<Map<String, dynamic>?>();
+        }
+        final health = _RecapHealth(api.events);
+        if (boundary == 'health') health.pending = Completer<int?>();
+        final auth = await _mountRecap(tester, api, health);
+        if (interruption == 'sign-out') await auth.signOut();
+        if (interruption == 'account switch') {
+          await auth.updateSessionToken('other-account-token');
+          await auth.syncFromBackendUser({
+            'id': 'other-account',
+          }, authoritative: true);
+        }
+        if (interruption == 'dispose') {
+          await tester.pumpWidget(const SizedBox());
+        }
+        if (interruption == 'background') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.paused,
+          );
+        }
+        if (boundary == 'sync') {
+          api.pendingSync!.complete(
+            const StepSyncV2Result(kind: StepSyncV2Kind.current),
+          );
+        }
+        if (boundary == 'get') api.pendingGet!.complete(_recapCandidate());
+        if (boundary == 'health') health.pending!.complete(1000);
+        if (boundary == 'post') {
+          api.pendingPost!.complete({
+            'state': 'ready',
+            'globalEventSummary': _globalEventSummary(),
+          });
+        }
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(api.posts, boundary == 'post' ? 1 : 0);
+        expect(find.text('2× STEPS COMPLETE'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      });
+    }
+  }
+
+  testWidgets('simple recap background five-minute sync does not recalculate', (
+    tester,
+  ) async {
+    final api = _RecapApi()..candidate = _recapCandidate();
+    await _mountRecap(tester, api, _RecapHealth(api.events, rawSteps: null));
+    await tester.pump(const Duration(minutes: 5));
+    await tester.pump();
+    expect(api.events.where((e) => e == 'sync').length, 2);
+    expect(api.gets, 1);
+    expect(api.posts, 0);
+  });
+
+  testWidgets(
+    'simple recap precedes Home invitations without blocking Home rendering',
+    (tester) async {
+      final api = _RecapApi(
+        homeInvitePreflight: {
+          'resolved': true,
+          'invites': [
+            {
+              'kind': 'RACE',
+              'id': 'invite-1',
+              'name': 'After Recap',
+              'status': 'PENDING',
+            },
+          ],
+        },
+      )..candidate = _recapCandidate();
+      final health = _RecapHealth(api.events)..pending = Completer<int?>();
+      await _mountRecap(tester, api, health);
+      expect(find.byType(HomeTab), findsOneWidget);
+      expect(api.homeInvitePreflightCalls, 0);
+      expect(find.text('After Recap'), findsNothing);
+      health.pending!.complete(1000);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      expect(find.text('After Recap'), findsNothing);
+      await tester.tap(find.text('CONTINUE'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(api.homeInvitePreflightCalls, 1);
+      expect(find.text('After Recap'), findsOneWidget);
+    },
+  );
+  for (final failed in [false, true]) {
+    testWidgets(
+      'simple recap requires complete legacy sync when samples fail=$failed',
+      (tester) async {
+        final api = _RecapApi()
+          ..candidate = _recapCandidate()
+          ..syncKind = StepSyncV2Kind.unsupported
+          ..failSamples = failed;
+        final health = _RecapHealth(api.events)
+          ..samples = [
+            StepSampleData(
+              periodStart: DateTime.utc(2026, 9, 11, 10),
+              periodEnd: DateTime.utc(2026, 9, 11, 11),
+              steps: 200,
+            ),
+          ];
+        await _mountRecap(tester, api, health);
+        expect(api.events.take(3), ['sync', 'legacy-total', 'legacy-samples']);
+        expect(api.gets, failed ? 0 : 1);
+        expect(api.posts, failed ? 0 : 1);
+        if (failed) {
+          expect(find.byType(HomeTab), findsOneWidget);
+          expect(find.text('2× STEPS COMPLETE'), findsNothing);
+        } else {
+          expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+          await tester.tap(find.text('CONTINUE'));
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+      },
+    );
+  }
+
+  testWidgets('simple recap coalesces cold-open and immediate resume sync', (
+    tester,
+  ) async {
+    final api = _RecapApi()
+      ..candidate = _recapCandidate()
+      ..pendingSync = Completer<StepSyncV2Result>();
+    await _mountRecap(tester, api, _RecapHealth(api.events));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(api.events, ['sync']);
+    api.pendingSync!.complete(
+      const StepSyncV2Result(kind: StepSyncV2Kind.current),
+    );
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(api.events, ['sync', 'get', 'health-window', 'post']);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('simple recap gets its chance before the version changelog', (
+    tester,
+  ) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'com.rohanchari.steptracker',
+      version: '2.3.8',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+    final api = _RecapApi()..candidate = _recapCandidate();
+    final health = _RecapHealth(api.events)..pending = Completer<int?>();
+    await _mountRecap(tester, api, health);
+    expect(find.byType(HomeTab), findsOneWidget);
+    expect(find.byKey(const Key('whats-new-sheet')), findsNothing);
+    health.pending!.complete(1000);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+    expect(find.byKey(const Key('whats-new-sheet')), findsNothing);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets(
+    'simple recap finishing in background cannot open the next invite',
+    (tester) async {
+      final api = _RecapApi(
+        homeInvitePreflight: {
+          'resolved': true,
+          'invites': [
+            {
+              'kind': 'RACE',
+              'id': 'invite-1',
+              'name': 'After Recap',
+              'status': 'PENDING',
+            },
+          ],
+        },
+      )..candidate = _recapCandidate();
+      final health = _RecapHealth(api.events)..pending = Completer<int?>();
+      await _mountRecap(tester, api, health);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      health.pending!.complete(1000);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(api.posts, 0);
+      expect(api.homeInvitePreflightCalls, 0);
+      expect(find.text('After Recap'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    },
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -1456,21 +1887,12 @@ void main() {
     expect(api.catalogCalls, 0);
   });
 
-  testWidgets('summary receipt survives full response older than narrow core', (
+  testWidgets('direct saved recap survives a newer narrow Home core', (
     tester,
   ) async {
-    final api = _SyncRefreshApi()..includeSummaryWork = true;
+    final api = _SyncRefreshApi()..deferRecap = true;
     await _mountSyncRefresh(tester, api);
-    final summaryHome = Completer<Map<String, dynamic>>();
-    api.fullScripts.add(summaryHome.future);
-    api.summaryStatus.complete(
-      GlobalEventSummaryWorkStatus(
-        state: GlobalEventSummaryWorkState.created,
-        expiresAt: DateTime.now().add(const Duration(hours: 1)),
-      ),
-    );
-    await tester.pump();
-    expect(api.fullCalls, 2);
+    expect(api.fullCalls, 1);
     api.completion.complete(
       const RaceResolutionStatus(RaceResolutionState.succeeded),
     );
@@ -1481,8 +1903,8 @@ void main() {
       'retainedSections': ['presentation', 'friends'],
     });
     await tester.pump();
-    summaryHome.complete({
-      ...api.fullPayload,
+    api.recap.complete({
+      'state': 'ready',
       'globalEventSummary': _globalEventSummary(),
     });
     for (var i = 0; i < 5; i++) {
@@ -1561,7 +1983,7 @@ void main() {
   testWidgets('new full response wins over an older narrow response', (
     tester,
   ) async {
-    final api = _SyncRefreshApi()..includeSummaryWork = true;
+    final api = _SyncRefreshApi();
     await _mountSyncRefresh(tester, api);
     api.completion.complete(
       const RaceResolutionStatus(RaceResolutionState.succeeded),
@@ -1570,12 +1992,7 @@ void main() {
     api.fullScripts.add(
       Future.value({...api.fullPayload, 'inboxUnreadCount': 2}),
     );
-    api.summaryStatus.complete(
-      GlobalEventSummaryWorkStatus(
-        state: GlobalEventSummaryWorkState.created,
-        expiresAt: DateTime.now().add(const Duration(hours: 1)),
-      ),
-    );
+    unawaited(tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh());
     await tester.pump();
     api.narrow.complete({
       'contract': 'home-sync-refresh-v1',
@@ -1590,6 +2007,8 @@ void main() {
       2,
     );
     expect(api.fullCalls, 2);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('retaining a narrow result never renews the shell age', (
@@ -1686,16 +2105,11 @@ void main() {
   testWidgets('acknowledged summary cannot reopen from a stale full receipt', (
     tester,
   ) async {
-    final api = _SyncRefreshApi()..includeSummaryWork = true;
+    final api = _SyncRefreshApi();
     await _mountSyncRefresh(tester, api);
     final late = Completer<Map<String, dynamic>>();
     api.fullScripts.add(late.future);
-    api.summaryStatus.complete(
-      GlobalEventSummaryWorkStatus(
-        state: GlobalEventSummaryWorkState.created,
-        expiresAt: DateTime.now().add(const Duration(hours: 1)),
-      ),
-    );
+    unawaited(tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh());
     await tester.pump();
     api.completion.complete(
       const RaceResolutionStatus(RaceResolutionState.succeeded),
@@ -1726,6 +2140,8 @@ void main() {
     }
     expect(find.text('2× STEPS COMPLETE'), findsNothing);
     expect(api.globalSummaryAckCalls, 1);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('pending invite optional malformed data degrades safely', (
@@ -1872,8 +2288,11 @@ void main() {
     testWidgets(
       'standalone friends replacing full shell ${duringNarrow ? 'during narrow' : 'before completion'} requires full catch-up',
       (tester) async {
-        final api = _SyncRefreshApi()..includeSummaryWork = true;
+        final api = _SyncRefreshApi();
         await _mountSyncRefresh(tester, api);
+        final refreshHome = tester
+            .widget<HomeTab>(find.byType(HomeTab))
+            .onRefresh;
         final independent = Completer<Map<String, dynamic>>();
         api.friendScripts.add(independent.future);
         final children =
@@ -1888,17 +2307,14 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         expect(api.friendsCalls, 1);
-        api.summaryStatus.complete(
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.created,
-            expiresAt: DateTime.now().add(const Duration(hours: 1)),
-          ),
-        );
+        unawaited(refreshHome());
         await tester.pump();
         expect(api.fullCalls, 2);
         tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(0);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
+        // The replacement trigger is a real sync and therefore creates an
+        // ordinary 750 ms race poll; let it reach its pending status read.
+        await tester.pump(const Duration(milliseconds: 800));
         if (duringNarrow) {
           api.completion.complete(
             const RaceResolutionStatus(RaceResolutionState.succeeded),
@@ -1948,20 +2364,13 @@ void main() {
   testWidgets(
     'standalone catalog replacing full presentation requires full catch-up',
     (tester) async {
-      final api = _SyncRefreshApi()
-        ..resolved = false
-        ..includeSummaryWork = true;
+      final api = _SyncRefreshApi()..resolved = false;
       final catalog = Completer<Map<String, dynamic>>();
       api.catalogScripts.add(catalog.future);
       await _mountSyncRefresh(tester, api);
       expect(api.catalogCalls, 1);
       api.resolved = true;
-      api.summaryStatus.complete(
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.created,
-          expiresAt: DateTime.now().add(const Duration(hours: 1)),
-        ),
-      );
+      unawaited(tester.widget<HomeTab>(find.byType(HomeTab)).onRefresh());
       await tester.pump();
       expect(api.fullCalls, 2);
       catalog.complete({'coins': 123, 'equipped': {}, 'items': []});
@@ -3031,7 +3440,7 @@ void main() {
     expect(tester.getRect(coins).top, greaterThan(tester.getRect(name).bottom));
   });
 
-  testWidgets('mixed net-zero 2x summary remains eligible on Home', (
+  testWidgets('nonpositive 2x recap is suppressed on Home', (
     WidgetTester tester,
   ) async {
     final authService = await _authService();
@@ -3060,11 +3469,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
-    expect(find.textContaining('net 0'), findsOneWidget);
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(api.globalSummaryAckCalls, 1);
+    expect(find.text('2× STEPS COMPLETE'), findsNothing);
+    expect(find.textContaining('net 0'), findsNothing);
+    expect(api.globalSummaryAckCalls, 0);
   });
 
   testWidgets(
@@ -3272,445 +3679,6 @@ void main() {
 
     expect(find.text('2× STEPS COMPLETE'), findsNothing);
     expect(find.byType(HomeTab), findsOneWidget);
-  });
-
-  testWidgets(
-    'fast device clock cannot suppress work polling or CREATED Home refetch',
-    (WidgetTester tester) async {
-      final authService = await _authService();
-      final locallyPast = DateTime.utc(2000, 1, 1);
-      final api = _SummaryWorkPollingApi(
-        statuses: [
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.created,
-            expiresAt: locallyPast,
-          ),
-        ],
-        syncReceipts: [_summaryWorkReceipt(expiresAt: locallyPast)],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 750));
-      await tester.pump();
-
-      expect(api.workStatusCalls, 1);
-      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
-      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
-      await tester.tap(find.text('CONTINUE'));
-      await tester.pump(const Duration(milliseconds: 350));
-    },
-  );
-
-  testWidgets(
-    'slow device clock still lets server CREATED drive Home refetch',
-    (WidgetTester tester) async {
-      final authService = await _authService();
-      final locallyFarFuture = DateTime.utc(2099, 1, 1);
-      final api = _SummaryWorkPollingApi(
-        statuses: [
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.created,
-            expiresAt: locallyFarFuture,
-          ),
-        ],
-        syncReceipts: [_summaryWorkReceipt(expiresAt: locallyFarFuture)],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 750));
-      await tester.pump();
-
-      expect(api.workStatusCalls, 1);
-      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
-      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
-      await tester.tap(find.text('CONTINUE'));
-      await tester.pump(const Duration(milliseconds: 350));
-    },
-  );
-
-  testWidgets(
-    'server EXPIRED_UNDELIVERED stops work despite a locally future deadline',
-    (WidgetTester tester) async {
-      final authService = await _authService();
-      final locallyFarFuture = DateTime.utc(2099, 1, 1);
-      final api = _SummaryWorkPollingApi(
-        statuses: [
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.expiredUndelivered,
-            expiresAt: locallyFarFuture,
-          ),
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.created,
-            expiresAt: locallyFarFuture,
-          ),
-        ],
-        syncReceipts: [_summaryWorkReceipt(expiresAt: locallyFarFuture)],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 750));
-      await tester.pump(const Duration(seconds: 10));
-
-      expect(api.workStatusCalls, 1);
-      expect(api.homeRaceCardCalls, 1);
-      expect(find.text('2× STEPS COMPLETE'), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'summary work polls past race cadence and CREATED independently refetches Home',
-    (WidgetTester tester) async {
-      final authService = await _authService();
-      final waiting = GlobalEventSummaryWorkStatus(
-        state: GlobalEventSummaryWorkState.waitingRaces,
-        expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-      );
-      final api = _SummaryWorkPollingApi(
-        includeRaceJob: true,
-        statuses: [
-          waiting,
-          waiting,
-          waiting,
-          waiting,
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.created,
-            expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
-        ),
-      );
-      for (final delay in const [
-        Duration(milliseconds: 750),
-        Duration(milliseconds: 1500),
-        Duration(seconds: 3),
-        Duration(seconds: 5),
-        Duration(seconds: 5),
-      ]) {
-        await tester.pump(delay);
-        await tester.pump();
-      }
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      expect(api.workStatusCalls, 5);
-      expect(api.raceStatusCalls, lessThan(api.workStatusCalls));
-      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
-      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
-      await tester.tap(find.text('CONTINUE'));
-      await tester.pump(const Duration(milliseconds: 350));
-    },
-  );
-
-  testWidgets('terminal summary work state stops polling without UI', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(
-      statuses: [
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.allZero,
-          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 750));
-    await tester.pump(const Duration(seconds: 10));
-
-    expect(api.workStatusCalls, 1);
-    expect(api.homeRaceCardCalls, 1);
-    expect(find.text('2× STEPS COMPLETE'), findsNothing);
-  });
-
-  testWidgets('failed summary work status read stops polling without UI', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(statuses: [null]);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 750));
-    await tester.pump(const Duration(seconds: 10));
-
-    expect(api.workStatusCalls, 1);
-    expect(find.text('2× STEPS COMPLETE'), findsNothing);
-  });
-
-  testWidgets('backgrounding cancels summary work polling', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(
-      statuses: [
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.waitingRaces,
-          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    await tester.pump(const Duration(seconds: 2));
-
-    expect(api.workStatusCalls, 0);
-  });
-
-  testWidgets(
-    'paused summary work is retained and polling restarts on resume',
-    (WidgetTester tester) async {
-      final authService = await _authService();
-      final api = _SummaryWorkPollingApi(
-        statuses: [
-          GlobalEventSummaryWorkStatus(
-            state: GlobalEventSummaryWorkState.created,
-            expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-          ),
-        ],
-        // The resume sync deliberately has no receipt. Polling can only restart
-        // if the shell retained the first active receipt while paused.
-        syncReceipts: [_summaryWorkReceipt(), null],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MainShell(
-            authService: authService,
-            healthService: _FakeHealthService(),
-            backendApiService: api,
-            backgroundSyncBootstrapService:
-                _FakeBackgroundSyncBootstrapService(),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump(const Duration(seconds: 2));
-      expect(api.workStatusCalls, 0);
-
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump(const Duration(milliseconds: 750));
-      await tester.pump();
-
-      expect(api.workStatusCalls, 1);
-      expect(api.homeRaceCardCalls, greaterThanOrEqualTo(2));
-      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
-      await tester.tap(find.text('CONTINUE'));
-      await tester.pump(const Duration(milliseconds: 350));
-    },
-  );
-
-  testWidgets('hidden summary work cancels polling and restarts on resume', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(
-      statuses: [
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.created,
-          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-        ),
-      ],
-      syncReceipts: [_summaryWorkReceipt(), null],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-    await tester.pump(const Duration(seconds: 2));
-    expect(api.workStatusCalls, 0);
-
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pump(const Duration(milliseconds: 750));
-    await tester.pump();
-    expect(api.workStatusCalls, 1);
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump(const Duration(milliseconds: 350));
-  });
-
-  testWidgets('later Home pull receipt starts existing WAITING_RACES work', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(
-      statuses: [
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.created,
-          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-        ),
-      ],
-      // Models a recreated process whose first sync sees no work, followed by
-      // the backend returning the existing active row on a later Home pull.
-      syncReceipts: [null, _summaryWorkReceipt()],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 500));
-    final home = tester.widget<HomeTab>(find.byType(HomeTab));
-    await home.onRefresh();
-    expect(api.homePulls, contains(true));
-
-    await tester.pump(const Duration(milliseconds: 750));
-    await tester.pump();
-    expect(api.workStatusCalls, 1);
-    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump(const Duration(milliseconds: 350));
-  });
-
-  testWidgets('terminal summary work is not restarted after resume', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(
-      statuses: [
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.unscorable,
-          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-        ),
-      ],
-      syncReceipts: [_summaryWorkReceipt(), null],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 750));
-    await tester.pump();
-    expect(api.workStatusCalls, 1);
-
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pump(const Duration(seconds: 2));
-
-    expect(api.workStatusCalls, 1);
-    expect(find.text('2× STEPS COMPLETE'), findsNothing);
-  });
-
-  testWidgets('sign-out cancels summary work polling', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _authService();
-    final api = _SummaryWorkPollingApi(
-      statuses: [
-        GlobalEventSummaryWorkStatus(
-          state: GlobalEventSummaryWorkState.waitingRaces,
-          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: api,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-        ),
-      ),
-    );
-    await tester.pump();
-    await authService.signOut();
-    await tester.pump(const Duration(seconds: 2));
-
-    expect(api.workStatusCalls, 0);
   });
 
   testWidgets('Home loads suggestions without Races discovery fan-out', (

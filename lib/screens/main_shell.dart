@@ -156,8 +156,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _independentGlobalSummaryId;
   final Set<String> _consumedGlobalSummaryIds = {};
   Timer? _globalSummaryExpiryTimer;
-  int _globalSummaryWorkPollToken = 0;
-  _ActiveGlobalEventSummaryWork? _activeGlobalEventSummaryWork;
+  Future<void>? _eventRecapInFlight;
   AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
 
   int _currentTab = 0;
@@ -888,18 +887,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _shopCatalogState = const Loadable.initial();
         _pendingGlobalEventSummary = null;
         _independentGlobalSummaryId = null;
+        _eventRecapInFlight = null;
         _globalSummaryExpiryTimer?.cancel();
         _globalSummaryExpiryTimer = null;
-        _activeGlobalEventSummaryWork = null;
         _stepDataState = const Loadable.initial();
       }
     });
-    if (userChanged || nextToken == null || nextToken.isEmpty) {
-      _globalSummaryWorkPollToken += 1;
-      if (nextToken == null || nextToken.isEmpty) {
-        _activeGlobalEventSummaryWork = null;
-      }
-    }
     // A cold-start suggestions request can begin before /me establishes the
     // backend user id. setUser intentionally invalidates that response so it
     // cannot cross accounts; immediately replace it for the newly known user.
@@ -1206,7 +1199,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
     _homeSuggestionDeadlines.clear();
     _jobPollToken += 1; // invalidate any in-flight job polling loop
-    _globalSummaryWorkPollToken += 1;
     _globalSummaryExpiryTimer?.cancel();
     _pageController.dispose();
     _bannerHeight.dispose();
@@ -1731,7 +1723,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _interstitialCoordinator?.didResume();
         _maybeWarmRaceDetail();
         _resumeGetCoinsWarm();
-        _restartActiveGlobalEventSummaryWorkPolling();
         unawaited(
           _adminMetricsTelemetry.didResume(
             widget.authService.authToken,
@@ -1787,11 +1778,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _stopForegroundPolling();
-      // Stop background job polling so a paused/hidden app issues no requests
-      // or leaks timers (§6.5). Active summary work is retained and restarted
-      // on resume; only the owner status endpoint can terminalize it.
+      // Stop ordinary race job polling while paused/hidden (§6.5).
       _jobPollToken += 1;
-      _globalSummaryWorkPollToken += 1;
     }
   }
 
@@ -1969,8 +1957,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _shopCatalogCache.clear();
         _backendApiService.resetSessionCapabilities();
         _jobPollToken += 1; // cancel any in-flight job polling
-        _globalSummaryWorkPollToken += 1;
-        _activeGlobalEventSummaryWork = null;
         await widget.authService.signOut();
         if (!mounted) return false;
 
@@ -2243,7 +2229,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final outcome = await _persistSteps();
-      _startGlobalEventSummaryWorkPollingIfPresent(outcome);
       setState(() {
         _isLoading = false;
         _error = null;
@@ -2334,8 +2319,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
 
     if (v2.shouldLegacyFallback) {
-      final ok = await _legacySyncSteps(identityToken, stepData, hourlySamples);
-      return _StepSyncOutcome(persisted: ok, error: !ok);
+      final legacy = await _legacySyncSteps(
+        identityToken,
+        stepData,
+        hourlySamples,
+      );
+      return _StepSyncOutcome(
+        persisted: legacy.persisted,
+        error: !legacy.persisted,
+        recapEligible: legacy.recapEligible,
+      );
     }
 
     if (v2.isCooldown) {
@@ -2356,14 +2349,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       error: v2.isError,
       jobId: v2.jobId,
       generation: v2.generation,
-      globalEventSummaryWork: v2.globalEventSummaryWork,
+      recapEligible:
+          v2.kind == StepSyncV2Kind.current ||
+          v2.kind == StepSyncV2Kind.deferred,
     );
   }
 
   /// The pre-existing synchronous step flow, reused only when sync-v2 is
   /// unsupported or async is disabled. Retries the daily post once on a
   /// cold-start blip, then posts hourly samples best-effort.
-  Future<bool> _legacySyncSteps(
+  Future<({bool persisted, bool recapEligible})> _legacySyncSteps(
     String identityToken,
     StepData stepData,
     List<StepSampleData> hourlySamples,
@@ -2377,6 +2372,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
 
     var syncFailed = false;
+    var samplesFailed = false;
     try {
       await pushSteps();
     } catch (_) {
@@ -2395,11 +2391,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           samples: hourlySamples,
         );
       } catch (_) {
-        // Don't fail the main sync if hourly samples fail; the next sync
-        // re-resolves.
+        // Preserve normal best-effort Home behavior, but partial sample
+        // persistence cannot finalize an event recap.
+        samplesFailed = true;
       }
     }
-    return !syncFailed;
+    return (
+      persisted: !syncFailed,
+      recapEligible: !syncFailed && !samplesFailed,
+    );
   }
 
   /// Polls the durable race-resolution job at 750 ms, 1.5 s, 3 s, 5 s while
@@ -2453,113 +2453,81 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     unawaited(poll(0));
   }
 
-  void _startGlobalEventSummaryWorkPollingIfPresent(_StepSyncOutcome outcome) {
-    final work = outcome.globalEventSummaryWork;
-    if (work != null) _acceptGlobalEventSummaryWorkReceipt(work);
-  }
-
-  /// Polls summary readiness independently of the race-resolution job. The
-  /// first three waits back off; later requests remain serialized and no more
-  /// frequent than once every five seconds until the server reports a terminal
-  /// state, or lifecycle/auth changes suspend the work.
-  void _acceptGlobalEventSummaryWorkReceipt(
-    GlobalEventSummaryWorkReceipt receipt,
-  ) {
-    final authToken = widget.authService.authToken;
-    if (authToken == null || authToken.isEmpty) {
-      _activeGlobalEventSummaryWork = null;
-      _globalSummaryWorkPollToken += 1;
-      return;
-    }
-
-    if (receipt.state.isCreated) {
-      _activeGlobalEventSummaryWork = null;
-      _globalSummaryWorkPollToken += 1;
-      unawaited(_refetchHomeForCreatedGlobalEventSummary());
-      return;
-    }
-    if (receipt.state.isTerminal) {
-      _activeGlobalEventSummaryWork = null;
-      _globalSummaryWorkPollToken += 1;
-      return;
-    }
-
-    final existing = _activeGlobalEventSummaryWork;
-    final active = existing != null && existing.id == receipt.id
-        ? (existing..applyServerStatus(receipt))
-        : _ActiveGlobalEventSummaryWork.fromReceipt(receipt);
-    _activeGlobalEventSummaryWork = active;
-    _startActiveGlobalEventSummaryWorkPolling(active);
-  }
-
-  void _restartActiveGlobalEventSummaryWorkPolling() {
-    final active = _activeGlobalEventSummaryWork;
-    if (active == null) return;
-    _startActiveGlobalEventSummaryWorkPolling(active);
-  }
-
-  void _startActiveGlobalEventSummaryWorkPolling(
-    _ActiveGlobalEventSummaryWork active,
-  ) {
-    if (_appLifecycleState == AppLifecycleState.paused ||
-        _appLifecycleState == AppLifecycleState.hidden) {
-      return;
-    }
-    final token = ++_globalSummaryWorkPollToken;
-
-    const initialSchedule = [
-      Duration(milliseconds: 750),
-      Duration(milliseconds: 1500),
-      Duration(seconds: 3),
-    ];
-
-    Future<void> poll(int index) async {
-      final delay = index < initialSchedule.length
-          ? initialSchedule[index]
-          : const Duration(seconds: 5);
-      await Future<void>.delayed(delay);
-      final authToken = widget.authService.authToken;
-      if (!mounted ||
-          token != _globalSummaryWorkPollToken ||
-          !identical(active, _activeGlobalEventSummaryWork) ||
-          authToken == null ||
-          authToken.isEmpty) {
-        return;
+  /// Once per successful foreground open/refresh, never a timer or background
+  /// sync side effect. Coalesced separately so optional Health/network work
+  /// cannot hold Home rendering or its refresh indicator hostage.
+  Future<void> _loadEventRecap({bool coordinateAfter = true}) {
+    final existing = _eventRecapInFlight;
+    if (existing != null) return existing;
+    final accountRevision = _homeAccountRevision;
+    late final Future<void> request;
+    request = _loadEventRecapInner().whenComplete(() {
+      if (identical(_eventRecapInFlight, request)) {
+        _eventRecapInFlight = null;
+        if (coordinateAfter &&
+            mounted &&
+            accountRevision == _homeAccountRevision &&
+            _appLifecycleState != AppLifecycleState.paused &&
+            _appLifecycleState != AppLifecycleState.hidden) {
+          unawaited(_coordinateHomeOverlays());
+        }
       }
+    });
+    _eventRecapInFlight = request;
+    return request;
+  }
 
-      final status = await _backendApiService.fetchGlobalEventSummaryWorkStatus(
-        identityToken: authToken,
-        workId: active.id,
+  Future<void> _loadEventRecapInner() async {
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final accountRevision = _homeAccountRevision;
+    bool current() =>
+        mounted &&
+        token == widget.authService.authToken &&
+        userId == widget.authService.userId &&
+        accountRevision == _homeAccountRevision &&
+        _appLifecycleState != AppLifecycleState.paused &&
+        _appLifecycleState != AppLifecycleState.hidden &&
+        !_isOnboarding;
+    if (token == null || token.isEmpty || !current()) return;
+    try {
+      var roundTrip = Stopwatch()..start();
+      var response = await _backendApiService.fetchEventRecap(
+        identityToken: token,
       );
-      if (!mounted ||
-          token != _globalSummaryWorkPollToken ||
-          !identical(active, _activeGlobalEventSummaryWork) ||
-          status == null) {
-        return;
+      roundTrip.stop();
+      if (!current() || response == null) return;
+      if (response['state'] == 'pending') {
+        final candidate = _EventRecapCandidate.tryParse(response['event']);
+        if (candidate == null || candidate.isExpired) return;
+        final rawSteps = await _healthService.getRawStepsInInterval(
+          candidate.startsAt,
+          candidate.endsAt,
+        );
+        if (!current() ||
+            candidate.isExpired ||
+            rawSteps == null ||
+            rawSteps < 0) {
+          return;
+        }
+        roundTrip = Stopwatch()..start();
+        response = await _backendApiService.finalizeEventRecap(
+          identityToken: token,
+          eventId: candidate.id,
+          revision: candidate.revision,
+          rawSteps: rawSteps,
+        );
+        roundTrip.stop();
+        if (!current() || response == null) return;
       }
-
-      // The owner-only status response is authoritative. Work expiry is a
-      // server state transition (EXPIRED_UNDELIVERED), never a comparison
-      // between server expiresAt and the device wall clock.
-      active.applyServerStatus(status);
-      if (status.state.isCreated) {
-        _activeGlobalEventSummaryWork = null;
-        await _refetchHomeForCreatedGlobalEventSummary();
-        return;
+      if (response['state'] == 'ready') {
+        _acceptHomeSummary(response, roundTrip.elapsed, independent: true);
+      } else if (response['state'] == 'none') {
+        _replacePendingGlobalEventSummary(null);
       }
-      if (status.state.isTerminal) {
-        _activeGlobalEventSummaryWork = null;
-        return;
-      }
-      await poll(index + 1);
+    } catch (_) {
+      // Optional recap failure never changes normal Home, step sync or scores.
     }
-
-    unawaited(poll(0));
-  }
-
-  Future<void> _refetchHomeForCreatedGlobalEventSummary() async {
-    await _fetchRaceCard(preserveSummaryReceipt: true);
-    if (mounted) await _coordinateHomeOverlays();
   }
 
   Future<void> _fetchFriendsSteps() async {
@@ -2888,12 +2856,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _loadHomeAndShowResultsInner() async {
+    final accountRevision = _homeAccountRevision;
     // Persist first so the home batch and persisted-total opt-in reflect the new
     // daily total. A local health-read failure still lets the other surfaces load.
     _StepSyncOutcome? outcome;
     try {
       outcome = await _persistSteps();
-      _startGlobalEventSummaryWorkPollingIfPresent(outcome);
     } catch (_) {
       _publishStepLoadError();
       // Keep prior surfaces; continue loading the rest.
@@ -2919,6 +2887,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!skipColdStartMeRefresh) requiredFutures.add(_refreshMe());
     await Future.wait(requiredFutures);
 
+    if (!mounted || accountRevision != _homeAccountRevision) return;
+    final recap = outcome?.recapEligible == true
+        ? _loadEventRecap(coordinateAfter: false)
+        : null;
+
     if (outcome?.jobId != null && outcome?.generation != null) {
       _startJobPolling(outcome!.jobId!, outcome.generation!);
     }
@@ -2929,10 +2902,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // both have had their chance (hence the awaits, which previously were
     // fire-and-forget). The share-race drain happens later in
     // `_restoreAndFetch`, so this stays ahead of it.
-    await _coordinateHomeOverlays();
-    if (!mounted) return;
+    await _coordinateHomeOverlays(beforeRecap: recap);
+    if (!mounted ||
+        accountRevision != _homeAccountRevision ||
+        _appLifecycleState == AppLifecycleState.paused ||
+        _appLifecycleState == AppLifecycleState.hidden) {
+      return;
+    }
     await _maybeShowRankedResults();
-    if (!mounted) return;
+    if (!mounted ||
+        accountRevision != _homeAccountRevision ||
+        _appLifecycleState == AppLifecycleState.paused ||
+        _appLifecycleState == AppLifecycleState.hidden) {
+      return;
+    }
     await _maybeShowWhatsNew();
   }
 
@@ -3066,17 +3049,29 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// Results always win over Home invitations. The coordinator is deliberately
   /// shell-owned: Home rebuilds, tab changes, and refreshes cannot tear down a
   /// modal route or stack it over a results/reward/quick-create route.
-  Future<void> _coordinateHomeOverlays() async {
+  Future<void> _coordinateHomeOverlays({Future<void>? beforeRecap}) async {
+    final accountRevision = _homeAccountRevision;
+    bool current() =>
+        mounted &&
+        accountRevision == _homeAccountRevision &&
+        _appLifecycleState != AppLifecycleState.paused &&
+        _appLifecycleState != AppLifecycleState.hidden;
+    if (!current()) return;
     await _maybeShowRaceResults();
-    if (!mounted) return;
+    if (!current()) return;
+    // Home is already rendered. Give the one-shot recap a chance before
+    // invitations or the version changelog, without delaying race results.
+    if (beforeRecap != null) await beforeRecap;
+    if (!current()) return;
     await _showPendingGlobalEventSummaryIfEligible();
-    if (!mounted) return;
+    if (!current()) return;
     await _maybeShowHomeInvites();
   }
 
   Future<void> _maybeShowHomeInvites() async {
     if (!mounted ||
         _isOnboarding ||
+        _eventRecapInFlight != null ||
         _currentTab != _homeTabIndex ||
         _homeInvitePopupOpen ||
         _homeInviteSequenceRunning ||
@@ -3846,12 +3841,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshHomeTabInner() async {
+    final accountRevision = _homeAccountRevision;
     if (mounted) setState(() => _error = null);
     _StepSyncOutcome outcome;
     try {
       // Stages 2-4: read health, persist (v2/legacy), update _stepData.
       outcome = await _persistSteps(homePull: true);
-      _startGlobalEventSummaryWorkPollingIfPresent(outcome);
     } catch (_) {
       _publishStepLoadError();
       // Local health read failed: keep prior server-derived surfaces and end
@@ -3883,6 +3878,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _refreshHomeSuggestions(),
     ]);
 
+    if (!mounted || accountRevision != _homeAccountRevision) return;
+    if (outcome.recapEligible) unawaited(_loadEventRecap());
+
     // Stage 6: the refresh indicator completes when this method returns.
     // Stage 7: background, coalesced, non-blocking. The streak/milestone widgets
     // now consume dailyReward/stepMilestones from the batch above; their
@@ -3895,10 +3893,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchRaceCard({
-    bool usePersistedTotals = false,
-    bool preserveSummaryReceipt = false,
-  }) async {
+  Future<void> _fetchRaceCard({bool usePersistedTotals = false}) async {
     final identityToken = widget.authService.authToken;
     final userId = widget.authService.userId;
     final generation = ++_raceCardGeneration;
@@ -3922,15 +3917,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           userId != widget.authService.userId) {
         return;
       }
-      if (generation != _raceCardGeneration) {
-        if (preserveSummaryReceipt) {
-          _acceptHomeSummary(data, requestRoundTrip.elapsed, independent: true);
-        }
-        return;
-      }
-      if (preserveSummaryReceipt) {
-        _acceptHomeSummary(data, requestRoundTrip.elapsed, independent: true);
-      }
+      if (generation != _raceCardGeneration) return;
       _homePresentationResolved = false;
       _homeFriendsResolved = false;
       _retainedHomeFetchedAt = null;
@@ -4070,9 +4057,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (summary != null && _consumedGlobalSummaryIds.contains(summary.id)) {
       return;
     }
-    // A CREATED receipt is independent of core Home generations. Keep its
-    // still-valid overlay pending behind race results, even if a concurrent
-    // catch-up core no longer includes that optional section.
+    // A directly saved recap is independent of Home generations. Keep its
+    // valid overlay behind race results if an older Home read omits it.
     if (summary == null &&
         (independent ||
             (_independentGlobalSummaryId != null &&
@@ -4109,6 +4095,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _showPendingGlobalEventSummaryIfEligible() async {
     if (!mounted ||
+        _isOnboarding ||
+        _appLifecycleState == AppLifecycleState.paused ||
+        _appLifecycleState == AppLifecycleState.hidden ||
         _globalSummaryShowing ||
         _currentTab != _homeTabIndex ||
         _raceResultsPopupOpen ||
@@ -4153,32 +4142,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (steps != 0)
-                  Column(
-                    children: [
-                      SignedStepAmount(steps: steps),
-                      const SizedBox(height: 6),
-                      Text(
-                        'across all races',
-                        textAlign: TextAlign.center,
-                        style: HomeText.body(
-                          size: 13,
-                          color: AppColors.of(context).muted,
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Text(
-                    'Gains and losses balanced across all races; net 0.',
-                    textAlign: TextAlign.center,
-                    style: HomeText.body(
-                      size: 13,
-                      color: AppColors.of(context).muted,
-                      weight: FontWeight.w700,
-                    ),
+                SignedStepAmount(steps: steps),
+                const SizedBox(height: 6),
+                Text(
+                  'extra steps gained across all races',
+                  textAlign: TextAlign.center,
+                  style: HomeText.body(
+                    size: 13,
+                    color: AppColors.of(context).muted,
+                    weight: FontWeight.w700,
                   ),
+                ),
                 const SizedBox(height: 16),
                 PillButton(
                   label: 'CONTINUE',
@@ -5592,7 +5566,7 @@ class _StepSyncOutcome {
     this.generation,
     this.cooldown = false,
     this.cooldownSeconds,
-    this.globalEventSummaryWork,
+    this.recapEligible = false,
   });
 
   /// Step/sample data is (very likely) on the server.
@@ -5609,33 +5583,52 @@ class _StepSyncOutcome {
   final int? generation;
   final bool cooldown;
   final int? cooldownSeconds;
-  final GlobalEventSummaryWorkReceipt? globalEventSummaryWork;
+  final bool recapEligible;
 }
 
-class _ActiveGlobalEventSummaryWork {
-  _ActiveGlobalEventSummaryWork({
-    required this.id,
-    required this.state,
-    required this.expiresAt,
-  });
-
-  factory _ActiveGlobalEventSummaryWork.fromReceipt(
-    GlobalEventSummaryWorkReceipt receipt,
-  ) {
-    return _ActiveGlobalEventSummaryWork(
-      id: receipt.id,
-      state: receipt.state,
-      expiresAt: receipt.expiresAt,
-    );
-  }
-
+class _EventRecapCandidate {
+  const _EventRecapCandidate(
+    this.id,
+    this.revision,
+    this.startsAt,
+    this.endsAt,
+    this.expiresAt,
+  );
   final String id;
-  GlobalEventSummaryWorkState state;
-  DateTime expiresAt;
+  final int revision;
+  final DateTime startsAt;
+  final DateTime endsAt;
+  final DateTime expiresAt;
 
-  void applyServerStatus(GlobalEventSummaryWorkStatus status) {
-    state = status.state;
-    expiresAt = status.expiresAt;
+  bool get isExpired => !DateTime.now().toUtc().isBefore(expiresAt);
+
+  static _EventRecapCandidate? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final revision = raw['revision'];
+    final raceCount = raw['raceCount'];
+    DateTime? date(String key) {
+      final value = raw[key];
+      return value is String ? DateTime.tryParse(value)?.toUtc() : null;
+    }
+
+    final startsAt = date('startsAt');
+    final endsAt = date('endsAt');
+    final expiresAt = date('expiresAt');
+    if (id is! String ||
+        id.isEmpty ||
+        revision is! int ||
+        revision < 0 ||
+        raceCount is! int ||
+        raceCount < 0 ||
+        startsAt == null ||
+        endsAt == null ||
+        expiresAt == null ||
+        !startsAt.isBefore(endsAt) ||
+        !endsAt.isBefore(expiresAt)) {
+      return null;
+    }
+    return _EventRecapCandidate(id, revision, startsAt, endsAt, expiresAt);
   }
 }
 
@@ -5691,6 +5684,7 @@ class _PendingGlobalEventSummary {
         extra is! num ||
         !extra.isFinite ||
         extra != extra.roundToDouble() ||
+        extra <= 0 ||
         count is! num ||
         !count.isFinite ||
         count != count.roundToDouble() ||

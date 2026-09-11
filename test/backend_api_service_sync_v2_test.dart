@@ -277,13 +277,28 @@ void main() {
         expect(result.unsupported, true);
       });
     }
-    for (final retained in <Object?>[null, [], ['friends', 'presentation'], ['presentation'], ['presentation', 'friends', 'coins']]) {
+    for (final retained in <Object?>[
+      null,
+      [],
+      ['friends', 'presentation'],
+      ['presentation'],
+      ['presentation', 'friends', 'coins'],
+    ]) {
       test('rejects unsupported retained sections $retained', () async {
-        final http = _FakeHttpClient([_Scripted(200, jsonEncode({
-          ...envelope(coreStates.first), 'retainedSections': retained,
-        }))]);
+        final http = _FakeHttpClient([
+          _Scripted(
+            200,
+            jsonEncode({
+              ...envelope(coreStates.first),
+              'retainedSections': retained,
+            }),
+          ),
+        ]);
         final api = BackendApiService(httpClient: http);
-        expect((await api.fetchHomeSyncRefresh(identityToken: 'token')).unsupported, true);
+        expect(
+          (await api.fetchHomeSyncRefresh(identityToken: 'token')).unsupported,
+          true,
+        );
       });
     }
     for (final status in [200, 404, 405]) {
@@ -515,33 +530,36 @@ void main() {
       expect(api.syncV2Support, EndpointSupport.supported);
     });
 
-    test('parses optional global event summary work receipt defensively', () async {
-      final body = jsonDecode(successBody('CURRENT')) as Map<String, dynamic>;
-      body['globalEventSummaryWork'] = {
-        'id': 'work-1',
-        'state': 'WAITING_RACES',
-        'expiresAt': '2026-08-27T04:00:00.000Z',
-      };
-      final api = BackendApiService(
-        httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
-      );
+    test(
+      'ignores historical work receipt without changing sync success',
+      () async {
+        final body =
+            jsonDecode(successBody('CURRENT', jobId: 'job-1', generation: 1))
+                as Map<String, dynamic>;
+        body['globalEventSummaryWork'] = {
+          'id': 'work-1',
+          'state': 'WAITING_RACES',
+          'expiresAt': '2026-08-27T04:00:00.000Z',
+        };
+        final api = BackendApiService(
+          httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
+        );
 
-      final result = await api.recordStepSyncV2(
-        identityToken: 't',
-        idempotencyKey: 'work-receipt',
-        payload: payload(),
-      );
+        final result = await api.recordStepSyncV2(
+          identityToken: 't',
+          idempotencyKey: 'work-receipt',
+          payload: payload(),
+        );
 
-      expect(result.globalEventSummaryWork?.id, 'work-1');
-      expect(
-        result.globalEventSummaryWork?.state,
-        GlobalEventSummaryWorkState.waitingRaces,
-      );
-      expect(result.globalEventSummaryWork?.expiresAt.isUtc, isTrue);
-    });
+        expect(result.kind, StepSyncV2Kind.current);
+        expect(result.hasJob, isTrue);
+      },
+    );
 
-    test('parses existing active work from a later no-op sync response', () async {
-      final body = jsonDecode(successBody('DEFERRED')) as Map<String, dynamic>;
+    test('ignores historical work receipt on deferred sync', () async {
+      final body =
+          jsonDecode(successBody('DEFERRED', jobId: 'job-1', generation: 1))
+              as Map<String, dynamic>;
       body['globalEventSummaryWork'] = {
         'id': 'existing-work-1',
         'state': 'WAITING_RACES',
@@ -559,33 +577,34 @@ void main() {
       );
 
       expect(result.kind, StepSyncV2Kind.deferred);
-      expect(result.globalEventSummaryWork?.id, 'existing-work-1');
-      expect(
-        result.globalEventSummaryWork?.state,
-        GlobalEventSummaryWorkState.waitingRaces,
-      );
+      expect(result.hasJob, isTrue);
     });
 
-    test('malformed summary work receipt does not invalidate sync success', () async {
-      final body = jsonDecode(successBody('CURRENT')) as Map<String, dynamic>;
-      body['globalEventSummaryWork'] = {
-        'id': 'work-1',
-        'state': 'A_NEW_UNKNOWN_STATE',
-        'expiresAt': null,
-      };
-      final api = BackendApiService(
-        httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
-      );
+    test(
+      'malformed summary work receipt does not invalidate sync success',
+      () async {
+        final body =
+            jsonDecode(successBody('CURRENT', jobId: 'job-1', generation: 1))
+                as Map<String, dynamic>;
+        body['globalEventSummaryWork'] = {
+          'id': 'work-1',
+          'state': 'A_NEW_UNKNOWN_STATE',
+          'expiresAt': null,
+        };
+        final api = BackendApiService(
+          httpClient: _FakeHttpClient([_Scripted(202, jsonEncode(body))]),
+        );
 
-      final result = await api.recordStepSyncV2(
-        identityToken: 't',
-        idempotencyKey: 'bad-work-receipt',
-        payload: payload(),
-      );
+        final result = await api.recordStepSyncV2(
+          identityToken: 't',
+          idempotencyKey: 'bad-work-receipt',
+          payload: payload(),
+        );
 
-      expect(result.kind, StepSyncV2Kind.current);
-      expect(result.globalEventSummaryWork, isNull);
-    });
+        expect(result.kind, StepSyncV2Kind.current);
+        expect(result.hasJob, isTrue);
+      },
+    );
 
     test('Home pull sends the exact opt-in header and parses cooldown', () async {
       final http = _FakeHttpClient([
@@ -882,62 +901,93 @@ void main() {
     });
   });
 
-  group('fetchGlobalEventSummaryWorkStatus', () {
-    test('parses every locked state and uses the owner-only path', () async {
-      const wireStates = [
-        'WAITING_SYNC',
-        'QUEUED',
-        'PROCESSING',
-        'WAITING_RACES',
-        'CREATED',
-        'ALL_ZERO',
-        'UNSCORABLE',
-        'EXPIRED_UNDELIVERED',
-      ];
-      for (final wireState in wireStates) {
+  group('simple event recap API', () {
+    test(
+      'GET and POST use locked wire contract and never retired status',
+      () async {
         final http = _FakeHttpClient([
-          _Scripted(
-            200,
-            jsonEncode({
-              'state': wireState,
-              'expiresAt': '2026-08-27T04:00:00.000Z',
-            }),
-          ),
+          _Scripted(200, '{"state":"pending","event":{"id":"event-1"}}'),
+          _Scripted(200, '{"state":"none"}'),
         ]);
         final api = BackendApiService(httpClient: http);
-
-        final result = await api.fetchGlobalEventSummaryWorkStatus(
-          identityToken: 't',
-          workId: 'work-1',
-        );
-
-        expect(result, isNotNull, reason: wireState);
         expect(
-          http.requests.single.uri.path,
-          '/home/global-event-summary-work/work-1',
-        );
-      }
-    });
-
-    test('not-found, auth, invalid id, and malformed success fail soft', () async {
-      for (final script in [
-        _Scripted(404, '{"code":"NOT_FOUND"}'),
-        _Scripted(401, '{"code":"UNAUTHORIZED"}'),
-        _Scripted(400, '{"code":"INVALID_ID"}'),
-        _Scripted(200, '{"state":"WAITING_RACES"}'),
-      ]) {
-        final api = BackendApiService(
-          httpClient: _FakeHttpClient([script]),
+          (await api.fetchEventRecap(identityToken: 't'))?['state'],
+          'pending',
         );
         expect(
-          await api.fetchGlobalEventSummaryWorkStatus(
+          (await api.finalizeEventRecap(
             identityToken: 't',
-            workId: 'work-1',
-          ),
-          isNull,
+            eventId: 'event-1',
+            revision: 3,
+            rawSteps: 1000,
+          ))?['state'],
+          'none',
         );
+        expect(http.requests.map((r) => r.method), ['GET', 'POST']);
+        expect(http.requests.map((r) => r.uri.path), [
+          '/home/event-recap',
+          '/home/event-recap',
+        ]);
+        expect(jsonDecode(http.requests.last.body.toString()), {
+          'eventId': 'event-1',
+          'revision': 3,
+          'rawSteps': 1000,
+        });
+        expect(
+          http.requests.every(
+            (r) =>
+                r.headers['X-Client-Features']
+                    ?.split(',')
+                    .contains('simple_event_recap_v1') ==
+                true,
+          ),
+          isTrue,
+        );
+      },
+    );
+    test('both platform header branches advertise the interaction', () {
+      for (final ios in [true, false]) {
+        for (final ads in [true, false]) {
+          expect(
+            BackendApiService.clientFeaturesHeaderForPlatform(
+              isIos: ios,
+              adsSupported: ads,
+              racePayoutDoubleSupported: false,
+            ).split(','),
+            contains('simple_event_recap_v1'),
+          );
+        }
       }
     });
+    test(
+      'old server, authorization, transient and malformed replies defer',
+      () async {
+        for (final script in [
+          _Scripted(404, '{"code":"NOT_FOUND"}'),
+          _Scripted(401, '{"code":"UNAUTHORIZED"}'),
+          _Scripted(409, '{"code":"EVENT_CHANGED"}'),
+          _Scripted(410, '{"code":"EVENT_EXPIRED"}'),
+          _Scripted(500, '{}'),
+          _Scripted(200, '{}'),
+          _Scripted(200, '{"state":"unknown"}'),
+          _Scripted(200, 'not json'),
+        ]) {
+          final http = _FakeHttpClient([script, script]);
+          final api = BackendApiService(httpClient: http);
+          expect(await api.fetchEventRecap(identityToken: 't'), isNull);
+          expect(
+            await api.finalizeEventRecap(
+              identityToken: 't',
+              eventId: 'event-1',
+              revision: 3,
+              rawSteps: 1000,
+            ),
+            isNull,
+          );
+          expect(http.requests.length, 2);
+        }
+      },
+    );
   });
 
   group('fetchRaceDiscoverySummary', () {

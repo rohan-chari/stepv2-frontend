@@ -77,6 +77,19 @@ class HealthService {
 
   final Health _health;
 
+  /// Display-only event aggregate with normal source deduplication and manual
+  /// entry exclusion. Missing permission/input is not zero.
+  Future<int?> getRawStepsInInterval(DateTime start, DateTime end) async {
+    if (!start.isBefore(end)) return null;
+    if (isAndroid && await getStepPermission() != true) return null;
+    try {
+      final steps = await _stepsInInterval(start, end);
+      return steps != null && steps >= 0 ? steps : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static const _keyHealthAuthorized = 'health_authorized';
 
   /// The accurate step total for the half-open interval [start, end) on the
