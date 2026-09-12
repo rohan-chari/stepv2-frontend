@@ -1,10 +1,10 @@
 # Immediate daily/weekly Join and earlier cohort preparation
 
-Status: DRAFT — joining and step-proration decisions resolved; awaiting spec
-approval. No implementation or
-deployment is authorized by this document. User approval precedes architect
-review under this repository's AGENTS.md workflow; required architect changes
-must be resolved before implementation.
+Status: IMPLEMENTED AND LOCALLY VALIDATED on 2026-09-09, following user approval
+and integration tests first. Backend deployed with user authorization on 2026-09-09;
+app release builds remain separate. The architect addendum
+below resolves the required preimplementation review corrections and supersedes
+conflicting draft mechanics.
 
 Prepared: 2026-09-09. Source baseline: frontend `648e4fe`, backend `cd46d1a`.
 Backend paths refer to the separate backend repository. Supporting research:
@@ -786,3 +786,197 @@ Unavailable/error feedback: appears without hiding the card or adding a duplicat
   in section 9. No new tutorial beat or duplicated strip proposed.
 - Architect review: after user approval, as required by repository AGENTS.md.
 - No implementation, tests, builds, or deployment performed for this spec.
+
+
+## 15. Architect corrections — implementation authority
+
+User authorization: start with integration tests, complete the feature, and
+report production readiness. The architect reviewed the full scope and returned
+REVISE with six required corrections. Implement the following corrections;
+they supersede conflicting mechanics earlier in this draft without reducing
+any product requirement or acceptance test.
+
+1. **HTTP admits only its caller.** When a reserved group is unmaterialized,
+   Join creates/activates its reserved race shell and admits only the requester.
+   Remaining reservations consume capacity but are materialized by the
+   race-keyed preparation task under C0, never by the HTTP request. The same
+   deterministic group/race IDs and lease-fenced task make retries safe. Count
+   accepted members plus unmaterialized reservations without double counting.
+   Pre-elected users retain window-start credit; new manual users start at the
+   admission decision instant.
+2. **Explicit preparation protocol.** Persist generation UUID, snapshotSequence,
+   planningCursor, validationCursor, expectedSnapshotCount, publishedAt, and
+   lease token/expiry on preparation; scope group uniqueness to generation +
+   ordinal. States are PLANNING, VALIDATING, PUBLISHED, MATERIALIZING, COMPLETE,
+   CLEANING. Each mutation CAS-checks generation, expected state, lease token,
+   and lease validity. Capture the database-default election-sequence high-water
+   mark under the window lock. A takeover of an unpublished generation goes to
+   CLEANING, clears only that generation's reservation pointers and groups in
+   bounded transactions, then starts a new generation and recomputes the full
+   unpublished plan. Do not resume an ordinal against newly computed mutable
+   inputs. Published generations never rebuild. Validation uses a durable
+   keyset cursor and proves every snapshot member is assigned or reserved;
+   publish under the window lock after rechecking completeness. Admissions
+   during planning exclude only their own assigned users; published groups
+   cannot be reshuffled. Materialization is bounded to one group transaction.
+3. **Atomic legacy arbitration.** Pass the existing per-race membership
+   transaction into claimLegacyStream and commit claim+participant atomically.
+   The OLD public endpoint retains its existing BUCKET_STREAM_ELECTED conflict
+   shape when bucket admission wins; do not change it to a different race ID.
+   The NEW endpoint may return the winning accepted legacy membership. Repair
+   historical orphan LEGACY claims under the same guards: confirm no accepted
+   legacy participant and no completed/forfeited participation before claiming
+   current bucket admission. Never erase a valid older-client membership.
+4. **Intent timing/locking.** Capture requestedAt and target window when the
+   server accepts the preference/capability change, not at later worker time.
+   Carry them through the batch payload. Persist users+enrollment-intent in one
+   transaction; it never calls admission or takes race/global/window locks.
+   ON commits an intent for its exact target windows; OFF affects future new
+   intents but does not revoke that committed election; ON again upserts the
+   same target identity. A separate worker admits under universal lock order.
+   Persist one unique user/seed/window intent; duplicate capability batches
+   cannot create duplicate elections.
+5. **Prune audit/repair storage.** Add an append-only SeededChallengeTransfer
+   record: deterministic request/transfer identity, userId, seedId, windowStart,
+   old/new raceId and participantId, prior/new assignment pointer, source state,
+   reason, createdAt. Write audit+pointer+exposure changes atomically; preserve
+   declined historical participants. Add a unique user/seed/window membership
+   repair task with state, reason, availableAt, lease, attempt count, result,
+   and source participant ID. The same preparation coordinator consumes these
+   bounded race-keyed tasks. The repair rechecks declined participation under
+   both required race fences and user guards, queries raw activity and all
+   existing caster/target/effect/box guards, and records either CLEARED_PRUNE
+   (fresh admission can proceed) or INCONSISTENT_HISTORY (retain history, expose
+   operational error and retryable API error, never silently transfer/reset).
+   Transient DB failures use the existing bounded retry/backoff conventions.
+   Ordinary resolution alone is not this repair. Manual exemption is rechecked
+   inside both prune transactions after locks. No gifts/score/effects move and
+   old/new exposure reservations reconcile via existing helpers.
+6. **Executable ownership handoff.** Register one seeded coordinator inside
+   src/index.js startCrons() under its existing role/instance guards; it owns
+   due activation, urgent recovery, then nonurgent preparation. Remove duplicate
+   old renewal registration. For production deployment, stop and await exit of
+   ONLY the old cron owner before new plans can publish; HTTP/resolution remain
+   at existing capacity. Migrate then start the new cron owner under the guard,
+   and verify one owner plus bounded recovery. Do not overlap old and new cron
+   finalizers. A rollback must use a compatibility revision that understands
+   published reservations, or drain/materialize all published work with the
+   new coordinator before returning to old code. Never simply restart the old
+   finalizer with stranded new reservations. This procedure needs fresh prod
+   approval; it authorizes no action now.
+
+Admission uses a precise server decision instant re-read after locks and before
+finishing writes. If the window changed at that check, retry selection. Do not
+claim to control the physical PostgreSQL commit timestamp. New busy responses
+include retryable metadata and explicitly set Retry-After: 1 at the route/error
+mapping boundary. Use existing discovery/list/Home/progress invalidation
+helpers; no new authoritative Redis capacity surface.
+
+Implementation agents may resolve ordinary technical details within these
+invariants and record them, but must not drop earlier preparation, bounded crash
+recovery, old-client compatibility, automatic intent durability, scoring parity,
+or the 1,000/5,000-user load validation to ship only the Join endpoint.
+
+### Final writer-ownership clarification
+
+Participant-changing background materialization and membership repair execute
+through the EXISTING race-resolution worker and its lease-token/write-fence
+protocol (`src/modules/races/jobs/raceResolutionQueueV2.js`). The preparation
+coordinator plans, creates empty shells where necessary, and enqueues race-keyed
+work; it does not independently bulk-write participants. Integrate these tasks
+before the worker's canonical scoring read under its valid lease so membership
+and subsequent scoring belong to the same fenced race generation. Use bounded
+task work and queue deduplication; stale worker leases cannot publish membership
+or task completion. Preserve task durability when a race has no participants
+yet; an empty shell must not be discarded as an invalid scoring context before
+its materialization work is processed. This supersedes any earlier wording
+that had the cron coordinator consume participant-changing tasks directly.
+
+### Frontend protected-assertion clarification
+
+For an older backend omitting currentJoin but reporting ELECTED, preserve the
+existing disabled YOU'RE IN pending state (no navigation, no participant count,
+and no additional assignment write). Clarify it as Upcoming challenge in the
+existing card space and expose current-entry unavailable/refresh feedback.
+A valid currentJoin v1 always overrides that future election for current Join.
+This retains the protected old-ELECTED widget assertion without implying an
+active current membership. A null-status unassigned card without currentJoin
+remains unavailable and must not send UPCOMING. The specifically identified
+elect-on-Join assertion remains the approved product-behavior test update.
+
+Architect final follow-up: APPROVE — section 15 and final writer ownership
+close all required review findings. No outstanding architecture changes.
+
+7. **Current admission on legacy Featured cards.** The locked additive
+   `currentJoin` projection also appears on bucket-capable callers' daily/weekly
+   Featured cards in LEGACY windows. Keep their historical `bucketPrivate:false`
+   and other fields unchanged for frozen clients. Updated Flutter uses presence
+   of `currentJoin`, independently of `bucketPrivate`, to select the current
+   admission action. Malformed-present projection is unavailable; it never
+   falls through to generic public Join. A legacy public card without the
+   projection retains its historical generic Join path. Home suggestions stay
+   public-only and never send private cohort IDs through the generic coordinator.
+
+
+## 16. Implementation recovery clarification
+
+Automatic population scans remain bounded at 500 accounts per coordinator tick.
+An interrupted scan resumes for the current BUCKET window, including a cold
+restart with no preparation record. A nullable permanent User eligibility stamp
+records transitions into automatic enrollment plus bucket capability. A database
+trigger covers older writers; repeated ON and unrelated capability updates keep
+the original stamp. Legacy NULL is eligible only for accounts created before the
+window. Post-boundary eligibility is excluded from current recovery; durable
+exact-window enrollment requests are processed independently. Recovered steady
+automatic elections retain window-start credit.
+
+Additive migrations also persist partial signup welcome-grant progress, allowing
+remaining gifts to recover in a later eligible challenge without exceeding slots
+or duplicating the human entitlement. These corrections preserve the approved
+product behavior. Integration regressions cover interrupted scans beyond 500
+users, late eligibility, stale worker leases, empty activation, and grant recovery.
+
+
+## 17. Validation and release handoff
+
+Backend implementation, preparation, recovery, and current admission are committed
+in `feature/immediate-challenge-join`; Flutter implementation is committed on the
+same branch name in its separate repository. Work used isolated worktrees.
+
+Validation: 3,370 backend unit tests, 115 seeded integration tests, 12 write-fence
+inventory tests, 40 remaining discard integration tests, 3,176 Flutter tests,
+and a clean Flutter analyzer. The user explicitly authorized removal of the
+obsolete discard timezone test; production timezone behavior is unchanged.
+Reviewers cleared the combined implementation and final admission guard.
+
+All six candidate load scenarios at 1,000/5,000 users passed, along with two
+baseline rollover comparisons. Final capacity testing forced full groups and
+new overflow groups; no joins failed and no group exceeded its cap. Placement
+selection now runs under an admission-only seed/window guard before shared
+write locks, using transaction-local reads and the existing bounded retries.
+
+At 5,000 users, the observed maximum midnight transaction fell from 1,292.96 ms
+to 153.26 ms, while step-sync latency stayed similar. This is an observed local
+maximum, not a production bound. Midnight query count and CPU were effectively
+flat; early plus midnight totals increased about 5.2% in SQL calls and 6.2% in
+PostgreSQL connection-backend CPU. The benefit is shorter large transactions
+around midnight, not a general CPU reduction. Preparation completed within the
+scheduled pre-23:50 budget. See backend `docs/seeded-immediate-join-readiness.md`
+and `docs/seeded-immediate-join-load-results.json` for evidence and limitations.
+
+Backend production deployment completed on 2026-09-09 at runtime commit
+`1bcf874`. The additive contract was verified in production; iOS and Android
+builds remain separately authorized work. Native release builds and manual device QA
+have not been performed. The manual UI-placement checklist is section 13 above.
+
+
+## 18. Production handoff clarification
+
+The deployed wrapper replaces HTTP, stops and proves the old cron owner exited,
+waits its delivery lease, stops and proves the old resolution owner exited, and
+starts new resolution before new cron. This supersedes earlier wording that
+left the old resolution process running through publication. Exactly two HTTP
+workers remain; staging stays stopped. All 25 wrapper/guard tests passed and
+an independent review cleared the handoff. All five migrations applied, and
+production checks confirmed the 23:30 daily and Sunday 23:15 ET schedules.
+Backend deployment audit: `docs/seeded-immediate-join-deployment-2026-09-09.md`.

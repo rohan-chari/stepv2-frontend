@@ -3,6 +3,7 @@ import 'dart:ui' show SemanticsAction, Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/screens/public_races_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -19,6 +20,15 @@ import 'package:step_tracker/widgets/featured_race_card.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'test',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+  });
 
   Future<AuthService> signedInAuth() async {
     SharedPreferences.setMockInitialValues({
@@ -170,21 +180,27 @@ void main() {
     },
   );
 
-  testWidgets('private virtual bucket elects once and becomes pending', (
-    tester,
-  ) async {
-    final api = _FakeApi(featuredRaces: [_privateVirtualRace()]);
-    await pumpScreen(tester, api);
+  testWidgets(
+    'private virtual bucket immediately joins current and becomes VIEW',
+    (tester) async {
+      final api = _FakeApi(
+        featuredRaces: [
+          {..._privateVirtualRace(), 'currentJoin': _currentJoinProjection()},
+        ],
+      );
+      await pumpScreen(tester, api);
 
-    expect(find.text('JOIN'), findsWidgets);
-    expect(find.text('0 racing'), findsNothing);
-    await tester.tap(find.text('JOIN').first);
-    await pumpFrames(tester);
+      expect(find.text('JOIN'), findsWidgets);
+      expect(find.text('0 racing'), findsNothing);
+      await tester.tap(find.text('JOIN').first);
+      await pumpFrames(tester);
 
-    expect(api.assignments, ['DAILY_10K']);
-    expect(find.text("YOU'RE IN"), findsWidgets);
-    expect(find.text('VIEW'), findsNothing);
-  });
+      expect(api.currentJoins, ['DAILY_10K']);
+      expect(api.assignments, isEmpty);
+      expect(find.text("YOU'RE IN"), findsNothing);
+      expect(find.text('VIEW'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'private elected bucket is non-navigable and hides candidate count',
@@ -484,6 +500,7 @@ class _FakeApi extends BackendApiService {
   final List<Map<String, dynamic>> userTournaments;
   final List<Map<String, dynamic>> publicRaces;
   final assignments = <String>[];
+  final currentJoins = <String>[];
   final publicJoinIds = <String>[];
 
   @override
@@ -492,6 +509,27 @@ class _FakeApi extends BackendApiService {
   }) async {
     if (featuredThrows) throw Exception('404');
     return featuredRaces;
+  }
+
+  @override
+  Future<Map<String, dynamic>> joinCurrentSeededChallenge({
+    required String identityToken,
+    required String seedKind,
+    required String requestId,
+  }) async {
+    currentJoins.add(seedKind);
+    return {
+      'joined': true,
+      'alreadyJoined': false,
+      'seedKind': seedKind,
+      'raceId': 'assigned-current-race',
+      'participantId': 'current-participant',
+      'windowStart': _currentStart.toIso8601String(),
+      'windowEnd': _currentEnd.toIso8601String(),
+      'joinedAt': DateTime.now().toUtc().toIso8601String(),
+      'scoringStartsAt': DateTime.now().toUtc().toIso8601String(),
+      'raceStatus': 'ACTIVE',
+    };
   }
 
   @override
@@ -532,3 +570,12 @@ class _FakeApi extends BackendApiService {
     'tournaments': const [],
   };
 }
+
+final _currentStart = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+final _currentEnd = _currentStart.add(const Duration(days: 1));
+Map<String, dynamic> _currentJoinProjection() => {
+  'version': 1,
+  'state': 'JOINABLE',
+  'windowStart': _currentStart.toIso8601String(),
+  'windowEnd': _currentEnd.toIso8601String(),
+};

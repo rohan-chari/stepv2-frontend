@@ -2,9 +2,10 @@
 
 Research date: 2026-09-09. Frontend inspected at `648e4fe`; backend at
 `cd46d1a`. Backend paths below are relative to the separate backend repository.
-This is source research and a proposed direction, not an approved implementation
-specification or a production performance measurement. No runtime code,
-database data, configuration, or schedules were changed.
+This records the initial source research and proposed direction, not a production
+performance measurement. At that research stage, no runtime code, database data,
+configuration, or schedules had changed. The subsequent approved implementation
+and validation are recorded in [the feature specification](daily-weekly-immediate-join-requirements.md).
 
 ## Confirmed product requirements
 
