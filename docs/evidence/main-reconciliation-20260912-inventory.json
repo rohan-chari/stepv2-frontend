@@ -1,0 +1,346 @@
+{
+  "repo": "frontend",
+  "main": "587d8cb16163ebdeaafe20e782862e6ec5f5109b",
+  "originMain": "587d8cb16163ebdeaafe20e782862e6ec5f5109b",
+  "head": "d0f69e5a2c0009e26c1ae5d8214307eda3d99502",
+  "branches": [
+    {
+      "sha": "5f009225532c4e6b423fbfa6f49dea30bca12a72",
+      "refs": [
+        "1.4.2",
+        "origin/1.4.2"
+      ],
+      "date": "2026-06-30 20:38:50 -0400",
+      "subject": "1.4.2: queued-box styling, public-races count, ranked->friends, remove daily reward, toasts, hide-from-leaderboard toggle",
+      "inMain": true
+    },
+    {
+      "sha": "7663aa946dc37edae66784da9baa2bdc41b22c9d",
+      "refs": [
+        "2.2.0",
+        "origin/2.2.0"
+      ],
+      "date": "2026-08-09 19:14:46 -0400",
+      "subject": "Race-day course: calm the grandstand band so runners read against it",
+      "inMain": true
+    },
+    {
+      "sha": "d36c6bcf86a68b304598af9ad77a9e422eca0708",
+      "refs": [
+        "2.2.4"
+      ],
+      "date": "2026-08-10 23:23:28 -0400",
+      "subject": "Onboarding: 'Skip' exit, and the demo rivals become bots",
+      "inMain": true
+    },
+    {
+      "sha": "8cb99658d610444271ba0c7d9bc6aab6087b3a17",
+      "refs": [
+        "2.3.9",
+        "origin/2.3.9"
+      ],
+      "date": "2026-08-19 07:04:33 -0400",
+      "subject": "fix: reject unhydrated race presentation",
+      "inMain": false,
+      "behind": 161,
+      "ahead": 2,
+      "uniquePatches": [
+        "8da26c0f5eef12a732c9fec49ba438d86eee9c0e perf: adopt compact request payloads"
+      ],
+      "equivalentPatches": 1
+    },
+    {
+      "sha": "84f3adb52076fd4174f5bf5ced8ef6889de47398",
+      "refs": [
+        "android-release"
+      ],
+      "date": "2026-06-17 23:01:27 -0400",
+      "subject": "WIP: tutorial spotlight integration, ios build config, tab anchors",
+      "inMain": true
+    },
+    {
+      "sha": "00c749e9425f7e5a08eb7a82c4bb2e0924e30b5e",
+      "refs": [
+        "codex/event-ends-timezone-20260909",
+        "origin/codex/event-ends-timezone-20260909"
+      ],
+      "date": "2026-09-09 01:09:26 -0400",
+      "subject": "Refresh request timezone after device timezone changes",
+      "inMain": true
+    },
+    {
+      "sha": "136cfb0472cdc9437f3445a6b259aaf84bde956a",
+      "refs": [
+        "codex/feature-control-frontend-clean"
+      ],
+      "date": "2026-08-20 15:28:17 -0400",
+      "subject": "refactor: graduate frontend feature controls",
+      "inMain": true
+    },
+    {
+      "sha": "c24dc458a9e851cd4153496cb588abb8a63efb0e",
+      "refs": [
+        "feat/home-rewarded-coins"
+      ],
+      "date": "2026-09-06 23:58:02 -0400",
+      "subject": "Add shared Home rewarded coins offer for TestFlight build 2",
+      "inMain": true
+    },
+    {
+      "sha": "ebf396393ba365e7eb3db0d95c9b48d147b195d9",
+      "refs": [
+        "feat/live-placement"
+      ],
+      "date": "2026-06-24 14:55:04 -0400",
+      "subject": "confetti",
+      "inMain": true
+    },
+    {
+      "sha": "d0f69e5a2c0009e26c1ae5d8214307eda3d99502",
+      "refs": [
+        "feat/simple-event-recap",
+        "origin/feat/simple-event-recap"
+      ],
+      "date": "2026-09-11 06:36:08 -0400",
+      "subject": "Track accepted baseline failures separately from recap release",
+      "inMain": false,
+      "behind": 0,
+      "ahead": 3,
+      "uniquePatches": [
+        "d3ed006f2b005a0c31e84ce22d019d0830514f5a Replace recap worker polling with foreground event recap",
+        "ae3721fd5844a272181b3ea1417b03fa0f6fcf10 Record recap cleanup verification and matched workload evidence",
+        "d0f69e5a2c0009e26c1ae5d8214307eda3d99502 Track accepted baseline failures separately from recap release"
+      ],
+      "equivalentPatches": 0
+    },
+    {
+      "sha": "a6440c7c3ef8203f6c2a8ab4b6675c7cdfd09a81",
+      "refs": [
+        "feature/batch-2026-08-08-frontend",
+        "origin/feature/batch-2026-08-08-frontend"
+      ],
+      "date": "2026-08-10 11:03:42 -0400",
+      "subject": "Batch 2026-08-10 item 2: course animals +10% (user 55px, friends 48px)",
+      "inMain": true
+    },
+    {
+      "sha": "fa0a841be9b0cf2cca7b56fce8ad7961e1216a6b",
+      "refs": [
+        "feature/batch-2026-08-09-frontend",
+        "origin/feature/batch-2026-08-09-frontend"
+      ],
+      "date": "2026-08-10 08:35:52 -0400",
+      "subject": "Item 9 follow-ups: scope the breaker to the device session, make completion structural",
+      "inMain": true
+    },
+    {
+      "sha": "b32d06f53a72e916e40df9109222565e234d84e6",
+      "refs": [
+        "feature/immediate-challenge-join"
+      ],
+      "date": "2026-09-09 17:20:02 -0400",
+      "subject": "Record production backend handoff and pending app release",
+      "inMain": false,
+      "behind": 41,
+      "ahead": 3,
+      "uniquePatches": [
+        "0b3afecb70ea1bd1980ef12199381d846c12a38a Support immediate daily and weekly challenge admission",
+        "47a34371472ba1e4349ae464e268d53835979782 Document approved immediate challenge joining and release validation",
+        "b32d06f53a72e916e40df9109222565e234d84e6 Record production backend handoff and pending app release"
+      ],
+      "equivalentPatches": 0
+    },
+    {
+      "sha": "936a90e8ee68574267f228d3483171fbc0e952d7",
+      "refs": [
+        "fix/ios-only-billing-setup",
+        "origin/fix/ios-only-billing-setup"
+      ],
+      "date": "2026-09-08 19:37:03 -0400",
+      "subject": "Record session fix TestFlight release verification",
+      "inMain": true
+    },
+    {
+      "sha": "eefbceb5c430b1d6fee126860dfa46ae2c49ba3f",
+      "refs": [
+        "fix/pending-box-countdown",
+        "origin/fix/pending-box-countdown"
+      ],
+      "date": "2026-09-06 19:24:32 -0400",
+      "subject": "Show pending box message while race rewards process",
+      "inMain": true
+    },
+    {
+      "sha": "5610e7ab796aacbf0de1130916d54d4ed2768aa2",
+      "refs": [
+        "fix/race-cosmetics-20260819",
+        "origin/fix/race-cosmetics-20260819"
+      ],
+      "date": "2026-08-19 07:04:29 -0400",
+      "subject": "fix: reject unhydrated race presentation",
+      "inMain": true
+    },
+    {
+      "sha": "405fe2e10a649056e25f331a616b4d13ecc3f329",
+      "refs": [
+        "fix/race-effect-expiry",
+        "origin/fix/race-effect-expiry"
+      ],
+      "date": "2026-09-06 22:38:34 -0400",
+      "subject": "Record verified production expiry deployment and baseline exceptions",
+      "inMain": true
+    },
+    {
+      "sha": "e953b6eb15a19234433fe0448fb43ae27c22c675",
+      "refs": [
+        "fix/shop-referral-team-chat-ui",
+        "origin/fix/shop-referral-team-chat-ui"
+      ],
+      "date": "2026-09-06 22:55:34 -0400",
+      "subject": "Fix Shop spotlight and referral and team chat readability",
+      "inMain": true
+    },
+    {
+      "sha": "b8a46ec4e17b4975ce3ab5ee9f0fb83552fa6a9a",
+      "refs": [
+        "hotfix/local-event-cutover-economy-20260819",
+        "origin/hotfix/local-event-cutover-economy-20260819"
+      ],
+      "date": "2026-08-19 21:26:15 -0400",
+      "subject": "docs: record local event rollout economy",
+      "inMain": true
+    },
+    {
+      "sha": "587d8cb16163ebdeaafe20e782862e6ec5f5109b",
+      "refs": [
+        "main",
+        "origin",
+        "origin/main"
+      ],
+      "date": "2026-09-10 20:42:39 -0400",
+      "subject": "Record Backpack retirement refund and accessory review decisions",
+      "inMain": true
+    },
+    {
+      "sha": "f6da728b727b98fc728e3b12e130b924be01f80b",
+      "refs": [
+        "perf/home-races-refresh"
+      ],
+      "date": "2026-07-17 21:22:38 -0400",
+      "subject": "perf(races): lazy CustomScrollView slivers for Races tab (9.5)",
+      "inMain": true
+    },
+    {
+      "sha": "c4537019c131aa1d7cd1d5f039215f22fd15d302",
+      "refs": [
+        "referral-program",
+        "origin/referral-program"
+      ],
+      "date": "2026-06-29 14:16:24 -0400",
+      "subject": "Profile-photo avatars, finish-reward paid-places display, ranked/daily UI updates",
+      "inMain": true
+    },
+    {
+      "sha": "181c96e0b0acfb3fcbfcf002073489018a452325",
+      "refs": [
+        "release/backend-catalog-authority-20260910",
+        "origin/release/backend-catalog-authority-20260910"
+      ],
+      "date": "2026-09-10 16:28:01 -0400",
+      "subject": "Record final validation and seed Red Card guide fixture",
+      "inMain": true
+    },
+    {
+      "sha": "bad2b6541236be9a48b2b37e6fd949aae2f1ecad",
+      "refs": [
+        "release/feature-control-cleanup-20260820",
+        "origin/release/feature-control-cleanup-20260820"
+      ],
+      "date": "2026-08-20 11:11:07 -0400",
+      "subject": "2.3.8",
+      "inMain": true
+    },
+    {
+      "sha": "32aa92b1f7419d7a3cb2eb74e593978082cebd09",
+      "refs": [
+        "release/shop-decoy-accessories-20260910",
+        "origin/release/shop-decoy-accessories-20260910"
+      ],
+      "date": "2026-09-10 15:37:31 -0400",
+      "subject": "Restore Decoy and show accessories directly in Shop for build 18",
+      "inMain": true
+    },
+    {
+      "sha": "1b07895ef742847ef7ba1643ae7b3771ed3f19a2",
+      "refs": [
+        "release/unified-shop-20260908"
+      ],
+      "date": "2026-09-08 20:45:32 -0400",
+      "subject": "Record verified Shop TestFlight build 2.3.13 (5)",
+      "inMain": true
+    },
+    {
+      "sha": "38c37f89fd2abd420c0bb24ec8060eca41ab840e",
+      "refs": [
+        "worktree-rename-challenges"
+      ],
+      "date": "2026-06-17 22:53:49 -0400",
+      "subject": "Races: rename seeded daily/weekly challenges, drop 10K/50K from labels",
+      "inMain": true
+    },
+    {
+      "sha": "5ca8b71d3db5a27e36f542f0b6760d72bd4c6120",
+      "refs": [
+        "origin/1.1.5"
+      ],
+      "date": "2026-05-25 16:40:28 -0400",
+      "subject": "1.1.5: revert to time-based races, drop targetSteps from new races",
+      "inMain": true
+    },
+    {
+      "sha": "6e1236c018ea1b0426c4cf04e9f6d5840ed7d344",
+      "refs": [
+        "origin/1.1.7"
+      ],
+      "date": "2026-06-04 10:35:09 -0400",
+      "subject": "fix(1.1.7): trust HealthKit cumulativeSum source-merge + filter manual (drop per-source dedup)",
+      "inMain": true
+    },
+    {
+      "sha": "a3ee0df777f75a3733e439342d461787445db768",
+      "refs": [
+        "origin/2.2.4"
+      ],
+      "date": "2026-08-10 23:20:55 -0400",
+      "subject": "Onboarding: 'Skip' exit, and the demo rivals become bots",
+      "inMain": true
+    },
+    {
+      "sha": "90eeee389a5516cda5e5534344ac890c29a55642",
+      "refs": [
+        "origin/android-release"
+      ],
+      "date": "2026-06-17 17:11:58 -0400",
+      "subject": "tutorial: rewrite onboarding tour to match the real app; fix onboarding dead-ends",
+      "inMain": true
+    },
+    {
+      "sha": "c74147a4c3f3ee2282a575cba5a83594d676e02c",
+      "refs": [
+        "origin/claude/fix-background-polling-7Itx5"
+      ],
+      "date": "2026-03-18 19:52:39 +0000",
+      "subject": "Add background sync architecture doc with silent push workflow",
+      "inMain": true
+    },
+    {
+      "sha": "3f595c7750511a1ad077f0c0e202fdf43e9b600a",
+      "refs": [
+        "origin/the-hunt"
+      ],
+      "date": "2026-05-20 18:51:14 -0400",
+      "subject": "Add The Hunt design docs and tuning simulator",
+      "inMain": true
+    }
+  ]
+}
