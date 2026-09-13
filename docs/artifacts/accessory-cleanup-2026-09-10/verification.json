@@ -1,0 +1,287 @@
+{
+  "verifiedAt": "2026-09-10T23:48:34.587Z",
+  "exact33Inactive": true,
+  "other34AccessoryPoliciesUnchanged": true,
+  "all67AssetReferencesUnchanged": true,
+  "publicRewardPool": 18,
+  "characters": [
+    {
+      "id": "564d2abf-b735-4235-b51e-6b462292e639",
+      "sku": "corgi_puppy",
+      "name": "Corgi Puppy",
+      "slot": "CHARACTER",
+      "active": true,
+      "test_only": false,
+      "earn_only": false,
+      "asset_key": "corgi_puppy",
+      "asset_version": null
+    },
+    {
+      "id": "fa5ea940-ac91-4db3-bade-8248d31f6d2b",
+      "sku": "turtle",
+      "name": "Turtle",
+      "slot": "CHARACTER",
+      "active": true,
+      "test_only": false,
+      "earn_only": false,
+      "asset_key": "turtle",
+      "asset_version": "a87ad177f0a0"
+    }
+  ],
+  "fits": [
+    {
+      "accessory_shop_item_id": "0d672fb1-922f-4f56-bad5-66f4ecad9a1d",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "0d672fb1-922f-4f56-bad5-66f4ecad9a1d",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "0d672fb1-922f-4f56-bad5-66f4ecad9a1d",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "2882e2b5-906e-46b7-b8e2-196ffcb30f05",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "2882e2b5-906e-46b7-b8e2-196ffcb30f05",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "2882e2b5-906e-46b7-b8e2-196ffcb30f05",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "2d8198d6-968f-4e4b-a926-270004920a9f",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "2d8198d6-968f-4e4b-a926-270004920a9f",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "2d8198d6-968f-4e4b-a926-270004920a9f",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "3ad58f64-4081-47b2-93f1-7bf00b1c1bbc",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "3ad58f64-4081-47b2-93f1-7bf00b1c1bbc",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "3ad58f64-4081-47b2-93f1-7bf00b1c1bbc",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "41d30f37-86f0-4a08-847e-f25a02689ef9",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "41d30f37-86f0-4a08-847e-f25a02689ef9",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "41d30f37-86f0-4a08-847e-f25a02689ef9",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "5112cb43-7fd8-4c68-8548-89171fd7ca3f",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "5112cb43-7fd8-4c68-8548-89171fd7ca3f",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "5112cb43-7fd8-4c68-8548-89171fd7ca3f",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "51ba15d4-1d73-4779-8a53-1c769cd8d37e",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "51ba15d4-1d73-4779-8a53-1c769cd8d37e",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "51ba15d4-1d73-4779-8a53-1c769cd8d37e",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "539b98f4-440d-426a-b2f5-e470d6b92d73",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "539b98f4-440d-426a-b2f5-e470d6b92d73",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "539b98f4-440d-426a-b2f5-e470d6b92d73",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "69d4bfcc-09ef-4f76-b648-740033361c21",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "69d4bfcc-09ef-4f76-b648-740033361c21",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "69d4bfcc-09ef-4f76-b648-740033361c21",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "7f9f5370-178d-47a3-8f6c-d8eef4b194a5",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "7f9f5370-178d-47a3-8f6c-d8eef4b194a5",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "7f9f5370-178d-47a3-8f6c-d8eef4b194a5",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "8ceb320b-8d6a-453d-b826-f3fcc5b248b6",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "8ceb320b-8d6a-453d-b826-f3fcc5b248b6",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "ab4c935a-d5e8-4f34-b7db-e815644a711c",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "ab4c935a-d5e8-4f34-b7db-e815644a711c",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "ab4c935a-d5e8-4f34-b7db-e815644a711c",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "c725d512-0508-4f32-927c-ad229ece96e8",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "c725d512-0508-4f32-927c-ad229ece96e8",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "c725d512-0508-4f32-927c-ad229ece96e8",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "df3dcbe7-8363-41f1-b11c-654bb32ebcb3",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "df3dcbe7-8363-41f1-b11c-654bb32ebcb3",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "df3dcbe7-8363-41f1-b11c-654bb32ebcb3",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "e8bfc9d4-0db5-425a-af9f-0216563c7716",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "e8bfc9d4-0db5-425a-af9f-0216563c7716",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "e8bfc9d4-0db5-425a-af9f-0216563c7716",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "eaa3fa49-6135-4d27-b3a2-0b3703c05f16",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "eaa3fa49-6135-4d27-b3a2-0b3703c05f16",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "eaa3fa49-6135-4d27-b3a2-0b3703c05f16",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "f53649c0-1d81-4b5c-9554-aefefb699c64",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "f53649c0-1d81-4b5c-9554-aefefb699c64",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "f53649c0-1d81-4b5c-9554-aefefb699c64",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "shop-baseball-cap",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "shop-baseball-cap",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "shop-baseball-cap",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    },
+    {
+      "accessory_shop_item_id": "shop-cowboy-hat",
+      "character_key": "564d2abf-b735-4235-b51e-6b462292e639"
+    },
+    {
+      "accessory_shop_item_id": "shop-cowboy-hat",
+      "character_key": "default"
+    },
+    {
+      "accessory_shop_item_id": "shop-cowboy-hat",
+      "character_key": "fa5ea940-ac91-4db3-bade-8248d31f6d2b"
+    }
+  ],
+  "catalogs": [
+    {
+      "channel": "prod",
+      "features": "legacy",
+      "status": 200,
+      "accessoryCount": 18,
+      "removedAbsent": true
+    },
+    {
+      "channel": "prod",
+      "features": "characters,remote_assets",
+      "status": 200,
+      "accessoryCount": 18,
+      "removedAbsent": true
+    },
+    {
+      "channel": "testflight",
+      "features": "legacy",
+      "status": 200,
+      "accessoryCount": 28,
+      "removedAbsent": true
+    },
+    {
+      "channel": "testflight",
+      "features": "characters,remote_assets",
+      "status": 200,
+      "accessoryCount": 28,
+      "removedAbsent": true
+    }
+  ]
+}

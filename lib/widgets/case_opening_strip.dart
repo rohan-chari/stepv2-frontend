@@ -676,7 +676,10 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
 
   // Reel tile label. The 86px tile wraps to 2 lines on its own, so the former
   // hand-placed line breaks ("Compression\nSocks") are unnecessary.
-  static String _typeName(String type) => PowerupCopy.nameFor(type);
+  // The neutral preview placeholder is an inventory state, so it has no
+  // powerup catalog copy. Never expose that internal key as its label.
+  static String _typeName(String type) =>
+      type == 'MYSTERY_BOX' ? 'Mystery Box' : PowerupCopy.nameFor(type);
 }
 
 class _StripItem {

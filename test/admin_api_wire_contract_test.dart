@@ -372,6 +372,72 @@ void main() {
     );
   });
 
+  group('GET /admin/purchases', () {
+    test(
+      'uses bounded production defaults and returns the page envelope',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(200, '{"items":[],"nextCursor":null}'),
+        ]);
+        final api = BackendApiService(httpClient: client);
+        final page = await api.fetchAdminPurchases(identityToken: 'tok');
+        expect(client.requests.single.uri.path, '/admin/purchases');
+        expect(client.requests.single.uri.queryParameters, {
+          'kind': 'all',
+          'environment': 'production',
+          'limit': '20',
+        });
+        expect(page['items'], isEmpty);
+      },
+    );
+
+    test(
+      'encodes opaque cursors and preserves category and sandbox query',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(200, '{"items":[],"nextCursor":null}'),
+        ]);
+        final api = BackendApiService(httpClient: client);
+        await api.fetchAdminPurchases(
+          identityToken: 'tok',
+          kind: 'subscription',
+          environment: 'sandbox',
+          limit: 100,
+          cursor: 'opaque+/=&anchor',
+        );
+        expect(client.requests.single.uri.queryParameters, {
+          'kind': 'subscription',
+          'environment': 'sandbox',
+          'limit': '50',
+          'cursor': 'opaque+/=&anchor',
+        });
+      },
+    );
+
+    test(
+      'old backend and authorization errors retain their HTTP status',
+      () async {
+        for (final status in [401, 403, 404, 503]) {
+          final api = BackendApiService(
+            httpClient: _FakeHttpClient([
+              _Scripted(status, '{"error":"Unavailable"}'),
+            ]),
+          );
+          await expectLater(
+            api.fetchAdminPurchases(identityToken: 'tok'),
+            throwsA(
+              isA<ApiException>().having(
+                (e) => e.statusCode,
+                'statusCode',
+                status,
+              ),
+            ),
+          );
+        }
+      },
+    );
+  });
+
   group('GET /admin/system-health', () {
     test(
       'sends the locked 60m window and parses a supported response',

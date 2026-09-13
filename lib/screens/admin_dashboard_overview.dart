@@ -189,11 +189,6 @@ class _AdminDashboardOverviewState extends State<AdminDashboardOverview> {
             controller.loadAll(adminOverviewSections);
           },
         ),
-        if (summaryData.fetchedAt != null)
-          Text(
-            'Snapshot fetched ${adminTimestamp(summaryData.fetchedAt!)}',
-            style: adminText(context, size: 10, muted: true),
-          ),
         const SizedBox(height: 12),
         for (final section in adminOverviewSections)
           AdminDataStatus(

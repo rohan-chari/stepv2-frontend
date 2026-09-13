@@ -837,6 +837,43 @@ Leech cap from `SPEC docs/powerup-activation-clarity-and-invariants-requirements
 | Ghost Pepper | Every one of 83 retained non-review effects has numeric `boostMs=1,800,000`, `freezeMs=1,800,000`, `multiplier=3`, and a 60m total window: **30m at 3×, then 30m frozen**. Isolated value relative to ordinary 1× walking is `2 × boost-phase raw steps - burnout-phase raw steps`. Canonical sample-prorated observations: mean +4,049 · p10 +2,152 · p50 +4,059 · p90 +6,026 · min +508 · max +9,039 steps; 0/83 negative. The proposed two local countdowns change display only. Prod price **200**; seed create-path price **75** (DB wins because deploy upsert preserves price). |
 | Trail Mix | Instant bonus is `unique used powerup types in this race, including TRAIL_MIX × perType`; perType is **100/150/200/300** at L0/L1/L2/L3. Active config classifies it COMMON, gives upgrade prices **0/5/15/45**, and includes it in the COMMON box pool. Across 2,940 retained non-review authoritative use events, unique count mean 8.11 · p10 2 · p50 7 · p90 15 · range 1–24; bonus mean 986 · p10 200 · p50 800 · p90 1,800 · range 100–7,200. `SPEC` adds a pre-use count and authoritative top-level result fields but does not change this formula. |
 
+Ghost Pepper scoring/notice semantics reverified **2026-09-12** against backend
+`src/modules/powerups/commands/usePowerup.js`,
+`src/modules/races/services/raceSettlementAttribution.js`,
+`src/modules/races/services/effectiveStepScoring.js`, and
+`src/modules/races/jobs/raceResolutionQueueV2.js`: new effects stamp the same
+30m boost / 30m freeze / 3× constants. The isolated notice contribution is
+`2B − F`, where B and F are raw steps in those respective phases; other effects
+use chronological-prefix attribution and global-event contributions are assigned
+separately. Natural-expiry notices persist a `SYNCED_SNAPSHOT` with duplicate
+insertion suppressed. Their calculation excludes sample intervals still open at
+capture time, so the displayed expiry amount is a synced-data snapshot rather
+than a guarantee about later-arriving health data. This code verification does
+not refresh the historical production distributions or catalog prices above.
+
+#### Proposed Ghost Pepper gains-only presentation — analyzed 2026-09-12
+
+Source: `SPEC docs/ghost-pepper-gains-requirements.md` (pending approval;
+**not deployed**). The proposed displayed gain is a distinct quantity from the
+existing signed net impact: for each canonical boost segment, let `s` be its
+closed-sample steps and `m_before` / `m_after` the local chronological-prefix
+multipliers before/after adding Ghost Pepper. Define
+`gainedSteps = Math.round(sum(s * max(0, m_after - m_before)))`, restricted to
+the boost window and actual effect/race/participant cutoff. This excludes
+burnout, negative boost contributions, race-total floors, transfers, and global
+event contributions. Round the accumulated nonnegative result once per source;
+do not allocate a remainder from the signed net-impact vector. Preserve the
+canonical sample-overlap rounding already applied when obtaining each `s`.
+
+Verified multiplier examples using `CODE races/services/effectMultiplier.js`
+for 1,011 canonical steps in one boost segment: isolated `1→3` gives **2,022**;
+earlier Runner's High `2→5` or Rally Flag `1.25→4.25` gives **3,033**;
+earlier 50% Rainstorm `0.5→1.5` gives **1,011**; earlier freeze `0→0` or
+Wrong Turn `−1→−3` gives **0** positive gains; earlier Coin Flip loss
+`0.5→2.5` gives **2,022**. An earlier Umbrella cancels preceding rain.
+Effects later in chronological attribution retain their own contribution.
+These are prospective display fixtures, not changes to scoring or live prices.
+
 ### 3.4 Upgrade ladder — `DB balance_config.upgradeCosts` (verified 2026-08-09)
 
 **Upgrades are NOT cumulative and NOT persistent.** `upgradeLevel` is a
@@ -1506,9 +1543,11 @@ tournaments`.
 
 ---
 
-## 5. Daily spinner (daily reward box) — verified 2026-08-19
+## 5. Daily spinner (daily reward box) — verified 2026-09-11
 
-`CODE economy/dailyBoxOdds.js`, config `DB balance_config.dailyBox`.
+`CODE src/modules/economy/dailyBoxOdds.js`, active `DB balance_config` v5
+(created 2026-09-06). The live v5 `dailyBox` object agrees with the code
+defaults; no separate daily-box seed literal was found.
 
 | Knob | Value |
 |---|---|
@@ -1520,26 +1559,46 @@ tournaments`.
 | `accessoryWeightMode` | `inverse` — cheaper items more likely (never set `legacy`) |
 | RARE sub-roll | 50% accessory / 50% powerup when both pools stocked |
 
+`coinAmountForTier` is deterministic, not a uniform draw from each range:
+`round5(min + clamp((streak - 1) / 29, 0, 1) × (max - min))`, where `round5`
+rounds to the nearest 5. Therefore the stocked-pool coin EV is
+`pCOMMON × COMMON + pUNCOMMON × UNCOMMON`: **17.00** coins at streak 1,
+**27.07** at streak 15, and **34.00** at streak 30. With both RARE pools
+empty, RARE folds into UNCOMMON and the EV is **19.00 / 41.66 / 70.00** at
+those same streaks. These are coin EV only; a RARE accessory or powerup is a
+non-coin prize. Source: `CODE dailyBoxOdds.js` (`streakProgress`,
+`dailyBoxOddsForPool`, `coinAmountForTier`) and `DB balance_config` v5.
+
 **The spinner's powerup pool is the shop catalog** (`getEligiblePowerupPool`,
-gated by client capability tokens). The live prod catalog has six active,
-non-test-only rows: `defense_scan`, `quick_rinse`, and `decoy` at 75 coins;
-`rainstorm`, `leech`, and `ghost_pepper` at 200. `TRAIL_MAGNET` has no
-`powerup_shop_items` row at all, so it cannot appear in the server-provided
-daily-spinner pool. Retained-account audit rows contain zero `TRAIL_MAGNET`
-free-daily or extra-spin grants.
+gated by client capability tokens). The live prod catalog has seven active,
+non-test-only rows, of which five are daily-reward eligible: `defense_scan` and
+`quick_rinse` at 75 coins; `rainstorm`, `leech`, and `ghost_pepper` at 200.
+`hitchhike` and `decoy` are active but have `daily_reward_eligible=false`, so
+they are not in the spin pool. `TRAIL_MAGNET` has no `powerup_shop_items` row
+at all, so it cannot appear in the server-provided daily-spinner pool. Source:
+`DB powerup_shop_items` and `CODE getEligiblePowerupPool.js`.
 
-Within a powerup hit, inverse-price weighting makes the conditional store-price
-proxy **109.09 coins at streak 1** and **90.41 at streak 30**. With both an
-unowned-accessory pool and powerup pool stocked, a spin hits a powerup with
-probability `RARE × 50%`: 2.5% at streak 1 and 22.5% at streak 30, contributing
-2.73 and 20.34 coins of store-price proxy per spin respectively. If the user
-owns every accessory, the powerup gets the whole RARE slice: 5%→45%, or
-5.45→40.68 proxy coins/spin. These are value proxies, not coin minting.
+Within the current five-item eligible powerup pool, inverse-price weighting
+makes the conditional store-price proxy **120.00 coins at streak 1** and
+**96.77 at streak 30**. With both an unowned-accessory pool and powerup pool
+stocked, a spin hits a powerup with probability `RARE × 50%`: 2.5% at streak 1
+and 22.5% at streak 30, contributing **3.00** and **21.77** coins of
+store-price proxy per spin respectively. If the user owns every accessory, the
+powerup gets the whole RARE slice: 5%→45%, or **6.00→43.55** proxy coins/spin.
+These are value proxies, not coin minting.
 
-Trailing 30 complete days (2026-07-19 through 2026-08-17) produced 79 free-spin
-and 43 extra-spin powerup grants among retained accounts. The catalog has
-changed within that window, so historical grant types are not the current pool.
-Source: `DB powerup_shop_items`, `daily_reward_claims`, `ad_reward_grants`.
+Trailing 30 complete days (2026-08-12 through 2026-09-10, review accounts
+excluded) contained 4,800 daily-box claims. Claims averaged **23.63 coins**
+when non-coin RARE prizes are counted as zero; the p10/p50/p90 claim values
+were 10 / 10 / 45 coins. Source: `DB daily_reward_claims × users`.
+
+The status preview can safely expose a deterministic `coinAmounts` map because
+the claim endpoints still roll rarity and prize kind server-side and return the
+landed `coinAmount` as authority. However, the current extra-spin handler calls
+`coinAmountForTier` without threading its already loaded balance snapshot;
+that is a config-version parity risk if an admin changes `dailyBox` during the
+cache window. Source: `CODE commands/claimExtraDailyRewardBox.js` versus
+`CODE commands/claimDailyRewardBox.js`.
 
 `dailyBoxExcludedTypes` still exists in the `DB balance_config` row
 (`DEFENSE_SCAN, LEECH, HITCHHIKE, QUICK_RINSE, RALLY_FLAG`) but is **dead data** —
@@ -3069,3 +3128,8 @@ discard rewards or mint rules. With the same server-authorized action,
 **the direct change to expected coins, steps and item quantities is zero**.
 Missing server price/policy metadata cannot substantiate a paid action quote;
 missing/incomplete preview metadata cannot substantiate fabricated odds.
+
+
+## Test-only mouse character — 2026-09-13
+
+Mouse is a cosmetic-only CHARACTER at a 1,000-coin base price, matching Turtle; existing membership pricing applies. Catalog flags are active=true, testOnly=true, remoteOnly=true, earnOnly=false. One idempotent ownership grant was made to the exact Rohan account, with no coin or equipment mutation. Game-analyst review: SOUND for limited testing; zero minted coins/steps and zero spin/box reward EV change. Test-only items and characters are excluded from free accessory drops. Test-only is a release-channel visibility gate, not an account ACL; no public price-affordability claim is made. Live current/TestFlight and production/legacy catalog checks passed.

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/admin_metrics_dashboard.dart';
 import '../styles.dart';
 import '../widgets/admin_metric_widgets.dart';
+import '../widgets/admin_purchase_list.dart';
 import 'admin_dashboard_controller.dart';
 import 'admin_onboarding_funnel.dart';
 import 'admin_system_health.dart';
@@ -21,6 +22,7 @@ class AdminDashboardDetail extends StatefulWidget {
 
 class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
   int _tab = 0;
+  final _purchasesKey = GlobalKey<AdminPurchaseListState>();
   String? _action;
   String _adSeries = 'uniqueSsvWatchers';
   AdminDashboardController get controller => widget.controller;
@@ -47,13 +49,37 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _load();
+      if (!mounted) return;
+      _load();
+      if (widget.title != 'System health') {
+        controller.watchAnalytics(
+          this,
+          isVisible: () =>
+              mounted && (ModalRoute.of(context)?.isCurrent ?? false),
+          refresh: () => _load(refresh: true),
+          sections: () => _dependencies,
+        );
+      }
     });
   }
 
-  Future<void> _load({bool refresh = false}) => widget.title == 'System health'
-      ? controller.loadHealth()
-      : controller.loadAll(_dependencies, refresh: refresh);
+  Future<void> _load({bool refresh = false}) async {
+    if (widget.title == 'System health') {
+      await controller.loadHealth();
+      return;
+    }
+    await Future.wait([
+      controller.loadAll(_dependencies, refresh: refresh),
+      if (refresh && _tab == 1 && widget.title == 'Ads & shop')
+        _purchasesKey.currentState?.refresh() ?? Future<void>.value(),
+    ]);
+  }
+
+  @override
+  void dispose() {
+    controller.unwatchAnalytics(this);
+    super.dispose();
+  }
 
   AdminMetricsEnvelope? _envelope(String section) =>
       controller.state(section).envelope;
@@ -799,6 +825,11 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
                 'Coin purchases of this SKU in the trailing 30-day legacy window across the two existing coin shops. Sorted by count rather than coins spent. Source: coin purchase records.',
           ),
       ]),
+      AdminPurchaseList(
+        key: _purchasesKey,
+        api: controller.api,
+        auth: controller.auth,
+      ),
     ];
   }
 }

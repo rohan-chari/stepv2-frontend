@@ -2810,6 +2810,29 @@ class BackendApiService {
     return stats is Map<String, dynamic> ? stats : <String, dynamic>{};
   }
 
+  /// Bounded recorded purchase history, independently deployed from analytics.
+  Future<Map<String, dynamic>> fetchAdminPurchases({
+    required String identityToken,
+    String kind = 'all',
+    String environment = 'production',
+    int limit = 20,
+    String? cursor,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        'kind': kind,
+        'environment': environment,
+        'limit': limit.clamp(1, 50).toString(),
+        'cursor': ?cursor,
+      },
+    ).query;
+    final response = await _sendGetRequest(
+      path: '/admin/purchases?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   /// Additive, read-only operational telemetry for Admin Tools.
   ///
   /// A plain 404 means the independently deployed backend predates this

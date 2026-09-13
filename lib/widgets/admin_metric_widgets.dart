@@ -630,8 +630,18 @@ class AdminFreshness extends StatelessWidget {
   final bool foreground;
   @override
   Widget build(BuildContext context) {
-    final at = data.fetchedAt;
+    final at = data.calculatedAt ?? data.fetchedAt;
     if (at == null) return const SizedBox.shrink();
+    final calculated = data.calculatedAt != null;
+    final stale =
+        data.snapshotStale ||
+        data.error != null ||
+        (data.freshUntil?.isBefore(DateTime.now()) ?? false);
+    final interval = data.refreshIntervalSeconds;
+    final freshness =
+        '${calculated ? 'Calculated' : 'Fetched'} ${adminTimestamp(at)}'
+        '${interval == 900 ? ' · updates every 15 min' : ''}'
+        '${stale ? ' · STALE' : ''}';
     final envelope = data.envelope;
     final sources = <String>[];
     final warnings = <String>[];
@@ -678,14 +688,14 @@ class AdminFreshness extends StatelessWidget {
         onTap: () => adminDefinition(
           context,
           '$name data freshness',
-          'Fetched ${adminTimestamp(at)}${data.error == null ? '' : ' · STALE'}.\n\n${sources.isEmpty ? 'Source timestamps are not supplied for this legacy aggregate.' : sources.join('\n')}',
+          '$freshness.${data.loading ? ' Checking for an updated snapshot.' : ''}\n\n${sources.isEmpty ? 'Source timestamps are not supplied for this legacy aggregate.' : sources.join('\n')}',
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Text(
-                '$name · ${adminTimestamp(at)}${data.error == null ? '' : ' · STALE'}${warnings.isEmpty ? '' : '\n${warnings.join(' · ')}'}',
+                '$name · $freshness${data.loading ? ' · Checking for updates' : ''}${warnings.isEmpty ? '' : '\n${warnings.join(' · ')}'}',
                 style: adminText(context, size: 11, muted: true),
               ),
             ),

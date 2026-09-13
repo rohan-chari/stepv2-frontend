@@ -35,6 +35,13 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.14',
+    title: 'SMALL IMPROVEMENTS',
+    bullets: <String>[
+      'Mystery Boxes show a clearer label while preview details are unavailable.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.3.13',
     title: 'A CLEARER VIEW',
     bullets: <String>[

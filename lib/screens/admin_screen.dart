@@ -526,6 +526,12 @@ class _AdminScreenState extends State<AdminScreen> {
   void initState() {
     super.initState();
     unawaited(_dashboard.loadAll(adminOverviewSections));
+    _dashboard.watchAnalytics(
+      this,
+      isVisible: () => mounted && (ModalRoute.of(context)?.isCurrent ?? false),
+      refresh: () => _dashboard.loadAll(adminOverviewSections, refresh: true),
+      sections: () => adminOverviewSections,
+    );
   }
 
   @override

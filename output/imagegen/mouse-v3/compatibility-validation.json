@@ -1,0 +1,23 @@
+{
+  "publishedFrames": 6,
+  "frameSize": 96,
+  "sampledMasterIndices": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20
+  ],
+  "cycleMs": 720,
+  "cyclicDifferences": [
+    11.014892578125,
+    2.6017252604166665,
+    11.045274522569445,
+    8.828776041666666,
+    2.7237141927083335,
+    8.66159396701389
+  ],
+  "seamNoLargerThanInterior": true,
+  "reason": "Current HomeCourseTrack and RaceCardCapybaraRow use six frame indices, so publish a complete six-pose cycle."
+}

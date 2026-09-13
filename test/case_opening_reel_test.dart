@@ -42,6 +42,16 @@ void main() {
     expect(completed, isTrue);
   });
 
+  testWidgets('missing preview data renders a readable mystery box label', (
+    WidgetTester tester,
+  ) async {
+    await pumpStrip(tester, onComplete: () {});
+
+    expect(find.text('Mystery Box'), findsWidgets);
+    expect(find.text('MYSTERY_BOX'), findsNothing);
+    expect(find.text('Red Card'), findsOneWidget);
+  });
+
   testWidgets('generic reel renders custom tiles', (
     WidgetTester tester,
   ) async {

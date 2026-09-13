@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../models/admin_metrics_dashboard.dart';
 import '../models/admin_system_health.dart';
@@ -21,6 +21,11 @@ class AdminSectionData {
   bool loading = false;
   String? error;
   DateTime? fetchedAt;
+  DateTime? calculatedAt;
+  DateTime? freshUntil;
+  bool snapshotStale = false;
+  bool retryableUnavailable = false;
+  int? refreshIntervalSeconds;
   AdminMetricsEnvelope? envelope;
   AdminMetricMap? legacy;
   Future<void>? pending;
@@ -29,14 +34,142 @@ class AdminSectionData {
 /// One session, shared by overview and detail routes. All stats reads are
 /// serialized; responses are stored under their captured API window so an old
 /// completion can never overwrite the newly selected range.
-class AdminDashboardController extends ChangeNotifier {
-  AdminDashboardController(this.api, this.auth);
+class AdminDashboardController extends ChangeNotifier
+    with WidgetsBindingObserver {
+  AdminDashboardController(this.api, this.auth, {DateTime Function()? now})
+    : _now = now ?? DateTime.now {
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+  }
   final BackendApiService api;
   final AuthService auth;
+  final DateTime Function() _now;
   AdminRange range = AdminRange.week;
   final Map<String, AdminSectionData> _cache = {};
   Future<void> _queue = Future.value();
   bool _disposed = false;
+  Timer? _refreshTimer;
+  final Map<Object, _VisibleAnalytics> _visibleAnalytics = {};
+  bool _foreground = true;
+
+  /// One timer for the shared session, including stacked detail routes. Only
+  /// the top visible analytics route may request a refresh.
+  void watchAnalytics(
+    Object owner, {
+    required bool Function() isVisible,
+    required Future<void> Function() refresh,
+    required Iterable<String> Function() sections,
+  }) {
+    _visibleAnalytics.remove(owner)?.followUp?.cancel();
+    _visibleAnalytics[owner] = _VisibleAnalytics(
+      isVisible,
+      refresh,
+      sections,
+      _now(),
+    );
+    _startRefreshTimer();
+  }
+
+  void unwatchAnalytics(Object owner) {
+    _visibleAnalytics.remove(owner)?.followUp?.cancel();
+    if (_visibleAnalytics.isEmpty) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  void _startRefreshTimer() {
+    if (_disposed ||
+        !_foreground ||
+        _visibleAnalytics.isEmpty ||
+        _refreshTimer != null) {
+      return;
+    }
+    _refreshTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      _refreshVisible(force: true);
+    });
+  }
+
+  void _refreshVisible({bool force = false}) {
+    if (_disposed || !_foreground) return;
+    final now = _now();
+    for (final view in _visibleAnalytics.values.toList()) {
+      if (!view.isVisible() || view.pending) continue;
+      if (!force &&
+          now.difference(view.checkedAt) < const Duration(minutes: 15)) {
+        continue;
+      }
+      view.checkedAt = now;
+      view.followUpAttempts = 0;
+      view.followUp?.cancel();
+      view.followUp = null;
+      view.pending = true;
+      unawaited(
+        view.refresh().whenComplete(() {
+          view.pending = false;
+          _scheduleFollowUps();
+        }),
+      );
+    }
+  }
+
+  List<String> _sectionsNeedingFollowUp(_VisibleAnalytics view) => [
+    for (final section in view.sections())
+      if (state(section).retryableUnavailable ||
+          (state(section).snapshotStale && state(section).error == null))
+        section,
+  ];
+
+  /// A stale response (or a cold 503) may precede a build that finishes within
+  /// the backend's 45-second deadline. Read the ordinary cached endpoint after
+  /// 50 seconds, at most twice per 15-minute cycle. Never force a server rebuild.
+  void _scheduleFollowUps() {
+    if (_disposed || !_foreground) return;
+    for (final view in _visibleAnalytics.values.toList()) {
+      if (!view.isVisible() || _sectionsNeedingFollowUp(view).isEmpty) {
+        view.followUp?.cancel();
+        view.followUp = null;
+        continue;
+      }
+      if (view.pending || view.followUp != null || view.followUpAttempts >= 2) {
+        continue;
+      }
+      view.followUp = Timer(const Duration(seconds: 50), () {
+        view.followUp = null;
+        if (_disposed || !_foreground || !view.isVisible() || view.pending) {
+          return;
+        }
+        final sections = _sectionsNeedingFollowUp(view);
+        if (sections.isEmpty) return;
+        view.followUpAttempts++;
+        view.pending = true;
+        unawaited(
+          loadAll(sections, refresh: true).whenComplete(() {
+            view.pending = false;
+            _scheduleFollowUps();
+          }),
+        );
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      for (final view in _visibleAnalytics.values) {
+        view.followUp?.cancel();
+        view.followUp = null;
+      }
+    } else {
+      _refreshVisible();
+      _scheduleFollowUps();
+      _startRefreshTimer();
+    }
+  }
 
   AdminSystemHealthEnvelope? health;
   AdminSystemHealthFetchStatus? healthStatus;
@@ -73,6 +206,7 @@ class AdminDashboardController extends ChangeNotifier {
       unawaited(load(section, refresh: refresh, range: captured));
     }
     await _queue;
+    _scheduleFollowUps();
   }
 
   Future<void> load(String section, {bool refresh = false, AdminRange? range}) {
@@ -113,6 +247,20 @@ class AdminDashboardController extends ChangeNotifier {
         if (_disposed) return;
         if (section.startsWith('dashboard-')) {
           final envelope = AdminMetricsEnvelope.fromStats(stats);
+          if (envelope.status == AdminDashboardStatus.disabled) {
+            // The server's explicit disablement supersedes every cached range.
+            for (final entry in _cache.entries) {
+              if (!entry.key.startsWith('dashboard-')) continue;
+              entry.value
+                ..envelope = null
+                ..calculatedAt = null
+                ..fetchedAt = null
+                ..freshUntil = null
+                ..snapshotStale = false
+                ..retryableUnavailable = false
+                ..refreshIntervalSeconds = null;
+            }
+          }
           if (!envelope.present ||
               envelope.status != AdminDashboardStatus.available) {
             throw const ApiException(
@@ -123,9 +271,21 @@ class AdminDashboardController extends ChangeNotifier {
         } else {
           data.legacy = AdminMetricMap.from(stats);
         }
-        data.fetchedAt = DateTime.now();
+        final metadata = AdminMetricMap.from(stats);
+        final snapshot = metadata?.map('snapshot');
+        data.calculatedAt =
+            DateTime.tryParse(snapshot?.text('generatedAt') ?? '')?.toLocal() ??
+            DateTime.tryParse(metadata?.text('generatedAt') ?? '')?.toLocal();
+        data.freshUntil = DateTime.tryParse(snapshot?.text('freshUntil') ?? '');
+        data.snapshotStale = snapshot?.text('status') == 'stale';
+        data.refreshIntervalSeconds = snapshot?.integer(
+          'refreshIntervalSeconds',
+        );
+        data.fetchedAt = _now();
         data.error = null;
+        data.retryableUnavailable = false;
       } on ApiException catch (error) {
+        data.retryableUnavailable = error.statusCode == 503;
         data.error = switch (error.statusCode) {
           401 => 'Your session has expired. Sign in again.',
           403 => 'Admin access is required.',
@@ -133,6 +293,7 @@ class AdminDashboardController extends ChangeNotifier {
           _ => 'Couldn’t update this section.',
         };
       } catch (_) {
+        data.retryableUnavailable = false;
         data.error = 'Couldn’t update this section.';
       } finally {
         data.loading = false;
@@ -183,6 +344,28 @@ class AdminDashboardController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _refreshTimer?.cancel();
+    for (final view in _visibleAnalytics.values) {
+      view.followUp?.cancel();
+    }
+    _visibleAnalytics.clear();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+}
+
+class _VisibleAnalytics {
+  _VisibleAnalytics(
+    this.isVisible,
+    this.refresh,
+    this.sections,
+    this.checkedAt,
+  );
+  final bool Function() isVisible;
+  final Future<void> Function() refresh;
+  final Iterable<String> Function() sections;
+  Timer? followUp;
+  int followUpAttempts = 0;
+  DateTime checkedAt;
+  bool pending = false;
 }
