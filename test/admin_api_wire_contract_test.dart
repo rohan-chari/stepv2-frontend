@@ -372,6 +372,88 @@ void main() {
     );
   });
 
+  group('GET /admin/stats page views', () {
+    test(
+      'one page request includes exact view/window and old-section hint',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(200, '{"stats":{"view":"retention","sections":{}}}'),
+        ]);
+        final api = BackendApiService(httpClient: client);
+        final stats = await api.fetchAdminStatsView(
+          identityToken: 'tok',
+          view: 'retention',
+          window: '7d',
+          section: 'dashboard-summary',
+        );
+        expect(client.requests.single.uri.path, '/admin/stats');
+        expect(client.requests.single.uri.queryParameters, {
+          'view': 'retention',
+          'window': '7d',
+          'sections': 'dashboard-summary',
+        });
+        expect(stats, {'view': 'retention', 'sections': {}});
+      },
+    );
+    test(
+      'pending503 preserves its code instead of looking like missing history',
+      () async {
+        final api = BackendApiService(
+          httpClient: _FakeHttpClient([
+            const _Scripted(
+              503,
+              '{"error":"Calculating","code":"ADMIN_ANALYTICS_PENDING"}',
+            ),
+          ]),
+        );
+        await expectLater(
+          api.fetchAdminStatsView(
+            identityToken: 'tok',
+            view: 'growth',
+            window: '7d',
+            section: 'dashboard-growth',
+          ),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.statusCode, 'status', 503)
+                .having((e) => e.code, 'code', 'ADMIN_ANALYTICS_PENDING'),
+          ),
+        );
+      },
+    );
+    test(
+      'missing stats wrapper is malformed; an old valid stats wrapper remains usable',
+      () async {
+        final bad = BackendApiService(
+          httpClient: _FakeHttpClient([const _Scripted(200, '{}')]),
+        );
+        await expectLater(
+          bad.fetchAdminStatsView(
+            identityToken: 'tok',
+            view: 'growth',
+            window: '7d',
+            section: 'dashboard-growth',
+          ),
+          throwsA(isA<ApiException>()),
+        );
+        final old = BackendApiService(
+          httpClient: _FakeHttpClient([
+            const _Scripted(200, '{"stats":{"generatedAt":"old"}}'),
+          ]),
+        );
+        expect(
+          await old.fetchAdminStatsView(
+            identityToken: 'tok',
+            view: 'growth',
+            window: '7d',
+            section: 'dashboard-growth',
+          ),
+          {'generatedAt': 'old'},
+        );
+      },
+    );
+  });
+
   group('GET /admin/purchases', () {
     test(
       'uses bounded production defaults and returns the page envelope',

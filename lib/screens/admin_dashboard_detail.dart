@@ -22,28 +22,31 @@ class AdminDashboardDetail extends StatefulWidget {
 
 class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
   int _tab = 0;
+  bool _routeVisible = false;
   final _purchasesKey = GlobalKey<AdminPurchaseListState>();
   String? _action;
   String _adSeries = 'uniqueSsvWatchers';
   AdminDashboardController get controller => widget.controller;
 
-  List<String> get _dependencies => switch (widget.title) {
-    'Growth' => ['dashboard-growth'],
-    'Activity' => ['dashboard-dau-engagement'],
-    'Retention' => [
-      'dashboard-summary',
-      'dashboard-retention-mature',
-      'dashboard-retention',
-    ],
-    'Races & friends' => [
-      'dashboard-summary',
-      'dashboard-engagement',
-      'dashboard-activation',
-    ],
-    'Invites & onboarding' => ['dashboard-funnels'],
-    'Ads & shop' => _tab == 0 ? ['dashboard-revenue', 'ads'] : ['economy'],
-    _ => [],
+  AdminView? get _view => switch (widget.title) {
+    'Growth' => AdminView.growth,
+    'Activity' => AdminView.activity,
+    'Retention' => AdminView.retention,
+    'Races & friends' => AdminView.races,
+    'Invites & onboarding' =>
+      _tab == 0 ? AdminView.invites : AdminView.onboarding,
+    'Ads & shop' => _tab == 0 ? AdminView.ads : AdminView.shop,
+    _ => null,
   };
+
+  List<String> get _dependencies => _view?.sections ?? const [];
+
+  AdminSectionData _state(String section) {
+    final view = _view;
+    return view == null
+        ? AdminSectionData()
+        : controller.state(section, view: view);
+  }
 
   @override
   void initState() {
@@ -51,16 +54,30 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _load();
-      if (widget.title != 'System health') {
+      final initialView = _view;
+      if (initialView != null) {
         controller.watchAnalytics(
           this,
           isVisible: () =>
               mounted && (ModalRoute.of(context)?.isCurrent ?? false),
           refresh: () => _load(refresh: true),
-          sections: () => _dependencies,
+          view: () => _view ?? initialView,
         );
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = ModalRoute.of(context)?.isCurrent ?? false;
+    final becameVisible = visible && !_routeVisible;
+    _routeVisible = visible;
+    if (becameVisible && _view != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) _load();
+      });
+    }
   }
 
   Future<void> _load({bool refresh = false}) async {
@@ -68,8 +85,10 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
       await controller.loadHealth();
       return;
     }
+    final view = _view;
+    if (view == null) return;
     await Future.wait([
-      controller.loadAll(_dependencies, refresh: refresh),
+      controller.loadPage(view, refresh: refresh),
       if (refresh && _tab == 1 && widget.title == 'Ads & shop')
         _purchasesKey.currentState?.refresh() ?? Future<void>.value(),
     ]);
@@ -81,8 +100,7 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
     super.dispose();
   }
 
-  AdminMetricsEnvelope? _envelope(String section) =>
-      controller.state(section).envelope;
+  AdminMetricsEnvelope? _envelope(String section) => _state(section).envelope;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -96,7 +114,13 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
         'Activity',
         'Ads & shop',
       ].contains(widget.title);
-      final data = _dependencies.map(controller.state).toList();
+      final data = _dependencies.map(_state).toList();
+      final initialCalculation =
+          data.isNotEmpty &&
+          data.every(
+            (entry) => entry.envelope == null && entry.legacy == null,
+          ) &&
+          data.any((entry) => entry.loading || entry.calculationPending);
       final refreshing =
           data.any((entry) => entry.loading) ||
           (widget.title == 'System health' && controller.healthLoading);
@@ -141,35 +165,37 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
             ],
             if (widget.title != 'System health')
               _note('Retained iOS population · coverage varies by metric'),
-            for (final section in _dependencies)
-              AdminDataStatus(
-                data: controller.state(section),
-                onRetry: () => controller.load(section, refresh: true),
-              ),
-            ...switch (widget.title) {
-              'Growth' => _growth(),
-              'Activity' => _activity(),
-              'Retention' => _retention(),
-              'Races & friends' => _races(),
-              'Invites & onboarding' => _tab == 0 ? _invites() : _onboarding(),
-              'Ads & shop' => _tab == 0 ? _ads() : _shop(),
-              'System health' => [
-                AdminCard(
-                  child: AdminSystemHealthBody(
-                    health: controller.health,
-                    loading: controller.healthLoading,
-                    emptyStatus: controller.healthStatus,
-                    failed: controller.healthFailed,
-                    stale: controller.healthFailed && controller.health != null,
-                    onRefresh: controller.loadHealth,
+            AdminPageDataStatus(
+              data: data,
+              onRetry: () => _load(refresh: true),
+            ),
+            if (!initialCalculation || _view == AdminView.shop)
+              ...switch (widget.title) {
+                'Growth' => _growth(),
+                'Activity' => _activity(),
+                'Retention' => _retention(),
+                'Races & friends' => _races(),
+                'Invites & onboarding' =>
+                  _tab == 0 ? _invites() : _onboarding(),
+                'Ads & shop' => _tab == 0 ? _ads() : _shop(),
+                'System health' => [
+                  AdminCard(
+                    child: AdminSystemHealthBody(
+                      health: controller.health,
+                      loading: controller.healthLoading,
+                      emptyStatus: controller.healthStatus,
+                      failed: controller.healthFailed,
+                      stale:
+                          controller.healthFailed && controller.health != null,
+                      onRefresh: controller.loadHealth,
+                    ),
                   ),
-                ),
-              ],
-              _ => [],
-            },
+                ],
+                _ => [],
+              },
             for (final section in _dependencies)
               AdminFreshness(
-                data: controller.state(section),
+                data: _state(section),
                 label: section.replaceFirst('dashboard-', ''),
                 foreground: [
                   'dashboard-growth',
@@ -722,11 +748,7 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
         rewardCounts[kind] = (rewardCounts[kind] ?? 0) + (grants ?? 0);
       }
     }
-    final cap = controller
-        .state('ads')
-        .legacy
-        ?.map('adRevenue')
-        ?.map('capUtilization');
+    final cap = _state('ads').legacy?.map('adRevenue')?.map('capUtilization');
     return [
       _note(
         'Signed reward callbacks · retained iOS accounts. Reward type is recorded, not independently authenticated. Counts may revise after account deletion.',
@@ -798,7 +820,7 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
   };
 
   List<Widget> _shop() {
-    final economy = controller.state('economy').legacy?.map('coinEconomy');
+    final economy = _state('economy').legacy?.map('coinEconomy');
     final rows = [...?economy?.rows('purchasesBySku')]
       ..sort(
         (a, b) =>
@@ -812,7 +834,10 @@ class _AdminDashboardDetailState extends State<AdminDashboardDetail> {
         _note(
           'Last 30 days · ranked by purchase count\nCoin purchases in the two existing shops; not cash revenue or in-app purchases.',
         ),
-        if (malformed)
+        if (malformed &&
+            (_state('economy').loading || _state('economy').calculationPending))
+          _note('Calculating purchase popularity…')
+        else if (malformed)
           _note('Unavailable · purchase history is missing or malformed')
         else if (rows.isEmpty)
           const AdminValueRow(label: 'No purchases in this period', value: '0'),

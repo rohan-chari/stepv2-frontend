@@ -17,8 +17,50 @@ enum AdminRange {
   final String apiWindow;
 }
 
+/// Permanent page identity: projected section names overlap across views.
+enum AdminView {
+  overview('overview', [
+    'dashboard-summary',
+    'dashboard-growth',
+    'dashboard-dau-engagement',
+  ]),
+  growth('growth', ['dashboard-growth']),
+  activity('activity', ['dashboard-dau-engagement']),
+  retention('retention', [
+    'dashboard-summary',
+    'dashboard-retention',
+    'dashboard-retention-mature',
+  ]),
+  races('races', [
+    'dashboard-summary',
+    'dashboard-engagement',
+    'dashboard-activation',
+  ]),
+  invites('invites', ['dashboard-funnels']),
+  onboarding('onboarding', ['dashboard-funnels']),
+  ads('ads', ['dashboard-revenue', 'ads']),
+  shop('shop', ['economy']);
+
+  const AdminView(this.apiName, this.sections);
+  final String apiName;
+  final List<String> sections;
+  String window(AdminRange range) => this == shop ? '30d' : range.apiWindow;
+}
+
+class _AdminPageData {
+  _AdminPageData(AdminView view)
+    : sections = {
+        for (final section in view.sections) section: AdminSectionData(),
+      };
+  final Map<String, AdminSectionData> sections;
+  Future<void>? pending;
+  DateTime? attemptedAt;
+}
+
 class AdminSectionData {
   bool loading = false;
+  bool calculationPending = false;
+  bool followUpExhausted = false;
   String? error;
   DateTime? fetchedAt;
   DateTime? calculatedAt;
@@ -28,12 +70,11 @@ class AdminSectionData {
   int? refreshIntervalSeconds;
   AdminMetricsEnvelope? envelope;
   AdminMetricMap? legacy;
-  Future<void>? pending;
 }
 
-/// One session, shared by overview and detail routes. All stats reads are
-/// serialized; responses are stored under their captured API window so an old
-/// completion can never overwrite the newly selected range.
+/// One session, shared by overview and detail routes. Page reads are serialized
+/// and stored under captured view/window keys, never under overlapping section
+/// names alone. A late response cannot overwrite a different view or range.
 class AdminDashboardController extends ChangeNotifier
     with WidgetsBindingObserver {
   AdminDashboardController(this.api, this.auth, {DateTime Function()? now})
@@ -46,7 +87,8 @@ class AdminDashboardController extends ChangeNotifier
   final AuthService auth;
   final DateTime Function() _now;
   AdminRange range = AdminRange.week;
-  final Map<String, AdminSectionData> _cache = {};
+  final Map<String, _AdminPageData> _cache = {};
+  bool _oldServer = false;
   Future<void> _queue = Future.value();
   bool _disposed = false;
   Timer? _refreshTimer;
@@ -59,13 +101,13 @@ class AdminDashboardController extends ChangeNotifier
     Object owner, {
     required bool Function() isVisible,
     required Future<void> Function() refresh,
-    required Iterable<String> Function() sections,
+    required AdminView Function() view,
   }) {
     _visibleAnalytics.remove(owner)?.followUp?.cancel();
     _visibleAnalytics[owner] = _VisibleAnalytics(
       isVisible,
       refresh,
-      sections,
+      view,
       _now(),
     );
     _startRefreshTimer();
@@ -95,8 +137,13 @@ class AdminDashboardController extends ChangeNotifier
     if (_disposed || !_foreground) return;
     final now = _now();
     for (final view in _visibleAnalytics.values.toList()) {
+      _syncWatchedPage(view);
       if (!view.isVisible() || view.pending) continue;
+      final page = _page(view.view(), range);
+      final needsFirstAttempt =
+          page.attemptedAt == null && page.pending == null;
       if (!force &&
+          !needsFirstAttempt &&
           now.difference(view.checkedAt) < const Duration(minutes: 15)) {
         continue;
       }
@@ -114,12 +161,25 @@ class AdminDashboardController extends ChangeNotifier
     }
   }
 
-  List<String> _sectionsNeedingFollowUp(_VisibleAnalytics view) => [
-    for (final section in view.sections())
-      if (state(section).retryableUnavailable ||
-          (state(section).snapshotStale && state(section).error == null))
-        section,
-  ];
+  void _syncWatchedPage(_VisibleAnalytics watcher) {
+    final view = watcher.view();
+    final key = '${view.apiName}:${view.window(range)}';
+    if (watcher.pageKey == key) return;
+    watcher.pageKey = key;
+    watcher.followUp?.cancel();
+    watcher.followUp = null;
+    watcher.followUpAttempts = 0;
+    watcher.checkedAt = _now();
+  }
+
+  bool _needsFollowUp(_VisibleAnalytics watcher) {
+    final view = watcher.view();
+    return view.sections.any((section) {
+      final data = state(section, view: view);
+      return data.retryableUnavailable ||
+          (data.snapshotStale && data.error == null);
+    });
+  }
 
   /// A stale response (or a cold 503) may precede a build that finishes within
   /// the backend's 45-second deadline. Read the ordinary cached endpoint after
@@ -127,12 +187,24 @@ class AdminDashboardController extends ChangeNotifier
   void _scheduleFollowUps() {
     if (_disposed || !_foreground) return;
     for (final view in _visibleAnalytics.values.toList()) {
-      if (!view.isVisible() || _sectionsNeedingFollowUp(view).isEmpty) {
+      _syncWatchedPage(view);
+      if (!view.isVisible() || !_needsFollowUp(view)) {
         view.followUp?.cancel();
         view.followUp = null;
         continue;
       }
-      if (view.pending || view.followUp != null || view.followUpAttempts >= 2) {
+      if (view.pending || view.followUp != null) continue;
+      if (view.followUpAttempts >= 2) {
+        var changed = false;
+        final pageView = view.view();
+        for (final section in pageView.sections) {
+          final data = state(section, view: pageView);
+          if (data.calculationPending && !data.followUpExhausted) {
+            data.followUpExhausted = true;
+            changed = true;
+          }
+        }
+        if (changed) _notify();
         continue;
       }
       view.followUp = Timer(const Duration(seconds: 50), () {
@@ -140,12 +212,11 @@ class AdminDashboardController extends ChangeNotifier
         if (_disposed || !_foreground || !view.isVisible() || view.pending) {
           return;
         }
-        final sections = _sectionsNeedingFollowUp(view);
-        if (sections.isEmpty) return;
+        if (!_needsFollowUp(view)) return;
         view.followUpAttempts++;
         view.pending = true;
         unawaited(
-          loadAll(sections, refresh: true).whenComplete(() {
+          loadPage(view.view(), refresh: true).whenComplete(() {
             view.pending = false;
             _scheduleFollowUps();
           }),
@@ -177,13 +248,21 @@ class AdminDashboardController extends ChangeNotifier
   bool healthFailed = false;
   Future<void>? _healthPending;
 
-  AdminSectionData state(String section, {AdminRange? range}) {
-    final window = section == 'dashboard-retention-mature'
-        ? '90d'
-        : section.startsWith('dashboard-')
-        ? (range ?? this.range).apiWindow
-        : '30d';
-    return _cache.putIfAbsent('$section:$window', AdminSectionData.new);
+  _AdminPageData _page(AdminView view, AdminRange selected) =>
+      _cache.putIfAbsent(
+        '${view.apiName}:${view.window(selected)}',
+        () => _AdminPageData(view),
+      );
+
+  AdminSectionData state(
+    String section, {
+    required AdminView view,
+    AdminRange? range,
+  }) {
+    return _page(
+      view,
+      range ?? this.range,
+    ).sections.putIfAbsent(section, AdminSectionData.new);
   }
 
   void selectRange(AdminRange value) {
@@ -196,32 +275,42 @@ class AdminDashboardController extends ChangeNotifier
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> loadAll(
-    Iterable<String> sections, {
-    bool refresh = false,
-  }) async {
-    final captured = range;
-    for (final section in sections) {
-      // Capture all requested ranges before waiting in the serial queue.
-      unawaited(load(section, refresh: refresh, range: captured));
-    }
-    await _queue;
-    _scheduleFollowUps();
+  void _ensureCanDispatch(AdminView view, AdminRange selected) {
+    final stillVisible =
+        !_disposed &&
+        _foreground &&
+        view.window(range) == view.window(selected) &&
+        _visibleAnalytics.values.any(
+          (watcher) => watcher.view() == view && watcher.isVisible(),
+        );
+    if (!stillVisible) throw const _AdminPageLoadCanceled();
   }
 
-  Future<void> load(String section, {bool refresh = false, AdminRange? range}) {
+  Future<void> loadPage(
+    AdminView view, {
+    bool refresh = false,
+    AdminRange? range,
+  }) {
     final selected = range ?? this.range;
-    final data = state(section, range: selected);
-    final pending = data.pending;
+    final page = _page(view, selected);
+    final pending = page.pending;
     if (pending != null) return pending;
-    if (!refresh && (data.fetchedAt != null || data.error != null)) {
+    final attemptedAt = page.attemptedAt;
+    if (!refresh &&
+        attemptedAt != null &&
+        _now().difference(attemptedAt) < const Duration(minutes: 15)) {
+      _scheduleFollowUps();
       return Future.value();
     }
-    data.loading = true;
+    for (final data in page.sections.values) {
+      data.loading = true;
+    }
     _notify();
     final operation = _queue.then((_) async {
-      if (_disposed) return;
+      var canceled = false;
       try {
+        // Visibility may have changed while another page owned the queue.
+        _ensureCanDispatch(view, selected);
         final token = auth.authToken;
         if (token == null || token.isEmpty) {
           throw const ApiException(
@@ -229,81 +318,181 @@ class AdminDashboardController extends ChangeNotifier
             statusCode: 401,
           );
         }
-        final stats = await api.fetchAdminStats(
-          identityToken: token,
-          // The internal mature-retention key uses the already-supported
-          // fixed 90-day cohort request, without adding a user range toggle.
-          sections: [
-            section == 'dashboard-retention-mature'
-                ? 'dashboard-retention'
-                : section,
-          ],
-          window: section == 'dashboard-retention-mature'
-              ? '90d'
-              : section.startsWith('dashboard-')
-              ? selected.apiWindow
-              : null,
-        );
-        if (_disposed) return;
-        if (section.startsWith('dashboard-')) {
-          final envelope = AdminMetricsEnvelope.fromStats(stats);
-          if (envelope.status == AdminDashboardStatus.disabled) {
-            // The server's explicit disablement supersedes every cached range.
-            for (final entry in _cache.entries) {
-              if (!entry.key.startsWith('dashboard-')) continue;
-              entry.value
-                ..envelope = null
-                ..calculatedAt = null
-                ..fetchedAt = null
-                ..freshUntil = null
-                ..snapshotStale = false
-                ..retryableUnavailable = false
-                ..refreshIntervalSeconds = null;
+        if (_oldServer) {
+          await _loadLegacyPage(view, selected, token);
+        } else {
+          final result = await api.fetchAdminStatsView(
+            identityToken: token,
+            view: view.apiName,
+            window: view.window(selected),
+            section: view.sections.first,
+          );
+          if (_disposed) return;
+          if (!result.containsKey('view') && !result.containsKey('sections')) {
+            // Old servers ignore the additive query and return the compatible
+            // first section. Reuse it; only fetch the remaining sections once.
+            _oldServer = true;
+            await _loadLegacyPage(view, selected, token, firstReply: result);
+          } else {
+            final projection = AdminMetricMap.from(result);
+            final sections = projection?.map('sections');
+            if (projection?.text('view') != view.apiName || sections == null) {
+              throw const FormatException('Malformed advertised page response');
+            }
+            for (final section in view.sections) {
+              final raw = sections.raw(section);
+              final data = state(section, view: view, range: selected);
+              if (raw is! Map) {
+                _fail(data, const FormatException('Missing projected section'));
+                continue;
+              }
+              final inner = <String, dynamic>{
+                for (final entry in raw.entries)
+                  if (entry.key is String) entry.key.toString(): entry.value,
+              };
+              // The outer snapshot is authoritative page metadata. Optional
+              // inner metadata remains a fallback for compatible responses.
+              if (result.containsKey('snapshot')) {
+                inner['snapshot'] = result['snapshot'];
+              }
+              if (result.containsKey('generatedAt')) {
+                inner['generatedAt'] = result['generatedAt'];
+              }
+              _acceptSection(data, section, inner);
             }
           }
-          if (!envelope.present ||
-              envelope.status != AdminDashboardStatus.available) {
-            throw const ApiException(
-              'This section is unavailable on this server.',
-            );
-          }
-          data.envelope = envelope;
-        } else {
-          data.legacy = AdminMetricMap.from(stats);
         }
-        final metadata = AdminMetricMap.from(stats);
-        final snapshot = metadata?.map('snapshot');
-        data.calculatedAt =
-            DateTime.tryParse(snapshot?.text('generatedAt') ?? '')?.toLocal() ??
-            DateTime.tryParse(metadata?.text('generatedAt') ?? '')?.toLocal();
-        data.freshUntil = DateTime.tryParse(snapshot?.text('freshUntil') ?? '');
-        data.snapshotStale = snapshot?.text('status') == 'stale';
-        data.refreshIntervalSeconds = snapshot?.integer(
-          'refreshIntervalSeconds',
-        );
-        data.fetchedAt = _now();
-        data.error = null;
-        data.retryableUnavailable = false;
-      } on ApiException catch (error) {
-        data.retryableUnavailable = error.statusCode == 503;
-        data.error = switch (error.statusCode) {
-          401 => 'Your session has expired. Sign in again.',
-          403 => 'Admin access is required.',
-          404 => 'This section requires a server update.',
-          _ => 'Couldn’t update this section.',
-        };
-      } catch (_) {
-        data.retryableUnavailable = false;
-        data.error = 'Couldn’t update this section.';
+      } on _AdminPageLoadCanceled {
+        canceled = true;
+      } catch (error) {
+        if (_disposed) return;
+        for (final data in page.sections.values) {
+          _fail(data, error);
+        }
       } finally {
-        data.loading = false;
-        data.pending = null;
-        _notify();
+        page.pending = null;
+        for (final data in page.sections.values) {
+          data.loading = false;
+        }
+        if (!_disposed) {
+          // A canceled queue entry is not a completed attempt. Reopening or
+          // resuming this page must still be able to perform its first read.
+          if (!canceled) page.attemptedAt = _now();
+          _notify();
+          _scheduleFollowUps();
+        }
       }
     });
-    data.pending = operation;
+    page.pending = operation;
     _queue = operation;
     return operation;
+  }
+
+  Future<void> _loadLegacyPage(
+    AdminView view,
+    AdminRange selected,
+    String token, {
+    Map<String, dynamic>? firstReply,
+  }) async {
+    for (var index = 0; index < view.sections.length; index++) {
+      _ensureCanDispatch(view, selected);
+      final section = view.sections[index];
+      final data = state(section, view: view, range: selected);
+      try {
+        final stats = index == 0 && firstReply != null
+            ? firstReply
+            : await api.fetchAdminStats(
+                identityToken: token,
+                sections: [
+                  section == 'dashboard-retention-mature'
+                      ? 'dashboard-retention'
+                      : section,
+                ],
+                window: section == 'dashboard-retention-mature'
+                    ? '90d'
+                    : section.startsWith('dashboard-')
+                    ? selected.apiWindow
+                    : null,
+              );
+        if (_disposed) return;
+        _acceptSection(data, section, stats);
+      } catch (error) {
+        if (_disposed) return;
+        _fail(data, error);
+        if (error is ApiException &&
+            (error.statusCode == 401 || error.statusCode == 403)) {
+          rethrow;
+        }
+      }
+    }
+  }
+
+  void _acceptSection(
+    AdminSectionData data,
+    String section,
+    Map<String, dynamic> stats,
+  ) {
+    final envelope = AdminMetricsEnvelope.fromStats(stats);
+    if (envelope.status == AdminDashboardStatus.disabled) {
+      // Explicit server disablement supersedes all cached enabled pages/ranges.
+      for (final page in _cache.values) {
+        page.attemptedAt = null;
+        for (final entry in page.sections.values) {
+          entry
+            ..envelope = null
+            ..legacy = null
+            ..calculatedAt = null
+            ..fetchedAt = null
+            ..freshUntil = null
+            ..snapshotStale = false
+            ..retryableUnavailable = false
+            ..calculationPending = false
+            ..refreshIntervalSeconds = null;
+        }
+      }
+      _fail(data, const ApiException('Analytics are disabled on this server.'));
+      return;
+    }
+    if (section.startsWith('dashboard-')) {
+      if (!envelope.present ||
+          envelope.status != AdminDashboardStatus.available) {
+        _fail(data, const FormatException('Unavailable metric envelope'));
+        return;
+      }
+      data.envelope = envelope;
+    } else {
+      data.legacy = AdminMetricMap.from(stats);
+    }
+    final metadata = AdminMetricMap.from(stats);
+    final snapshot = metadata?.map('snapshot');
+    data.calculatedAt =
+        DateTime.tryParse(snapshot?.text('generatedAt') ?? '')?.toLocal() ??
+        DateTime.tryParse(metadata?.text('generatedAt') ?? '')?.toLocal();
+    data.freshUntil = DateTime.tryParse(snapshot?.text('freshUntil') ?? '');
+    data.snapshotStale = snapshot?.text('status') == 'stale';
+    data.refreshIntervalSeconds = snapshot?.integer('refreshIntervalSeconds');
+    data.fetchedAt = _now();
+    data.error = null;
+    data.retryableUnavailable = false;
+    data.calculationPending = false;
+    data.followUpExhausted = false;
+  }
+
+  void _fail(AdminSectionData data, Object error) {
+    data.followUpExhausted = false;
+    final apiError = error is ApiException ? error : null;
+    data.retryableUnavailable = apiError?.statusCode == 503;
+    data.calculationPending =
+        apiError?.statusCode == 503 &&
+        apiError?.code == 'ADMIN_ANALYTICS_PENDING';
+    data.error = data.calculationPending
+        ? null
+        : switch (apiError?.statusCode) {
+            401 => 'Your session has expired. Sign in again.',
+            403 => 'Admin access is required.',
+            404 => 'This section requires a server update.',
+            _ => 'Couldn’t update this section.',
+          };
   }
 
   Future<void> loadHealth() {
@@ -355,17 +544,17 @@ class AdminDashboardController extends ChangeNotifier
 }
 
 class _VisibleAnalytics {
-  _VisibleAnalytics(
-    this.isVisible,
-    this.refresh,
-    this.sections,
-    this.checkedAt,
-  );
+  _VisibleAnalytics(this.isVisible, this.refresh, this.view, this.checkedAt);
   final bool Function() isVisible;
   final Future<void> Function() refresh;
-  final Iterable<String> Function() sections;
+  final AdminView Function() view;
   Timer? followUp;
+  String? pageKey;
   int followUpAttempts = 0;
   DateTime checkedAt;
   bool pending = false;
+}
+
+class _AdminPageLoadCanceled implements Exception {
+  const _AdminPageLoadCanceled();
 }

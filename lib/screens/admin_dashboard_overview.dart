@@ -28,9 +28,29 @@ class _AdminDashboardOverviewState extends State<AdminDashboardOverview> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final summaryData = controller.state('dashboard-summary');
-    final growthData = controller.state('dashboard-growth');
-    final actionData = controller.state('dashboard-dau-engagement');
+    final summaryData = controller.state(
+      'dashboard-summary',
+      view: AdminView.overview,
+    );
+    final growthData = controller.state(
+      'dashboard-growth',
+      view: AdminView.overview,
+    );
+    final actionData = controller.state(
+      'dashboard-dau-engagement',
+      view: AdminView.overview,
+    );
+    final initialCalculation =
+        [
+          summaryData,
+          growthData,
+          actionData,
+        ].every((entry) => entry.envelope == null) &&
+        [
+          summaryData,
+          growthData,
+          actionData,
+        ].any((entry) => entry.loading || entry.calculationPending);
     final summary = summaryData.envelope;
     final growth = growthData.envelope;
     final actions = actionData.envelope;
@@ -162,7 +182,9 @@ class _AdminDashboardOverviewState extends State<AdminDashboardOverview> {
           children: [
             Expanded(
               child: Text(
-                '${adminCount(growthSummary?.integer('totalSignups'))} total accounts',
+                initialCalculation
+                    ? 'Calculating account totals…'
+                    : '${adminCount(growthSummary?.integer('totalSignups'))} total accounts',
                 style: adminText(context, size: 14, strong: true),
               ),
             ),
@@ -186,63 +208,67 @@ class _AdminDashboardOverviewState extends State<AdminDashboardOverview> {
           value: range,
           onChanged: (value) {
             controller.selectRange(value);
-            controller.loadAll(adminOverviewSections);
+            controller.loadPage(AdminView.overview);
           },
         ),
         const SizedBox(height: 12),
-        for (final section in adminOverviewSections)
-          AdminDataStatus(
-            data: controller.state(section),
-            onRetry: () => controller.load(section, refresh: true),
-          ),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final singleColumn =
-                constraints.maxWidth < 300 ||
-                MediaQuery.textScalerOf(context).scale(14) > 21;
-            final width = singleColumn
-                ? constraints.maxWidth
-                : (constraints.maxWidth - 10) / 2;
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final card in metricCards)
-                  SizedBox(width: width, child: card),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            for (final series in ['Signups', 'App opens', 'Active users'])
-              ChoiceChip(
-                label: Text(series, style: adminText(context, size: 12)),
-                selected: _series == series,
-                showCheckmark: false,
-                selectedColor: AppColors.of(
-                  context,
-                ).successText.withValues(alpha: .13),
-                onSelected: (_) => setState(() => _series = series),
-              ),
+        AdminPageDataStatus(
+          data: [
+            for (final section in adminOverviewSections)
+              controller.state(section, view: AdminView.overview),
           ],
+          onRetry: () => controller.loadPage(AdminView.overview, refresh: true),
         ),
-        const SizedBox(height: 8),
-        AdminTrendChart(
-          title: '$_series trend',
-          points: points,
-          subtitle:
-              '${range.label} · daily counts · ET${_series == 'App opens' ? ' · ${adminCoverage(growth?.coverage.metric('observedForegroundDau'))}' : ' · tracked iOS'}',
-        ),
-        for (final section in adminOverviewSections)
-          AdminFreshness(
-            data: controller.state(section),
-            label: section.replaceFirst('dashboard-', ''),
-            foreground: section != 'dashboard-summary',
+        if (!initialCalculation) ...[
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final singleColumn =
+                  constraints.maxWidth < 300 ||
+                  MediaQuery.textScalerOf(context).scale(14) > 21;
+              final width = singleColumn
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - 10) / 2;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final card in metricCards)
+                    SizedBox(width: width, child: card),
+                ],
+              );
+            },
           ),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final series in ['Signups', 'App opens', 'Active users'])
+                ChoiceChip(
+                  label: Text(series, style: adminText(context, size: 12)),
+                  selected: _series == series,
+                  showCheckmark: false,
+                  selectedColor: AppColors.of(
+                    context,
+                  ).successText.withValues(alpha: .13),
+                  onSelected: (_) => setState(() => _series = series),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          AdminTrendChart(
+            title: '$_series trend',
+            points: points,
+            subtitle:
+                '${range.label} · daily counts · ET${_series == 'App opens' ? ' · ${adminCoverage(growth?.coverage.metric('observedForegroundDau'))}' : ' · tracked iOS'}',
+          ),
+          for (final section in adminOverviewSections)
+            AdminFreshness(
+              data: controller.state(section, view: AdminView.overview),
+              label: section.replaceFirst('dashboard-', ''),
+              foreground: section != 'dashboard-summary',
+            ),
+        ],
         const SizedBox(height: 22),
         Text('Explore', style: adminText(context, size: 18, strong: true)),
         const SizedBox(height: 6),

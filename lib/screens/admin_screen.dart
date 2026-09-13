@@ -515,6 +515,7 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> {
+  bool _routeVisible = false;
   late final BackendApiService _api =
       widget.backendApiService ?? BackendApiService();
   late final AdminDashboardController _dashboard = AdminDashboardController(
@@ -525,13 +526,28 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_dashboard.loadAll(adminOverviewSections));
+    unawaited(_dashboard.loadPage(AdminView.overview));
     _dashboard.watchAnalytics(
       this,
       isVisible: () => mounted && (ModalRoute.of(context)?.isCurrent ?? false),
-      refresh: () => _dashboard.loadAll(adminOverviewSections, refresh: true),
-      sections: () => adminOverviewSections,
+      refresh: () => _dashboard.loadPage(AdminView.overview, refresh: true),
+      view: () => AdminView.overview,
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = ModalRoute.of(context)?.isCurrent ?? false;
+    final becameVisible = visible && !_routeVisible;
+    _routeVisible = visible;
+    if (becameVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+          unawaited(_dashboard.loadPage(AdminView.overview));
+        }
+      });
+    }
   }
 
   @override
@@ -550,7 +566,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (!mounted) return;
     // A detail may have changed the shared range. Only fill missing overview
     // dependencies when returning; cached Today and 7-day sources are reused.
-    unawaited(_dashboard.loadAll(adminOverviewSections));
+    unawaited(_dashboard.loadPage(AdminView.overview));
   }
 
   @override
@@ -558,7 +574,7 @@ class _AdminScreenState extends State<AdminScreen> {
     animation: _dashboard,
     builder: (context, _) => AdminPage(
       title: 'Admin',
-      onRefresh: () => _dashboard.loadAll(adminOverviewSections, refresh: true),
+      onRefresh: () => _dashboard.loadPage(AdminView.overview, refresh: true),
       actions: [
         TextButton.icon(
           onPressed: _openTools,
@@ -574,10 +590,11 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: const Icon(Icons.refresh, size: 21),
           onPressed:
               adminOverviewSections.any(
-                (section) => _dashboard.state(section).loading,
+                (section) =>
+                    _dashboard.state(section, view: AdminView.overview).loading,
               )
               ? null
-              : () => _dashboard.loadAll(adminOverviewSections, refresh: true),
+              : () => _dashboard.loadPage(AdminView.overview, refresh: true),
         ),
       ],
       child: AdminDashboardOverview(

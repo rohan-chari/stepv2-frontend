@@ -2810,6 +2810,28 @@ class BackendApiService {
     return stats is Map<String, dynamic> ? stats : <String, dynamic>{};
   }
 
+  /// One projected, cached admin page. The section is an old-server hint only.
+  Future<Map<String, dynamic>> fetchAdminStatsView({
+    required String identityToken,
+    required String view,
+    required String window,
+    required String section,
+  }) async {
+    final query = Uri(
+      queryParameters: {'view': view, 'window': window, 'sections': section},
+    ).query;
+    final response = await _sendGetRequest(
+      path: '/admin/stats?$query',
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final stats = body['stats'];
+    if (stats is! Map<String, dynamic>) {
+      throw const ApiException('Malformed admin page response.');
+    }
+    return stats;
+  }
+
   /// Bounded recorded purchase history, independently deployed from analytics.
   Future<Map<String, dynamic>> fetchAdminPurchases({
     required String identityToken,

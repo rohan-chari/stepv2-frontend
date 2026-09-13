@@ -283,6 +283,42 @@ class AdminRangeControl extends StatelessWidget {
   );
 }
 
+/// A projected page shares one load/pending state across several inner
+/// sections. Keep one progress message while retaining distinct partial errors.
+class AdminPageDataStatus extends StatelessWidget {
+  const AdminPageDataStatus({
+    super.key,
+    required this.data,
+    required this.onRetry,
+  });
+  final List<AdminSectionData> data;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    AdminSectionData? progress;
+    final errors = <AdminSectionData>[];
+    final messages = <String>{};
+    for (final section in data) {
+      if (section.loading || section.calculationPending) {
+        progress ??= section;
+      } else {
+        final error = section.error;
+        if (error != null && messages.add(error)) errors.add(section);
+      }
+    }
+    final loading = progress;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (loading != null) AdminDataStatus(data: loading, onRetry: onRetry),
+        for (final error in errors)
+          AdminDataStatus(data: error, onRetry: onRetry),
+      ],
+    );
+  }
+}
+
 class AdminDataStatus extends StatelessWidget {
   const AdminDataStatus({super.key, required this.data, required this.onRetry});
   final AdminSectionData data;
@@ -291,12 +327,15 @@ class AdminDataStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final at = data.fetchedAt;
     final stamp = at == null ? null : adminTimestamp(at);
-    if (data.error == null && !data.loading) return const SizedBox.shrink();
+    if (data.error == null && !data.loading && !data.calculationPending) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          if (data.loading)
+          if (data.loading ||
+              (data.calculationPending && !data.followUpExhausted))
             const Padding(
               padding: EdgeInsets.only(right: 8),
               child: SizedBox(
@@ -307,7 +346,11 @@ class AdminDataStatus extends StatelessWidget {
             ),
           Expanded(
             child: Text(
-              data.loading
+              data.calculationPending && data.followUpExhausted
+                  ? 'Calculation is taking longer than expected. Retry in a moment.'
+                  : data.calculationPending
+                  ? 'Checking for calculated data…${stamp == null ? '' : ' Showing the previous snapshot.'}'
+                  : data.loading
                   ? (stamp == null
                         ? 'Loading…'
                         : 'Updating · showing $stamp data')
@@ -315,7 +358,7 @@ class AdminDataStatus extends StatelessWidget {
               style: adminText(context, size: 12, muted: true),
             ),
           ),
-          if (!data.loading && data.error != null)
+          if (!data.loading && (data.error != null || data.followUpExhausted))
             TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),

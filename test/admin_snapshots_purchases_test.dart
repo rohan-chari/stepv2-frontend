@@ -43,6 +43,18 @@ class _Api extends BackendApiService {
   }
 
   @override
+  Future<Map<String, dynamic>> fetchAdminStatsView({
+    required String identityToken,
+    required String view,
+    required String window,
+    required String section,
+  }) => fetchAdminStats(
+    identityToken: identityToken,
+    sections: [section],
+    window: window,
+  );
+
+  @override
   Future<Map<String, dynamic>> fetchAdminPurchases({
     required String identityToken,
     String kind = 'all',
@@ -401,7 +413,12 @@ void main() {
       await tester.pump(const Duration(seconds: 50));
       await _pump(tester);
       expect(api.statsCalls, ['dashboard-growth', 'dashboard-growth']);
-      expect(controller.state('dashboard-growth').snapshotStale, isFalse);
+      expect(
+        controller
+            .state('dashboard-growth', view: AdminView.growth)
+            .snapshotStale,
+        isFalse,
+      );
       await tester.pump(const Duration(minutes: 3));
       expect(api.statsCalls.length, 2);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -420,11 +437,17 @@ void main() {
         ),
       );
       await _pump(tester);
-      expect(controller.state('dashboard-growth').envelope, isNull);
+      expect(
+        controller.state('dashboard-growth', view: AdminView.growth).envelope,
+        isNull,
+      );
       api.statsError = null;
       await tester.pump(const Duration(seconds: 50));
       await _pump(tester);
-      expect(controller.state('dashboard-growth').envelope, isNotNull);
+      expect(
+        controller.state('dashboard-growth', view: AdminView.growth).envelope,
+        isNotNull,
+      );
       await tester.pump(const Duration(seconds: 50));
       await _pump(tester);
       expect(api.statsCalls.length, 3);
