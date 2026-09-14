@@ -658,8 +658,12 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                             (item) =>
                                                 item.fit != 'preservation-only',
                                           ))
-                                            _text(
+                                            Text(
                                               'No accessories for this character yet.',
+                                              style: PixelText.body(
+                                                size: 14,
+                                                color: Colors.white,
+                                              ),
                                             ),
                                           _accessorySection(
                                             'Owned',

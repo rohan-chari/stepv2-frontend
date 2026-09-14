@@ -1,0 +1,17 @@
+{
+  "published": true,
+  "asset": {
+    "url": "https://steptracker-api.org/assets/characters/sea_lion@df5d4edd4b6a.png",
+    "animationFrames": 6,
+    "baselineOffset": -0.03125
+  },
+  "sha256": "df5d4edd4b6a9ccbce44b8a7cbef3591cf1055227ea2fbfb673afc85631700d3",
+  "granted": [
+    "Rohan",
+    "Nathan"
+  ],
+  "testOnly": true,
+  "remoteOnly": true,
+  "mirrorVerified": true,
+  "currentAndLegacyCatalogChecksPassed": true
+}

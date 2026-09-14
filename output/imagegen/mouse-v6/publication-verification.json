@@ -1,0 +1,13 @@
+{
+  "published": true,
+  "asset": {
+    "url": "https://steptracker-api.org/assets/characters/mouse@43753919ad60.png",
+    "animationFrames": 6,
+    "baselineOffset": -0.03125
+  },
+  "sha256": "43753919ad6070673a5667c24ccdb4a62fb2f1890971824bd93e3c4af9f527bd",
+  "mirrorVerified": true,
+  "testOnly": true,
+  "remoteOnly": true,
+  "otherCatalogFieldsUnchanged": true
+}

@@ -1,0 +1,17 @@
+{
+  "published": true,
+  "asset": {
+    "url": "https://steptracker-api.org/assets/characters/hedgehog@913c434d04e4.png",
+    "animationFrames": 6,
+    "baselineOffset": -0.03125
+  },
+  "sha256": "913c434d04e44cb764ec04c00d77c7e43768b53e6eb7240f9816267c7cc167fc",
+  "testOnly": true,
+  "remoteOnly": true,
+  "granted": [
+    "Rohan",
+    "Nathan"
+  ],
+  "mirrorVerified": true,
+  "currentAndLegacyCatalogChecksPassed": true
+}

@@ -1,0 +1,11 @@
+{
+  "frames": 6,
+  "dimensions": [
+    576,
+    96
+  ],
+  "frameDurationMs": 120,
+  "transparentBorders": true,
+  "footBoundary": 78,
+  "separateBodyParts": false
+}

@@ -1,0 +1,17 @@
+{
+  "published": true,
+  "asset": {
+    "url": "https://steptracker-api.org/assets/characters/otter@71abf0567ddf.png",
+    "animationFrames": 6,
+    "baselineOffset": -0.03125
+  },
+  "sha256": "71abf0567ddf955539377ffc58b82b0af942dbeaad97cfbe07fdf56f229caad5",
+  "granted": [
+    "Rohan",
+    "Nathan"
+  ],
+  "testOnly": true,
+  "remoteOnly": true,
+  "mirrorVerified": true,
+  "currentAndLegacyCatalogChecksPassed": true
+}

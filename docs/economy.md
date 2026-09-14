@@ -3133,3 +3133,47 @@ missing/incomplete preview metadata cannot substantiate fabricated odds.
 ## Test-only mouse character — 2026-09-13
 
 Mouse is a cosmetic-only CHARACTER at a 1,000-coin base price, matching Turtle; existing membership pricing applies. Catalog flags are active=true, testOnly=true, remoteOnly=true, earnOnly=false. One idempotent ownership grant was made to the exact Rohan account, with no coin or equipment mutation. Game-analyst review: SOUND for limited testing; zero minted coins/steps and zero spin/box reward EV change. Test-only items and characters are excluded from free accessory drops. Test-only is a release-channel visibility gate, not an account ACL; no public price-affordability claim is made. Live current/TestFlight and production/legacy catalog checks passed.
+
+## Hedgehog test publication economics — 2026-09-14
+
+Publication plan uses the existing cosmetic CHARACTER contract, testOnly=true,
+remoteOnly=true, and Mouse's current base price. Production `shop_items` was
+queried in an explicitly read-only session and transaction on this date:
+exactly one Mouse row, min/max price_coins both 1,000, active/test_only/
+remote_only all true, slot CHARACTER. Hedgehog publication and grants were
+not yet verified when this entry was written.
+
+Two planned one-time ownership grants mint two cosmetic entitlements and zero
+coins or steps; repeat grants must mint zero additional entitlements. With no
+power/scoring change, the per-spin, per-box, per-race and per-day coin/step EV
+delta is zero for both recipients and other players. Backend
+`src/modules/cosmetics/getUnownedAccessoryPool.js` excludes both CHARACTER and
+test-only items from free accessory rewards. No reward weights change.
+
+Existing member pricing is `1000 - floor(1000 * discountPercent / 100)`
+(`src/modules/billing/services/memberPrice.js`); no live membership discount
+percentage was assumed. Grants debit zero coins; any other eligible purchase
+uses that existing quoted price. Incremental daily coin sinks are therefore
+the sum of actual paid Hedgehog quotes, if any, with zero new daily coin
+sources. No purchase volume or median affordability estimate is made for this
+limited test publication. The release-channel gate is client-header based
+(`src/shared/middleware/releaseChannel.js`), not a two-account authorization
+boundary; test availability does not imply that only grant recipients can buy.
+
+## Otter and Sea Lion test publication economics — 2026-09-14
+
+The bounded publication plan adds two cosmetic CHARACTER items (`otter` and
+`sea_lion`), both testOnly=true and remoteOnly=true, each at the existing
+Mouse base price. A fresh production read-only session and transaction again
+confirmed exactly one Mouse row at 1,000 coins with active/test_only/
+remote_only=true and slot CHARACTER. These new publications and grants were
+pending at this review; this entry does not assert their completion.
+
+Two idempotent grants per character produce four cosmetic entitlements in
+total, debit zero coins, and mint zero coins or steps. Without any power or
+scoring change, per-spin/box/race/day coin and step EV changes are zero.
+The same CHARACTER/test-only free-reward exclusions, member-price formula,
+and release-channel-versus-account distinction documented above apply.
+Daily new coin sources are zero; daily extra sinks, if any, equal the sum of
+actual paid server quotes for these two items. No paid purchase volume,
+membership discount percentage, or median affordability is assumed.
