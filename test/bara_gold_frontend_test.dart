@@ -144,7 +144,7 @@ void main() {
     expect(find.byKey(const Key('bara-gold-ribbon')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const Key('bara-gold-ribbon'))),
-      const Size(116, 35),
+      const Size(108, 35),
     );
     expect(find.textContaining('DIRECT PURCHASE'), findsOneWidget);
     expect(find.text('Unavailable'), findsNothing);

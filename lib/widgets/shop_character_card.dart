@@ -48,27 +48,37 @@ class ShopCharacterCard extends StatelessWidget {
                 child: Stack(
                   children: [
                     Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Center(
-                      child: Transform.scale(
-                        key: const Key('shop-character-art-scale'),
-                        scale: 1.1,
-                        child: RacerAvatar(
-                          rank: 1,
-                          size: constraints.biggest.shortestSide.clamp(24, 240),
-                          showMedalRing: false,
-                          animal: character.animal,
-                          accessories: character.owned
-                              ? character.outfit?.items ?? []
-                              : [],
+                      padding: EdgeInsets.fromLTRB(
+                        10,
+                        character.goldAccess ? 18 : 10,
+                        10,
+                        10,
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Center(
+                          child: Transform.translate(
+                            offset: character.key == 'mouse'
+                                ? const Offset(-6, 0)
+                                : Offset.zero,
+                            child: Transform.scale(
+                              key: const Key('shop-character-art-scale'),
+                              scale: 1.1,
+                              child: RacerAvatar(
+                                rank: 1,
+                                size: constraints.biggest.shortestSide.clamp(
+                                  24,
+                                  240,
+                                ),
+                                showMedalRing: false,
+                                animal: character.animal,
+                                accessories: character.owned
+                                    ? character.outfit?.items ?? []
+                                    : [],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
                     ),
                     if (character.goldAccess)
                       const Positioned(

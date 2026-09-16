@@ -17,7 +17,7 @@ class BaraGoldRibbon extends StatelessWidget {
       key: const Key('bara-gold-ribbon'),
       decoration: const BoxDecoration(),
       child: SizedBox(
-        width: compact ? 116 : 148,
+        width: compact ? 108 : 140,
         height: compact ? 35 : 43,
         child: Stack(
           fit: StackFit.expand,
