@@ -20,16 +20,16 @@ class _GoldBilling extends BillingController {
 
   @override
   BillingSnapshot get snapshot => BillingSnapshot(
-        status: member ? BillingStatus.active : BillingStatus.free,
-        plan: member ? BillingPlan.weekly : null,
-        givesAccess: member,
-      );
+    status: member ? BillingStatus.active : BillingStatus.free,
+    plan: member ? BillingPlan.weekly : null,
+    givesAccess: member,
+  );
 
   @override
   List<StorePlanOffer> get plans => const [
-        StorePlanOffer(plan: BillingPlan.weekly, price: r'$1.49', trialDays: 7),
-        StorePlanOffer(plan: BillingPlan.monthly, price: r'$3.99', trialDays: 7),
-      ];
+    StorePlanOffer(plan: BillingPlan.weekly, price: r'$1.49', trialDays: 7),
+    StorePlanOffer(plan: BillingPlan.monthly, price: r'$3.99', trialDays: 7),
+  ];
 
   @override
   Future<BillingResult> buyCoins(CoinPackOffer pack) async =>
@@ -38,7 +38,10 @@ class _GoldBilling extends BillingController {
   @override
   Future<BillingResult> buyDirectProduct(String storeProductId) async {
     directPurchases.add(storeProductId);
-    return const BillingResult(success: true, message: 'Character purchase confirmed');
+    return const BillingResult(
+      success: true,
+      message: 'Character purchase confirmed',
+    );
   }
 
   @override
@@ -82,31 +85,34 @@ void main() {
     expect(const BillingSnapshot().availableCredits, 0);
   });
 
-  testWidgets('Bara Gold paywall only presents current weekly/monthly benefits',
-      (tester) async {
-    final billing = _GoldBilling();
-    await tester.pumpWidget(
-      BillingScope(
-        controller: billing,
-        child: const MaterialApp(home: Scaffold(body: BaraPlusScreen())),
-      ),
-    );
+  testWidgets(
+    'Bara Gold paywall only presents current weekly/monthly benefits',
+    (tester) async {
+      final billing = _GoldBilling();
+      await tester.pumpWidget(
+        BillingScope(
+          controller: billing,
+          child: const MaterialApp(home: Scaffold(body: BaraPlusScreen())),
+        ),
+      );
 
-    expect(find.text('Bara Gold'), findsOneWidget);
-    expect(find.byKey(const Key('plan-weekly')), findsOneWidget);
-    expect(find.byKey(const Key('plan-monthly')), findsOneWidget);
-    expect(find.byKey(const Key('plan-annual')), findsNothing);
-    expect(find.byKey(const Key('plan-permanent')), findsNothing);
-    expect(find.textContaining('credit'), findsNothing);
-    expect(find.textContaining('cosmetic'), findsNothing);
-    expect(find.textContaining('Bara+'), findsNothing);
-    expect(find.textContaining('200 coins'), findsOneWidget);
-    expect(find.textContaining('1,000 coins'), findsOneWidget);
-    expect(find.textContaining('free reroll'), findsOneWidget);
-  });
+      expect(find.text('Bara Gold'), findsOneWidget);
+      expect(find.byKey(const Key('plan-weekly')), findsOneWidget);
+      expect(find.byKey(const Key('plan-monthly')), findsOneWidget);
+      expect(find.byKey(const Key('plan-annual')), findsNothing);
+      expect(find.byKey(const Key('plan-permanent')), findsNothing);
+      expect(find.textContaining('credit'), findsNothing);
+      expect(find.textContaining('cosmetic'), findsNothing);
+      expect(find.textContaining('Bara+'), findsNothing);
+      expect(find.textContaining('200 coins'), findsOneWidget);
+      expect(find.textContaining('1,000 coins'), findsOneWidget);
+      expect(find.textContaining('free reroll'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Gold character policy renders ribbon and direct-IAP fallback',
-      (tester) async {
+  testWidgets('Gold character policy renders ribbon and direct-IAP fallback', (
+    tester,
+  ) async {
     final character = ShopCharacter.fromJson({
       'characterKey': 'mouse',
       'name': 'Mouse',
@@ -130,19 +136,23 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: ShopCharacterCard(character: character),
-        ),
+        home: Scaffold(body: ShopCharacterCard(character: character)),
       ),
     );
 
     expect(find.text('Bara Gold'), findsOneWidget);
+    expect(find.byKey(const Key('bara-gold-ribbon')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('bara-gold-ribbon'))),
+      const Size(116, 35),
+    );
     expect(find.textContaining('DIRECT PURCHASE'), findsOneWidget);
     expect(find.text('Unavailable'), findsNothing);
   });
 
-  testWidgets('direct character purchase action uses the server product ID',
-      (tester) async {
+  testWidgets('direct character purchase action uses the server product ID', (
+    tester,
+  ) async {
     final billing = _GoldBilling();
     final character = ShopCharacter.fromJson({
       'characterKey': 'sea_lion',
@@ -169,9 +179,8 @@ void main() {
         home: Scaffold(
           body: ShopCharacterCard(
             character: character,
-            onDirectBuy: () => billing.buyDirectProduct(
-              character.directStoreProductId!,
-            ),
+            onDirectBuy: () =>
+                billing.buyDirectProduct(character.directStoreProductId!),
           ),
         ),
       ),
