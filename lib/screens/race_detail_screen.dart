@@ -1,3 +1,4 @@
+import '../services/race_change_refresh.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
@@ -164,6 +165,10 @@ class RaceDetailScreen extends StatefulWidget {
   /// Non-authoritative display/refresh clock, injectable for lifecycle tests.
   final DateTime Function()? now;
 
+  /// Optional local diagnostics sink. Contains timing/identity, never health
+  /// payloads. A frame marker is not proof of physical display presentation.
+  final void Function(String, Map<String, Object>)? freshnessTrace;
+
   RaceDetailScreen({
     super.key,
     required this.authService,
@@ -186,6 +191,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.showPostCreateSharePrompt = false,
     this.fallbackOnUnavailable = false,
     this.now,
+    this.freshnessTrace,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -576,6 +582,50 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // set, every poller is stopped and the board is replaced by one honest state
   // rather than a repeating error toast over stale data.
   bool _notAParticipant = false;
+  late final RaceChangeRefresh _raceChangeRefresh;
+  void _traceFreshness(String name, Map<String, Object> fields) {
+    final payload = <String, Object>{'raceId': widget.raceId, ...fields};
+    developer.Timeline.instantSync(name, arguments: payload);
+    try {
+      widget.freshnessTrace?.call(name, payload);
+    } catch (_) {
+      // Optional diagnostics must never interfere with refresh or teardown.
+    }
+  }
+
+  Future<void> _refreshFromRaceChange() async {
+    // A request started before this hint might have read the previous score.
+    // Wait for it, then make one post-hint read instead of reusing its result.
+    final pending = _progressRequest;
+    if (pending != null) await pending;
+    if (!mounted ||
+        !_routeVisible ||
+        !_appResumed ||
+        !_pollingActive ||
+        widget.authService.authToken == null ||
+        !widget.authService.raceEventDrivenRefreshEnabled) {
+      return;
+    }
+    await _loadProgress(reuseInFlight: true);
+  }
+
+  void _updateRaceChanges() {
+    _raceChangeRefresh.update(
+      active:
+          mounted &&
+          !widget.demoMode &&
+          _routeVisible &&
+          _appResumed &&
+          _pollingActive &&
+          _race?['status'] == 'ACTIVE' &&
+          _progress?['status'] != 'COMPLETED' &&
+          !_isPreviewViewer &&
+          !_notAParticipant &&
+          widget.authService.raceEventDrivenRefreshEnabled,
+      token: widget.authService.authToken,
+    );
+  }
+
   Timer? _pollTimer;
   Timer? _countdownTimer;
   // Whether this screen wants to be polling progress (true only for an ACTIVE
@@ -791,6 +841,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   void _pauseCoveredTimers() {
+    _updateRaceChanges();
     _effectExpiryRefresh.pause();
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
@@ -950,6 +1001,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void initState() {
     super.initState();
+    _raceChangeRefresh = RaceChangeRefresh(
+      connect: (token) =>
+          _api.watchRaceChanges(identityToken: token, raceId: widget.raceId),
+      refresh: _refreshFromRaceChange,
+      trace: _traceFreshness,
+    );
+    widget.authService.addListener(_updateRaceChanges);
     _postCreateSharePromptVisible = widget.showPostCreateSharePrompt;
     _interstitialVisitUserId = widget.authService.userId;
     _interstitialVisitToken = widget.authService.authToken;
@@ -1162,6 +1220,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       widget.interstitialVisit?.setForeground(true);
       _scheduleLeaderboardVisibilityCheck();
     }
+    _updateRaceChanges();
     switch (racePollLifecycleAction(state, wasPolling: _pollingActive)) {
       case RacePollLifecycleAction.pause:
         _effectExpiryRefresh.pause();
@@ -1228,6 +1287,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         widget.demoCancelBoxOpen?.call(boxId);
       }
     }
+    _raceChangeRefresh.dispose();
+    widget.authService.removeListener(_updateRaceChanges);
     _effectExpiryRefresh.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.authService.removeListener(_handleRewardedAdAuthChanged);
@@ -1719,6 +1780,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _effectExpiryRefresh.pause();
     widget.interstitialVisit?.revoke();
     _pollingActive = false;
+    _updateRaceChanges();
     _countdownActive = false;
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
@@ -1880,6 +1942,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // would visibly "un-open" until the next poll. Only the newest-issued
     // request may commit its response.
     final fetchSeq = ++_progressFetchSeq;
+    final readClock = Stopwatch()..start();
+    void traceRead(String name, [Map<String, Object> extra = const {}]) {
+      _traceFreshness(name, {
+        'fetchSequence': fetchSeq,
+        'elapsedMicros': readClock.elapsedMicroseconds,
+        'prefetched': prefetched != null,
+        ...extra,
+      });
+    }
+
+    traceRead('race_progress_read_start');
     final previous = _progress;
     if (mounted) {
       if (append) {
@@ -1935,6 +2008,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       limit: requestedLimit,
                     ))
               .progress;
+
+      traceRead('race_progress_read_complete');
 
       if (!mounted ||
           fetchSeq != _progressFetchSeq ||
@@ -2088,6 +2163,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               : null;
           _progressState = Loadable.success(resolvedProgress);
         });
+        traceRead('race_progress_state_applied');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted ||
+              !_routeVisible ||
+              !_appResumed ||
+              fetchSeq != _progressFetchSeq ||
+              token != widget.authService.authToken) {
+            return;
+          }
+          traceRead('race_progress_frame', {
+            if (projection?.generation case final int generation)
+              'projectionGeneration': generation,
+          });
+        });
         _disposeRerollIfUnavailable();
         _updateEffectExpiryRefresh();
       }
@@ -2129,6 +2218,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // Polling stops for good — clear the flags so a later app resume does
         // not restart the poll/countdown on a now-finished race.
         _pollingActive = false;
+        _updateRaceChanges();
         _countdownActive = false;
         _pollTimer?.cancel();
         _countdownTimer?.cancel();
@@ -2141,6 +2231,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         }
       }
     } on ApiException catch (e) {
+      traceRead('race_progress_read_failed', {
+        if (e.statusCode case final int statusCode) 'statusCode': statusCode,
+      });
       if (!mounted ||
           fetchSeq != _progressFetchSeq ||
           token != widget.authService.authToken) {
@@ -2164,6 +2257,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         showErrorToast(context, 'Couldn’t refresh race progress.');
       }
     } catch (e) {
+      traceRead('race_progress_read_failed');
       if (!mounted ||
           fetchSeq != _progressFetchSeq ||
           token != widget.authService.authToken) {
@@ -2206,6 +2300,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   void _startPolling() {
     _pollingActive = true;
+    _updateRaceChanges();
     _pollTimer?.cancel();
     if (!_routeVisible || !_appResumed) return;
     // The demo's clock is floored at 0:20 (§5.5), but `endsAt` is read from the

@@ -166,6 +166,8 @@ class AuthService extends ChangeNotifier {
   bool _autoJoinFeaturedRaces = false;
   bool _bannerAdsEnabled = true;
   bool _teamRacesEnabled = true;
+  bool _raceEventDrivenRefreshEnabled = false;
+  bool get raceEventDrivenRefreshEnabled => _raceEventDrivenRefreshEnabled;
   bool _customRaceWindowEnabled = false;
   bool _onboardingV2Enabled = false;
   bool _onboardingV3Enabled = false;
@@ -970,6 +972,8 @@ class AuthService extends ChangeNotifier {
     // payload is allowed to resolve opt-in capabilities to false below.
     if (backendUser.containsKey('featureFlags')) {
       final flags = backendUser['featureFlags'];
+      _raceEventDrivenRefreshEnabled =
+          flags is Map && flags['raceEventDrivenRefreshEnabled'] == true;
       final rawBannerAdsEnabled = flags is Map
           ? flags['bannerAdsEnabled']
           : null;
@@ -1040,6 +1044,7 @@ class AuthService extends ChangeNotifier {
           appSettings['setupInviteCodePromptEnabled'] == true;
     }
     if (authoritative && !backendUser.containsKey('featureFlags')) {
+      _raceEventDrivenRefreshEnabled = false;
       // A full user response from an older backend must clear cached opt-in
       // capabilities from a newer backend. Partial mutation responses retain
       // the last authoritative answer. appSettings remains a supported legacy
@@ -1083,6 +1088,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _raceEventDrivenRefreshEnabled = false;
     // Clear the Google session so the next sign-in re-prompts the account
     // picker. Runs wherever Google Sign-In is available (Android always; iOS
     // when the client id was baked in) — harmless if the user signed in with

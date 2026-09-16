@@ -32,7 +32,7 @@ void main() {
     }
     expect(calls.length, greaterThan(35));
     final declarations = RegExp(
-      r'@override\s+(?:Future<[^;{]+>|void|bool)\s+([a-zA-Z0-9_]+)\s*\(',
+      r'@override\s+(?:Future<[^;{]+>|Stream<[^;{]+>|void|bool)\s+([a-zA-Z0-9_]+)\s*\(',
     ).allMatches('$preview\n$inherited').map((m) => m.group(1)).toSet();
     expect(
       calls.difference(declarations),

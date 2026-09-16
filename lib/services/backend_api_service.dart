@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/backend_config.dart';
 import 'meta_app_events_service.dart';
+import 'race_change_refresh.dart';
 import '../constants/powerup_copy.dart';
 import '../models/admin_system_health.dart';
 import '../models/balance_config.dart';
@@ -252,9 +253,134 @@ String describeBackendConnectionError(Object error, {required Uri uri}) {
 }
 
 class BackendApiService {
-  BackendApiService({HttpClient? httpClient})
-    : _httpClient = httpClient ?? HttpClient() {
+  BackendApiService({
+    HttpClient? httpClient,
+    HttpClient Function()? raceStreamClientFactory,
+  }) : _raceStreamClientFactory = raceStreamClientFactory ?? HttpClient.new,
+       _httpClient = httpClient ?? HttpClient() {
     _httpClient.connectionTimeout = _requestTimeout;
+  }
+
+  final HttpClient Function() _raceStreamClientFactory;
+
+  /// Authenticated, cancellable SSE owned by the visible race screen. Uses a
+  /// separate socket pool so cancelling it never cancels ordinary API calls.
+  Stream<RaceChangeSignal> watchRaceChanges({
+    required String identityToken,
+    required String raceId,
+  }) {
+    late final StreamController<RaceChangeSignal> output;
+    HttpClient? client;
+    HttpClientRequest? request;
+    StreamSubscription<String>? subscription;
+    var cancelled = false;
+    void closeTransport() {
+      cancelled = true;
+      request?.abort();
+      unawaited(subscription?.cancel());
+      client?.close(force: true);
+    }
+
+    Future<void> start() async {
+      try {
+        client = _raceStreamClientFactory()
+          ..connectionTimeout = _requestTimeout;
+        final uri = Uri.parse(
+          '${BackendConfig.baseUrl}/races/${Uri.encodeComponent(raceId)}/changes',
+        );
+        request = await client!.getUrl(uri).timeout(_requestTimeout);
+        if (cancelled) {
+          request?.abort();
+          return;
+        }
+        request!.followRedirects = false; // Never forward the bearer elsewhere.
+        request!.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer $identityToken',
+        );
+        request!.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+        request!.headers.set('X-Client-Features', clientFeaturesHeader);
+        _setPlatformHeader(request!.headers);
+        final response = await request!.close().timeout(_requestTimeout);
+        if (cancelled) return;
+        if (response.statusCode != 200) {
+          throw RaceChangeStreamException(response.statusCode);
+        }
+        if (response.headers.contentType?.mimeType != 'text/event-stream') {
+          throw const RaceChangeStreamException(404);
+        }
+        output.add(RaceChangeSignal.connected);
+        var buffer = '';
+        subscription = response
+            .timeout(const Duration(seconds: 45))
+            .transform(utf8.decoder)
+            .listen(
+              (chunk) {
+                buffer += chunk;
+                buffer = buffer.replaceAll('\r\n', '\n');
+                if (buffer.length > 65536) {
+                  output.addError(
+                    const FormatException('Race stream frame too large'),
+                  );
+                  closeTransport();
+                  unawaited(output.close());
+                  return;
+                }
+                var boundary = buffer.indexOf('\n\n');
+                while (boundary >= 0) {
+                  final frame = buffer.substring(0, boundary);
+                  buffer = buffer.substring(boundary + 2);
+                  String? event;
+                  final data = <String>[];
+                  for (final line in frame.split('\n')) {
+                    if (line.startsWith('event:')) {
+                      event = line.substring(6).trim();
+                    }
+                    if (line.startsWith('data:')) {
+                      data.add(line.substring(5).trimLeft());
+                    }
+                  }
+                  if (event == 'race-invalidated') {
+                    try {
+                      final decoded = jsonDecode(data.join('\n'));
+                      if (decoded is Map &&
+                          decoded['raceId'] is String &&
+                          decoded['raceId'] == raceId) {
+                        output.add(RaceChangeSignal.invalidated);
+                      }
+                    } on FormatException {
+                      /* Invalid hints never replace API state. */
+                    }
+                  }
+                  boundary = buffer.indexOf('\n\n');
+                }
+              },
+              onError: (Object error) {
+                if (!cancelled) {
+                  output.addError(error);
+                  closeTransport();
+                  unawaited(output.close());
+                }
+              },
+              onDone: () {
+                closeTransport();
+                unawaited(output.close());
+              },
+            );
+      } catch (error) {
+        if (!cancelled) {
+          output.addError(error);
+          closeTransport();
+          unawaited(output.close());
+        }
+      }
+    }
+
+    output = StreamController<RaceChangeSignal>(
+      onListen: start,
+      onCancel: closeTransport,
+    );
+    return output.stream;
   }
 
   static const Duration _requestTimeout = Duration(seconds: 15);

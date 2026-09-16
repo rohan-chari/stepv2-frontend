@@ -1,4 +1,5 @@
 import '../services/backend_api_service.dart';
+import '../services/race_change_refresh.dart';
 import '../models/race_resolution_status.dart';
 import '../tutorial/tutorial_preview_data.dart' show tutorialAccessoryPreview;
 import 'demo_race_engine.dart';
@@ -16,6 +17,13 @@ import 'demo_race_engine.dart';
 /// of them touch the network, and none of them can reach real race, powerup or
 /// settlement logic.
 class DemoRaceApiService extends BackendApiService {
+  // Tutorial/demo scores are driven by their local engine, never a live stream.
+  @override
+  Stream<RaceChangeSignal> watchRaceChanges({
+    required String identityToken,
+    required String raceId,
+  }) => const Stream.empty();
+
   DemoRaceApiService(this.engine);
 
   @override
@@ -806,6 +814,7 @@ class DemoRaceApiService extends BackendApiService {
     required String raceId,
     required List<String> powerupIds,
     required String localDate,
+    String? idempotencyKey,
   }) async => const {};
 
   // -- Telemetry --------------------------------------------------------------
