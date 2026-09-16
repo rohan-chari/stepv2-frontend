@@ -58,6 +58,19 @@ void main() {
     }
     expect(find.byType(CoinPackOffers), findsOneWidget);
   });
+
+  testWidgets('Featured shows the Bara Gold entry when billing is available', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    final billing = AvailabilityBilling();
+    await pumpShop(tester, billing: billing);
+    await tester.tap(find.text('Try again').first);
+    await tester.pump();
+    expect(find.byKey(const Key('bara-plus-card')), findsOneWidget);
+    expect(find.text('Bara Gold'), findsOneWidget);
+  });
+
   for (final width in [320.0, 390.0, 800.0]) {
     testWidgets(
       'Featured starts with coins and character actions fit at $width',

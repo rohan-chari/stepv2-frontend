@@ -7,11 +7,10 @@ import '../../widgets/shop_tile_name.dart';
 import '../character_wardrobe_screen.dart';
 import '../../widgets/shop_category_bar.dart';
 import '../../services/billing_controller.dart';
-// Bara+ on hold; used by the retained Featured composition below.
-// import '../../models/billing.dart';
 import '../../widgets/billing_scope.dart';
 import '../../widgets/shop_product_grid.dart';
 import '../../widgets/coin_pack_offers.dart';
+import '../../widgets/bara_plus_card.dart';
 import '../bara_plus_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -3046,17 +3045,29 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     });
   }
 
-  // Bara+ on hold. The original Featured composition is retained below;
-  // restore it and the commented membership entry in _focusFeatured together.
+  // Featured shop content includes the active Bara Gold entry and coin packs.
   Widget _buildFeatured() {
     final billing = BillingScope.maybeOf(context);
-    return Container(
-      key: _coinsKey,
-      child: CoinPackOffers(
-        key: ValueKey('coins-${billing?.userId}'),
-        onGreenSurface: true,
-        showHeading: false,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: BaraPlusCard(
+            controller: billing,
+            onTap: _openMembershipDetails,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          key: _coinsKey,
+          child: CoinPackOffers(
+            key: ValueKey('coins-${billing?.userId}'),
+            onGreenSurface: true,
+            showHeading: false,
+          ),
+        ),
+      ],
     );
   }
 
