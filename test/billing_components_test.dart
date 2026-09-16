@@ -52,7 +52,7 @@ class FakeBilling extends BillingController {
   @override
   Future<BillingResult> startTrial(BillingPlan plan) async {
     update(
-      BillingSnapshot(status: BillingStatus.trial, plan: plan, trialCredits: 3),
+      BillingSnapshot(status: BillingStatus.trial, plan: plan),
     );
     return const BillingResult(success: true, message: 'Trial started');
   }
@@ -142,17 +142,16 @@ void main() {
     await tester.pump();
     expect(find.text('Purchase failed. Try again.'), findsOneWidget);
   });
-  testWidgets('membership monthly offer and trial use correct benefits', (
+  testWidgets('membership monthly offer and trial use current Gold benefits', (
     tester,
   ) async {
     final billing = FakeBilling();
     await tester.pumpWidget(host(billing, const BaraPlusScreen()));
+    await tester.ensureVisible(find.byKey(const Key('plan-monthly')));
     await tester.tap(find.byKey(const Key('plan-monthly')));
     await tester.pump();
-    await tester.scrollUntilVisible(find.textContaining('500 coins'), 200);
-    expect(find.textContaining('500 coins'), findsWidgets);
-    await tester.scrollUntilVisible(find.textContaining('10 reroll'), 200);
-    expect(find.textContaining('10 reroll'), findsWidgets);
+    expect(find.textContaining('Monthly Gold grants 1,000 coins'), findsOneWidget);
+    expect(find.text('One free reroll per powerup'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-bara-trial')),
       400,
@@ -161,10 +160,10 @@ void main() {
     await tester.pump();
     expect(billing.snapshot.status, BillingStatus.trial);
     expect(billing.snapshot.plan, BillingPlan.monthly);
-    await tester.scrollUntilVisible(find.text('3 trial rerolls'), -400);
-    expect(find.text('3 trial rerolls'), findsOneWidget);
+    expect(find.textContaining('Your Gold trial is active.'), findsOneWidget);
+    expect(billing.snapshot.trialCredits, 0);
   });
-  testWidgets('expired credits remain visible and restore works', (
+  testWidgets('expired historical credits are not shown as active Gold benefits', (
     tester,
   ) async {
     final billing = FakeBilling()
@@ -173,8 +172,8 @@ void main() {
         paidCredits: 8,
       );
     await tester.pumpWidget(host(billing, const BaraPlusScreen()));
-    expect(find.text('8 paid rerolls'), findsOneWidget);
-    expect(find.textContaining('remain usable'), findsOneWidget);
+    expect(find.text('8 paid rerolls'), findsNothing);
+    expect(find.textContaining('remain usable'), findsNothing);
     await tester.scrollUntilVisible(find.byKey(const Key('restore-bara')), 400);
     await tester.tap(find.byKey(const Key('restore-bara')));
     await tester.pump();
@@ -222,14 +221,10 @@ void main() {
       ..state = const BillingSnapshot(
         status: BillingStatus.active,
         plan: BillingPlan.monthly,
-        paidCredits: 10,
       );
     await tester.pumpWidget(host(billing, const BaraPlusScreen()));
     await tester.scrollUntilVisible(find.byKey(const Key('manage-bara')), 400);
     await tester.tap(find.byKey(const Key('manage-bara')));
-    await tester.pumpAndSettle();
-    expect(billing.cancels, 0);
-    await tester.tap(find.text('CANCEL RENEWAL'));
     await tester.pumpAndSettle();
     expect(billing.cancels, 1);
   });
@@ -239,7 +234,7 @@ void main() {
     );
     expect(find.text('500'), findsNothing);
     await tester.pumpWidget(const MaterialApp(home: BaraPlusScreen()));
-    expect(find.text('Membership is not available yet.'), findsOneWidget);
+    expect(find.text('Bara Gold is not available right now.'), findsOneWidget);
   });
   testWidgets('small phone and large text fit light and dark membership', (
     tester,

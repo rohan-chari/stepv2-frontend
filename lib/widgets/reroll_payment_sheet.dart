@@ -3,6 +3,7 @@ import '../models/billing.dart';
 import '../services/billing_controller.dart';
 import '../styles.dart';
 import 'pill_button.dart';
+import 'remove_ads_action.dart';
 
 Future<RerollFunding?> showRerollPaymentSheet(
   BuildContext context, {
@@ -50,61 +51,58 @@ Future<RerollFunding?> showRerollPaymentSheet(
                   style: PixelText.body(size: 13, color: colors.textDark),
                 ),
                 const SizedBox(height: 22),
-                PillButton(
-                  key: const Key('reroll-funding-credits'),
-                  label: pendingFunding == RerollFunding.credits
-                      ? 'RETRY PREVIOUS CREDIT REROLL'
-                      : 'USE 1 REROLL CREDIT',
-                  fullWidth: true,
-                  onPressed:
-                      (pendingFunding == RerollFunding.credits ||
-                              pendingFunding == null &&
-                                  state.availableCredits > 0) &&
-                          !state.busy
-                      ? () => Navigator.pop(context, RerollFunding.credits)
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${state.paidCredits} paid credits · ${state.isTrial ? state.trialCredits : 0} trial credits',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(size: 12, color: colors.textMid),
-                ),
-                if (state.isTrial && state.trialCredits > 0)
-                  Text(
-                    'Expiring trial credits are used first.',
-                    textAlign: TextAlign.center,
-                    style: PixelText.body(size: 11, color: colors.textMid),
+                if (state.isMember) ...[
+                  PillButton(
+                    key: const Key('reroll-funding-gold'),
+                    label: pendingFunding == RerollFunding.freeGold
+                        ? 'RETRY BARA GOLD REROLL'
+                        : 'FREE BARA GOLD REROLL',
+                    fullWidth: true,
+                    onPressed: !state.busy
+                        ? () => Navigator.pop(context, RerollFunding.freeGold)
+                        : null,
                   ),
-                const SizedBox(height: 18),
-                PillButton(
-                  key: const Key('reroll-funding-coins'),
-                  label: pendingFunding == RerollFunding.coins
-                      ? 'RETRY PREVIOUS COIN REROLL'
-                      : 'SPEND $cost COINS',
-                  variant: PillButtonVariant.secondary,
-                  fullWidth: true,
-                  onPressed:
-                      (pendingFunding == RerollFunding.coins ||
-                              pendingFunding == null && state.coins >= cost) &&
-                          !state.busy
-                      ? () => Navigator.pop(context, RerollFunding.coins)
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  state.coins < cost
-                      ? 'You need $cost coins. Balance: ${state.coins}.'
-                      : '$cost coins per action · Balance: ${billingCoinLabel(state.coins)}',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(size: 12, color: colors.textMid),
-                ),
-                if (pendingFunding != null)
+                  const SizedBox(height: 12),
                   Text(
-                    'Your previous action is still being checked. Retrying recovers that same action without a second charge.',
+                    'One free reroll per powerup. No coins or ad required.',
+                    textAlign: TextAlign.center,
                     style: PixelText.body(size: 12, color: colors.textMid),
                   ),
-                if (adSupported && pendingFunding == null) ...[
+                ],
+                if (!state.isMember) ...[
+                  const SizedBox(height: 18),
+                  PillButton(
+                    key: const Key('reroll-funding-coins'),
+                    label: pendingFunding == RerollFunding.coins
+                        ? 'RETRY PREVIOUS COIN REROLL'
+                        : 'SPEND $cost COINS',
+                    variant: PillButtonVariant.secondary,
+                    fullWidth: true,
+                    onPressed:
+                        (pendingFunding == RerollFunding.coins ||
+                                pendingFunding == null &&
+                                    state.coins >= cost) &&
+                            !state.busy
+                        ? () => Navigator.pop(context, RerollFunding.coins)
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.coins < cost
+                        ? 'You need $cost coins. Balance: ${state.coins}.'
+                        : '$cost coins per action · Balance: ${billingCoinLabel(state.coins)}',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(size: 12, color: colors.textMid),
+                  ),
+                  if (pendingFunding != null)
+                    Text(
+                      'Your previous action is still being checked. Retrying recovers that same action without a second charge.',
+                      style: PixelText.body(size: 12, color: colors.textMid),
+                    ),
+                ],
+                if (!state.isMember &&
+                    adSupported &&
+                    pendingFunding == null) ...[
                   const SizedBox(height: 18),
                   PillButton(
                     key: const Key('reroll-funding-ad'),
@@ -114,6 +112,9 @@ Future<RerollFunding?> showRerollPaymentSheet(
                     onPressed: state.busy
                         ? null
                         : () => Navigator.pop(context, RerollFunding.ad),
+                  ),
+                  RemoveAdsAction(
+                    onPressed: () => RemoveAdsAction.openPaywall(context),
                   ),
                 ],
                 const SizedBox(height: 12),

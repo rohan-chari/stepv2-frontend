@@ -7,8 +7,57 @@ import 'package:step_tracker/widgets/coin_pack_offers.dart';
 import 'package:step_tracker/widgets/billing_scope.dart';
 
 void main() {
+  test('preview supports both current Gold plans and their coin grants', () async {
+    final controller = PreviewBillingController();
+    addTearDown(controller.dispose);
+
+    expect(controller.plans.map((offer) => offer.price), [r'$1.49', r'$3.99']);
+    expect(
+      controller.plans.map((offer) => offer.coinGrant),
+      [200, 1000],
+    );
+
+    final weeklyTrial = await controller.startTrial(BillingPlan.weekly);
+    expect(weeklyTrial.success, isTrue);
+    expect(controller.snapshot.plan, BillingPlan.weekly);
+    expect(controller.snapshot.status, BillingStatus.trial);
+    expect(controller.snapshot.coins, 550);
+    expect(controller.snapshot.availableCredits, 0);
+
+    controller.setScenario(PreviewBillingScenario.free);
+    final monthly = await controller.subscribe(BillingPlan.monthly);
+    expect(monthly.success, isTrue);
+    expect(controller.snapshot.plan, BillingPlan.monthly);
+    expect(controller.snapshot.coins, 1350);
+    expect(controller.snapshot.availableCredits, 0);
+
+    final annual = await controller.subscribe(BillingPlan.annual);
+    expect(annual.success, isFalse);
+    final permanent = await controller.subscribe(BillingPlan.permanent);
+    expect(permanent.success, isFalse);
+  });
+
+  test('weekly and monthly Gold previews both start seven-day trials', () async {
+    final controller = PreviewBillingController();
+    addTearDown(controller.dispose);
+
+    final weekly = await controller.startTrial(BillingPlan.weekly);
+    expect(weekly.success, isTrue);
+    expect(controller.snapshot.accessUntil, isNotNull);
+    expect(
+      controller.snapshot.accessUntil!.difference(DateTime.now()).inDays,
+      inInclusiveRange(6, 7),
+    );
+
+    controller.setScenario(PreviewBillingScenario.free);
+    final monthly = await controller.startTrial(BillingPlan.monthly);
+    expect(monthly.success, isTrue);
+    expect(controller.snapshot.plan, BillingPlan.monthly);
+    expect(controller.snapshot.coins, 1350);
+  });
+
   testWidgets(
-    'real preview batch consent debits once and cancellation debits nothing',
+    'Gold preview batch reroll is free and still limited to one attempt',
     (tester) async {
       final controller = PreviewBillingController();
       addTearDown(controller.dispose);
@@ -44,22 +93,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('CANCEL'));
       await tester.pumpAndSettle();
-      expect(controller.snapshot.paidCredits, 10);
-      expect(controller.snapshot.coins, 850);
+      expect(controller.snapshot.coins, 350);
       await tester.tap(find.text('Reroll batch'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('reroll-funding-credits')));
+      await tester.tap(find.byKey(const Key('reroll-funding-gold')));
       await tester.pumpAndSettle();
       expect(result?.success, true);
       expect(result?.rows.length, 3);
-      expect(controller.snapshot.paidCredits, 9);
-      expect(controller.snapshot.coins, 850);
+      expect(controller.snapshot.paidCredits, 0);
+      expect(controller.snapshot.coins, 350);
       await tester.tap(find.text('Reroll batch'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('reroll-funding-coins')));
+      expect(find.byKey(const Key('reroll-funding-gold')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('reroll-funding-gold')));
       await tester.pumpAndSettle();
       expect(result?.success, false);
-      expect(controller.snapshot.coins, 850);
+      expect(controller.snapshot.coins, 350);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

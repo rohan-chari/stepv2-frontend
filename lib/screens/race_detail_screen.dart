@@ -82,6 +82,18 @@ import 'tournament_detail_screen.dart';
 import 'race_invite_screen.dart';
 import '../constants/powerup_copy.dart';
 
+String _newUuidV4() {
+  final random = math.Random.secure();
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  String hex(int value) => value.toRadixString(16).padLeft(2, '0');
+  final text = bytes.map(hex).join();
+  return '${text.substring(0, 8)}-${text.substring(8, 12)}-'
+      '${text.substring(12, 16)}-${text.substring(16, 20)}-'
+      '${text.substring(20)}';
+}
+
 class RaceDetailScreen extends StatefulWidget {
   final AuthService authService;
   final String raceId;
@@ -7794,6 +7806,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (powerupIds.isEmpty) return null;
 
     final localDate = _todayLocalDate();
+    final requestKey = _newUuidV4();
     final adContext = RewardedAdContext.boxReroll(
       userId: userId,
       localDate: localDate,
@@ -7826,6 +7839,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         userId,
         powerupIds,
         localDate,
+        requestKey,
       );
       if (!_rerollFlowCurrent(token, userId)) return null;
       // Warm the next ad for a second Open All this session.
@@ -7886,6 +7900,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     String userId,
     List<String> powerupIds,
     String localDate,
+    String requestKey,
   ) async {
     const maxAttempts = 5;
     for (var attempt = 0; ; attempt++) {
@@ -7898,6 +7913,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           raceId: widget.raceId,
           powerupIds: powerupIds,
           localDate: localDate,
+          idempotencyKey: requestKey,
         );
         if (!_rerollFlowCurrent(token, userId)) {
           throw StateError('Rewarded-ad identity changed');

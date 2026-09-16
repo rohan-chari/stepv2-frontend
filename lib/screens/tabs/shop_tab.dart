@@ -38,6 +38,7 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
+import '../../widgets/remove_ads_action.dart';
 import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
 import '../../services/meta_app_events_service.dart';
@@ -201,6 +202,7 @@ class ShopTab extends StatefulWidget {
 }
 
 class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
+  bool get _isGold => BillingScope.maybeOf(context)?.snapshot.isMember == true;
   final _storeScrollController = ScrollController();
   final _coinsKey = GlobalKey();
   final _powerupsKey = GlobalKey();
@@ -2079,6 +2081,27 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               }
             }
           : null,
+      onDirectBuy:
+          _characterActionsReady &&
+              !_saving &&
+              !row.owned &&
+              row.directPurchaseAvailable &&
+              row.directStoreProductId != null &&
+              _billing != null
+          ? () => unawaited(
+              _billing!.buyDirectProduct(row.directStoreProductId!).then((
+                result,
+              ) {
+                if (!mounted) return;
+                if (result.success) {
+                  _showInfo(context, result.message);
+                  unawaited(_wardrobes.load());
+                } else {
+                  _showError(context, result.message);
+                }
+              }),
+            )
+          : null,
     );
   }
 
@@ -2548,22 +2571,34 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     operation = _purchase(item);
                   },
           ),
-          _AffordRoute.watchAds => PillButton(
-            label: adsNeeded == 1
-                ? 'WATCH 1 AD TO UNLOCK'
-                : 'WATCH $adsNeeded ADS TO UNLOCK',
-            icon: Icons.smart_display_rounded,
-            variant: PillButtonVariant.rewardedAd,
-            fontSize: 13,
-            fullWidth: true,
-            onPressed: _saving
-                ? null
-                : () {
-                    if (!claimAction()) return;
-                    _shopActionContext = adContext;
-                    Navigator.of(context).pop();
-                    operation = _unlockCosmeticWithAds(item, adsNeeded);
-                  },
+          _AffordRoute.watchAds => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PillButton(
+                label: _isGold
+                    ? 'UNLOCK ITEM'
+                    : adsNeeded == 1
+                    ? 'WATCH 1 AD TO UNLOCK'
+                    : 'WATCH $adsNeeded ADS TO UNLOCK',
+                icon: _isGold
+                    ? Icons.lock_open_rounded
+                    : Icons.smart_display_rounded,
+                variant: _isGold
+                    ? PillButtonVariant.primary
+                    : PillButtonVariant.rewardedAd,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _saving
+                    ? null
+                    : () {
+                        if (!claimAction()) return;
+                        _shopActionContext = adContext;
+                        Navigator.of(context).pop();
+                        operation = _unlockCosmeticWithAds(item, adsNeeded);
+                      },
+              ),
+              if (!_isGold) RemoveAdsAction(onPressed: _openMembershipDetails),
+            ],
           ),
           _AffordRoute.getCoins => PillButton(
             label: 'GET MORE COINS',
@@ -2944,7 +2979,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     child: Padding(
                       padding: const EdgeInsets.only(left: 20),
                       child: Text(
-                        'Bara+',
+                        'Bara Gold',
                         style: PixelText.title(
                           size: 24,
                           color: AppColors.of(sheetContext).textDark,
@@ -3045,7 +3080,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             key: const Key('billing-shop-membership'),
             child: Semantics(
               button: true,
-              label: 'Bara+ membership details',
+              label: 'Bara Gold membership details',
               child: Material(
                 key: const Key('shop-membership-toggle'),
                 color: colors.parchment,
@@ -3068,7 +3103,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Bara+',
+                                'Bara Gold',
                                 style: PixelText.title(
                                   size: 23,
                                   color: colors.textDark,
@@ -3194,6 +3229,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     int generation,
     String token,
   ) async {
+    if (_isGold) return true;
     final matching = _shopAdContext == context ? _shopAdController : null;
     ExtraSpinAdController current = matching ?? _newAdController();
     _activeShopAdControllers.add(current);
@@ -3293,12 +3329,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     setState(() => _saving = true);
     try {
-      if (!await _watchShopUnlockAds(
-        adContext,
-        adsNeeded,
-        actionGeneration,
-        token,
-      )) {
+      // Gold is authorized by the backend membership check in the same
+      // unlock endpoint.  It bypasses the optional ad, but the endpoint still
+      // enforces its daily cap, eligibility, idempotency, and ownership rules.
+      if (!_isGold &&
+          !await _watchShopUnlockAds(
+            adContext,
+            adsNeeded,
+            actionGeneration,
+            token,
+          )) {
         return;
       }
       if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
@@ -3415,12 +3455,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     setState(() => _saving = true);
     try {
-      if (!await _watchShopUnlockAds(
-        adContext,
-        adsNeeded,
-        actionGeneration,
-        token,
-      )) {
+      // Gold membership is verified again by the backend.  Do not fabricate
+      // SSV/ad grants for the client-side bypass; the same endpoint performs
+      // the Gold action claim and preserves its caps/idempotency.
+      if (!_isGold &&
+          !await _watchShopUnlockAds(
+            adContext,
+            adsNeeded,
+            actionGeneration,
+            token,
+          )) {
         return;
       }
       if (!_shopFlowCurrent(actionGeneration, token, adContext)) return;
@@ -3595,20 +3639,32 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       );
     }
     if (canAdUnlock) {
-      return PillButton(
-        label: adsNeeded == 1
-            ? 'WATCH 1 AD TO UNLOCK'
-            : 'WATCH $adsNeeded ADS TO UNLOCK',
-        icon: Icons.smart_display_rounded,
-        variant: PillButtonVariant.rewardedAd,
-        fontSize: 13,
-        fullWidth: true,
-        onPressed: _saving
-            ? null
-            : () {
-                Navigator.of(context).pop();
-                _unlockPowerupWithAds(item, adsNeeded);
-              },
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PillButton(
+            label: _isGold
+                ? 'UNLOCK POWERUP'
+                : adsNeeded == 1
+                ? 'WATCH 1 AD TO UNLOCK'
+                : 'WATCH $adsNeeded ADS TO UNLOCK',
+            icon: _isGold
+                ? Icons.lock_open_rounded
+                : Icons.smart_display_rounded,
+            variant: _isGold
+                ? PillButtonVariant.primary
+                : PillButtonVariant.rewardedAd,
+            fontSize: 13,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _unlockPowerupWithAds(item, adsNeeded);
+                  },
+          ),
+          if (!_isGold) RemoveAdsAction(onPressed: _openMembershipDetails),
+        ],
       );
     }
     return PillButton(

@@ -296,7 +296,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byKey(const Key('reroll-funding-coins')), findsOneWidget);
-        expect(find.byKey(const Key('reroll-funding-credits')), findsOneWidget);
+        expect(find.byKey(const Key('reroll-funding-credits')), findsNothing);
         expect(find.byKey(const Key('reroll-funding-ad')), findsNothing);
         await tester.tap(find.text('CANCEL'));
         await tester.pump();
@@ -389,12 +389,12 @@ void main() {
             findsOneWidget,
           );
         }
-        await tester.tap(find.byKey(const Key('reroll-funding-credits')));
+        await tester.tap(find.byKey(const Key('reroll-funding-coins')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(billing.calls, 1);
         expect(billing.selectedIds, hasLength(count));
-        expect(billing.funding, RerollFunding.credits);
+        expect(billing.funding, RerollFunding.coins);
         await tester.pumpWidget(const SizedBox.shrink());
       },
     );

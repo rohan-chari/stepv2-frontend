@@ -90,6 +90,8 @@ class AvailabilityBilling extends FakeBilling {
   @override
   bool get isPreview => false;
   @override
+  bool get goldPolicyAvailable => true;
+  @override
   bool get isAvailable => packs || membership;
   @override
   List<CoinPackOffer> get coinPacks =>
@@ -365,9 +367,9 @@ void main() {
     (tester) async {
       addTearDown(tester.view.reset);
       await pumpRetainedMembership(tester, billing: FakeBilling());
-      expect(find.text('A LITTLE EXTRA JOY'), findsNothing);
+      expect(find.text('A LITTLE EXTRA JOY'), findsOneWidget);
       expect(find.text('For you. For your capy.'), findsNothing);
-      expect(find.text('THE MONTHLY LOOK'), findsOneWidget);
+      expect(find.text('Plan-specific coin grants'), findsOneWidget);
       expect(find.byKey(const Key('plan-monthly')), findsOneWidget);
       expect(find.byKey(const Key('restore-bara')), findsOneWidget);
     },
@@ -382,21 +384,16 @@ void main() {
       width: 320,
       textScale: 1.6,
     );
-    final art = find.image(
-      const AssetImage('assets/images/accessories/wizard_hat.png'),
-    );
-    expect(
-      tester.getBottomLeft(art).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.text('THE MONTHLY LOOK')).dy),
-    );
+    expect(find.text('Bara Gold'), findsOneWidget);
     final monthly = find.byKey(const Key('plan-monthly'));
-    final permanent = find.byKey(const Key('plan-permanent'));
+    final weekly = find.byKey(const Key('plan-weekly'));
     expect(
-      tester.getBottomLeft(monthly).dy,
-      lessThan(tester.getTopLeft(permanent).dy),
+      tester.getTopLeft(weekly).dy,
+      closeTo(tester.getTopLeft(monthly).dy, 1),
     );
-    expect(tester.getSize(monthly).width, tester.getSize(permanent).width);
-    expect(find.text('Something to show off'), findsOneWidget);
+    expect(tester.getSize(monthly).width, tester.getSize(weekly).width);
+    expect(find.byKey(const Key('plan-permanent')), findsNothing);
+    expect(find.textContaining('reroll credits'), findsNothing);
     expect(tester.takeException(), isNull);
   });
   testWidgets('shared pending checkout blocks membership and all coin offers', (

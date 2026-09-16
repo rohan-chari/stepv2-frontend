@@ -50,6 +50,7 @@ import '../services/race_detail_navigation.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
 import '../widgets/ad_banner_slot.dart';
+import '../widgets/billing_scope.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
@@ -961,6 +962,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       identityToken: token,
       backendApiService: _backendApiService,
       analytics: _activationAnalytics,
+      isMemberProvider: () =>
+          BillingScope.maybeOf(context)?.snapshot.isMember == true,
     );
     _interstitialCoordinator = coordinator;
     _interstitialBoundToken = token;

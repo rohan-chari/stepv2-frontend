@@ -11,21 +11,7 @@ import 'package:step_tracker/services/store_billing_client.dart';
 import 'live_billing_test.dart';
 import 'package:step_tracker/preview/preview_billing_controller.dart';
 
-class PermanentApi extends TestApi {
-  @override
-  Map<String, dynamic> data({String identityToken = 'token-a'}) {
-    final result = super.data(identityToken: identityToken);
-    (result['products'] as List).add({
-      'id': 'plus_permanent',
-      'kind': 'non_consumable',
-      'plan': 'permanent',
-      'coins': 500,
-      'credits': 10,
-      'storeProductId': 'permanent',
-    });
-    return result;
-  }
-}
+class PermanentApi extends TestApi {}
 
 class PermanentStore extends TestStore {
   List<String> nonSubscriptions = [];
@@ -43,7 +29,6 @@ class PermanentStore extends TestStore {
     nonSubscriptions = coins;
     return [
       ...await super.products(coins, subscriptions),
-      const StoreBillingProduct(id: 'permanent', price: '€21,99', trialDays: 7),
     ];
   }
 }
@@ -67,7 +52,7 @@ void main() {
   }
 
   testWidgets(
-    'permanent uses nonSubscription, localized one-time price and no annual or trial offer',
+    'retired permanent and annual products are not offered by the Gold screen',
     (tester) async {
       final api = PermanentApi()..fixedCoins = 100;
       final store = PermanentStore()..eligible = true;
@@ -78,31 +63,14 @@ void main() {
         platform: 'ios',
       );
       await screen(tester, billing);
-      expect(store.nonSubscriptions, contains('permanent'));
-      expect(
-        billing.coinPacks.map((p) => p.id),
-        isNot(contains('plus_permanent')),
-      );
+      expect(store.nonSubscriptions, isNot(contains('permanent')));
+      expect(billing.coinPacks.map((p) => p.id), isNot(contains('plus_permanent')));
       expect(find.byKey(const Key('plan-annual')), findsNothing);
-      await tester.tap(find.byKey(const Key('plan-permanent')));
-      await tester.pump();
-      expect(find.text('€21,99'), findsOneWidget);
-      expect(find.byKey(const Key('start-bara-trial')), findsNothing);
-      expect(find.byKey(const Key('buy-permanent-bara')), findsOneWidget);
-      expect(find.textContaining('One-time payment'), findsWidgets);
-      store.duringPurchase = () => api.membership = {
-        'status': 'active',
-        'plan': 'permanent',
-        'givesAccess': true,
-        'renews': false,
-        'nextRewardAt': '2030-05-31T10:00:00Z',
-      };
-      await tester.tap(find.byKey(const Key('buy-permanent-bara')));
-      await tester.pumpAndSettle();
-      expect(api.syncHints, contains('transaction-1'));
-      expect(billing.snapshot.coins, 100);
-      expect(find.text('Bara+ permanently owned'), findsOneWidget);
+      expect(find.byKey(const Key('plan-permanent')), findsNothing);
       expect(find.byKey(const Key('buy-permanent-bara')), findsNothing);
+      expect(find.textContaining('One-time payment'), findsNothing);
+      expect(billing.snapshot.coins, 100);
+      expect(find.text('Bara Gold'), findsOneWidget);
     },
   );
   for (final overlap in [false, true]) {
@@ -135,19 +103,15 @@ void main() {
           platform: 'android',
         );
         await screen(tester, billing);
-        expect(find.text('Bara+ permanently owned'), findsOneWidget);
-        expect(find.textContaining('Next reward:'), findsOneWidget);
+        expect(find.text('Bara Gold'), findsOneWidget);
+        expect(find.textContaining('Next reward:'), findsNothing);
         expect(find.byKey(const Key('plan-monthly')), findsNothing);
         expect(find.byKey(const Key('plan-permanent')), findsNothing);
+        expect(find.byKey(const Key('plan-annual')), findsNothing);
         expect(find.byKey(const Key('subscribe-bara')), findsNothing);
-        expect(
-          find.byKey(const Key('manage-bara')),
-          overlap ? findsOneWidget : findsNothing,
-        );
+        expect(find.byKey(const Key('manage-bara')), findsOneWidget);
         expect(find.textContaining('Renewal cancelled.'), findsNothing);
-        if (overlap) {
-          expect(find.textContaining('does not cancel'), findsOneWidget);
-        }
+        expect(find.textContaining('does not cancel'), findsNothing);
         expect(billing.snapshot.coins, 100);
         expect(billing.snapshot.paidCredits, 0);
       },
@@ -172,10 +136,10 @@ void main() {
         platform: 'ios',
       );
       await screen(tester, billing);
-      expect(find.text('6,000 coins upfront'), findsOneWidget);
+      expect(find.text('Bara Gold'), findsOneWidget);
       expect(find.byKey(const Key('manage-bara')), findsOneWidget);
       expect(find.byKey(const Key('plan-annual')), findsNothing);
-      expect(find.byKey(const Key('plan-permanent')), findsOneWidget);
+      expect(find.byKey(const Key('plan-permanent')), findsNothing);
       expect(billing.plans.any((p) => p.plan == BillingPlan.annual), false);
     },
   );
@@ -191,27 +155,13 @@ void main() {
         platform: 'ios',
       );
       await screen(tester, billing);
-      await tester.tap(find.byKey(const Key('plan-permanent')));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('buy-permanent-bara')));
-      await tester.pumpAndSettle();
       await billing.refresh();
       await tester.pump();
-      expect(billing.snapshot.operationStatus, BillingOperationStatus.pending);
+      expect(billing.snapshot.operationStatus, BillingOperationStatus.success);
       expect(billing.snapshot.isMember, false);
       expect(billing.snapshot.coins, 100);
       expect(billing.snapshot.paidCredits, 0);
-      store.nativeTransactions.add('permanent-new-transaction');
-      api.membership = {
-        'status': 'active',
-        'plan': 'permanent',
-        'givesAccess': true,
-        'renews': false,
-      };
-      await billing.refresh();
-      await tester.pump();
-      expect(api.syncHints.last, 'permanent-new-transaction');
-      expect(find.text('Bara+ permanently owned'), findsOneWidget);
+      expect(find.byKey(const Key('plan-permanent')), findsNothing);
       expect(billing.snapshot.coins, 100);
     },
   );
@@ -220,7 +170,6 @@ void main() {
     (tester) async {
       final billing = PreviewBillingController();
       addTearDown(billing.dispose);
-      // Name lookup deliberately fails before the new fixture is implemented.
       final fixture = PreviewBillingScenario.values.where(
         (s) => s.name == 'permanentWithMonthly',
       );
@@ -229,11 +178,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: BaraPlusScreen(controller: billing)),
       );
-      await tester.scrollUntilVisible(
-        find.text('Bara+ permanently owned'),
-        300,
-      );
-      expect(find.text('Bara+ permanently owned'), findsOneWidget);
+      expect(find.text('Bara Gold'), findsOneWidget);
+      expect(find.byKey(const Key('plan-permanent')), findsNothing);
+      expect(find.byKey(const Key('plan-annual')), findsNothing);
       await tester.ensureVisible(find.byKey(const Key('manage-bara')));
       expect(find.byKey(const Key('manage-bara')), findsOneWidget);
       expect(find.byKey(const Key('subscribe-bara')), findsNothing);
@@ -241,7 +188,8 @@ void main() {
         PreviewBillingScenario.values.singleWhere((s) => s.name == 'permanent'),
       );
       await tester.pump();
-      expect(find.byKey(const Key('manage-bara')), findsNothing);
+      expect(find.byKey(const Key('manage-bara')), findsOneWidget);
+      expect(find.byKey(const Key('plan-permanent')), findsNothing);
     },
   );
   testWidgets(
@@ -263,10 +211,11 @@ void main() {
         platform: 'ios',
       );
       await screen(tester, billing);
-      expect(find.text('Member coin rewards'), findsOneWidget);
+      expect(find.text('Bara Gold'), findsOneWidget);
       expect(find.text('500 coins each month'), findsNothing);
       expect(find.textContaining('Next reward:'), findsNothing);
-      expect(find.byKey(const Key('manage-bara')), findsNothing);
+      expect(find.textContaining('reroll credits'), findsNothing);
+      expect(find.byKey(const Key('manage-bara')), findsOneWidget);
       expect(billing.snapshot.subscription, isNull);
       expect(tester.takeException(), isNull);
     },
@@ -277,7 +226,7 @@ void main() {
     PreviewBillingScenario.monthly,
   ]) {
     testWidgets(
-      'preview permanent purchase from ${scenario.name} has accurate first reward and separate subscription',
+      'preview ${scenario.name} does not expose retired permanent purchase',
       (tester) async {
         tester.view.physicalSize = const Size(900, 2600);
         tester.view.devicePixelRatio = 1;
@@ -285,32 +234,13 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         final billing = PreviewBillingController()..setScenario(scenario);
         addTearDown(billing.dispose);
-        final before = billing.snapshot;
         await tester.pumpWidget(
           MaterialApp(home: BaraPlusScreen(controller: billing)),
         );
-        await tester.tap(find.byKey(const Key('plan-permanent')));
-        await tester.pump();
-        expect(find.byKey(const Key('start-bara-trial')), findsNothing);
-        await tester.tap(find.byKey(const Key('buy-permanent-bara')));
-        await tester.pumpAndSettle();
-        expect(billing.snapshot.isPermanent, true);
-        expect(
-          billing.snapshot.coins,
-          before.coins + (scenario == PreviewBillingScenario.monthly ? 0 : 500),
-        );
-        expect(
-          billing.snapshot.paidCredits,
-          before.paidCredits +
-              (scenario == PreviewBillingScenario.monthly ? 0 : 10),
-        );
-        expect(billing.snapshot.trialCredits, 0);
-        expect(
-          billing.snapshot.hasSubscription,
-          scenario != PreviewBillingScenario.free,
-        );
-        expect(billing.snapshot.nextRewardAt, isNotNull);
+        expect(find.byKey(const Key('plan-permanent')), findsNothing);
+        expect(find.byKey(const Key('plan-annual')), findsNothing);
         expect(find.byKey(const Key('buy-permanent-bara')), findsNothing);
+        expect(find.textContaining('reroll credits'), findsNothing);
       },
     );
   }
@@ -370,7 +300,7 @@ void main() {
         );
         await screen(tester, billing);
         expect(find.byKey(const Key('manage-bara')), findsOneWidget);
-        expect(find.textContaining('currently unavailable'), findsOneWidget);
+        expect(find.textContaining('currently unavailable'), findsNothing);
         await tester.tap(find.byKey(const Key('manage-bara')));
         await tester.pumpAndSettle();
         expect(store.manages, 1);
@@ -466,7 +396,7 @@ void main() {
       expect(find.textContaining('cancelled'), findsNothing);
       expect(
         find.textContaining('Check your store for renewal and payment status.'),
-        findsOneWidget,
+        findsNothing,
       );
       await tester.tap(find.byKey(const Key('manage-bara')));
       await tester.pumpAndSettle();

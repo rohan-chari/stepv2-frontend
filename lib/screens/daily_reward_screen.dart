@@ -21,6 +21,8 @@ import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_coin.dart';
+import '../widgets/billing_scope.dart';
+import '../widgets/remove_ads_action.dart';
 
 class DailyRewardScreen extends StatefulWidget {
   final AuthService authService;
@@ -204,7 +206,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
 
   void _recordExtraSpinOfferArrival() {
     if (!_hasAvailableExtraSpin) return;
-    if (!_adCtrl.isSupported) {
+    if (!_isGold && !_adCtrl.isSupported) {
       _record(
         'extra_spin_ad_not_ready',
         context: {..._analyticsSurfaceContext, 'result': 'unsupported'},
@@ -222,7 +224,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
   Future<void> _maybePrepareExtraSpin() async {
     final extra = _adExtraSpin;
     final ctrl = _adCtrl;
-    if (extra == null || !_hasAvailableExtraSpin || !ctrl.isSupported) return;
+    if (extra == null ||
+        !_hasAvailableExtraSpin ||
+        (_isGold ? false : !ctrl.isSupported)) {
+      return;
+    }
     final context = _extraSpinAdContext;
     if (context == null) {
       _record(
@@ -233,6 +239,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
     }
     _preparedExtraSpinContext = context;
     if (extra['pendingGrant'] == true) return;
+    if (_isGold) {
+      return;
+    }
     if (!ctrl.isReadyFor(context)) {
       if (mounted) setState(() => _adLoading = true);
       try {
@@ -257,7 +266,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
   /// load rather than leaving a disabled "LOADING AD…" button on screen.
   void _retryOrStartExtraSpin() {
     if (_adFlowBusy || _isClaiming) return;
-    if (_adExtraSpin?['pendingGrant'] == true || _adReady) {
+    if (_isGold || _adExtraSpin?['pendingGrant'] == true || _adReady) {
       unawaited(_startExtraSpin());
       return;
     }
@@ -356,8 +365,13 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
     if (token == null || token.isEmpty) return;
     final ctrl = _adCtrl;
     final pending = _adExtraSpin?['pendingGrant'] == true;
-    final adContext = _preparedExtraSpinContext ?? _extraSpinAdContext;
-    if (adContext == null || adContext != _extraSpinAdContext) {
+    final currentAdContext = _extraSpinAdContext;
+    if (currentAdContext == null) return;
+    // Gold does not preload an ad, so establish the same session-bound
+    // context that the ad path establishes before claiming directly.
+    _preparedExtraSpinContext ??= currentAdContext;
+    final adContext = _preparedExtraSpinContext;
+    if (adContext == null || adContext != currentAdContext) {
       unawaited(_maybePrepareExtraSpin());
       return;
     }
@@ -373,7 +387,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
     final priorStrip = _stripItems;
     final priorOpening = _opening;
     try {
-      if (!pending) {
+      if (!pending && !_isGold) {
         if (!ctrl.isReadyFor(adContext)) return;
         setState(() => _adReady = false);
         final earned = await ctrl.showAndAwaitRewardFor(adContext);
@@ -777,7 +791,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
               labelMaxLines: 2,
               onPressed: _isClaiming ? null : _openBox,
             )
-          else if (_extraSpinOffered)
+          else if (_extraSpinOffered) ...[
             // The extra spin IS the primary action once today's box is open —
             // this view is reached from the home button's EXTRA SPIN state.
             PillButton(
@@ -789,8 +803,12 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
               onPressed: (_adFlowBusy || _adLoading)
                   ? null
                   : _retryOrStartExtraSpin,
-            )
-          else
+            ),
+            if (!_isGold)
+              RemoveAdsAction(
+                onPressed: () => RemoveAdsAction.openPaywall(context),
+              ),
+          ] else
             PillButton(
               label: 'COME BACK TOMORROW',
               variant: PillButtonVariant.primary,
@@ -808,11 +826,16 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
   /// hasn't been used or already run this session, and this platform can show
   /// ads.
   bool get _extraSpinOffered {
-    return _hasAvailableExtraSpin && !_extraSpinDone && _adCtrl.isSupported;
+    return _hasAvailableExtraSpin &&
+        !_extraSpinDone &&
+        (_isGold || _adCtrl.isSupported);
   }
+
+  bool get _isGold => BillingScope.maybeOf(context)?.snapshot.isMember == true;
 
   String get _extraSpinCtaLabel {
     if (_adFlowBusy) return 'PLEASE WAIT...';
+    if (_isGold) return 'BONUS SPIN';
     if (_adExtraSpin?['pendingGrant'] == true) return 'BONUS SPIN - WATCH AD';
     if (_adReady) return 'BONUS SPIN - WATCH AD';
     if (_adLoading) return 'LOADING AD...';

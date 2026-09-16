@@ -395,6 +395,7 @@ class BackendApiService {
       'referral_contest_global_v1',
       'recurring_races_v1',
       'team_chat_v1',
+      'bara_gold_v1',
       // This capability stamps the iOS-only, immutable metrics collection
       // cohort. Android shares this Dart file but must never advertise it.
       if (isIos) 'admin_metrics_v2',
@@ -404,8 +405,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,team_races_10v10_v1,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,simple_event_recap_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1,recurring_races_v1,team_chat_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,team_races_10v10_v1,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,simple_event_recap_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1,recurring_races_v1,team_chat_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,team_races_10v10_v1,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,simple_event_recap_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1,recurring_races_v1,team_chat_v1,bara_gold_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,team_races_10v10_v1,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,privacy_safe_display_ranks,powerup_stacking_guide_v1,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,impact_summary_expiry_v1,simple_event_recap_v1,review_prompt,inbox_v1,privateJoinApproval,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1,recurring_races_v1,team_chat_v1,bara_gold_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -1807,12 +1808,17 @@ class BackendApiService {
     required String raceId,
     required List<String> powerupIds,
     required String localDate,
+    String? idempotencyKey,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/powerups/reroll-batch',
       body: <String, dynamic>{'powerupIds': powerupIds, 'localDate': localDate},
       identityToken: identityToken,
+      headers: <String, String>{
+        if (idempotencyKey != null && idempotencyKey.isNotEmpty)
+          'Idempotency-Key': idempotencyKey,
+      },
     );
 
     return _decodeJsonResponse(response);

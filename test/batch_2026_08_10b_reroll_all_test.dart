@@ -243,6 +243,7 @@ class _BatchStubApi extends BackendApiService {
     required String raceId,
     required List<String> powerupIds,
     required String localDate,
+    String? idempotencyKey,
   }) async {
     batchCalls++;
     batchIds.add(List<String>.from(powerupIds));

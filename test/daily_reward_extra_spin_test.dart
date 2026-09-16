@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/daily_reward_screen.dart';
+import 'package:step_tracker/models/billing.dart';
+import 'package:step_tracker/services/billing_controller.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/activation_analytics_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -11,6 +13,7 @@ import 'package:step_tracker/widgets/case_opening_strip.dart';
 import 'package:step_tracker/widgets/extra_spin_reward_ticket.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/streak_chip.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
 
 // ---------------------------------------------------------------------------
 // Rewarded-ad extra daily box spin.
@@ -160,6 +163,40 @@ class _RecordingAnalytics extends ActivationAnalyticsService {
   }
 }
 
+class _GoldBilling extends BillingController {
+  @override
+  String get userId => 'gold-user';
+  @override
+  bool get isPreview => true;
+  @override
+  BillingSnapshot get snapshot => const BillingSnapshot(
+    status: BillingStatus.active,
+    plan: BillingPlan.monthly,
+    givesAccess: true,
+  );
+  @override
+  Future<BillingResult> buyCoins(CoinPackOffer pack) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> startTrial(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> subscribe(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> restore() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> cancelRenewal() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingRerollResult> reroll({
+    required String raceId,
+    required List<String> ids,
+    required RerollFunding funding,
+  }) async => const BillingRerollResult(success: true, message: 'ok');
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues(<String, Object>{
     'auth_identity_token': 'apple-token',
@@ -176,21 +213,23 @@ Future<void> _pumpScreen(
   WidgetTester tester, {
   required _FakeBackendApiService api,
   ExtraSpinAdController? adController,
+  BillingController? billing,
   AuthService? authService,
   ActivationAnalyticsService? analytics,
   DateTime Function()? now,
 }) async {
   final auth = authService ?? await _createAuthService();
-  await tester.pumpWidget(
-    MaterialApp(
-      home: DailyRewardScreen(
-        authService: auth,
-        backendApiService: api,
-        adController: adController,
-        analytics: analytics,
-        now: now,
-      ),
+  final screen = MaterialApp(
+    home: DailyRewardScreen(
+      authService: auth,
+      backendApiService: api,
+      adController: adController,
+      analytics: analytics,
+      now: now,
     ),
+  );
+  await tester.pumpWidget(
+    billing == null ? screen : BillingScope(controller: billing, child: screen),
   );
   // Let the status fetch land. (No pumpAndSettle: screen has looping anims.)
   await tester.pump();
@@ -228,6 +267,31 @@ void main() {
       expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
     },
   );
+
+  testWidgets('Gold extra spin is direct and has no ad or Remove Ads CTA', (
+    tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      status: _status(
+        adExtraSpin: {'available': true, 'pendingGrant': false, 'used': false},
+      ),
+    );
+    final ads = _FakeAdController();
+    await _pumpScreen(
+      tester,
+      api: api,
+      adController: ads,
+      billing: _GoldBilling(),
+    );
+
+    expect(find.text('BONUS SPIN'), findsOneWidget);
+    expect(find.text('BONUS SPIN - WATCH AD'), findsNothing);
+    expect(find.byKey(const Key('remove-ads-action')), findsNothing);
+    await tester.tap(find.text('BONUS SPIN'));
+    await tester.pump();
+    expect(ads.showCalls, 0);
+    expect(api.claimCalls, 1);
+  });
 
   testWidgets('no button when the backend omits adExtraSpin (old backend)', (
     tester,

@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/constants/powerup_copy.dart';
+import 'package:step_tracker/models/billing.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/services/billing_controller.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
 
 /// Item 10 — the "watch ads to unlock" affordance vs the +coins route,
 /// driven entirely by the coin shortfall against a single 150/300-coin tile.
@@ -117,6 +120,40 @@ class _FakeShopAdController implements ExtraSpinAdController {
   void dispose() => disposeCalls++;
 }
 
+class _GoldBilling extends BillingController {
+  @override
+  String get userId => 'user-1';
+  @override
+  bool get isPreview => true;
+  @override
+  BillingSnapshot get snapshot => const BillingSnapshot(
+    status: BillingStatus.active,
+    plan: BillingPlan.weekly,
+    givesAccess: true,
+  );
+  @override
+  Future<BillingResult> buyCoins(CoinPackOffer pack) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> startTrial(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> subscribe(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> restore() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> cancelRenewal() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingRerollResult> reroll({
+    required String raceId,
+    required List<String> ids,
+    required RerollFunding funding,
+  }) async => const BillingRerollResult(success: true, message: 'ok');
+}
+
 Future<AuthService> _pump(
   WidgetTester tester, {
   required int coins,
@@ -125,6 +162,7 @@ Future<AuthService> _pump(
   _FakeShopAdController? ads,
   ExtraSpinAdController Function()? adControllerBuilder,
   DateTime Function()? now,
+  BillingController? billing,
 }) async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -137,17 +175,18 @@ Future<AuthService> _pump(
   });
   final auth = AuthService();
   await auth.restoreSession();
-  await tester.pumpWidget(
-    MaterialApp(
-      home: ShopTab(
-        initialFocus: ShopFocus.items,
-        authService: auth,
-        backendApiService: api ?? _FakeShopApi(coins: coins, price: price),
-        adControllerBuilder:
-            adControllerBuilder ?? (ads == null ? null : () => ads),
-        now: now,
-      ),
+  final screen = MaterialApp(
+    home: ShopTab(
+      initialFocus: ShopFocus.items,
+      authService: auth,
+      backendApiService: api ?? _FakeShopApi(coins: coins, price: price),
+      adControllerBuilder:
+          adControllerBuilder ?? (ads == null ? null : () => ads),
+      now: now,
     ),
+  );
+  await tester.pumpWidget(
+    billing == null ? screen : BillingScope(controller: billing, child: screen),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
@@ -169,6 +208,30 @@ void main() {
     await _pump(tester, coins: 30, price: 150);
     expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
     expect(find.text('GET MORE COINS'), findsNothing);
+  });
+
+  testWidgets('Gold powerup unlock skips the ad but keeps the action route', (
+    tester,
+  ) async {
+    final ads = _FakeShopAdController();
+    final api = _FakeShopApi(coins: 30, price: 150);
+    await _pump(
+      tester,
+      coins: 30,
+      price: 150,
+      api: api,
+      ads: ads,
+      billing: _GoldBilling(),
+    );
+
+    expect(find.text('UNLOCK POWERUP'), findsOneWidget);
+    expect(find.textContaining('WATCH'), findsNothing);
+    expect(find.byKey(const Key('remove-ads-action')), findsNothing);
+    await tester.tap(find.text('UNLOCK POWERUP'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(ads.showCalls, 0);
+    expect(api.unlockCalls, 1);
   });
 
   testWidgets('shortfall 40 → "Watch 1 ad"', (tester) async {

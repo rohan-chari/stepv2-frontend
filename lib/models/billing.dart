@@ -1,13 +1,15 @@
 /// UI contracts only. Store adapters supply verified state and localized prices.
 enum BillingStatus { free, trial, active, expired }
 
-enum BillingPlan { monthly, annual, permanent }
+/// Plan values are additive. [annual] and [permanent] remain readable for
+/// historical subscriptions, but are never offered by the current Gold UI.
+enum BillingPlan { weekly, monthly, annual, permanent }
 
 enum BillingOperationStatus { idle, loading, pending, success, failed }
 
 enum BillingDisposition { success, error, cancelled, pending, notice }
 
-enum RerollFunding { credits, coins, ad }
+enum RerollFunding { credits, coins, ad, freeGold }
 
 class CoinPackOffer {
   final String id;
@@ -133,14 +135,30 @@ class StorePlanOffer {
   final BillingPlan plan;
   final String price;
   final int trialDays;
+  final int coinGrant;
+  final int trialCoinGrant;
   const StorePlanOffer({
     required this.plan,
     required this.price,
     this.trialDays = 0,
+    this.coinGrant = 0,
+    this.trialCoinGrant = 0,
   });
   static const previewOffers = [
-    StorePlanOffer(plan: BillingPlan.monthly, price: r'$4.99', trialDays: 7),
-    StorePlanOffer(plan: BillingPlan.permanent, price: r'$19.99'),
+    StorePlanOffer(
+      plan: BillingPlan.weekly,
+      price: r'$1.49',
+      trialDays: 7,
+      coinGrant: 200,
+      trialCoinGrant: 200,
+    ),
+    StorePlanOffer(
+      plan: BillingPlan.monthly,
+      price: r'$3.99',
+      trialDays: 7,
+      coinGrant: 1000,
+      trialCoinGrant: 1000,
+    ),
   ];
 }
 

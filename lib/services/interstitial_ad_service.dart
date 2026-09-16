@@ -335,6 +335,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
     String? sessionId,
     DateTime? sessionStartedAt,
     Future<String> Function()? appVersionProvider,
+    bool Function()? isMemberProvider,
     List<Duration>? retryDelays,
   }) : _identityToken = identityToken,
        _api = backendApiService,
@@ -352,6 +353,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
        _tracker = fullScreenTracker ?? FullScreenPresentationTracker.production,
        _loader = loader ?? _loadGoogleInterstitial,
        _appVersionProvider = appVersionProvider ?? _appVersion,
+       _isMemberProvider = isMemberProvider,
        _retryDelays =
            retryDelays ?? const [Duration(seconds: 30), Duration(minutes: 2)],
        _sessionId = sessionId ?? _uuid(),
@@ -379,6 +381,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   final FullScreenPresentationTracker _tracker;
   final InterstitialAdLoader _loader;
   final Future<String> Function() _appVersionProvider;
+  final bool Function()? _isMemberProvider;
   final List<Duration> _retryDelays;
   String _sessionId;
   DateTime _sessionStartedAt;
@@ -405,6 +408,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   Future<void> warm(InterstitialPlacement placement) {
     final adUnitId = _adUnitIdForPlacement(placement);
     if (_disposed ||
+        (_isMemberProvider?.call() ?? false) ||
         !_foreground ||
         _impressionConfirmedThisSession ||
         _tracker.wasPresentedRecentlySync ||
@@ -569,6 +573,7 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
   Future<void> prime(InterstitialPlacement placement) async {
     final adUnitId = _adUnitIdForPlacement(placement);
     if (_disposed ||
+        (_isMemberProvider?.call() ?? false) ||
         !_foreground ||
         _showPending ||
         _impressionConfirmedThisSession ||
@@ -800,6 +805,8 @@ class InterstitialAdCoordinator implements InterstitialPresentationCoordinator {
     String? skipReason;
     if (_disposed) {
       skipReason = 'account_changed';
+    } else if (_isMemberProvider?.call() ?? false) {
+      skipReason = 'member';
     } else if (!AdService.adRequestsAllowed) {
       skipReason = 'not_ready';
     } else if (_adUnitIdForPlacement(placement).isEmpty) {

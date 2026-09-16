@@ -5,10 +5,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/constants/powerup_copy.dart';
+import 'package:step_tracker/models/billing.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/services/billing_controller.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
 
 // Spec §6 (dark-mode owned pill), §7 (server-served ad-unlock rules) and §8
 // (shop type scale) — all three live on the shop tab, so they share a harness
@@ -81,6 +84,40 @@ class _FakeShopApi extends BackendApiService with LegacyShopWardrobeFixture {
   }
 }
 
+class _GoldBilling extends BillingController {
+  @override
+  String get userId => 'user-1';
+  @override
+  bool get isPreview => true;
+  @override
+  BillingSnapshot get snapshot => const BillingSnapshot(
+    status: BillingStatus.active,
+    plan: BillingPlan.weekly,
+    givesAccess: true,
+  );
+  @override
+  Future<BillingResult> buyCoins(CoinPackOffer pack) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> startTrial(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> subscribe(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> restore() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> cancelRenewal() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingRerollResult> reroll({
+    required String raceId,
+    required List<String> ids,
+    required RerollFunding funding,
+  }) async => const BillingRerollResult(success: true, message: 'ok');
+}
+
 Future<AuthService> _auth(int coins) async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -105,27 +142,29 @@ Future<void> _pump(
   String powerupName = 'Big Bang',
   List<Map<String, dynamic>> cosmetics = const [],
   ThemeData? theme,
+  BillingController? billing,
 }) async {
   final auth = await _auth(coins);
-  await tester.pumpWidget(
-    MaterialApp(
-      theme: theme ?? AppThemeData.light(),
-      home: ShopTab(
-        initialFocus: ShopFocus.items,
-        // A fresh key per pump: without it Flutter reuses the previous
-        // ShopTab's State and never reloads the fake catalog.
-        key: UniqueKey(),
-        authService: auth,
-        backendApiService: _FakeShopApi(
-          coins: coins,
-          price: price,
-          adUnlock: adUnlock,
-          ownedQuantity: ownedQuantity,
-          powerupName: powerupName,
-          cosmetics: cosmetics,
-        ),
+  final screen = MaterialApp(
+    theme: theme ?? AppThemeData.light(),
+    home: ShopTab(
+      initialFocus: ShopFocus.items,
+      // A fresh key per pump: without it Flutter reuses the previous
+      // ShopTab's State and never reloads the fake catalog.
+      key: UniqueKey(),
+      authService: auth,
+      backendApiService: _FakeShopApi(
+        coins: coins,
+        price: price,
+        adUnlock: adUnlock,
+        ownedQuantity: ownedQuantity,
+        powerupName: powerupName,
+        cosmetics: cosmetics,
       ),
     ),
+  );
+  await tester.pumpWidget(
+    billing == null ? screen : BillingScope(controller: billing, child: screen),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
@@ -394,6 +433,49 @@ void main() {
       await tester.pump(const Duration(milliseconds: 180));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
+    });
+
+    testWidgets('Gold cosmetic unlock is direct and has no ad CTA', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        coins: 385,
+        price: 150,
+        adUnlock: {
+          'maxShortfall': 20,
+          'coinsPerAd': 50,
+          'maxAds': 3,
+          'dailyCap': 1,
+          'remainingToday': 1,
+        },
+        billing: _GoldBilling(),
+        cosmetics: [
+          {
+            'id': 'c1',
+            'sku': 'corgi_puppy',
+            'name': 'Corgi Puppy',
+            'slot': 'CHARACTER',
+            'assetKey': 'corgi_puppy',
+            'priceCoins': 400,
+            'description': 'Zoomies!',
+          },
+        ],
+      );
+      await selectShopCategory(tester, 'CHARACTERS');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final selector = find.byKey(const Key('shop-character-c1'));
+      await tester.scrollUntilVisible(
+        selector,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('shop-character-buy-c1')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('UNLOCK ITEM'), findsOneWidget);
+      expect(find.textContaining('WATCH'), findsNothing);
+      expect(find.byKey(const Key('remove-ads-action')), findsNothing);
     });
 
     testWidgets('a cosmetic priced past maxShortfall routes to Get coins', (

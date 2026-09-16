@@ -80,7 +80,7 @@ void main() {
     await tester.tap(find.text('BUY · 170'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
-    expect(controller.snapshot.coins, 680);
+    expect(controller.snapshot.coins, 180);
     await exitShop(tester);
     await tester.tap(find.byKey(const Key('preview-nav-profile')));
     await tester.pump();

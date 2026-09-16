@@ -39,6 +39,7 @@ class AdBannerSpacing extends StatelessWidget {
     builder: (context, enabled, child) => SizedBox(
       height:
           (BillingScope.maybeOf(context)?.isPreview != true) &&
+              (BillingScope.maybeOf(context)?.snapshot.isMember != true) &&
               enabled &&
               (placement == AdBannerPlacement.boxTop
                   ? AdService.boxTopBannerEnabled
@@ -157,7 +158,17 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   void _maybeStartLoad() {
     if (_loadStarted ||
         widget.hidden ||
-        BillingScope.read(context)?.isPreview == true) {
+        BillingScope.read(context)?.isPreview == true ||
+        BillingScope.maybeOf(context)?.snapshot.isMember == true) {
+      if (BillingScope.maybeOf(context)?.snapshot.isMember == true && _ad != null) {
+        _loadGeneration++;
+        _retryTimer?.cancel();
+        _retryTimer = null;
+        _ad?.dispose();
+        _ad = null;
+        _loaded = false;
+        _loadStarted = false;
+      }
       return;
     }
     _loadStarted = true;
@@ -171,7 +182,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
     final enabled = widget.placement == AdBannerPlacement.boxTop
         ? AdService.boxTopBannerEnabled
         : AdService.bannersEnabled;
-    if (!enabled) return;
+    if (!enabled || BillingScope.maybeOf(context)?.snapshot.isMember == true) return;
     bool initialized;
     try {
       initialized =
@@ -187,6 +198,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
     if (!mounted ||
         generation != _loadGeneration ||
         !enabled ||
+        BillingScope.maybeOf(context)?.snapshot.isMember == true ||
         !(widget.placement == AdBannerPlacement.boxTop
             ? AdService.boxTopBannerEnabled
             : AdService.bannersEnabled)) {

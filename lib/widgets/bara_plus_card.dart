@@ -41,7 +41,7 @@ class BaraPlusCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Bara+',
+                            'Bara Gold',
                             style: PixelText.title(
                               size: 25,
                               color: colors.textLight,
@@ -49,11 +49,9 @@ class BaraPlusCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            billing.snapshot.isPermanent
-                                ? 'Permanently owned · ${billing.snapshot.availableCredits} rerolls left'
-                                : member
-                                ? '15% shop savings · ${billing.snapshot.availableCredits} rerolls left'
-                                : 'More for your capy. 15% shop savings + monthly perks.',
+                            member
+                                ? '15% member discount · Free Gold rerolls'
+                                : 'More for your capy. 15% member discount + Gold perks.',
                             style: PixelText.body(
                               size: 12,
                               color: colors.textLight,

@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/get_coins_screen.dart';
+import 'package:step_tracker/models/billing.dart';
 import 'package:step_tracker/screens/referral_screen.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/services/billing_controller.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
 
 // ---------------------------------------------------------------------------
 // Get Coins hub (the "+" next to the coin balance): one page listing every way
@@ -146,6 +149,40 @@ class _DeferredStatusApi extends _FakeBackendApiService {
   }
 }
 
+class _GoldBilling extends BillingController {
+  @override
+  String get userId => 'gold-user';
+  @override
+  bool get isPreview => true;
+  @override
+  BillingSnapshot get snapshot => const BillingSnapshot(
+    status: BillingStatus.active,
+    plan: BillingPlan.monthly,
+    givesAccess: true,
+  );
+  @override
+  Future<BillingResult> buyCoins(CoinPackOffer pack) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> startTrial(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> subscribe(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> restore() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> cancelRenewal() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingRerollResult> reroll({
+    required String raceId,
+    required List<String> ids,
+    required RerollFunding funding,
+  }) async => const BillingRerollResult(success: true, message: 'ok');
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues(<String, Object>{
     'auth_identity_token': 'apple-token',
@@ -165,17 +202,19 @@ Future<AuthService> _pumpScreen(
   required _FakeBackendApiService api,
   ExtraSpinAdController? adController,
   DateTime Function()? now,
+  BillingController? billing,
 }) async {
   final auth = await _createAuthService();
-  await tester.pumpWidget(
-    MaterialApp(
-      home: GetCoinsScreen(
-        authService: auth,
-        backendApiService: api,
-        adController: adController,
-        now: now,
-      ),
+  final screen = MaterialApp(
+    home: GetCoinsScreen(
+      authService: auth,
+      backendApiService: api,
+      adController: adController,
+      now: now,
     ),
+  );
+  await tester.pumpWidget(
+    billing == null ? screen : BillingScope(controller: billing, child: screen),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
@@ -222,6 +261,28 @@ void main() {
     // SSV custom_data carries the coins: prefix so the backend mints a
     // coin_reward grant, not an extra spin.
     expect(ads.lastLoadLocalDate, startsWith('coins:'));
+  });
+
+  testWidgets('Gold keeps the five-ad coin feature and never gets Remove Ads', (
+    tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      status: _status(adCoinReward: _liveOffer),
+    );
+    final ads = _FakeAdController();
+    await _pumpScreen(
+      tester,
+      api: api,
+      adController: ads,
+      billing: _GoldBilling(),
+    );
+
+    expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
+    expect(find.byKey(const Key('remove-ads-action')), findsNothing);
+    await tester.tap(find.text('WATCH AD · RANDOM COINS'));
+    await tester.pump();
+    expect(ads.showCalls, 1);
+    expect(api.claimCalls, 1);
   });
 
   testWidgets('watch-ad section hidden when the backend omits adCoinReward', (

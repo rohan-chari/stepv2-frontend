@@ -89,8 +89,8 @@ void main() {
                     'identifier': id,
                     'description': 'Product',
                     'title': 'Product',
-                    'price': coins ? 1.09 : 5.49,
-                    'priceString': coins ? '€1,09' : '€5,49',
+                    'price': coins ? 1.09 : 2.99,
+                    'priceString': coins ? '€1,09' : '€3,99',
                     'currencyCode': 'EUR',
                     'productCategory': coins
                         ? 'NON_SUBSCRIPTION'
@@ -109,15 +109,17 @@ void main() {
             case 'checkTrialOrIntroductoryPriceEligibility':
               if (failEligibility) throw PlatformException(code: '23');
               return {
+                'weekly': {'status': 2, 'description': 'eligible'},
                 'monthly': {'status': 2, 'description': 'eligible'},
-                'annual': {'status': 2, 'description': 'eligible'},
               };
             default:
               throw StateError('Unexpected native call ${call.method}');
           }
         });
     auth = TestAuth();
-    api = TestApi()..perAccount = true;
+    api = TestApi()
+      ..perAccount = true
+      ..goldAccountA = true;
     store = RevenueCatBillingClient(apiKey: 'public-test-key', platform: 'ios');
     billing = LiveBillingController(
       auth: auth,
@@ -288,8 +290,11 @@ void main() {
     failCoins = true;
     await tester.runAsync(billing.refresh);
     await render(tester, membership: true);
-    expect(billing.plans.single.price, '€5,49');
-    expect(find.textContaining('€5,49'), findsWidgets);
+    expect(billing.plans.map((plan) => plan.plan), containsAll([
+      BillingPlan.weekly,
+      BillingPlan.monthly,
+    ]));
+    expect(billing.plans.map((plan) => plan.price), contains('€3,99'));
     expect(billing.coinPacks, isEmpty);
   });
   testWidgets(
@@ -299,9 +304,10 @@ void main() {
       await tester.runAsync(billing.refresh);
       await render(tester);
       expect(find.text('€1,09'), findsOneWidget);
-      expect(billing.plans.single.trialDays, 0);
+      expect(billing.plans, hasLength(2));
+      expect(billing.plans.every((plan) => plan.trialDays == 0), isTrue);
       await render(tester, membership: true);
-      expect(find.textContaining('€5,49'), findsWidgets);
+      expect(billing.plans.map((plan) => plan.price), contains('€3,99'));
       expect(find.byKey(const Key('start-bara-trial')), findsNothing);
     },
   );

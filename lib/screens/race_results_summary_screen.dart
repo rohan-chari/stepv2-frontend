@@ -21,6 +21,8 @@ import '../widgets/pill_button.dart';
 import '../widgets/race_podium.dart';
 import '../widgets/spinning_coin.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/billing_scope.dart';
+import '../widgets/remove_ads_action.dart';
 import 'race_detail_screen.dart';
 
 /// Blurred-backdrop popup summarizing races that finished since the user last
@@ -248,13 +250,13 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     final api = widget.backendApiService;
     final auth = widget.authService;
     final ads = widget.adController;
+    final gold = BillingScope.maybeOf(context)?.snapshot.isMember == true;
     final token = auth?.authToken;
     final userId = auth?.userId;
     var current = _offer;
     if (api == null ||
         auth == null ||
-        ads == null ||
-        !ads.isSupported ||
+        (!gold && (ads == null || !ads.isSupported)) ||
         token == null ||
         token.isEmpty ||
         userId == null ||
@@ -291,12 +293,18 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
         if (!_generationMatches(generation, token, userId)) return;
         setState(() => _offer = current);
       }
+      if (gold) {
+        if (_generationMatches(generation, token, userId)) {
+          setState(() => _flowState = _PayoutDoubleFlowState.ready);
+        }
+        return;
+      }
       final context = _contextForOffer(current);
       if (context == null) {
         _hideOffer();
         return;
       }
-      if (!ads.isReadyFor(context)) await ads.warm(context);
+      if (!ads!.isReadyFor(context)) await ads.warm(context);
       if (!_generationMatches(generation, token, userId)) return;
       setState(() {
         _flowState = _PayoutDoubleFlowState.ready;
@@ -325,14 +333,14 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     final api = widget.backendApiService;
     final auth = widget.authService;
     final ads = widget.adController;
+    final gold = BillingScope.maybeOf(context)?.snapshot.isMember == true;
     final token = auth?.authToken;
     final userId = auth?.userId;
     final generation = _popupGeneration;
     var current = _offer;
     if (api == null ||
         auth == null ||
-        ads == null ||
-        !ads.isSupported ||
+        (!gold && (ads == null || !ads.isSupported)) ||
         token == null ||
         token.isEmpty ||
         userId == null ||
@@ -348,7 +356,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       _message = null;
     });
     try {
-      await _ensurePrepared();
+      if (!gold) await _ensurePrepared();
       if (!_generationMatches(generation, token, userId) || _offerHidden) {
         return;
       }
@@ -366,7 +374,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
         _hideOffer();
         return;
       }
-      if (_earnedCallbackReceived) {
+      if (_earnedCallbackReceived || gold) {
         await _claimPreparedOffer(
           offerId,
           generation: generation,
@@ -379,17 +387,17 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
         userId: userId,
         offerId: offerId,
       );
-      if (!ads.isReadyFor(context)) await ads.warm(context);
+      if (!gold && !ads!.isReadyFor(context)) await ads.warm(context);
       if (!_generationMatches(generation, token, userId)) return;
-      if (!ads.isReadyFor(context)) {
+      if (!gold && !ads!.isReadyFor(context)) {
         setState(() {
           _flowState = _PayoutDoubleFlowState.ready;
           _message = "Ad didn't load. Your coins are unchanged.";
         });
         return;
       }
-      _rewardedPresented = true;
-      final earned = await ads.showAndAwaitRewardFor(context);
+      _rewardedPresented = !gold;
+      final earned = gold || await ads!.showAndAwaitRewardFor(context);
       if (!_generationMatches(generation, token, userId)) return;
       if (!earned) {
         setState(() {
@@ -828,23 +836,33 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
               child: PillButton(
                 key: const Key('race-payout-double-action'),
                 label: _flowState == _PayoutDoubleFlowState.loading
-                    ? 'LOADING AD…'
+                    ? (BillingScope.maybeOf(context)?.snapshot.isMember == true ? 'CLAIMING…' : 'LOADING AD…')
                     : _flowState == _PayoutDoubleFlowState.verifying
                     ? 'VERIFYING…'
                     : _earnedCallbackReceived
                     ? 'RETRY +$bonus BONUS'
+                    : BillingScope.maybeOf(context)?.snapshot.isMember == true
+                    ? 'CLAIM GOLD BONUS · +$bonus COINS'
                     : flat && offer.raceIds.length > 1
                     ? 'WATCH AD · +50 COINS PER RACE'
                     : 'WATCH AD · +$bonus COINS',
-                icon: Icons.play_circle_fill_rounded,
+                icon: BillingScope.maybeOf(context)?.snapshot.isMember == true
+                    ? Icons.lock_open_rounded
+                    : Icons.play_circle_fill_rounded,
                 // This is the primary action on the results screen. The
                 // gold decision treatment made the label difficult to read
                 // and did not match the app-wide action hierarchy.
-                variant: PillButtonVariant.rewardedAd,
+                variant: BillingScope.maybeOf(context)?.snapshot.isMember == true
+                    ? PillButtonVariant.primary
+                    : PillButtonVariant.rewardedAd,
                 fullWidth: true,
                 onPressed: _presentationStarted ? null : _startPayoutDouble,
               ),
             ),
+            if (BillingScope.maybeOf(context)?.snapshot.isMember != true)
+              RemoveAdsAction(
+                onPressed: () => RemoveAdsAction.openPaywall(context),
+              ),
           ],
           if (_message != null) ...[
             const SizedBox(height: 10),

@@ -41,6 +41,7 @@ class LiveBillingController extends BillingController {
   bool _disposed = false;
   bool _storeAvailable = false;
   bool _rerollSupported = false;
+  bool _goldPolicyAvailable = false;
   int _cost = 50;
   bool _working = false;
   bool _loadingCatalog = false;
@@ -55,6 +56,8 @@ class LiveBillingController extends BillingController {
   String get userId => _user;
   @override
   bool get isPreview => false;
+  @override
+  bool get goldPolicyAvailable => _goldPolicyAvailable;
   @override
   bool get isAvailable =>
       _storeAvailable &&
@@ -151,6 +154,7 @@ class LiveBillingController extends BillingController {
                       .firstOrNull ??
                   BillingStatus.free,
               plan: [
+                BillingPlan.weekly,
                 BillingPlan.monthly,
                 BillingPlan.annual,
               ].where((e) => e.name == subscription['plan']).firstOrNull,
@@ -201,6 +205,7 @@ class LiveBillingController extends BillingController {
     _productIds.clear();
     _storeAvailable = false;
     _rerollSupported = false;
+    _goldPolicyAvailable = false;
     _operation = BillingOperationStatus.idle;
     _message = null;
     _notify();
@@ -211,6 +216,8 @@ class LiveBillingController extends BillingController {
   Future<void> _apply(Map<String, dynamic> data, int generation) async {
     if (!_current(generation)) return;
     _data = data;
+    final goldPolicy = _map(data['goldPolicy']);
+    _goldPolicyAvailable = goldPolicy['version'] == 'bara_gold_v1';
     final reroll = _map(data['reroll']);
     _rerollSupported =
         data['contract'] == 'bara-billing-v1' &&
@@ -243,6 +250,7 @@ class LiveBillingController extends BillingController {
       if (data['contract'] != 'bara-billing-v1') {
         _data = {};
         _rerollSupported = false;
+        _goldPolicyAvailable = false;
         _storeAvailable = false;
         _packs = [];
         _plans = [];
@@ -267,8 +275,8 @@ class LiveBillingController extends BillingController {
               (p) =>
                   p['kind'] == 'coins' ||
                   (p['kind'] == 'non_consumable' &&
-                      p['plan'] == 'permanent' &&
-                      p['id'] == 'plus_permanent'),
+                      (p['plan'] == 'permanent' ||
+                          p['plan'] == null)),
             )
             .map((p) => _string(p['storeProductId']))
             .whereType<String>()
@@ -298,12 +306,11 @@ class LiveBillingController extends BillingController {
           final plan = BillingPlan.values
               .where((p) => p.name == item['plan'])
               .firstOrNull;
-          if (((item['kind'] == 'subscription' &&
-                      plan == BillingPlan.monthly &&
-                      id == 'plus_monthly') ||
-                  (item['kind'] == 'non_consumable' &&
-                      plan == BillingPlan.permanent &&
-                      id == 'plus_permanent')) &&
+          if (_goldPolicyAvailable &&
+              item['kind'] == 'subscription' &&
+              item['benefitVersion'] == 'bara_gold_v1' &&
+              (plan == BillingPlan.weekly || plan == BillingPlan.monthly) &&
+              (id == 'plus_weekly' || id == 'plus_monthly') &&
               plan != null &&
               termsUrl != null &&
               privacyUrl != null) {
@@ -311,7 +318,9 @@ class LiveBillingController extends BillingController {
               StorePlanOffer(
                 plan: plan,
                 price: product.price,
-                trialDays: plan == BillingPlan.monthly ? product.trialDays : 0,
+                trialDays: product.trialDays,
+                coinGrant: _int(item['coins']),
+                trialCoinGrant: _int(item['trialCoins']),
               ),
             );
           }
@@ -361,6 +370,7 @@ class LiveBillingController extends BillingController {
         if (error is ApiException && error.statusCode == 404) {
           _data = {};
           _rerollSupported = false;
+          _goldPolicyAvailable = false;
           _identity = null;
         }
         _storeAvailable = false;
@@ -601,11 +611,32 @@ class LiveBillingController extends BillingController {
 
   @override
   Future<BillingResult> buyCoins(CoinPackOffer pack) => _purchase(pack.id);
+
+  @override
+  Future<BillingResult> buyDirectProduct(String storeProductId) {
+    final id = _productIds.entries
+        .where((entry) => entry.value == storeProductId)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    return id == null
+        ? Future.value(
+            const BillingResult(
+              success: false,
+              message: 'This character purchase is unavailable.',
+            ),
+          )
+        : _purchase(id);
+  }
   @override
   Future<BillingResult> startTrial(BillingPlan plan) => subscribe(plan);
   @override
   Future<BillingResult> subscribe(BillingPlan plan) {
-    if (plan != BillingPlan.monthly ||
+    final productId = plan == BillingPlan.weekly
+        ? 'plus_weekly'
+        : plan == BillingPlan.monthly
+        ? 'plus_monthly'
+        : null;
+    if (productId == null ||
         snapshot.isMember ||
         !plans.any((p) => p.plan == plan)) {
       return Future.value(
@@ -615,7 +646,7 @@ class LiveBillingController extends BillingController {
         ),
       );
     }
-    return _purchase('plus_monthly');
+    return _purchase(productId);
   }
 
   @override
@@ -625,7 +656,7 @@ class LiveBillingController extends BillingController {
       return Future.value(
         const BillingResult(
           success: false,
-          message: 'Permanent Bara+ is unavailable or already owned.',
+          message: 'Permanent Bara Gold is unavailable or already owned.',
         ),
       );
     }
@@ -636,12 +667,9 @@ class LiveBillingController extends BillingController {
   bool get canManageSubscription =>
       snapshot.hasSubscription || _https(_data['managementUrl']) != null;
   @override
-  bool get canChangePlan =>
-      isAvailable &&
-      snapshot.isMember &&
-      snapshot.plan == BillingPlan.annual &&
-      _productIds.containsKey('plus_annual') &&
-      plans.any((p) => p.plan == BillingPlan.monthly);
+  // The native adapter does not expose safe subscription-group/base-plan
+  // replacement yet; delegate switching to the platform store UI.
+  bool get canChangePlan => false;
   @override
   Future<BillingResult> changePlan(BillingPlan plan) async {
     final generation = _generation,
@@ -854,9 +882,9 @@ class LiveBillingController extends BillingController {
       if (saved == null) return null;
       final operation = _map(jsonDecode(saved));
       if (operation['complete'] == true) return null;
-      return RerollFunding.values
-          .where((e) => e.name == operation['funding'])
-          .firstOrNull;
+      final wire = operation['funding'];
+      if (wire == 'free_gold') return RerollFunding.freeGold;
+      return RerollFunding.values.where((e) => e.name == wire).firstOrNull;
     } catch (_) {
       return null;
     }
@@ -889,8 +917,11 @@ class LiveBillingController extends BillingController {
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString(storageKey);
+      final wireFunding = funding == RerollFunding.freeGold
+          ? 'free_gold'
+          : funding.name;
       final operation = saved == null
-          ? {'key': _uuid(), 'funding': funding.name, 'cost': _cost}
+          ? {'key': _uuid(), 'funding': wireFunding, 'cost': _cost}
           : _map(jsonDecode(saved));
       await prefs.setString(storageKey, jsonEncode(operation));
       if (!_current(generation)) {
@@ -899,8 +930,8 @@ class LiveBillingController extends BillingController {
           message: 'Account changed.',
         );
       }
-      final savedFunding = _string(operation['funding']) ?? funding.name;
-      if (savedFunding != funding.name) {
+      final savedFunding = _string(operation['funding']) ?? wireFunding;
+      if (savedFunding != wireFunding) {
         return BillingRerollResult(
           success: false,
           message:

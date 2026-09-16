@@ -16,6 +16,7 @@ import '../widgets/home_hero_scene.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/shop_category_bar.dart';
 import '../widgets/shop_product_grid.dart';
+import '../widgets/bara_gold_ribbon.dart';
 
 class CharacterWardrobeScreen extends StatefulWidget {
   const CharacterWardrobeScreen({
@@ -578,6 +579,12 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
                                               excludeBackgroundSemantics: true,
                                               child: Stack(
                                                 children: [
+                                                  if (widget.character.goldAccess)
+                                                    const Positioned(
+                                                      top: 8,
+                                                      left: 8,
+                                                      child: BaraGoldRibbon(compact: true),
+                                                    ),
                                                   Positioned(
                                                     left: 0,
                                                     right: 0,
@@ -876,6 +883,12 @@ class _CharacterWardrobeScreenState extends State<CharacterWardrobeScreen> {
               ),
               child: Stack(
                 children: [
+                  if (item.item['goldAccess'] == true)
+                    const Positioned(
+                      top: 6,
+                      right: 6,
+                      child: BaraGoldRibbon(compact: true),
+                    ),
                   Column(
                     children: [
                       Expanded(

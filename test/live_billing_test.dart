@@ -11,6 +11,7 @@ import 'package:step_tracker/services/store_billing_client.dart';
 import 'package:step_tracker/widgets/coin_pack_offers.dart';
 import 'package:step_tracker/widgets/bara_plus_card.dart';
 import 'package:step_tracker/widgets/reroll_payment_sheet.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
 
 class TestAuth extends AuthService {
   String id = 'a';
@@ -28,7 +29,11 @@ class TestAuth extends AuthService {
   }
 
   void switchUser() {
-    id = 'b';
+    switchTo('b');
+  }
+
+  void switchTo(String nextId) {
+    id = nextId;
     notifyListeners();
   }
 }
@@ -39,6 +44,9 @@ class TestApi extends BackendApiService {
   int? fixedCoins;
   bool oldBackend = false;
   bool perAccount = false;
+  bool goldAccountA = false;
+  bool failBootstrap = false;
+  Completer<Map<String, dynamic>>? delayedBootstrap;
   Map<String, dynamic>? rawBootstrap;
   bool pending = false;
   int syncCalls = 0;
@@ -65,21 +73,40 @@ class TestApi extends BackendApiService {
         'coins': 500,
       },
       {
+        'id': 'plus_weekly',
+        'storeProductId': 'weekly',
+        'kind': 'subscription',
+        'plan': 'weekly',
+        'coins': 200,
+        'trialCoins': 200,
+        'benefitVersion': 'bara_gold_v1',
+      },
+      {
         'id': 'plus_monthly',
         'storeProductId': 'monthly',
         'kind': 'subscription',
         'plan': 'monthly',
-        'coins': 500,
-      },
-      {
-        'id': 'plus_annual',
-        'storeProductId': 'annual',
-        'kind': 'subscription',
-        'plan': 'annual',
-        'coins': 6000,
+        'coins': 1000,
+        'trialCoins': 1000,
+        'benefitVersion': 'bara_gold_v1',
       },
     ],
-    'membership': membership ?? {'status': 'free'},
+    'membership': membership ??
+        (goldAccountA && identityToken == 'token-a'
+            ? {
+                'status': 'active',
+                'plan': 'monthly',
+                'givesAccess': true,
+                'discountPercent': 15,
+              }
+            : {'status': 'free', 'givesAccess': false}),
+    if (!perAccount || goldAccountA && identityToken == 'token-a')
+      'goldPolicy': {
+        'version': 'bara_gold_v1',
+        'isMember': true,
+        'weeklyProductId': 'bara_plus_weekly_v1',
+        'monthlyProductId': 'bara_plus_monthly_v1',
+      },
     'coins':
         fixedCoins ??
         (perAccount && identityToken == 'token-b' ? 900 : serverCoins),
@@ -94,6 +121,10 @@ class TestApi extends BackendApiService {
     required String platform,
   }) async {
     if (oldBackend) throw const ApiException('Not found', statusCode: 404);
+    if (failBootstrap) throw const ApiException('Unavailable', statusCode: 503);
+    if (delayedBootstrap != null && identityToken == 'token-a') {
+      return delayedBootstrap!.future;
+    }
     return rawBootstrap ?? data(identityToken: identityToken);
   }
 
@@ -105,6 +136,12 @@ class TestApi extends BackendApiService {
   }) async {
     syncHints.add(transactionId);
     syncTokens.add(identityToken);
+    if (rawBootstrap != null && !rawBootstrap!.containsKey('goldPolicy')) {
+      return {
+        ...rawBootstrap!,
+        'status': pending ? 'pending' : 'complete',
+      };
+    }
     return {
       ...data(identityToken: identityToken),
       'status': pending ? 'pending' : 'complete',
@@ -195,10 +232,10 @@ class TestStore extends StoreBillingClient {
     List<String> subscriptions,
   ) async => [
     const StoreBillingProduct(id: 'coin', price: '€1,09'),
-    const StoreBillingProduct(id: 'annual', price: '€54,99'),
+    const StoreBillingProduct(id: 'weekly', price: '€1,49'),
     StoreBillingProduct(
       id: 'monthly',
-      price: '€5,49',
+      price: '€3,99',
       trialDays: eligible ? 7 : 0,
     ),
   ];
@@ -246,8 +283,247 @@ class CoinPackTestStore extends TestStore {
   ];
 }
 
+class DirectCharacterTestStore extends TestStore {
+  @override
+  Future<List<StoreBillingProduct>> products(
+    List<String> coins,
+    List<String> subscriptions,
+  ) async => [
+    for (final id in {...coins, ...subscriptions})
+      StoreBillingProduct(id: id, price: '€0,99'),
+  ];
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('direct character checkout sends the verified native transaction to sync',
+      (tester) async {
+    final api = TestApi();
+    api.rawBootstrap = {
+      ...api.data(),
+      'products': [
+        ...((api.data()['products'] as List).cast<Map<String, dynamic>>()),
+        {
+          'id': 'character_mouse',
+          'storeProductId': 'bara_character_mouse_v1',
+          'kind': 'non_consumable',
+          'plan': null,
+          'coins': 0,
+        },
+      ],
+    };
+    final store = DirectCharacterTestStore();
+    final billing = LiveBillingController(
+      auth: TestAuth(),
+      api: api,
+      store: store,
+      platform: 'ios',
+    );
+    addTearDown(billing.dispose);
+
+    await billing.refresh();
+    final result = await billing.buyDirectProduct('bara_character_mouse_v1');
+
+    expect(result.success, isTrue);
+    expect(store.purchases, 1);
+    expect(store.purchaseIdentities, ['identity-a']);
+    expect(api.syncHints, [null, 'transaction-1']);
+    expect(billing.snapshot.operationStatus, BillingOperationStatus.success);
+    await tester.pump();
+  });
+
+  testWidgets('account switching clears Gold state and reloads the active account',
+      (tester) async {
+    final auth = TestAuth();
+    final api = TestApi()
+      ..perAccount = true
+      ..goldAccountA = true;
+    final billing = LiveBillingController(
+      auth: auth,
+      api: api,
+      store: TestStore(),
+      platform: 'ios',
+    );
+    addTearDown(billing.dispose);
+
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isTrue);
+    expect(billing.goldPolicyAvailable, isTrue);
+    expect(billing.snapshot.effectiveDiscountPercent, 15);
+
+    auth.switchTo('b');
+    await tester.pump();
+    expect(billing.snapshot.isMember, isFalse);
+    expect(billing.goldPolicyAvailable, isFalse);
+    expect(billing.snapshot.effectiveDiscountPercent, 0);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(billing.userId, 'b');
+    expect(billing.snapshot.isMember, isFalse);
+
+    auth.switchTo('a');
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(billing.snapshot.isMember, isTrue);
+    expect(billing.goldPolicyAvailable, isTrue);
+  });
+
+  testWidgets('late Gold bootstrap cannot overwrite the switched-to account',
+      (tester) async {
+    final auth = TestAuth();
+    final api = TestApi()
+      ..perAccount = true
+      ..goldAccountA = true;
+    final billing = LiveBillingController(
+      auth: auth,
+      api: api,
+      store: TestStore(),
+      platform: 'ios',
+    );
+    addTearDown(billing.dispose);
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isTrue);
+
+    final delayed = Completer<Map<String, dynamic>>();
+    api.delayedBootstrap = delayed;
+    final staleRequest = billing.refresh();
+    await tester.pump();
+    auth.switchTo('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(billing.userId, 'b');
+    expect(billing.snapshot.isMember, isFalse);
+    expect(billing.goldPolicyAvailable, isFalse);
+
+    delayed.complete(api.data(identityToken: 'token-a'));
+    await staleRequest;
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(billing.userId, 'b');
+    expect(billing.snapshot.isMember, isFalse);
+    expect(billing.goldPolicyAvailable, isFalse);
+
+    api.failBootstrap = true;
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isFalse);
+    expect(billing.goldPolicyAvailable, isFalse);
+  });
+
+  testWidgets('missing Gold fields from an older backend fail closed',
+      (tester) async {
+    final api = TestApi()
+      ..rawBootstrap = {
+        'available': true,
+        'contract': 'bara-billing-v1',
+        'identity': {'appUserId': 'identity-a', 'environment': 'production'},
+        'membership': {'status': 'free', 'givesAccess': false},
+        'coins': 100,
+        'credits': {'paid': 0, 'trial': 0},
+        'products': [
+          {
+            'id': 'plus_monthly',
+            'storeProductId': 'monthly',
+            'kind': 'subscription',
+            'plan': 'monthly',
+            'coins': 500,
+          },
+        ],
+        'reroll': {'supported': true, 'coinCost': 50},
+      };
+    final billing = LiveBillingController(
+      auth: TestAuth(),
+      api: api,
+      store: TestStore(),
+      platform: 'ios',
+    );
+    addTearDown(billing.dispose);
+    await billing.refresh();
+    await tester.pump();
+    expect(billing.goldPolicyAvailable, isFalse);
+    expect(billing.snapshot.isMember, isFalse);
+    expect(billing.plans, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('purchase, restore, expiration, and resume refresh membership safely',
+      (tester) async {
+    final api = TestApi();
+    final billing = LiveBillingController(
+      auth: TestAuth(),
+      api: api,
+      store: TestStore(),
+      platform: 'ios',
+    );
+    addTearDown(billing.dispose);
+
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isFalse);
+
+    // A verified purchase response updates the same controller without a restart.
+    api.goldAccountA = true;
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isTrue);
+    expect(billing.goldPolicyAvailable, isTrue);
+    expect(billing.snapshot.effectiveDiscountPercent, 15);
+
+    // Restore uses the same backend-confirmed refresh path and is idempotent.
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isTrue);
+
+    // Expiration removes Gold-only behavior from the active snapshot.
+    api.goldAccountA = false;
+    await billing.refresh();
+    expect(billing.snapshot.isMember, isFalse);
+    expect(billing.snapshot.effectiveDiscountPercent, 0);
+    expect(billing.goldPolicyAvailable, isTrue);
+
+    // Resume refresh can observe a later reactivation without process restart.
+    api.goldAccountA = true;
+    await billing.refresh();
+    await tester.pump();
+    expect(billing.snapshot.isMember, isTrue);
+  });
+
+  testWidgets('mounted rewarded-action sheet follows an account switch',
+      (tester) async {
+    final auth = TestAuth();
+    final api = TestApi()..goldAccountA = true;
+    final billing = LiveBillingController(
+      auth: auth,
+      api: api,
+      store: TestStore(),
+      platform: 'ios',
+    );
+    addTearDown(billing.dispose);
+
+    await billing.refresh();
+    await tester.pumpWidget(
+      BillingScope(
+        controller: billing,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showRerollPaymentSheet(
+                  context,
+                  controller: billing,
+                  adSupported: true,
+                ),
+                child: const Text('Open reroll'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open reroll'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reroll-funding-gold')), findsOneWidget);
+    expect(find.byKey(const Key('reroll-funding-ad')), findsNothing);
+
+    auth.switchTo('b');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('reroll-funding-gold')), findsNothing);
+    expect(find.byKey(const Key('reroll-funding-ad')), findsOneWidget);
+    expect(find.byKey(const Key('remove-ads-action')), findsOneWidget);
+  });
   for (final platform in ['ios', 'android']) {
     testWidgets('existing $platform pack tiles refresh backend quantities', (
       tester,
@@ -333,7 +609,8 @@ void main() {
       );
       expect(find.text('SUBSCRIBE'), findsOneWidget);
       expect(find.text('TRY 7 DAYS FREE'), findsNothing);
-      expect(find.textContaining('€5,49/month'), findsOneWidget);
+      expect(find.textContaining('€1,49 per week'), findsOneWidget);
+      expect(find.text('€3,99'), findsOneWidget);
     },
   );
   testWidgets('missing backend data hides purchase offers without crashing', (
@@ -472,7 +749,7 @@ void main() {
       expect(find.text('RETRY PREVIOUS COIN REROLL'), findsNothing);
     },
   );
-  testWidgets('only eligible native offers show free trial and legal links', (
+  testWidgets('only eligible native offers show the free trial CTA', (
     tester,
   ) async {
     final billing = LiveBillingController(
@@ -486,13 +763,16 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: BaraPlusScreen(controller: billing)),
     );
+    await tester.ensureVisible(find.byKey(const Key('plan-monthly')));
+    await tester.tap(find.byKey(const Key('plan-monthly')));
+    await tester.pump();
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-bara-trial')),
       500,
     );
     expect(find.text('TRY 7 DAYS FREE'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Privacy Policy'), 300);
-    expect(find.text('Terms of Use'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsNothing);
+    expect(find.text('Terms of Use'), findsNothing);
   });
   test(
     'replayed historical reroll response cannot overwrite the current wallet',
@@ -732,12 +1012,12 @@ void main() {
   });
   for (final reject in [false, true]) {
     testWidgets(
-      'deferred plan change ${reject ? 'cancellation' : 'success'} keeps current paid plan and wallet',
+      'retired annual history has no active plan-change CTA (${reject ? 'cancelled' : 'completed'} fixture)',
       (tester) async {
         final api = TestApi()
           ..membership = {
             'status': 'active',
-            'plan': 'annual',
+            'plan': 'monthly',
             'accessUntil': DateTime.now()
                 .add(const Duration(days: 30))
                 .toUtc()
@@ -758,31 +1038,16 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(home: BaraPlusScreen(controller: billing)),
         );
-        await tester.scrollUntilVisible(
-          find.byKey(const Key('change-bara-plan')),
-          500,
-        );
-        await tester.tap(find.byKey(const Key('change-bara-plan')));
-        await tester.pumpAndSettle();
-        expect(find.textContaining('€5,49/month'), findsOneWidget);
-        expect(find.textContaining('next renewal'), findsWidgets);
-        await tester.tap(find.byKey(const Key('confirm-bara-plan-change')));
-        await tester.pump(const Duration(milliseconds: 400));
-        expect(store.planChanges, [
-          ['annual', 'monthly'],
-        ]);
-        expect(billing.snapshot.plan, BillingPlan.annual);
+        expect(find.byKey(const Key('change-bara-plan')), findsNothing);
+        expect(find.byKey(const Key('plan-annual')), findsNothing);
+        expect(find.byKey(const Key('plan-permanent')), findsNothing);
+        expect(billing.snapshot.plan, BillingPlan.monthly);
         expect(billing.snapshot.coins, 100);
         expect(billing.snapshot.paidCredits, 0);
         expect(store.purchases, 0);
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getString('billing.sync.v1.android.a'), isNull);
-        expect(
-          find.textContaining(
-            reject ? 'Plan change cancelled.' : 'Plan change requested',
-          ),
-          findsOneWidget,
-        );
+        expect(store.planChanges, isEmpty);
         await tester.pumpWidget(const SizedBox.shrink());
       },
     );
@@ -885,10 +1150,7 @@ void main() {
           billing.snapshot.effectiveDiscountPercent,
           scenario.member ? 15 : 0,
         );
-        expect(
-          find.textContaining('rerolls left'),
-          scenario.member ? findsOneWidget : findsNothing,
-        );
+        expect(find.textContaining('rerolls left'), findsNothing);
         expect(billing.snapshot.accessUntil, expiry);
         expect(billing.snapshot.coins, 100);
         expect(billing.snapshot.paidCredits, 0);

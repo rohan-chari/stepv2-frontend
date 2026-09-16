@@ -89,17 +89,30 @@ class ShopCharacter {
       canActivate = json['owned'] == true && json['canActivate'] == true,
       canEdit = json['owned'] == true && json['canEdit'] == true,
       availability = wardrobeString(json['availability']) ?? 'unavailable',
+      goldAccess = json['goldAccess'] == true,
+      benefitVersion = wardrobeString(json['benefitVersion']),
+      coinPurchaseAllowed = json['goldAccess'] == true
+          ? json['coinPurchaseAllowed'] == true
+          : json['coinPurchaseAllowed'] != false,
+      directPurchase = wardrobeMap(json['directPurchase']),
+      unavailableReason = wardrobeString(json['unavailableReason']),
       outfit = json['outfit'] is Map
           ? CharacterOutfit.fromJson(json['outfit'])
           : null;
   final String key, name, availability;
   final Map<String, dynamic> item;
   final bool owned, active, canPurchase, canActivate, canEdit;
+  final bool goldAccess, coinPurchaseAllowed;
+  final String? benefitVersion, unavailableReason;
+  final Map<String, dynamic> directPurchase;
   final CharacterOutfit? outfit;
   bool get valid =>
       key == 'default' ||
       (key.isNotEmpty && item['id'] == key && item['slot'] == 'CHARACTER');
   String? get animal => wardrobeString(item['assetKey']);
+  bool get directPurchaseAvailable => directPurchase['available'] == true;
+  String? get directStoreProductId =>
+      wardrobeString(directPurchase['storeProductId']);
 }
 
 class WardrobeAccessory {

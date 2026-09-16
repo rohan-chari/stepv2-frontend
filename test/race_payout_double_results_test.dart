@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/race_payout_double_offer.dart';
+import 'package:step_tracker/models/billing.dart';
 import 'package:step_tracker/screens/race_results_summary_screen.dart';
 import 'package:step_tracker/services/ad_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/services/billing_controller.dart';
+import 'package:step_tracker/widgets/billing_scope.dart';
 import 'package:step_tracker/widgets/spinning_coin.dart';
 
 const _offerId = 'd05cb2a4-16b7-463f-977d-58231987a0ac';
@@ -162,6 +165,40 @@ class _FakeRacePayoutApi extends BackendApiService {
   }
 }
 
+class _GoldBilling extends BillingController {
+  @override
+  String get userId => 'user-1';
+  @override
+  bool get isPreview => true;
+  @override
+  BillingSnapshot get snapshot => const BillingSnapshot(
+    status: BillingStatus.active,
+    plan: BillingPlan.monthly,
+    givesAccess: true,
+  );
+  @override
+  Future<BillingResult> buyCoins(CoinPackOffer pack) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> startTrial(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> subscribe(BillingPlan plan) async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> restore() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingResult> cancelRenewal() async =>
+      const BillingResult(success: true, message: 'ok');
+  @override
+  Future<BillingRerollResult> reroll({
+    required String raceId,
+    required List<String> ids,
+    required RerollFunding funding,
+  }) async => const BillingRerollResult(success: true, message: 'ok');
+}
+
 Future<AuthService> _auth() async {
   SharedPreferences.setMockInitialValues(<String, Object>{
     'auth_identity_token': 'identity-token',
@@ -185,6 +222,7 @@ Future<AuthService> _pump(
   bool canStartNextRace = false,
   bool disableAnimations = false,
   bool adControllerOwnedByCaller = true,
+  BillingController? billing,
 }) async {
   final auth = await _auth();
   if (api != null && offer != null && offer.offerId == null) {
@@ -200,22 +238,23 @@ Future<AuthService> _pump(
       'status': 'PENDING',
     };
   }
-  await tester.pumpWidget(
-    MaterialApp(
-      home: MediaQuery(
-        data: MediaQueryData(disableAnimations: disableAnimations),
-        child: RaceResultsSummaryScreen(
-          races: races ?? _races(),
-          canStartNextRace: canStartNextRace,
-          payoutDoubleOffer: offer,
-          authService: auth,
-          backendApiService: api,
-          adController: ads,
-          adControllerOwnedByCaller: adControllerOwnedByCaller,
-          claimRetryDelay: claimRetryDelay,
-        ),
+  final screen = MaterialApp(
+    home: MediaQuery(
+      data: MediaQueryData(disableAnimations: disableAnimations),
+      child: RaceResultsSummaryScreen(
+        races: races ?? _races(),
+        canStartNextRace: canStartNextRace,
+        payoutDoubleOffer: offer,
+        authService: auth,
+        backendApiService: api,
+        adController: ads,
+        adControllerOwnedByCaller: adControllerOwnedByCaller,
+        claimRetryDelay: claimRetryDelay,
       ),
     ),
+  );
+  await tester.pumpWidget(
+    billing == null ? screen : BillingScope(controller: billing, child: screen),
   );
   await tester.pump();
   return auth;
@@ -280,6 +319,33 @@ void main() {
     );
     expect(find.textContaining('DOUBLE'), findsNothing);
     expect(find.textContaining('qualifying race prizes'), findsNothing);
+  });
+
+  testWidgets('Gold payout double claims immediately without an ad or CTA', (
+    tester,
+  ) async {
+    final offer = RacePayoutDoubleOffer.tryParse(
+      _offerJson(),
+      popupRaceIds: const ['race-a'],
+    );
+    final api = _FakeRacePayoutApi();
+    final ads = _FakeRacePayoutAdController();
+    await _pump(
+      tester,
+      offer: offer,
+      api: api,
+      ads: ads,
+      billing: _GoldBilling(),
+    );
+
+    expect(find.text('CLAIM GOLD BONUS · +120 COINS'), findsOneWidget);
+    expect(find.byKey(const Key('remove-ads-action')), findsNothing);
+    await tester.tap(find.text('CLAIM GOLD BONUS · +120 COINS'));
+    await tester.pump();
+    await tester.pump();
+    expect(ads.showCalls, 0);
+    expect(api.claimCalls, 1);
+    expect(find.text('120 PAYOUT + 120 AD BONUS'), findsOneWidget);
   });
 
   testWidgets('flat multi-race offer shows 50 per race and exact total', (

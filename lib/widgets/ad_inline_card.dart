@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../services/ad_service.dart';
+import 'billing_scope.dart';
 
 /// In-feed ad row for the races tab: a NATIVE ad rendered by the custom iOS
 /// NativeAdFactory registered as 'raceFeedAd' (ios/Runner/
@@ -36,7 +37,10 @@ class _AdInlineCardState extends State<AdInlineCard> {
 
   Future<void> _load() async {
     final generation = _loadGeneration;
-    if (!AdService.nativeAdsEnabled) return;
+    if (BillingScope.maybeOf(context)?.snapshot.isMember == true ||
+        !AdService.nativeAdsEnabled) {
+      return;
+    }
     bool initialized;
     try {
       initialized =
@@ -51,6 +55,7 @@ class _AdInlineCardState extends State<AdInlineCard> {
     }
     if (!mounted ||
         generation != _loadGeneration ||
+        BillingScope.maybeOf(context)?.snapshot.isMember == true ||
         !AdService.nativeAdsEnabled) {
       return;
     }
@@ -72,6 +77,7 @@ class _AdInlineCardState extends State<AdInlineCard> {
           onAdLoaded: (ad) {
             if (!mounted ||
                 generation != _loadGeneration ||
+                BillingScope.maybeOf(context)?.snapshot.isMember == true ||
                 !AdService.nativeAdsEnabled) {
               ad.dispose();
               return;
@@ -116,7 +122,8 @@ class _AdInlineCardState extends State<AdInlineCard> {
 
   void _onBannerGateChanged() {
     if (!mounted) return;
-    if (AdService.nativeAdsEnabled) {
+    if (BillingScope.maybeOf(context)?.snapshot.isMember != true &&
+        AdService.nativeAdsEnabled) {
       _loadGeneration++;
       _load();
     } else {
@@ -137,7 +144,10 @@ class _AdInlineCardState extends State<AdInlineCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (!AdService.nativeAdsEnabled) return const SizedBox.shrink();
+    if (BillingScope.maybeOf(context)?.snapshot.isMember == true ||
+        !AdService.nativeAdsEnabled) {
+      return const SizedBox.shrink();
+    }
 
     final ad = _ad;
     if (ad == null || !_adLoaded) return const SizedBox.shrink();

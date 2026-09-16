@@ -106,6 +106,8 @@ class PreviewBillingController extends BillingController {
                   ? -1
                   : _status == BillingStatus.trial
                   ? 7
+                  : _plan == BillingPlan.weekly
+                  ? 7
                   : _plan == BillingPlan.annual
                   ? 365
                   : 30,
@@ -135,7 +137,6 @@ class PreviewBillingController extends BillingController {
     raceItems.clear();
     if (scenario == PreviewBillingScenario.trial) {
       _status = BillingStatus.trial;
-      _trial = 3;
       _plan = BillingPlan.monthly;
     } else if (scenario == PreviewBillingScenario.monthly ||
         scenario == PreviewBillingScenario.annual) {
@@ -143,9 +144,8 @@ class PreviewBillingController extends BillingController {
       _plan = scenario == PreviewBillingScenario.monthly
           ? BillingPlan.monthly
           : BillingPlan.annual;
-      _paid = _plan == BillingPlan.monthly ? 10 : 120;
-      auth.balance += _plan == BillingPlan.monthly ? 500 : 6000;
-      ownedCosmetics.add('wizard_hat');
+      _paid = _plan == BillingPlan.monthly ? 0 : 120;
+      auth.balance += _plan == BillingPlan.monthly ? 0 : 6000;
     } else if (scenario == PreviewBillingScenario.permanent ||
         scenario == PreviewBillingScenario.permanentWithMonthly) {
       _status = BillingStatus.active;
@@ -252,22 +252,26 @@ class PreviewBillingController extends BillingController {
   }, '${billingCoinLabel(pack.coins)} preview coins added.');
   @override
   Future<BillingResult> startTrial(BillingPlan plan) =>
-      plan != BillingPlan.monthly || snapshot.isMember
+      (plan != BillingPlan.weekly && plan != BillingPlan.monthly) ||
+              snapshot.isMember
       ? Future.value(
           const BillingResult(
             success: false,
-            message: 'Monthly trial unavailable.',
+            message: 'Bara Gold trial unavailable.',
           ),
         )
       : _perform(() {
           _status = BillingStatus.trial;
           _plan = plan;
-          _trial = 3;
+          _trial = 0;
           _renews = true;
+          auth.balance += plan == BillingPlan.weekly ? 200 : 1000;
+          auth.announce();
         }, 'Your seven-day preview trial has started.');
   @override
   Future<BillingResult> subscribe(BillingPlan plan) =>
-      plan != BillingPlan.monthly || snapshot.isPermanent
+      (plan != BillingPlan.weekly && plan != BillingPlan.monthly) ||
+              snapshot.isPermanent
       ? Future.value(
           const BillingResult(
             success: false,
@@ -279,11 +283,9 @@ class PreviewBillingController extends BillingController {
           _plan = plan;
           _trial = 0;
           _renews = true;
-          _paid += 10;
-          auth.balance += 500;
-          ownedCosmetics.add('wizard_hat');
+          auth.balance += plan == BillingPlan.weekly ? 200 : 1000;
           auth.announce();
-        }, 'Bara+ is active in this preview. Your gifts are ready.');
+        }, 'Bara Gold is active in this preview.');
   DateTime _nextMonth(DateTime date) {
     final lastDay = DateTime.utc(date.year, date.month + 2, 0).day;
     return DateTime.utc(
@@ -399,11 +401,16 @@ class PreviewBillingController extends BillingController {
         message: 'These boxes cannot be rerolled again.',
       );
     }
-    if ((funding == RerollFunding.coins && auth.coins < 50) ||
-        (funding == RerollFunding.credits && snapshot.availableCredits == 0)) {
+    if (funding == RerollFunding.credits) {
       return const BillingRerollResult(
         success: false,
-        message: 'Not enough coins or reroll credits.',
+        message: 'Credit-funded rerolls are no longer available.',
+      );
+    }
+    if (funding == RerollFunding.coins && auth.coins < 50) {
+      return const BillingRerollResult(
+        success: false,
+        message: 'Not enough coins.',
       );
     }
     if (snapshot.busy) {
@@ -413,13 +420,6 @@ class PreviewBillingController extends BillingController {
       );
     }
     if (funding == RerollFunding.coins) auth.balance -= 50;
-    if (funding == RerollFunding.credits) {
-      if (_status == BillingStatus.trial && _trial > 0) {
-        _trial--;
-      } else {
-        _paid--;
-      }
-    }
     final rows = <Map<String, dynamic>>[];
     for (final id in ids) {
       final result = <String, dynamic>{
