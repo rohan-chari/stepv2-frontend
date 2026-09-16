@@ -231,7 +231,36 @@ void main() {
       matching: find.byType(Material),
     );
     expect(cardMaterial, findsNWidgets(2));
-    expect(tester.widget<Material>(cardMaterial.first).color, Colors.white);
+    expect(
+      tester.widget<Material>(cardMaterial.first).color,
+      AppPalette.light.parchment,
+    );
+  });
+
+  testWidgets('Bara Gold card follows the night palette', (tester) async {
+    final billing = FakeBilling();
+    await tester.pumpWidget(
+      BillingScope(
+        controller: billing,
+        child: MaterialApp(
+          theme: ThemeData(extensions: [AppPalette.night]),
+          home: Scaffold(body: BaraPlusCard(controller: billing)),
+        ),
+      ),
+    );
+
+    final card = find.ancestor(
+      of: find.byKey(const Key('bara-plus-card')),
+      matching: find.byType(Material),
+    );
+    expect(
+      tester.widget<Material>(card.first).color,
+      AppPalette.night.parchment,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.auto_awesome)).color,
+      AppPalette.night.medalGold,
+    );
   });
   testWidgets(
     'expired historical credits are not shown as active Gold benefits',

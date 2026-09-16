@@ -23,7 +23,7 @@ class BaraPlusCard extends StatelessWidget {
         return Semantics(
           button: true,
           child: Material(
-            color: Colors.white,
+            color: colors.parchment,
             borderRadius: BorderRadius.circular(18),
             child: InkWell(
               key: const Key('bara-plus-card'),
@@ -33,7 +33,11 @@ class BaraPlusCard extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Icon(Icons.auto_awesome, color: colors.roofMid, size: 27),
+                    Icon(
+                      Icons.auto_awesome,
+                      color: colors.isDark ? colors.medalGold : colors.roofMid,
+                      size: 27,
+                    ),
                     const SizedBox(width: 13),
                     Expanded(
                       child: Column(
@@ -43,7 +47,7 @@ class BaraPlusCard extends StatelessWidget {
                             'Bara Gold',
                             style: PixelText.title(
                               size: 25,
-                              color: colors.roofDark,
+                              color: colors.textDark,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -58,7 +62,10 @@ class BaraPlusCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.arrow_forward_rounded, color: colors.roofMid),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: colors.isDark ? colors.medalGold : colors.roofMid,
+                    ),
                   ],
                 ),
               ),
