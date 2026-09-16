@@ -20,11 +20,10 @@ class BaraPlusCard extends StatelessWidget {
           return const SizedBox.shrink();
         }
         final colors = AppColors.of(context);
-        final member = billing.snapshot.isMember;
         return Semantics(
           button: true,
           child: Material(
-            color: colors.roofMid,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(18),
             child: InkWell(
               key: const Key('bara-plus-card'),
@@ -34,7 +33,7 @@ class BaraPlusCard extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Icon(Icons.auto_awesome, color: colors.pillGold, size: 27),
+                    Icon(Icons.auto_awesome, color: colors.roofMid, size: 27),
                     const SizedBox(width: 13),
                     Expanded(
                       child: Column(
@@ -44,24 +43,22 @@ class BaraPlusCard extends StatelessWidget {
                             'Bara Gold',
                             style: PixelText.title(
                               size: 25,
-                              color: colors.textLight,
+                              color: colors.roofDark,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            member
-                                ? '15% member discount · Free Gold rerolls'
-                                : 'More for your capy. 15% member discount + Gold perks.',
+                            'More room to move, play, and collect.',
                             style: PixelText.body(
                               size: 12,
-                              color: colors.textLight,
+                              color: colors.textMid,
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.arrow_forward_rounded, color: colors.textLight),
+                    Icon(Icons.arrow_forward_rounded, color: colors.roofMid),
                   ],
                 ),
               ),

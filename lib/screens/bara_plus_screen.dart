@@ -16,13 +16,13 @@ class BaraPlusScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: AppColors.of(context).parchmentLight,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            child: BaraPlusBody(controller: controller, standalone: true),
-          ),
-        ),
-      );
+    backgroundColor: AppColors.of(context).parchmentLight,
+    body: SafeArea(
+      child: SingleChildScrollView(
+        child: BaraPlusBody(controller: controller, standalone: true),
+      ),
+    ),
+  );
 }
 
 class BaraPlusBody extends StatefulWidget {
@@ -64,12 +64,23 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
     }
   }
 
-  Widget _text(String value, {double size = 14, bool title = false}) => Text(
-        value,
-        style: title
-            ? PixelText.title(size: size, color: AppColors.of(context).textDark)
-            : PixelText.body(size: size, color: AppColors.of(context).textMid),
-      );
+  Widget _text(
+    String value, {
+    double size = 14,
+    bool title = false,
+    Color? color,
+  }) => Text(
+    value,
+    style: title
+        ? PixelText.title(
+            size: size,
+            color: color ?? AppColors.of(context).textDark,
+          )
+        : PixelText.body(
+            size: size,
+            color: color ?? AppColors.of(context).textMid,
+          ),
+  );
 
   Widget _benefit(IconData icon, String title, String detail) {
     final colors = AppColors.of(context);
@@ -85,7 +96,11 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
             ),
             child: Padding(
               padding: const EdgeInsets.all(10),
-              child: Icon(icon, color: colors.pillGoldDark, size: 22),
+              child: Icon(
+                icon,
+                color: colors.isDark ? colors.medalGold : colors.pillGoldDark,
+                size: 22,
+              ),
             ),
           ),
           const SizedBox(width: 13),
@@ -136,11 +151,21 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   offer.plan == BillingPlan.weekly ? 'WEEKLY' : 'MONTHLY',
                   size: 13,
                   title: true,
+                  color: selected ? colors.textLight : null,
                 ),
                 const SizedBox(height: 6),
-                _text(offer.price, size: 23, title: true),
+                _text(
+                  offer.price,
+                  size: 23,
+                  title: true,
+                  color: selected ? colors.textLight : null,
+                ),
                 const SizedBox(height: 3),
-                _text('${billingCoinLabel(offer.coinGrant)} coins / $cadence', size: 11),
+                _text(
+                  '${billingCoinLabel(offer.coinGrant)} coins / $cadence',
+                  size: 11,
+                  color: selected ? colors.textLight : null,
+                ),
               ],
             ),
           ),
@@ -163,10 +188,17 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
       builder: (context, _) {
         final state = billing.snapshot;
         final offers = billing.plans
-            .where((offer) => offer.plan == BillingPlan.weekly || offer.plan == BillingPlan.monthly)
+            .where(
+              (offer) =>
+                  offer.plan == BillingPlan.weekly ||
+                  offer.plan == BillingPlan.monthly,
+            )
             .toList();
-        final offer = offers.where((item) => item.plan == _plan).firstOrNull ?? offers.firstOrNull;
-        final disabled = _busy || state.busy || offer == null || !billing.isAvailable;
+        final offer =
+            offers.where((item) => item.plan == _plan).firstOrNull ??
+            offers.firstOrNull;
+        final disabled =
+            _busy || state.busy || offer == null || !billing.isAvailable;
         return Container(
           key: const Key('bara-gold-paywall'),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 26),
@@ -178,7 +210,10 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     onPressed: () => Navigator.maybePop(context),
-                    icon: Icon(Icons.arrow_back_rounded, color: AppColors.of(context).textDark),
+                    icon: Icon(
+                      Icons.arrow_back_rounded,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ),
               _text('A LITTLE EXTRA JOY', size: 10),
@@ -186,12 +221,36 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               const SizedBox(height: 6),
               _text('More room to move, play, and collect.', size: 16),
               const SizedBox(height: 20),
-              _benefit(Icons.local_offer_outlined, '15% off the shop', 'Save on eligible coin purchases across the shop.'),
-              _benefit(Icons.monetization_on_outlined, 'Plan-specific coin grants', 'Weekly Gold grants 200 coins. Monthly Gold grants 1,000 coins.'),
-              _benefit(Icons.visibility_off_outlined, 'No forced ads', 'Banners, inline ads, and interruptions stay out of your run.'),
-              _benefit(Icons.bolt_rounded, 'Eligible rewarded actions skip the ad', 'The server still enforces every limit and eligibility rule.'),
-              _benefit(Icons.refresh_rounded, 'One free reroll per powerup', 'Gold rerolls do not consume coins or historical balances.'),
-              _benefit(Icons.pets_rounded, 'Gold character access', 'Unlock the Gold character catalog with server-defined coin prices.'),
+              _benefit(
+                Icons.local_offer_outlined,
+                '15% off the shop',
+                'Save on eligible coin purchases across the shop.',
+              ),
+              _benefit(
+                Icons.monetization_on_outlined,
+                'Plan-specific coin grants',
+                'Weekly Gold grants 200 coins. Monthly Gold grants 1,000 coins.',
+              ),
+              _benefit(
+                Icons.visibility_off_outlined,
+                'No forced ads',
+                'Banners, inline ads, and interruptions stay out of your run.',
+              ),
+              _benefit(
+                Icons.bolt_rounded,
+                'Eligible rewarded actions skip the ad',
+                'The server still enforces every limit and eligibility rule.',
+              ),
+              _benefit(
+                Icons.refresh_rounded,
+                'One free reroll per powerup',
+                'Gold rerolls do not consume coins or historical balances.',
+              ),
+              _benefit(
+                Icons.pets_rounded,
+                'Gold character access',
+                'Unlock the Gold character catalog with server-defined coin prices.',
+              ),
               if (!state.isMember) ...[
                 const SizedBox(height: 16),
                 if (offers.isEmpty)
@@ -207,11 +266,20 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   ),
                   const SizedBox(height: 14),
                   if ((offer?.trialDays ?? 0) > 0)
-                    _text('Try ${offer!.trialDays} days free. The store confirms trial eligibility; billing starts after the trial unless cancelled.', size: 12),
+                    _text(
+                      'Try ${offer!.trialDays} days free. The store confirms trial eligibility; billing starts after the trial unless cancelled.',
+                      size: 12,
+                    ),
                   const SizedBox(height: 14),
                   PillButton(
-                    key: Key((offer?.trialDays ?? 0) > 0 ? 'start-bara-trial' : 'subscribe-bara'),
-                    label: (offer?.trialDays ?? 0) > 0 ? 'TRY ${offer!.trialDays} DAYS FREE' : 'SUBSCRIBE',
+                    key: Key(
+                      (offer?.trialDays ?? 0) > 0
+                          ? 'start-bara-trial'
+                          : 'subscribe-bara',
+                    ),
+                    label: (offer?.trialDays ?? 0) > 0
+                        ? 'TRY ${offer!.trialDays} DAYS FREE'
+                        : 'SUBSCRIBE',
                     fullWidth: true,
                     loading: _busy,
                     onPressed: disabled
@@ -223,24 +291,40 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                               ),
                             );
                             unawaited(
-                              _perform(() => offer.trialDays > 0
-                                  ? billing.startTrial(offer.plan)
-                                  : billing.subscribe(offer.plan)),
+                              _perform(
+                                () => offer.trialDays > 0
+                                    ? billing.startTrial(offer.plan)
+                                    : billing.subscribe(offer.plan),
+                              ),
                             );
                           },
                   ),
                   const SizedBox(height: 9),
-                  _text('${offer!.price} per ${offer.plan == BillingPlan.weekly ? 'week' : 'month'}. Auto-renews until cancelled.', size: 12),
+                  Align(
+                    alignment: Alignment.center,
+                    child: _text(
+                      '${offer!.price} per ${offer.plan == BillingPlan.weekly ? 'week' : 'month'}. Auto-renews until cancelled.',
+                      size: 12,
+                    ),
+                  ),
                 ],
               ] else ...[
-                _text(state.isTrial ? 'Your Gold trial is active.' : 'Your Bara Gold membership is active.', size: 20, title: true),
+                _text(
+                  state.isTrial
+                      ? 'Your Gold trial is active.'
+                      : 'Your Bara Gold membership is active.',
+                  size: 20,
+                  title: true,
+                ),
                 const SizedBox(height: 10),
                 PillButton(
                   key: const Key('manage-bara'),
                   label: 'MANAGE MEMBERSHIP',
                   fullWidth: true,
                   variant: PillButtonVariant.secondary,
-                  onPressed: _busy || state.busy ? null : () => _perform(billing.cancelRenewal),
+                  onPressed: _busy || state.busy
+                      ? null
+                      : () => _perform(billing.cancelRenewal),
                 ),
               ],
               const SizedBox(height: 8),
@@ -250,7 +334,10 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 child: _text('Restore purchases', size: 12),
               ),
               if (state.operationStatus == BillingOperationStatus.pending)
-                _text(state.message ?? 'Purchase is awaiting confirmation.', size: 12),
+                _text(
+                  state.message ?? 'Purchase is awaiting confirmation.',
+                  size: 12,
+                ),
             ],
           ),
         );

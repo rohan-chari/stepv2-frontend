@@ -7,6 +7,7 @@ import 'package:step_tracker/services/billing_controller.dart';
 import 'package:step_tracker/widgets/billing_scope.dart';
 import 'package:step_tracker/widgets/coin_pack_offers.dart';
 import 'package:step_tracker/widgets/reroll_payment_sheet.dart';
+import 'package:step_tracker/widgets/bara_plus_card.dart';
 import 'package:step_tracker/screens/bara_plus_screen.dart';
 
 class FakeBilling extends BillingController {
@@ -51,9 +52,7 @@ class FakeBilling extends BillingController {
 
   @override
   Future<BillingResult> startTrial(BillingPlan plan) async {
-    update(
-      BillingSnapshot(status: BillingStatus.trial, plan: plan),
-    );
+    update(BillingSnapshot(status: BillingStatus.trial, plan: plan));
     return const BillingResult(success: true, message: 'Trial started');
   }
 
@@ -150,7 +149,10 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('plan-monthly')));
     await tester.tap(find.byKey(const Key('plan-monthly')));
     await tester.pump();
-    expect(find.textContaining('Monthly Gold grants 1,000 coins'), findsOneWidget);
+    expect(
+      find.textContaining('Monthly Gold grants 1,000 coins'),
+      findsOneWidget,
+    );
     expect(find.text('One free reroll per powerup'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-bara-trial')),
@@ -163,22 +165,94 @@ void main() {
     expect(find.textContaining('Your Gold trial is active.'), findsOneWidget);
     expect(billing.snapshot.trialCredits, 0);
   });
-  testWidgets('expired historical credits are not shown as active Gold benefits', (
+  testWidgets(
+    'selected plan copy stays white and the pricing note is centered',
+    (tester) async {
+      final billing = FakeBilling();
+      await tester.pumpWidget(
+        BillingScope(
+          controller: billing,
+          child: MaterialApp(
+            theme: ThemeData(extensions: [AppPalette.light]),
+            home: const BaraPlusScreen(),
+          ),
+        ),
+      );
+
+      for (final label in ['WEEKLY', r'$1.49', '200 coins / week']) {
+        expect(
+          tester.widget<Text>(find.text(label)).style!.color,
+          AppPalette.light.textLight,
+        );
+      }
+      final note = find.textContaining(r'$1.49 per week.');
+      final noteAlign = find.ancestor(of: note, matching: find.byType(Align));
+      expect(noteAlign, findsOneWidget);
+      expect(tester.widget<Align>(noteAlign).alignment, Alignment.center);
+    },
+  );
+
+  testWidgets('Gold benefit icons use the brighter night purple', (
     tester,
   ) async {
-    final billing = FakeBilling()
-      ..state = const BillingSnapshot(
-        status: BillingStatus.expired,
-        paidCredits: 8,
-      );
-    await tester.pumpWidget(host(billing, const BaraPlusScreen()));
-    expect(find.text('8 paid rerolls'), findsNothing);
-    expect(find.textContaining('remain usable'), findsNothing);
-    await tester.scrollUntilVisible(find.byKey(const Key('restore-bara')), 400);
-    await tester.tap(find.byKey(const Key('restore-bara')));
-    await tester.pump();
-    expect(billing.restores, 1);
+    final billing = FakeBilling();
+    await tester.pumpWidget(
+      BillingScope(
+        controller: billing,
+        child: MaterialApp(
+          theme: ThemeData(extensions: [AppPalette.night]),
+          home: const BaraPlusScreen(),
+        ),
+      ),
+    );
+
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.local_offer_outlined)).color,
+      AppPalette.night.medalGold,
+    );
   });
+
+  testWidgets('Bara Gold card uses the short premium subtitle', (tester) async {
+    final billing = FakeBilling();
+    await tester.pumpWidget(
+      BillingScope(
+        controller: billing,
+        child: MaterialApp(
+          home: Scaffold(body: BaraPlusCard(controller: billing)),
+        ),
+      ),
+    );
+
+    expect(find.text('More room to move, play, and collect.'), findsOneWidget);
+    expect(find.textContaining('15% member discount'), findsNothing);
+    expect(find.textContaining('Gold perks'), findsNothing);
+    final cardMaterial = find.ancestor(
+      of: find.byKey(const Key('bara-plus-card')),
+      matching: find.byType(Material),
+    );
+    expect(cardMaterial, findsNWidgets(2));
+    expect(tester.widget<Material>(cardMaterial.first).color, Colors.white);
+  });
+  testWidgets(
+    'expired historical credits are not shown as active Gold benefits',
+    (tester) async {
+      final billing = FakeBilling()
+        ..state = const BillingSnapshot(
+          status: BillingStatus.expired,
+          paidCredits: 8,
+        );
+      await tester.pumpWidget(host(billing, const BaraPlusScreen()));
+      expect(find.text('8 paid rerolls'), findsNothing);
+      expect(find.textContaining('remain usable'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('restore-bara')),
+        400,
+      );
+      await tester.tap(find.byKey(const Key('restore-bara')));
+      await tester.pump();
+      expect(billing.restores, 1);
+    },
+  );
   testWidgets('reroll selection is explicit and cancelling never spends', (
     tester,
   ) async {
