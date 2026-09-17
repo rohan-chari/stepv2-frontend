@@ -117,8 +117,8 @@ class ShopCharacterCard extends StatelessWidget {
               _strip(
                 context,
                 key: Key('shop-character-buy-${character.key}'),
-                label: '$price',
-                leading: const CoinGlyph(),
+                label: character.goldExclusive ? 'BUY' : '$price',
+                leading: character.goldExclusive ? null : const CoinGlyph(),
                 available: true,
                 enabled: onBuy != null,
               )

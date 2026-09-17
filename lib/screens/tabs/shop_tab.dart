@@ -2145,6 +2145,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                   ...row.item,
                   'canPurchase': row.canPurchase,
                   'goldExclusive': row.goldExclusive,
+                  'directPurchase': row.directPurchase,
                 }, canAct: rowCurrent);
               } finally {
                 if (mounted && generation == _shopSessionGeneration) {
@@ -2625,6 +2626,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final price = (rawPrice as num).toInt();
     final coinPurchaseAllowed = item['canPurchase'] != false;
     final goldUpgradeAvailable = item['goldExclusive'] == true && !_isGold;
+    final directProductId = wardrobeString(
+      wardrobeMap(item['directPurchase'])['storeProductId'],
+    );
+    final directPurchaseAvailable =
+        item['goldExclusive'] == true &&
+        directProductId != null &&
+        _billing != null;
     // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
     // by the same server-served rules.
     final route = _routeFor(price);
@@ -2669,17 +2677,39 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     operation = _purchase(item);
                   },
           ),
-          _AffordRoute.affordable =>
-            goldUpgradeAvailable
-                ? PillButton(
-                    label: 'UPGRADE TO BARA GOLD',
-                    icon: Icons.workspace_premium_rounded,
-                    variant: PillButtonVariant.primary,
-                    fontSize: 14,
-                    fullWidth: true,
-                    onPressed: _openMembershipDetails,
-                  )
-                : const SizedBox.shrink(),
+          _AffordRoute.affordable => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (directPurchaseAvailable)
+                PillButton(
+                  label: 'BUY',
+                  icon: Icons.shopping_bag_outlined,
+                  variant: PillButtonVariant.primary,
+                  fontSize: 14,
+                  fullWidth: true,
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          if (!claimAction()) return;
+                          Navigator.of(context).pop();
+                          operation = _billing!.buyDirectProduct(
+                            directProductId,
+                          );
+                        },
+                ),
+              if (goldUpgradeAvailable) ...[
+                if (directPurchaseAvailable) const SizedBox(height: 10),
+                PillButton(
+                  label: 'UPGRADE TO BARA GOLD',
+                  icon: Icons.workspace_premium_rounded,
+                  variant: PillButtonVariant.secondary,
+                  fontSize: 14,
+                  fullWidth: true,
+                  onPressed: _openMembershipDetails,
+                ),
+              ],
+            ],
+          ),
           _AffordRoute.watchAds => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
