@@ -17,6 +17,7 @@ import '../../services/auth_service.dart';
 import '../../services/ad_service.dart';
 import '../../services/rewarded_coins_controller.dart';
 import '../../widgets/home_rewarded_coins.dart';
+import '../../widgets/social_rewards_section.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/onboarding_state_service.dart';
 import '../../widgets/arcade_fx.dart';
@@ -444,6 +445,11 @@ class HomeTab extends StatelessWidget {
                             ),
                             if (rewards != null)
                               HomeRewardedCoins(controller: rewards),
+                            if (!isTutorialPreview)
+                              SocialRewardsSection(
+                                auth: authService,
+                                api: backendApiService,
+                              ),
                             _buildRaceSection(context),
                             _buildFeedbackSection(context),
                           ],

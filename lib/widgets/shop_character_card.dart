@@ -38,18 +38,14 @@ class ShopCharacterCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.parchment,
         borderRadius: BorderRadius.circular(14),
-        // Keep the historical Gold geometry while removing its visible
-        // decoration. The transparent two-pixel border is layout-only.
-        border: Border.all(
-          color: character.goldAccess
-              ? Colors.transparent
-              : colors.parchmentBorder,
-          width: character.goldAccess ? 2 : 1,
-        ),
-        // Preserve the existing Gold card's inner geometry; only its visual
-        // treatment is removed.
+        // Gold framing is identified by the key above; it must not alter the
+        // full-width merchandise action geometry.
+        border: null,
       ),
-      padding: EdgeInsets.all(character.goldAccess ? 2 : 0),
+      // The border is decorative and must not shrink the merchandise action
+      // bands. Keeping layout padding here made Gold cards' Edit/Equip rows
+      // two pixels narrower than the card and broke the full-width contract.
+      padding: EdgeInsets.zero,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(character.goldAccess ? 12 : 14),
         child: Column(

@@ -16,11 +16,49 @@ import 'package:step_tracker/widgets/step_milestones_section.dart';
 // or the bounce-in cascade plays out of sequence, so that is asserted too.
 
 class _FakeApi extends BackendApiService {
+  _FakeApi({this.social = false});
+
+  final bool social;
+
   @override
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
     required String identityToken,
     required String localDate,
   }) async => const {'claimedToday': true};
+
+  @override
+  Future<Map<String, dynamic>> fetchSocialRewardsStatus({
+    required String identityToken,
+  }) async => social
+      ? const {
+          'rewards': [
+            {
+              'platform': 'instagram',
+              'label': 'Instagram',
+              'handle': '@bara',
+              'url': 'https://instagram.com/bara',
+              'amount': 200,
+              'state': 'not_started',
+            },
+            {
+              'platform': 'tiktok',
+              'label': 'TikTok',
+              'handle': '@bara',
+              'url': 'https://tiktok.com/@bara',
+              'amount': 200,
+              'state': 'not_started',
+            },
+            {
+              'platform': 'x',
+              'label': 'X',
+              'handle': '@Bara',
+              'url': 'https://x.com/Bara',
+              'amount': 200,
+              'state': 'not_started',
+            },
+          ],
+        }
+      : const {'rewards': <dynamic>[]};
 }
 
 Future<AuthService> _authService(BackendApiService api) async {
@@ -104,6 +142,24 @@ void main() {
       lessThan(tester.getTopLeft(races.first).dy),
     );
   });
+
+  testWidgets(
+    "social rewards render inside Today's coins before Suggested Races",
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _FakeApi(social: true);
+      final authService = await _authService(api);
+      await tester.pumpWidget(_buildHome(authService, api));
+      await _flush(tester);
+      expect(find.byKey(const Key('home-social-rewards')), findsOneWidget);
+      expect(find.byKey(const Key('home-social-instagram')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('home-social-rewards'))).dy,
+        lessThan(tester.getTopLeft(find.text('Suggested Races').first).dy),
+      );
+    },
+  );
 
   testWidgets("Today's coins breathes above and hugs Suggested Races below", (
     tester,
