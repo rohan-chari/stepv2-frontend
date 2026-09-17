@@ -23,6 +23,9 @@ class ShopCharacterCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final price = wardrobeCoinPrice(character.item['priceCoins']);
+    final originalPrice = wardrobeCoinPrice(character.item['basePriceCoins']);
+    final discounted =
+        originalPrice != null && price != null && originalPrice > price;
     final purchasable = character.canPurchase && price != null;
     final opensPurchaseSheet =
         price != null && (purchasable || character.goldExclusive);
@@ -118,6 +121,9 @@ class ShopCharacterCard extends StatelessWidget {
                 context,
                 key: Key('shop-character-buy-${character.key}'),
                 label: character.goldExclusive ? 'BUY' : '$price',
+                labelWidget: !character.goldExclusive && discounted
+                    ? _discountedPriceLabel(context, originalPrice, price)
+                    : null,
                 leading: character.goldExclusive ? null : const CoinGlyph(),
                 available: true,
                 enabled: onBuy != null,
@@ -234,6 +240,7 @@ class ShopCharacterCard extends StatelessWidget {
     required bool enabled,
     bool gold = true,
     Widget? leading,
+    Widget? labelWidget,
   }) {
     final colors = AppColors.of(context);
     return Container(
@@ -259,18 +266,47 @@ class ShopCharacterCard extends StatelessWidget {
         children: [
           if (leading != null) ...[leading, const SizedBox(width: 4)],
           Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PixelText.title(
-                size: 13,
-                color: available ? colors.textDark : colors.textMid,
-              ),
-            ),
+            child: labelWidget != null
+                ? FittedBox(fit: BoxFit.scaleDown, child: labelWidget)
+                : Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(
+                      size: 13,
+                      color: available ? colors.textDark : colors.textMid,
+                    ),
+                  ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _discountedPriceLabel(BuildContext context, int original, int price) {
+    final colors = AppColors.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const CoinGlyph(size: 13),
+        const SizedBox(width: 3),
+        Text(
+          '$original',
+          style: PixelText.title(
+            size: 11,
+            color: Colors.red,
+          ).copyWith(decoration: TextDecoration.lineThrough),
+        ),
+        const SizedBox(width: 4),
+        Text('15%', style: PixelText.title(size: 10, color: colors.textAccent)),
+        const SizedBox(width: 4),
+        const CoinGlyph(size: 13),
+        const SizedBox(width: 3),
+        Text(
+          '$price',
+          style: PixelText.title(size: 13, color: colors.textDark),
+        ),
+      ],
     );
   }
 }

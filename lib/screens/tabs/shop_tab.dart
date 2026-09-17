@@ -2059,12 +2059,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             : _memberPriceCopy(item) != null
             ? '$safePrice · PLUS'
             : '$safePrice',
+        stripLabelWidget: !goldLocked && _memberPriceCopy(item) != null
+            ? _discountedPriceLabel(item, safePrice)
+            : null,
         stripLeading: goldLocked
             ? Icon(
                 Icons.auto_awesome_rounded,
                 size: 13,
                 color: AppColors.of(context).textDark,
               )
+            : _memberPriceCopy(item) != null
+            ? null
             : const CoinGlyph(),
         stripEnabled: !_saving && (goldLocked || hasPrice),
         onStrip: price == null && !goldLocked ? () {} : openSheet,
@@ -3784,8 +3789,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               size: 13,
               color: AppColors.of(context).textDark,
             )
-          : _memberPriceCopy(item) != null
-          ? null
           : const CoinGlyph(),
       stripEnabled: !_saving && (premiumLocked || hasPrice),
       onStrip: price == null && !premiumLocked ? () {} : openSheet,
@@ -3819,10 +3822,12 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         style: PixelText.title(size: 13, color: colors.textDark),
       );
     }
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        const CoinGlyph(size: 13),
+        const SizedBox(width: 3),
         Text(
           '$original',
           style: PixelText.title(
@@ -3830,22 +3835,14 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             color: Colors.red,
           ).copyWith(decoration: TextDecoration.lineThrough),
         ),
-        const SizedBox(height: 1),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '15%',
-              style: PixelText.title(size: 10, color: colors.textAccent),
-            ),
-            const SizedBox(width: 4),
-            const CoinGlyph(size: 13),
-            const SizedBox(width: 3),
-            Text(
-              '$price',
-              style: PixelText.title(size: 13, color: colors.textDark),
-            ),
-          ],
+        const SizedBox(width: 4),
+        Text('15%', style: PixelText.title(size: 10, color: colors.textAccent)),
+        const SizedBox(width: 4),
+        const CoinGlyph(size: 13),
+        const SizedBox(width: 3),
+        Text(
+          '$price',
+          style: PixelText.title(size: 13, color: colors.textDark),
         ),
       ],
     );
@@ -4369,7 +4366,7 @@ class _ShopTile extends StatelessWidget {
               // Action strip
               KeyedSubtree(
                 child: Container(
-                  height: stripLabelWidget == null ? 26 : 42,
+                  height: 26,
                   decoration: BoxDecoration(
                     color: onStrip == null
                         ? AppColors.of(context).parchmentDark
@@ -4400,19 +4397,22 @@ class _ShopTile extends StatelessWidget {
                         const SizedBox(width: 4),
                       ],
                       Flexible(
-                        child:
-                            stripLabelWidget ??
-                            Text(
-                              stripLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: PixelText.title(
-                                size: 13,
-                                color: onStrip == null
-                                    ? AppColors.of(context).textMid
-                                    : AppColors.of(context).textDark,
+                        child: stripLabelWidget != null
+                            ? FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: stripLabelWidget,
+                              )
+                            : Text(
+                                stripLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: PixelText.title(
+                                  size: 13,
+                                  color: onStrip == null
+                                      ? AppColors.of(context).textMid
+                                      : AppColors.of(context).textDark,
+                                ),
                               ),
-                            ),
                       ),
                     ],
                   ),
