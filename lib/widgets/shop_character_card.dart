@@ -4,7 +4,6 @@ import '../styles.dart';
 import 'coin_glyph.dart';
 import 'race_ui.dart';
 import 'shop_tile_name.dart';
-import 'bara_gold_ribbon.dart';
 
 /// Character merchandise uses the shop's art window, name band and action strips.
 class ShopCharacterCard extends StatelessWidget {
@@ -26,10 +25,16 @@ class ShopCharacterCard extends StatelessWidget {
     final purchasable = character.canPurchase && price != null;
     final buy = purchasable ? onBuy : null;
     final card = DecoratedBox(
+      key: character.goldAccess ? const Key('bara-gold-card-frame') : null,
       decoration: BoxDecoration(
         color: colors.parchment,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.parchmentBorder, width: 1),
+        border: Border.all(
+          color: character.goldAccess
+              ? (colors.isDark ? colors.medalGold : colors.pillGoldDark)
+              : colors.parchmentBorder,
+          width: character.goldAccess ? 2 : 1,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
@@ -45,48 +50,33 @@ class ShopCharacterCard extends StatelessWidget {
                     bottom: BorderSide(color: colors.parchmentBorder, width: 1),
                   ),
                 ),
-                child: Stack(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        10,
-                        character.goldAccess ? 48 : 10,
-                        10,
-                        10,
-                      ),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) => Center(
-                          child: Transform.translate(
-                            offset: character.key == 'mouse'
-                                ? const Offset(-6, 0)
-                                : Offset.zero,
-                            child: Transform.scale(
-                              key: const Key('shop-character-art-scale'),
-                              scale: 1.1,
-                              child: RacerAvatar(
-                                rank: 1,
-                                size: constraints.biggest.shortestSide.clamp(
-                                  24,
-                                  240,
-                                ),
-                                showMedalRing: false,
-                                animal: character.animal,
-                                accessories: character.owned
-                                    ? character.outfit?.items ?? []
-                                    : [],
-                              ),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Center(
+                      child: Transform.translate(
+                        offset: character.key == 'mouse'
+                            ? const Offset(-6, 0)
+                            : Offset.zero,
+                        child: Transform.scale(
+                          key: const Key('shop-character-art-scale'),
+                          scale: 1.1,
+                          child: RacerAvatar(
+                            rank: 1,
+                            size: constraints.biggest.shortestSide.clamp(
+                              24,
+                              240,
                             ),
+                            showMedalRing: false,
+                            animal: character.animal,
+                            accessories: character.owned
+                                ? character.outfit?.items ?? []
+                                : [],
                           ),
                         ),
                       ),
                     ),
-                    if (character.goldAccess)
-                      const Positioned(
-                        top: 6,
-                        right: 8,
-                        child: BaraGoldRibbon(compact: true),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -140,10 +130,43 @@ class ShopCharacterCard extends StatelessWidget {
         ),
       ),
     );
+    final framedCard = character.goldAccess
+        ? Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                card,
+                Positioned(
+                  top: -8,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      key: const Key('bara-gold-card-label'),
+                      color: colors.parchment,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'Bara Gold',
+                        style: PixelText.title(
+                          size: 9,
+                          color: colors.isDark
+                              ? colors.textLight
+                              : colors.textDark,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : card;
     return Semantics(
       container: true,
       explicitChildNodes: character.owned,
-      button: !character.owned &&
+      button:
+          !character.owned &&
           (purchasable || character.directPurchaseAvailable),
       enabled: !character.owned && purchasable
           ? buy != null
@@ -152,10 +175,10 @@ class ShopCharacterCard extends StatelessWidget {
           : null,
       onTap: !character.owned
           ? purchasable
-              ? buy
-              : character.directPurchaseAvailable
-              ? onDirectBuy
-              : null
+                ? buy
+                : character.directPurchaseAvailable
+                ? onDirectBuy
+                : null
           : null,
       label:
           '${character.name}, ${character.owned ? 'owned' : 'unowned'}${character.active ? ', active' : ''}${!character.owned && purchasable ? ', buy for $price coins' : ''}',
@@ -165,12 +188,12 @@ class ShopCharacterCard extends StatelessWidget {
           excludeFromSemantics: true,
           onTap: !character.owned
               ? purchasable
-                  ? buy
-                  : character.directPurchaseAvailable
-                  ? onDirectBuy
-                  : null
+                    ? buy
+                    : character.directPurchaseAvailable
+                    ? onDirectBuy
+                    : null
               : null,
-          child: card,
+          child: framedCard,
         ),
       ),
     );

@@ -110,45 +110,43 @@ void main() {
     },
   );
 
-  testWidgets('Gold character policy renders ribbon and direct-IAP fallback', (
-    tester,
-  ) async {
-    final character = ShopCharacter.fromJson({
-      'characterKey': 'mouse',
-      'name': 'Mouse',
-      'item': {
-        'id': 'mouse',
-        'sku': 'mouse',
-        'slot': 'CHARACTER',
-        'assetKey': 'mouse',
-        'priceCoins': 1000,
-      },
-      'owned': false,
-      'canPurchase': false,
-      'goldAccess': true,
-      'coinPurchaseAllowed': false,
-      'directPurchase': {
-        'available': true,
-        'storeProductId': 'bara_character_mouse_v1',
-      },
-      'unavailableReason': 'requires_gold_or_direct_purchase',
-    });
+  testWidgets(
+    'Gold character policy renders framed label and direct-IAP fallback',
+    (tester) async {
+      final character = ShopCharacter.fromJson({
+        'characterKey': 'mouse',
+        'name': 'Mouse',
+        'item': {
+          'id': 'mouse',
+          'sku': 'mouse',
+          'slot': 'CHARACTER',
+          'assetKey': 'mouse',
+          'priceCoins': 1000,
+        },
+        'owned': false,
+        'canPurchase': false,
+        'goldAccess': true,
+        'coinPurchaseAllowed': false,
+        'directPurchase': {
+          'available': true,
+          'storeProductId': 'bara_character_mouse_v1',
+        },
+        'unavailableReason': 'requires_gold_or_direct_purchase',
+      });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: ShopCharacterCard(character: character)),
-      ),
-    );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ShopCharacterCard(character: character)),
+        ),
+      );
 
-    expect(find.text('Bara Gold'), findsOneWidget);
-    expect(find.byKey(const Key('bara-gold-ribbon')), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const Key('bara-gold-ribbon'))),
-      const Size(108, 35),
-    );
-    expect(find.textContaining('DIRECT PURCHASE'), findsOneWidget);
-    expect(find.text('Unavailable'), findsNothing);
-  });
+      expect(find.text('Bara Gold'), findsOneWidget);
+      expect(find.byKey(const Key('bara-gold-card-frame')), findsOneWidget);
+      expect(find.byKey(const Key('bara-gold-card-label')), findsOneWidget);
+      expect(find.textContaining('DIRECT PURCHASE'), findsOneWidget);
+      expect(find.text('Unavailable'), findsNothing);
+    },
+  );
 
   testWidgets('direct character purchase action uses the server product ID', (
     tester,
