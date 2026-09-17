@@ -2437,15 +2437,18 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     color: AppColors.of(context).textDark,
                   ),
                 ),
-                if (slotLabel != null || badge != null) ...[
+                if ((slotLabel != null && slotLabel != 'CHARACTER') ||
+                    badge != null) ...[
                   const SizedBox(height: 8),
                   Center(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (slotLabel != null)
+                        if (slotLabel != null && slotLabel != 'CHARACTER')
                           _sheetChip(slotLabel, AppColors.of(context).textMid),
-                        if (slotLabel != null && badge != null)
+                        if (slotLabel != null &&
+                            slotLabel != 'CHARACTER' &&
+                            badge != null)
                           const SizedBox(width: 6),
                         if (badge != null)
                           _sheetChip(badge, AppColors.of(context).textAccent),
