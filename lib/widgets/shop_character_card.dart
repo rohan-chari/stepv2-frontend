@@ -153,28 +153,7 @@ class ShopCharacterCard extends StatelessWidget {
     final cleanedCard = character.goldAccess
         ? Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                card,
-                Positioned(
-                  top: -8,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    key: const Key('bara-gold-card-label'),
-                    color: colors.parchment,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: character.hasAccess && !character.owned
-                        ? const Text(
-                            'Included with Gold',
-                            textAlign: TextAlign.center,
-                          )
-                        : const SizedBox(height: 9),
-                  ),
-                ),
-              ],
-            ),
+            child: Stack(clipBehavior: Clip.none, children: [card]),
           )
         : card;
     return Semantics(
