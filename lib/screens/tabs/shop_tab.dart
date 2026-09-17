@@ -3775,6 +3775,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           : _memberPriceCopy(item) != null
           ? '$safePrice · PLUS'
           : '$safePrice',
+      stripLabelWidget: !premiumLocked && _memberPriceCopy(item) != null
+          ? _discountedPriceLabel(item, safePrice)
+          : null,
       stripLeading: premiumLocked
           ? Icon(
               Icons.auto_awesome_rounded,
@@ -3800,6 +3803,38 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           left: 0,
           right: 0,
           child: SizedBox(key: Key('premium-powerup-label-$sku')),
+        ),
+      ],
+    );
+  }
+
+  Widget _discountedPriceLabel(Map<String, dynamic> item, int price) {
+    final original = (item['basePriceCoins'] as num?)?.toInt();
+    final colors = AppColors.of(context);
+    if (original == null || original <= price) {
+      return Text(
+        '$price',
+        style: PixelText.title(size: 13, color: colors.textDark),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$original',
+          style: PixelText.title(
+            size: 11,
+            color: Colors.red,
+          ).copyWith(decoration: TextDecoration.lineThrough),
+        ),
+        const SizedBox(width: 4),
+        Text('15%', style: PixelText.title(size: 10, color: colors.textAccent)),
+        const SizedBox(width: 4),
+        const CoinGlyph(size: 13),
+        const SizedBox(width: 3),
+        Text(
+          '$price',
+          style: PixelText.title(size: 13, color: colors.textDark),
         ),
       ],
     );
@@ -4188,6 +4223,7 @@ class _ShopTile extends StatelessWidget {
     required this.onTap,
     this.stripIcon,
     this.stripLeading,
+    this.stripLabelWidget,
     this.badge,
     this.artScale = 1,
   }) : assert(
@@ -4205,6 +4241,7 @@ class _ShopTile extends StatelessWidget {
   /// strip shows the paw coin while EQUIP/CLEAR/xN keep their Material icons.
   final IconData? stripIcon;
   final Widget? stripLeading;
+  final Widget? stripLabelWidget;
   final bool stripEnabled;
   final VoidCallback? onStrip;
   final VoidCallback onTap;
@@ -4350,17 +4387,19 @@ class _ShopTile extends StatelessWidget {
                           ),
                       const SizedBox(width: 4),
                       Flexible(
-                        child: Text(
-                          stripLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: PixelText.title(
-                            size: 13,
-                            color: onStrip == null
-                                ? AppColors.of(context).textMid
-                                : AppColors.of(context).textDark,
-                          ),
-                        ),
+                        child:
+                            stripLabelWidget ??
+                            Text(
+                              stripLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: PixelText.title(
+                                size: 13,
+                                color: onStrip == null
+                                    ? AppColors.of(context).textMid
+                                    : AppColors.of(context).textDark,
+                              ),
+                            ),
                       ),
                     ],
                   ),
