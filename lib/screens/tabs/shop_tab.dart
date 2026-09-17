@@ -3826,8 +3826,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const CoinGlyph(size: 13),
-        const SizedBox(width: 3),
         Text(
           '$original',
           style: PixelText.title(
@@ -3836,10 +3834,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           ).copyWith(decoration: TextDecoration.lineThrough),
         ),
         const SizedBox(width: 4),
-        Text('15%', style: PixelText.title(size: 10, color: colors.textAccent)),
-        const SizedBox(width: 4),
-        const CoinGlyph(size: 13),
-        const SizedBox(width: 3),
         Text(
           '$price',
           style: PixelText.title(size: 13, color: colors.textDark),
