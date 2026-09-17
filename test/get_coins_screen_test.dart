@@ -43,15 +43,34 @@ const _claimResult = <String, dynamic>{
 class _FakeBackendApiService extends BackendApiService {
   _FakeBackendApiService({
     required this.status,
+    this.socialStatus = const {'rewards': <dynamic>[]},
     this.claimResults = const [_claimResult],
   });
 
   final Map<String, dynamic> status;
+  Map<String, dynamic> socialStatus;
   // One entry per expected claim attempt; an ApiException entry is thrown.
   final List<Object> claimResults;
   int claimCalls = 0;
   int statusCalls = 0;
   final List<String> claimDates = [];
+
+  @override
+  Future<Map<String, dynamic>> fetchSocialRewardsStatus({
+    required String identityToken,
+  }) async => socialStatus;
+
+  @override
+  Future<Map<String, dynamic>> openSocialReward({
+    required String identityToken,
+    required String platform,
+  }) async => {'platform': platform, 'state': 'opened'};
+
+  @override
+  Future<Map<String, dynamic>> claimSocialReward({
+    required String identityToken,
+    required String platform,
+  }) async => {'platform': platform, 'state': 'claimed', 'coins': 325};
 
   @override
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
@@ -554,6 +573,50 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byType(ReferralScreen), findsOneWidget);
+  });
+
+  testWidgets('renders all three social rewards from server state', (
+    tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      status: _status(),
+      socialStatus: const {
+        'rewards': [
+          {
+            'platform': 'instagram',
+            'label': 'Instagram',
+            'handle': '@bara.steps.app',
+            'url': 'https://instagram.com/bara.steps.app',
+            'amount': 200,
+            'state': 'not_started',
+          },
+          {
+            'platform': 'tiktok',
+            'label': 'TikTok',
+            'handle': '@bara.app',
+            'url': 'https://www.tiktok.com/@bara.app',
+            'amount': 200,
+            'state': 'opened',
+          },
+          {
+            'platform': 'x',
+            'label': 'X',
+            'handle': '@BaraStepsApp',
+            'url': 'https://x.com/BaraStepsApp',
+            'amount': 200,
+            'state': 'claimed',
+          },
+        ],
+      },
+    );
+    await _pumpScreen(tester, api: api);
+    expect(find.text('FOLLOW BARA'), findsOneWidget);
+    expect(find.text('@bara.steps.app · +200 coins'), findsOneWidget);
+    expect(find.text('@bara.app · +200 coins'), findsOneWidget);
+    expect(find.text('@BaraStepsApp · +200 coins'), findsOneWidget);
+    expect(find.text('FOLLOW'), findsOneWidget);
+    expect(find.text('CLAIM 200'), findsOneWidget);
+    expect(find.text('CLAIMED'), findsOneWidget);
   });
 
   testWidgets('the shop "+" focuses Coins in the same storefront', (

@@ -114,9 +114,14 @@ class ActivationAnalyticsService {
     'race_detail_visit_ended',
     'race_detail_back_exit',
     'race_detail_exit_eligible',
+    'social_reward_impression',
+    'social_reward_opened',
+    'social_reward_claimed',
+    'social_reward_claim_failed',
   };
 
   static const allowedContext = <String, Set<String>>{
+    'platform': {'instagram', 'tiktok', 'x'},
     'source': {
       'onboarding',
       'profile',

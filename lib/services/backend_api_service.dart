@@ -6217,6 +6217,39 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchSocialRewardsStatus({
+    required String identityToken,
+  }) async => _decodeJsonResponse(
+    await _sendGetRequest(
+      path: '/social-rewards/status',
+      identityToken: identityToken,
+    ),
+  );
+
+  Future<Map<String, dynamic>> openSocialReward({
+    required String identityToken,
+    required String platform,
+  }) async => _decodeJsonResponse(
+    await _sendJsonRequest(
+      method: 'POST',
+      path: '/social-rewards/$platform/open',
+      identityToken: identityToken,
+      body: const {},
+    ),
+  );
+
+  Future<Map<String, dynamic>> claimSocialReward({
+    required String identityToken,
+    required String platform,
+  }) async => _decodeJsonResponse(
+    await _sendJsonRequest(
+      method: 'POST',
+      path: '/social-rewards/$platform/claim',
+      identityToken: identityToken,
+      body: const {},
+    ),
+  );
+
   Future<Map<String, dynamic>> fetchGetCoinsStatus({
     required String identityToken,
     required String localDate,

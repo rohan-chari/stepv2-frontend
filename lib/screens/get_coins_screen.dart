@@ -6,6 +6,7 @@ import '../services/ad_service.dart';
 import '../services/rewarded_coins_controller.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/social_rewards_controller.dart';
 import '../styles.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/billing_scope.dart';
@@ -16,6 +17,7 @@ import '../widgets/coin_balance_badge.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/spinning_coin.dart';
 import 'daily_reward_screen.dart';
 import 'referral_screen.dart';
 
@@ -61,6 +63,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   late final BackendApiService _api;
   late final RewardedCoinsController _rewards;
   late final bool _ownsRewards;
+  late final SocialRewardsController _socialRewards;
   int? _referrerCoins;
   int? _refereeCoins;
   String? _referralToken;
@@ -85,7 +88,17 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
           now: widget.now,
         );
     _rewards.addListener(_changed);
+    _socialRewards = SocialRewardsController(
+      auth: widget.authService,
+      api: _api,
+    );
+    _socialRewards.addListener(_socialChanged);
     unawaited(_load());
+    unawaited(_socialRewards.refresh(impression: true));
+  }
+
+  void _socialChanged() {
+    if (mounted) setState(() {});
   }
 
   void _changed() {
@@ -116,12 +129,142 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
   void dispose() {
     _rewards.removeListener(_changed);
     if (_ownsRewards) _rewards.dispose();
+    _socialRewards.removeListener(_socialChanged);
+    _socialRewards.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     await _rewards.refresh();
     _changed();
+  }
+
+  Future<void> _showSocialSheet(SocialRewardItem reward) async {
+    final opened = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppColors.of(context).parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'FOLLOW BARA ON ${reward.label.toUpperCase()}',
+                style: PixelText.title(
+                  size: 20,
+                  color: AppColors.of(sheetContext).textDark,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Follow us on ${reward.label}, then come back to Bara to claim 200 coins.',
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(sheetContext).textMid,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SpinningCoin(size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    '200 COINS',
+                    style: PixelText.title(
+                      size: 16,
+                      color: AppColors.of(sheetContext).textDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              PillButton(
+                label: 'OPEN ${reward.label.toUpperCase()}',
+                variant: PillButtonVariant.primary,
+                fullWidth: true,
+                onPressed: _socialRewards.busy.contains(reward.platform)
+                    ? null
+                    : () async {
+                        final success = await _socialRewards.launchAndOpen(
+                          reward,
+                        );
+                        if (sheetContext.mounted && success) {
+                          Navigator.of(sheetContext).pop(true);
+                        }
+                      },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (opened == true) await _socialRewards.refresh();
+  }
+
+  Widget _buildSocialRewards() {
+    final items = [
+      'instagram',
+      'tiktok',
+      'x',
+    ].map(_socialRewards.item).whereType<SocialRewardItem>().toList();
+    if (items.length != 3) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'FOLLOW BARA',
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.of(context).textDark,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...items.map(
+          (reward) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildSocialCard(reward),
+          ),
+        ),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  Widget _buildSocialCard(SocialRewardItem reward) {
+    final busy = _socialRewards.busy.contains(reward.platform);
+    final label = reward.isClaimed
+        ? 'CLAIMED'
+        : reward.isOpened
+        ? 'CLAIM 200'
+        : 'FOLLOW';
+    return _buildCard(
+      key: Key('get-coins-social-${reward.platform}'),
+      icon: Icons.public,
+      title: reward.label,
+      subtitle: '${reward.handle} · +200 coins',
+      action: PillButton(
+        label: busy ? 'LOADING...' : label,
+        variant: reward.isClaimed
+            ? PillButtonVariant.secondary
+            : PillButtonVariant.primary,
+        fullWidth: true,
+        onPressed: reward.isClaimed || busy
+            ? null
+            : () async {
+                if (reward.isOpened) {
+                  await _socialRewards.claim(reward);
+                } else {
+                  await _showSocialSheet(reward);
+                }
+              },
+      ),
+    );
   }
 
   /// Best-effort lookup of the configured referral rewards so the invite row
@@ -285,6 +428,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen>
                         _buildWatchAdCard(),
                         const SizedBox(height: 12),
                       ],
+                      _buildSocialRewards(),
                       _buildReferralCard(),
                       const SizedBox(height: 12),
                       _buildDailySpinCard(),
