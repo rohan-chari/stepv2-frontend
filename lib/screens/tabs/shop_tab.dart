@@ -3573,6 +3573,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final requiresGold = item['requiresGold'] == true;
     final goldEligible = item['goldEligible'] != false;
     final premiumLocked = requiresGold && !goldEligible;
+    final hasPremiumMetadata =
+        item['requiresGold'] is bool && item['goldEligible'] is bool;
+    final premium = hasPremiumMetadata && requiresGold;
 
     // Affordability drives the strip + sheet action (item 10). Read coins
     // defensively off the auth service.
@@ -3635,7 +3638,16 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       onStrip: openSheet,
       onTap: openSheet,
     );
-    return premiumLocked || requiresGold ? PremiumItemFrame(child: tile) : tile;
+    if (!premium) return tile;
+    final sku = item['sku'] is String && (item['sku'] as String).isNotEmpty
+        ? item['sku'] as String
+        : type;
+    return PremiumItemFrame(
+      centeredLabel: true,
+      frameKey: Key('premium-powerup-frame-$sku'),
+      labelKey: Key('premium-powerup-label-$sku'),
+      child: tile,
+    );
   }
 
   /// The primary action button for a powerup detail sheet: BUY when affordable,

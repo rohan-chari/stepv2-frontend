@@ -11,6 +11,7 @@ class _UnifiedApi extends ShopApi {
   bool unavailable = false;
   bool ownedOnlyRinse = false;
   bool includePremium = false;
+  bool includeLegacyMissingPremium = false;
   @override
   Future<Map<String, dynamic>> fetchPowerupShopCatalog({
     required String identityToken,
@@ -44,6 +45,14 @@ class _UnifiedApi extends ShopApi {
             'requiresGold': true,
             'goldEligible': false,
             'purchaseEligibility': 'GOLD_REQUIRED',
+          },
+        if (includeLegacyMissingPremium)
+          {
+            'sku': 'PW_QUICKSAND',
+            'name': 'Quicksand',
+            'description': 'Slow the pack down',
+            'priceCoins': 300,
+            'powerupType': 'QUICKSAND',
           },
       ],
     };
@@ -180,15 +189,48 @@ void main() {
     },
   );
 
-  testWidgets('free premium powerup shows Gold treatment and upgrade CTA', (
-    tester,
-  ) async {
-    await render(tester, _UnifiedApi()..includePremium = true);
-    expect(find.text('Leech'), findsOneWidget);
-    expect(find.text('Bara Gold'), findsOneWidget);
-    await tester.ensureVisible(find.text('Leech'));
-    await tester.tap(find.text('Leech'));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Get Bara Gold'), findsOneWidget);
-  });
+  for (final dark in [false, true]) {
+    testWidgets(
+      'premium powerup shows Gold treatment and upgrade CTA in ${dark ? 'night' : 'day'} mode',
+      (tester) async {
+        await render(tester, _UnifiedApi()..includePremium = true, dark: dark);
+        expect(find.text('Leech'), findsOneWidget);
+        expect(find.text('Bara Gold'), findsOneWidget);
+        final frame = find.byKey(const Key('premium-powerup-frame-PW_LEECH'));
+        final label = find.byKey(const Key('premium-powerup-label-PW_LEECH'));
+        expect(frame, findsOneWidget);
+        expect(label, findsOneWidget);
+        expect(
+          tester.getCenter(label).dx,
+          closeTo(tester.getCenter(frame).dx, .01),
+        );
+        expect(
+          tester.getRect(label).bottom,
+          lessThanOrEqualTo(tester.getTopLeft(frame).dy + 2),
+        );
+        await tester.ensureVisible(find.text('Leech'));
+        await tester.tap(find.text('Leech'));
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('Get Bara Gold'), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets(
+    'missing premium metadata keeps Quicksand as an ordinary legacy tile',
+    (tester) async {
+      await render(tester, _UnifiedApi()..includeLegacyMissingPremium = true);
+
+      expect(find.text('Quicksand'), findsOneWidget);
+      expect(
+        find.byKey(const Key('premium-powerup-frame-PW_QUICKSAND')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('premium-powerup-label-PW_QUICKSAND')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
