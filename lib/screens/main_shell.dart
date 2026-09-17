@@ -1321,30 +1321,47 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _draining = true;
     String? raceId;
     String? errorMessage;
+    var clearPendingToken = false;
     try {
       // TR-201/204: a team race needs a side before the join call, and a team
       // race that already started can't be joined at all. Resolve the public
       // preview first — share-link opens are rare, so the extra GET is cheap,
-      // and it lets us branch without relying on an error response. Failure
-      // here falls through to the plain join (older backends, individual
-      // races), preserving today's behavior.
-      Map<String, dynamic>? preview;
+      // and it lets us branch without relying on an error response. A failed
+      // preview is intentionally not treated as a legacy link. The
+      // server must successfully establish which join contract applies before
+      // either join endpoint may be called.
+      late Map<String, dynamic> preview;
       try {
         preview = await _backendApiService.fetchSharedRace(
           token: token,
           identityToken: identityToken,
         );
-      } catch (_) {}
+      } on ApiException catch (e) {
+        final terminal = _isTerminalShareLinkError(e);
+        errorMessage = terminal
+            ? _shareLinkErrorMessage(e)
+            : 'Couldn’t open this race right now. Please try again.';
+        clearPendingToken = terminal;
+        if (mounted) showErrorToast(context, errorMessage);
+        return;
+      } catch (_) {
+        errorMessage = 'Couldn’t open this race right now. Please try again.';
+        if (mounted) showErrorToast(context, errorMessage);
+        return;
+      }
 
-      final approvalRequired = preview?['_shareApprovalRequired'] == true;
+      final approvalRequired = preview['_shareApprovalRequired'] == true;
       if (approvalRequired) {
         if (!mounted) return;
         final confirmed = await _confirmPrivateJoinRequest(preview);
-        if (confirmed != true) return;
+        if (confirmed != true) {
+          clearPendingToken = true;
+          return;
+        }
       }
 
       String? team;
-      if (preview != null && TeamRace.isTeamRace(preview)) {
+      if (TeamRace.isTeamRace(preview)) {
         final status = preview['status'] is String
             ? preview['status'] as String
             : null;
@@ -1366,6 +1383,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           // Dismissed the side picker: leave them where they are. The token is
           // still consumed below so the drain can't loop.
           raceId = preview['id'] is String ? preview['id'] as String : null;
+          clearPendingToken = true;
           return;
         }
       }
@@ -1384,8 +1402,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         final resultRaceId = request['raceId'];
         if (status == 'ACCEPTED' && resultRaceId is String) {
           raceId = resultRaceId;
+          clearPendingToken = true;
         } else if (mounted) {
           await _showPrivateJoinPending();
+          clearPendingToken = true;
         }
       } else {
         final result = team != null
@@ -1404,28 +1424,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onboarding: true,
               );
         raceId = result['raceId'] is String ? result['raceId'] as String : null;
+        clearPendingToken = raceId != null;
       }
     } on ApiException catch (e) {
       if (isActiveCompetitionLimitError(e)) {
         errorMessage = fundedExposureErrorCopy(e);
       } else {
-        // Already a member / full / closed: still try to land them on the race by
-        // resolving its id from the public preview.
-        try {
-          final preview = await _backendApiService.fetchSharedRace(
-            token: token,
-            identityToken: identityToken,
-          );
-          final previewRaceId = preview['id'];
-          raceId = previewRaceId is String ? previewRaceId : null;
-        } catch (_) {}
-        if (raceId == null) errorMessage = e.message;
+        errorMessage = _shareLinkErrorMessage(e);
+        clearPendingToken = _isTerminalShareLinkError(e);
       }
     } catch (_) {
-      // Network/transient: drop the token (it's re-tappable) rather than loop.
+      // Network/transient: retain the token for a later legitimate retry.
+      errorMessage = 'Couldn’t open this race right now. Please try again.';
     } finally {
-      // Consume the token on every outcome so the drain can't loop.
-      await widget.authService.setPendingShareToken(null);
+      if (clearPendingToken) {
+        await widget.authService.setPendingShareToken(null);
+      }
       _draining = false;
     }
 
@@ -1436,6 +1450,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } else if (errorMessage != null) {
       showErrorToast(context, errorMessage);
     }
+  }
+
+  bool _isTerminalShareLinkError(ApiException error) =>
+      error.statusCode == 404 ||
+      error.code == 'RACE_NOT_FOUND' ||
+      error.statusCode == 410 ||
+      error.code == 'SHARE_LINK_EXPIRED';
+
+  String _shareLinkErrorMessage(ApiException error) {
+    if (error.statusCode == 410 || error.code == 'SHARE_LINK_EXPIRED') {
+      return 'This race link has expired.';
+    }
+    if (error.statusCode == 404 || error.code == 'RACE_NOT_FOUND') {
+      return 'This race link is no longer available.';
+    }
+    return error.message;
   }
 
   Future<bool?> _confirmPrivateJoinRequest(Map<String, dynamic>? preview) {

@@ -37,9 +37,11 @@ class _FakeBootstrap extends BackgroundSyncBootstrapService {
 }
 
 class _ShareApi extends BackendApiService {
-  _ShareApi({required this.preview});
+  _ShareApi({required this.preview, this.previewError, this.joinError});
 
   final Map<String, dynamic> preview;
+  final Object? previewError;
+  final Object? joinError;
   String? joinedWithTeam;
   bool plainJoinCalled = false;
   int approvalRequestCalls = 0;
@@ -49,7 +51,10 @@ class _ShareApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchSharedRace({
     required String token,
     String? identityToken,
-  }) async => preview;
+  }) async {
+    if (previewError != null) throw previewError!;
+    return preview;
+  }
 
   @override
   Future<Map<String, dynamic>> joinRaceByShareToken({
@@ -57,6 +62,7 @@ class _ShareApi extends BackendApiService {
     required String token,
     bool onboarding = false,
   }) async {
+    if (joinError != null) throw joinError!;
     plainJoinCalled = true;
     return {'raceId': preview['id']};
   }
@@ -68,6 +74,7 @@ class _ShareApi extends BackendApiService {
     required String team,
     bool onboarding = false,
   }) async {
+    if (joinError != null) throw joinError!;
     joinedWithTeam = team;
     return {'raceId': preview['id']};
   }
@@ -80,6 +87,7 @@ class _ShareApi extends BackendApiService {
   }) async {
     approvalRequestCalls += 1;
     requestedTeam = team;
+    if (joinError != null) throw joinError!;
     return {
       'joinRequest': {
         'id': 'request-1',
@@ -302,5 +310,114 @@ void main() {
 
     expect(api.plainJoinCalled, isTrue);
     expect(api.approvalRequestCalls, 0);
+  });
+
+  testWidgets('preview failure never falls back to either join path', (
+    tester,
+  ) async {
+    final authService = await _authService();
+    final api = _ShareApi(
+      preview: const {},
+      previewError: const ApiException('temporary failure', statusCode: 500),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBootstrap(),
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    expect(api.plainJoinCalled, isFalse);
+    expect(api.approvalRequestCalls, 0);
+    expect(authService.pendingShareToken, 'share-abc');
+  });
+
+  testWidgets('terminal preview failure clears the pending token', (
+    tester,
+  ) async {
+    final authService = await _authService();
+    final api = _ShareApi(
+      preview: const {},
+      previewError: const ApiException('not found', statusCode: 404),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBootstrap(),
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    expect(api.plainJoinCalled, isFalse);
+    expect(api.approvalRequestCalls, 0);
+    expect(authService.pendingShareToken, isNull);
+    expect(find.text('This race link is no longer available.'), findsOneWidget);
+  });
+
+  testWidgets('expired preview clears the pending token without joining', (
+    tester,
+  ) async {
+    final authService = await _authService();
+    final api = _ShareApi(
+      preview: const {},
+      previewError: const ApiException('expired', statusCode: 410),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBootstrap(),
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    expect(api.plainJoinCalled, isFalse);
+    expect(api.approvalRequestCalls, 0);
+    expect(authService.pendingShareToken, isNull);
+    expect(find.text('This race link has expired.'), findsOneWidget);
+  });
+
+  testWidgets('join-request transient failure retains the pending token', (
+    tester,
+  ) async {
+    final authService = await _authService();
+    final api = _ShareApi(
+      preview: const {
+        'id': 'race-private',
+        'name': 'Private Friends Race',
+        'status': 'PENDING',
+        '_shareApprovalRequired': true,
+      },
+      joinError: const ApiException('temporary failure', statusCode: 503),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBootstrap(),
+        ),
+      ),
+    );
+    await _settle(tester);
+    await tester.tap(find.byKey(const Key('private-share-request-join')));
+    await _settle(tester);
+
+    expect(api.approvalRequestCalls, 1);
+    expect(api.plainJoinCalled, isFalse);
+    expect(authService.pendingShareToken, 'share-abc');
   });
 }
