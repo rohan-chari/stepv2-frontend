@@ -150,12 +150,7 @@ class ShopCharacterCard extends StatelessWidget {
         ),
       ),
     );
-    final cleanedCard = character.goldAccess
-        ? Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Stack(clipBehavior: Clip.none, children: [card]),
-          )
-        : card;
+    final cleanedCard = card;
     return Semantics(
       container: true,
       explicitChildNodes: character.hasAccess,
