@@ -964,14 +964,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
     final coinAmounts = wardrobeMap(box['coinAmounts']);
     final coinRanges = wardrobeMap(box['coinRanges']);
 
-    Object? coinValue(String key) =>
-        coinAmounts[key] ?? coinRanges[key];
+    Object? coinValue(String key) => coinAmounts[key] ?? coinRanges[key];
 
     _DailyStripItem coins(String rarity) => _DailyStripItem.coinPreview(
       rarity,
-      _dailyCoinAmount(
-        coinValue(rarity == 'RARE' ? 'RARE_FALLBACK' : rarity),
-      ),
+      coinValue(rarity == 'RARE' ? 'RARE_FALLBACK' : rarity),
     );
 
     _DailyStripItem candidate() {
@@ -1064,7 +1061,7 @@ class _DailyStripItem {
   static const resultPosition = 38;
 
   final String rarity;
-  final int? coinAmount;
+  final Object? coinAmount;
   final String? assetKey;
   final String? name;
   final int animationFrames;
@@ -1085,7 +1082,7 @@ class _DailyStripItem {
     this.coinPreview = false,
   });
 
-  const _DailyStripItem.coinPreview(String rarity, int? amount)
+  const _DailyStripItem.coinPreview(String rarity, Object? amount)
     : this._(
         rarity: rarity,
         coinAmount: amount,
@@ -1136,7 +1133,7 @@ class _DailyStripItem {
         animationFrames: AccessoryThumbnail.framesOf(shopItem),
       );
     }
-    final coinAmount = _dailyCoinAmount(result['coinAmount']);
+    final coinAmount = result['coinAmount'];
     return _DailyStripItem._(
       rarity: rarity,
       coinAmount: coinAmount,
