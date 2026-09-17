@@ -2635,6 +2635,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         item['goldExclusive'] == true &&
         directProductId != null &&
         _billing != null;
+    final directPrice = directProductId == null
+        ? null
+        : _billing?.priceForStoreProduct(directProductId);
     // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
     // by the same server-served rules.
     final route = isGoldOnlyCharacter
@@ -2686,7 +2689,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             children: [
               if (directPurchaseAvailable)
                 PillButton(
-                  label: 'BUY',
+                  label: directPrice == null ? 'BUY' : 'BUY · $directPrice',
                   icon: Icons.shopping_bag_outlined,
                   variant: PillButtonVariant.primary,
                   fontSize: 14,

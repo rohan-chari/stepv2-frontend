@@ -32,7 +32,8 @@ abstract class BillingController extends ChangeNotifier {
   bool get isAvailable => isPreview;
   bool get goldPolicyAvailable => isPreview;
   bool get canShowMembership =>
-      goldPolicyAvailable && (isAvailable || snapshot.isMember || canManageSubscription);
+      goldPolicyAvailable &&
+      (isAvailable || snapshot.isMember || canManageSubscription);
   int get rerollCoinCost => 50;
   List<StorePlanOffer> get plans =>
       isPreview ? StorePlanOffer.previewOffers : const [];
@@ -47,6 +48,7 @@ abstract class BillingController extends ChangeNotifier {
   List<CoinPackOffer> get coinPacks =>
       isPreview ? CoinPackOffer.previewOffers : const [];
   Future<BillingResult> buyCoins(CoinPackOffer pack);
+
   /// Starts a verified non-consumable character purchase. The server maps the
   /// native transaction to ownership; this method never grants locally.
   Future<BillingResult> buyDirectProduct(String storeProductId) async =>
@@ -54,6 +56,7 @@ abstract class BillingController extends ChangeNotifier {
         success: false,
         message: 'This character purchase is unavailable.',
       );
+  String? priceForStoreProduct(String storeProductId) => null;
   Future<BillingResult> startTrial(BillingPlan plan);
   Future<BillingResult> subscribe(BillingPlan plan);
   Future<BillingResult> buyPermanent() async => const BillingResult(

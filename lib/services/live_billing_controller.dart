@@ -48,6 +48,7 @@ class LiveBillingController extends BillingController {
   Timer? _retry;
   Map<String, dynamic> _data = {};
   final Map<String, String> _productIds = {};
+  final Map<String, String> _productPrices = {};
   List<CoinPackOffer> _packs = [];
   List<StorePlanOffer> _plans = [];
   BillingOperationStatus _operation = BillingOperationStatus.idle;
@@ -264,6 +265,7 @@ class LiveBillingController extends BillingController {
       _packs = [];
       _plans = [];
       _productIds.clear();
+      _productPrices.clear();
       if (_storeAvailable) {
         await store.identify(_identity!);
         if (!_current(generation)) return;
@@ -275,8 +277,7 @@ class LiveBillingController extends BillingController {
               (p) =>
                   p['kind'] == 'coins' ||
                   (p['kind'] == 'non_consumable' &&
-                      (p['plan'] == 'permanent' ||
-                          p['plan'] == null)),
+                      (p['plan'] == 'permanent' || p['plan'] == null)),
             )
             .map((p) => _string(p['storeProductId']))
             .whereType<String>()
@@ -294,6 +295,7 @@ class LiveBillingController extends BillingController {
           final product = products.where((p) => p.id == storeId).firstOrNull;
           if (id == null || product == null || product.price.isEmpty) continue;
           _productIds[id] = product.id;
+          _productPrices[product.id] = product.price;
           if (item['kind'] == 'coins' && _int(item['coins']) > 0) {
             _packs.add(
               CoinPackOffer(
@@ -627,6 +629,11 @@ class LiveBillingController extends BillingController {
           )
         : _purchase(id);
   }
+
+  @override
+  String? priceForStoreProduct(String storeProductId) =>
+      _productPrices[storeProductId];
+
   @override
   Future<BillingResult> startTrial(BillingPlan plan) => subscribe(plan);
   @override
