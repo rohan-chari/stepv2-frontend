@@ -248,8 +248,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               ),
               _benefit(
                 Icons.pets_rounded,
-                'Gold character access',
-                'Unlock the Gold character catalog with server-defined coin prices.',
+                'Unlock every character',
+                'Use every normal character while your Bara Gold membership is active.',
               ),
               if (!state.isMember) ...[
                 const SizedBox(height: 16),

@@ -29,7 +29,7 @@ class ShopCharacterCard extends StatelessWidget {
         character.directStoreProductId != null;
     final goldAction =
         character.goldAccess &&
-        !character.owned &&
+        !character.hasAccess &&
         !purchasable &&
         !directPurchasable;
     final buy = purchasable ? onBuy : null;
@@ -83,7 +83,7 @@ class ShopCharacterCard extends StatelessWidget {
                             ),
                             showMedalRing: false,
                             animal: character.animal,
-                            accessories: character.owned
+                            accessories: character.hasAccess
                                 ? character.outfit?.items ?? []
                                 : [],
                           ),
@@ -101,7 +101,7 @@ class ShopCharacterCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 5),
               child: ShopTileName(name: character.name, color: colors.textDark),
             ),
-            if (character.owned) ...[
+            if (character.hasAccess) ...[
               _action(
                 context,
                 'edit',
@@ -156,37 +156,43 @@ class ShopCharacterCard extends StatelessWidget {
         ? Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              card,
-              Positioned(
-                top: -8,
-                left: 0,
-                right: 0,
-                child: Container(
-                  key: const Key('bara-gold-card-label'),
-                  color: colors.parchment,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: const SizedBox(height: 9),
+              clipBehavior: Clip.none,
+              children: [
+                card,
+                Positioned(
+                  top: -8,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    key: const Key('bara-gold-card-label'),
+                    color: colors.parchment,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: character.hasAccess && !character.owned
+                        ? const Text(
+                            'Included with Gold',
+                            textAlign: TextAlign.center,
+                          )
+                        : const SizedBox(height: 9),
+                  ),
                 ),
-              ),
-            ],
+              ],
             ),
           )
         : card;
     return Semantics(
       container: true,
-      explicitChildNodes: character.owned,
+      explicitChildNodes: character.hasAccess,
       button:
-          !character.owned && (purchasable || directPurchasable || goldAction),
-      enabled: !character.owned && purchasable
+          !character.hasAccess &&
+          (purchasable || directPurchasable || goldAction),
+      enabled: !character.hasAccess && purchasable
           ? buy != null
-          : !character.owned && directPurchasable
+          : !character.hasAccess && directPurchasable
           ? onDirectBuy != null
-          : !character.owned && goldAction
+          : !character.hasAccess && goldAction
           ? onGetGold != null
           : null,
-      onTap: !character.owned
+      onTap: !character.hasAccess
           ? purchasable
                 ? buy
                 : directPurchasable
@@ -196,12 +202,16 @@ class ShopCharacterCard extends StatelessWidget {
                 : null
           : null,
       label:
-          '${character.name}, ${character.owned ? 'owned' : 'unowned'}${character.active ? ', active' : ''}${!character.owned && purchasable ? ', buy for $price coins' : ''}',
+          '${character.name}, ${character.owned
+              ? 'owned'
+              : character.hasAccess
+              ? 'Included with Gold'
+              : 'unowned'}${character.active ? ', active' : ''}${!character.hasAccess && purchasable ? ', buy for $price coins' : ''}',
       child: ExcludeSemantics(
-        excluding: !character.owned && purchasable,
+        excluding: !character.hasAccess && purchasable,
         child: GestureDetector(
           excludeFromSemantics: true,
-          onTap: !character.owned
+          onTap: !character.hasAccess
               ? purchasable
                     ? buy
                     : directPurchasable

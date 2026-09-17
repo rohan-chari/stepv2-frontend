@@ -84,10 +84,18 @@ class ShopCharacter {
           (json['characterKey'] == 'default' ? 'Capybara' : 'Character'),
       item = wardrobeMap(json['item']),
       owned = json['owned'] == true,
-      active = json['owned'] == true && json['active'] == true,
+      hasAccess = json['hasAccess'] == true || json['owned'] == true,
+      accessSource = wardrobeString(json['accessSource']),
+      active =
+          (json['hasAccess'] == true || json['owned'] == true) &&
+          json['active'] == true,
       canPurchase = json['owned'] == false && json['canPurchase'] == true,
-      canActivate = json['owned'] == true && json['canActivate'] == true,
-      canEdit = json['owned'] == true && json['canEdit'] == true,
+      canActivate =
+          (json['hasAccess'] == true || json['owned'] == true) &&
+          json['canActivate'] == true,
+      canEdit =
+          (json['hasAccess'] == true || json['owned'] == true) &&
+          json['canEdit'] == true,
       availability = wardrobeString(json['availability']) ?? 'unavailable',
       goldAccess = json['goldAccess'] == true,
       benefitVersion = wardrobeString(json['benefitVersion']),
@@ -101,7 +109,8 @@ class ShopCharacter {
           : null;
   final String key, name, availability;
   final Map<String, dynamic> item;
-  final bool owned, active, canPurchase, canActivate, canEdit;
+  final bool owned, hasAccess, active, canPurchase, canActivate, canEdit;
+  final String? accessSource;
   final bool goldAccess, coinPurchaseAllowed;
   final String? benefitVersion, unavailableReason;
   final Map<String, dynamic> directPurchase;

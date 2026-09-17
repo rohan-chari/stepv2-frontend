@@ -2110,7 +2110,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       key: Key('shop-character-${row.key}'),
       character: row,
       onEdit:
-          _characterActionsReady && _wardrobesReady && row.owned && row.canEdit
+          _characterActionsReady &&
+              _wardrobesReady &&
+              row.hasAccess &&
+              row.canEdit
           ? () {
               if (current()) _openCharacterWardrobe(row);
             }
@@ -2118,7 +2121,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       onEquip:
           _characterActionsReady &&
               _wardrobesReady &&
-              row.owned &&
+              row.hasAccess &&
               !row.active &&
               row.canActivate &&
               _wardrobes.appearanceRevision != null &&
@@ -2243,7 +2246,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   Future<void> _equipCharacter(ShopCharacter character) async {
     if (!_characterActionsReady ||
         !_wardrobesReady ||
-        !character.owned ||
+        !character.hasAccess ||
         character.active ||
         !character.canActivate ||
         _wardrobes.appearanceRevision == null ||
