@@ -3111,7 +3111,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       participants: participants,
       myUserId: _myUserId,
       race: _race ?? const {},
-          );
+    );
 
     if (type == 'QUICKSAND') {
       if (targets.isEmpty) {
@@ -9344,7 +9344,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   Widget _buildActivityItem(RaceFeedEvent e, Map<String, String> actorNames) {
-    final actorId = e.actorUserId ?? '';
+    final actorId = e.displayActorUserId ?? '';
     return FeedBubble(
       eventType: e.eventType,
       powerupType: e.powerupType,

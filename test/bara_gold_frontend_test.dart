@@ -107,6 +107,14 @@ void main() {
       expect(find.textContaining('200 coins'), findsOneWidget);
       expect(find.textContaining('1,000 coins'), findsOneWidget);
       expect(find.textContaining('free reroll'), findsOneWidget);
+      expect(
+        find.textContaining('Ad-free extra Daily Spin and box reroll'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Eligible rewarded actions skip the ad'),
+        findsNothing,
+      );
     },
   );
 
@@ -140,13 +148,48 @@ void main() {
         ),
       );
 
-      expect(find.text('Bara Gold'), findsOneWidget);
+      expect(find.text('Bara Gold'), findsNothing);
       expect(find.byKey(const Key('bara-gold-card-frame')), findsOneWidget);
       expect(find.byKey(const Key('bara-gold-card-label')), findsOneWidget);
       expect(find.textContaining('DIRECT PURCHASE'), findsOneWidget);
       expect(find.text('Unavailable'), findsNothing);
     },
   );
+
+  testWidgets('Gold character with missing IAP metadata offers Get Gold', (
+    tester,
+  ) async {
+    final character = ShopCharacter.fromJson({
+      'characterKey': 'mouse',
+      'name': 'Mouse',
+      'item': {
+        'id': 'mouse',
+        'slot': 'CHARACTER',
+        'assetKey': 'mouse',
+        'priceCoins': 1000,
+      },
+      'owned': false,
+      'canPurchase': false,
+      'goldAccess': true,
+      'directPurchase': {'available': true},
+    });
+    var opened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ShopCharacterCard(
+            character: character,
+            onGetGold: () => opened = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Get Gold'), findsOneWidget);
+    expect(find.text('DIRECT PURCHASE'), findsNothing);
+    await tester.tap(find.text('Get Gold'));
+    expect(opened, isTrue);
+  });
 
   testWidgets('direct character purchase action uses the server product ID', (
     tester,

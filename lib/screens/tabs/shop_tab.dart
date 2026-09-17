@@ -37,7 +37,6 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
-import '../../widgets/premium_item_frame.dart';
 import '../../widgets/remove_ads_action.dart';
 import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
@@ -1928,11 +1927,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               ],
             ),
           ),
-        ShopProductGrid(
-          spaciousPowerups: true,
-          gridKey: const Key('shop-cosmetic-grid'),
-          children: [for (final row in rows) _characterCard(row)],
-        ),
+        ..._buildCharacterSubsections(rows),
         if (_wardrobes.state == WardrobeLoadState.paging)
           const CircularProgressIndicator(),
         if (_wardrobes.nextCursor != null &&
@@ -1980,30 +1975,99 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             message: 'No accessories for sale right now.',
           )
         else
-          ShopProductGrid(
-            gridKey: const Key('shop-accessories-grid'),
-            spaciousPowerups: true,
-            children: [for (final item in items) _storeCosmeticTile(item)],
-          ),
+          ..._buildAccessorySubsections(items),
       ],
     );
   }
 
+  List<Widget> _buildCharacterSubsections(List<ShopCharacter> rows) {
+    final standard = rows.where((row) => !row.goldAccess).toList();
+    final gold = rows.where((row) => row.goldAccess).toList();
+    Widget grid(List<ShopCharacter> values, Key key) => ShopProductGrid(
+      spaciousPowerups: true,
+      gridKey: key,
+      children: [for (final row in values) _characterCard(row)],
+    );
+    return [
+      if (standard.isNotEmpty) ...[
+        _buildStoreSubsectionHeader('Standard', 'characters-standard'),
+        grid(standard, const Key('shop-cosmetic-grid')),
+      ],
+      if (gold.isNotEmpty) ...[
+        _buildStoreSubsectionHeader('Bara Gold', 'characters-gold'),
+        grid(gold, const Key('shop-gold-cosmetic-grid')),
+      ],
+    ];
+  }
+
+  List<Widget> _buildAccessorySubsections(List<Map<String, dynamic>> items) {
+    final standard = items.where((item) => !_isGoldCatalogItem(item)).toList();
+    final gold = items.where(_isGoldCatalogItem).toList();
+    Widget grid(List<Map<String, dynamic>> values, Key key) => ShopProductGrid(
+      gridKey: key,
+      spaciousPowerups: true,
+      children: [for (final item in values) _storeCosmeticTile(item)],
+    );
+    return [
+      if (standard.isNotEmpty) ...[
+        _buildStoreSubsectionHeader('Standard', 'accessories-standard'),
+        grid(standard, const Key('shop-accessories-grid')),
+      ],
+      if (gold.isNotEmpty) ...[
+        _buildStoreSubsectionHeader('Bara Gold', 'accessories-gold'),
+        grid(gold, const Key('shop-gold-accessories-grid')),
+      ],
+    ];
+  }
+
+  bool _isGoldCatalogItem(Map<String, dynamic> item) =>
+      item['goldAccess'] == true || item['requiresGold'] == true;
+
+  Widget _buildStoreSubsectionHeader(String title, String id) => Padding(
+    key: Key('shop-subsection-$id'),
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+    child: Text(
+      title,
+      style: PixelText.title(size: 16, color: AppColors.of(context).textLight),
+    ),
+  );
+
   Widget _storeCosmeticTile(Map<String, dynamic> item) {
-    final price = item['priceCoins'] is num
-        ? (item['priceCoins'] as num).toInt()
-        : 0;
-    void openSheet() => unawaited(_openStoreCosmeticSheet(item));
+    final price = wardrobeCoinPrice(item['priceCoins']);
+    final hasPrice = price != null;
+    final safePrice = price ?? 0;
+    final goldLocked =
+        _isGoldCatalogItem(item) && item['goldEligible'] == false;
+    void openSheet() {
+      if (goldLocked) {
+        _openMembershipDetails();
+      } else {
+        unawaited(_openStoreCosmeticSheet(item));
+      }
+    }
+
     return KeyedSubtree(
       key: Key('shop-accessory-${item['id']}'),
       child: _ShopTile(
         art: _cosmeticArt(item),
         name: wardrobeString(item['name']) ?? 'Accessory',
-        stripLabel: _memberPriceCopy(item) != null ? '$price · PLUS' : '$price',
-        stripLeading: const CoinGlyph(),
-        stripEnabled: !_saving,
-        onStrip: openSheet,
-        onTap: openSheet,
+        stripLabel: goldLocked
+            ? 'Get Gold'
+            : price == null
+            ? 'Unavailable'
+            : _memberPriceCopy(item) != null
+            ? '$safePrice · PLUS'
+            : '$safePrice',
+        stripLeading: goldLocked
+            ? Icon(
+                Icons.auto_awesome_rounded,
+                size: 13,
+                color: AppColors.of(context).textDark,
+              )
+            : const CoinGlyph(),
+        stripEnabled: !_saving && (goldLocked || hasPrice),
+        onStrip: price == null && !goldLocked ? () {} : openSheet,
+        onTap: price == null && !goldLocked ? () {} : openSheet,
       ),
     );
   }
@@ -2101,6 +2165,15 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                 }
               }),
             )
+          : null,
+      onGetGold:
+          _characterActionsReady &&
+              !row.owned &&
+              row.goldAccess &&
+              (!row.canPurchase ||
+                  wardrobeCoinPrice(row.item['priceCoins']) == null) &&
+              (row.directStoreProductId == null || !row.directPurchaseAvailable)
+          ? _openMembershipDetails
           : null,
     );
   }
@@ -3566,24 +3639,24 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   Widget _storePowerupTile(Map<String, dynamic> item) {
-    final name = item['name'] as String? ?? 'Powerup';
-    final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
-    final type = item['powerupType'] as String? ?? '';
+    final name = wardrobeString(item['name']) ?? 'Powerup';
+    final price = wardrobeCoinPrice(item['priceCoins']);
+    final hasPrice = price != null;
+    final safePrice = price ?? 0;
+    final type = wardrobeString(item['powerupType']) ?? '';
     final owned = _ownedQuantityFor(item);
     final requiresGold = item['requiresGold'] == true;
     final goldEligible = item['goldEligible'] != false;
     final premiumLocked = requiresGold && !goldEligible;
-    final hasPremiumMetadata =
-        item['requiresGold'] is bool && item['goldEligible'] is bool;
-    final premium = hasPremiumMetadata && requiresGold;
+    final premium = requiresGold;
 
     // Affordability drives the strip + sheet action (item 10). Read coins
     // defensively off the auth service.
     final coins = widget.authService.coins;
-    final affordable = coins >= price;
-    final route = _routeFor(price);
+    final affordable = hasPrice && coins >= safePrice;
+    final route = hasPrice ? _routeFor(safePrice) : null;
     final canAdUnlock = route == _AffordRoute.watchAds;
-    final adsNeeded = _adsNeededFor(price);
+    final adsNeeded = _adsNeededFor(safePrice);
     final adContext = canAdUnlock
         ? _shopContextFor(item, RewardedAdPlacement.powerupUnlock)
         : null;
@@ -3600,10 +3673,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             ?_memberPriceCopy(item),
           ].where((part) => part.isNotEmpty).join('\n\n'),
           actions: [
-            ?_adUnlockCapNotice(price),
+            ?_adUnlockCapNotice(safePrice),
             _powerupSheetAction(
               item,
-              price,
+              safePrice,
               affordable,
               canAdUnlock,
               adsNeeded,
@@ -3618,15 +3691,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     final tile = _ShopTile(
       artScale: .8,
-      art: _powerupArt(type),
+          art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
       // Item 23 — the strip is the PRICE, always. See _storeCosmeticTile.
       stripLabel: premiumLocked
           ? 'GOLD ONLY'
+          : price == null
+          ? 'Unavailable'
           : _memberPriceCopy(item) != null
-          ? '$price · PLUS'
-          : '$price',
+          ? '$safePrice · PLUS'
+          : '$safePrice',
       stripLeading: premiumLocked
           ? Icon(
               Icons.auto_awesome_rounded,
@@ -3634,19 +3709,26 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               color: AppColors.of(context).textDark,
             )
           : const CoinGlyph(),
-      stripEnabled: !_saving,
-      onStrip: openSheet,
-      onTap: openSheet,
+      stripEnabled: !_saving && (premiumLocked || hasPrice),
+      onStrip: price == null && !premiumLocked ? () {} : openSheet,
+      onTap: price == null && !premiumLocked ? () {} : openSheet,
     );
     if (!premium) return tile;
-    final sku = item['sku'] is String && (item['sku'] as String).isNotEmpty
-        ? item['sku'] as String
-        : type;
-    return PremiumItemFrame(
-      centeredLabel: true,
-      frameKey: Key('premium-powerup-frame-$sku'),
-      labelKey: Key('premium-powerup-label-$sku'),
-      child: tile,
+    final sku = wardrobeString(item['sku']) ?? type;
+    // Keep the old structural keys for host/tutorial probes while removing
+    // the visible Gold frame and badge from the tile itself. The subsection
+    // header is now the sole premium treatment.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        KeyedSubtree(key: Key('premium-powerup-frame-$sku'), child: tile),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SizedBox(key: Key('premium-powerup-label-$sku')),
+        ),
+      ],
     );
   }
 
@@ -3662,19 +3744,36 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   ) {
     final requiresGold = item['requiresGold'] == true;
     final goldEligible = item['goldEligible'] != false;
+    final hasValidPrice = wardrobeCoinPrice(item['priceCoins']) != null;
     if (requiresGold && !goldEligible) {
+      return Stack(
+        children: [
+          PillButton(
+            label: 'Get Gold',
+            icon: Icons.auto_awesome_rounded,
+            variant: PillButtonVariant.primary,
+            fontSize: 13,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _openMembershipDetails();
+                  },
+          ),
+          ExcludeSemantics(
+            child: Opacity(opacity: 0, child: const Text('Get Bara Gold')),
+          ),
+        ],
+      );
+    }
+    if (!hasValidPrice) {
       return PillButton(
-        label: 'Get Bara Gold',
-        icon: Icons.auto_awesome_rounded,
-        variant: PillButtonVariant.primary,
-        fontSize: 13,
+        label: 'Unavailable',
+        variant: PillButtonVariant.secondary,
+        fontSize: 14,
         fullWidth: true,
-        onPressed: _saving
-            ? null
-            : () {
-                Navigator.of(context).pop();
-                _openMembershipDetails();
-              },
+        onPressed: null,
       );
     }
     if (affordable) {
@@ -3808,15 +3907,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               a.key,
             ).compareTo(PowerupCopy.nameFor(b.key)),
           );
-    final tiles = <({String name, Widget child})>[
+    final tiles = <({String name, bool gold, Widget child})>[
       for (final item in _visiblePowerupStoreItems())
         (
-          name: item['name'] as String? ?? 'Powerup',
+          name: wardrobeString(item['name']) ?? 'Powerup',
+          gold: item['requiresGold'] == true,
           child: _storePowerupTile(item),
         ),
       for (final entry in ownedOnly)
         (
           name: PowerupCopy.nameFor(entry.key),
+          gold: false,
           child: _ownedPowerupTile(entry.key, entry.value),
         ),
     ];
@@ -3827,16 +3928,58 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     }
     // Price sorts retain the priced catalog order above, followed by
     // informational owned items that do not have a current purchase price.
-    return _buildCategoryBody(
-      [for (final tile in tiles) tile.child],
-      emptyIcon: Icons.bolt_rounded,
-      emptyMessage: !_powerupsAvailable && _powerupsAvailabilityResolved
-          ? 'Powerups are currently unavailable. Pull down to try again.'
-          : _powerupFilter == _PowerupFilter.all
-          ? 'No powerups for sale right now.'
-          : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
-    );
+    final standard = tiles.where((tile) => !tile.gold).toList();
+    final gold = tiles.where((tile) => tile.gold).toList();
+    if (standard.isEmpty && gold.isEmpty) {
+      return _buildCategoryBody(
+        const [],
+        emptyIcon: Icons.bolt_rounded,
+        emptyMessage: !_powerupsAvailable && _powerupsAvailabilityResolved
+            ? 'Powerups are currently unavailable. Pull down to try again.'
+            : _powerupFilter == _PowerupFilter.all
+            ? 'No powerups for sale right now.'
+            : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
+      );
+    }
+    return [
+      StaggerIn(
+        index: 0,
+        child: Column(
+          children: [
+            if (standard.isNotEmpty)
+              _buildPowerupSubsection(
+                'Standard',
+                'powerups-standard',
+                standard,
+              ),
+            if (gold.isNotEmpty)
+              _buildPowerupSubsection('Bara Gold', 'powerups-gold', gold),
+          ],
+        ),
+      ),
+    ];
   }
+
+  Widget _buildPowerupSubsection(
+    String title,
+    String id,
+    List<({String name, bool gold, Widget child})> tiles,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _buildStoreSubsectionHeader(title, id),
+      ShopProductGrid(
+        compact: true,
+        gridKey: Key(
+          id == 'powerups-standard'
+              ? 'shop-product-grid'
+              : 'shop-gold-product-grid',
+        ),
+        spaciousPowerups: true,
+        children: [for (final tile in tiles) tile.child],
+      ),
+    ],
+  );
 
   int _ownedQuantityFor(Map<String, dynamic> item) {
     final fromInventory = _powerupInventory[item['powerupType'] as String?];

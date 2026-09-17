@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'auth_service.dart';
 import 'backend_api_service.dart';
+import '../models/character_wardrobe.dart' show wardrobeMap;
 
 /// A single powerup/system event in the race Activity feed.
 class RaceFeedEvent {
@@ -17,6 +18,13 @@ class RaceFeedEvent {
   final String? impactScope;
   final int? deltaSteps;
   final String? attackerDisplayName;
+  final String? activityAction;
+  final int? activityVersion;
+  final String? originalAttackerUserId;
+  final String? originalTargetUserId;
+  final String? finalTargetUserId;
+  final String? redirectType;
+  final String? activityOutcome;
   final String? redirectAttackerUserId;
   final String? redirectDecoyOwnerUserId;
   final String? redirectTargetUserId;
@@ -34,6 +42,13 @@ class RaceFeedEvent {
     this.impactScope,
     this.deltaSteps,
     this.attackerDisplayName,
+    this.activityAction,
+    this.activityVersion,
+    this.originalAttackerUserId,
+    this.originalTargetUserId,
+    this.finalTargetUserId,
+    this.redirectType,
+    this.activityOutcome,
     this.redirectAttackerUserId,
     this.redirectDecoyOwnerUserId,
     this.redirectTargetUserId,
@@ -55,6 +70,50 @@ class RaceFeedEvent {
       if (value is! String || value.trim().isEmpty) return null;
       return value;
     }
+
+    final activity = metadata is Map ? wardrobeMap(metadata['activityV1']) : {};
+    final redirect = wardrobeMap(activity['redirect']);
+    final activityAction = _boundedActivityString(activity['action']);
+    final activityVersion = activity['version'] is int
+        ? activity['version'] as int
+        : null;
+    final validActivityV1 = activityVersion == 1 &&
+        activityAction == 'POWERUP_USE';
+    final originalAttacker = validActivityV1
+        ? _boundedActivityString(activity['originalAttackerUserId'])
+        : null;
+    final originalTarget = validActivityV1
+        ? _boundedActivityString(activity['originalTargetUserId'])
+        : null;
+    final finalTarget = validActivityV1
+        ? _boundedActivityString(activity['finalTargetUserId'])
+        : null;
+    final redirectType = validActivityV1
+        ? _boundedActivityString(redirect['type'])
+        : null;
+    final redirectOwner = validActivityV1
+        ? _boundedActivityString(redirect['ownerUserId'])
+        : null;
+    final redirectRecipient = validActivityV1
+        ? _boundedActivityString(redirect['recipientUserId'])
+        : null;
+    final outcome = validActivityV1
+        ? _boundedActivityString(activity['outcome'])
+        : null;
+    final validOutcome = const {
+      'APPLIED', 'REDIRECTED', 'BLOCKED', 'REFLECTED', 'NO_EFFECT', 'CANCELLED',
+    }.contains(outcome);
+    final validRedirect = redirectType == null ||
+        (redirectType == 'DECOY' &&
+            redirectOwner != null &&
+            redirectRecipient != null &&
+            finalTarget == redirectRecipient);
+    final validActivity = validActivityV1 &&
+        originalAttacker != null &&
+        originalTarget != null &&
+        finalTarget != null &&
+        validOutcome &&
+        validRedirect;
 
     final deltaSteps =
         rawDelta is num &&
@@ -91,9 +150,30 @@ class RaceFeedEvent {
       attackerDisplayName: attacker.isNotEmpty && attacker.runes.length <= 30
           ? attacker
           : null,
-      redirectAttackerUserId: metadataUserId('attackerUserId'),
-      redirectDecoyOwnerUserId: metadataUserId('decoyOwnerUserId'),
-      redirectTargetUserId: metadataUserId('redirectedUserId'),
+      activityAction: validActivity ? activityAction : null,
+      activityVersion: validActivity ? 1 : null,
+      originalAttackerUserId: validActivity ? originalAttacker : null,
+      originalTargetUserId: validActivity ? originalTarget : null,
+      finalTargetUserId: validActivity ? finalTarget : null,
+      redirectType: validActivity && redirectType == 'DECOY' ? redirectType : null,
+      activityOutcome:
+          const {
+            'APPLIED',
+            'REDIRECTED',
+            'BLOCKED',
+            'REFLECTED',
+          }.contains(outcome)
+          ? (validActivity ? outcome : null)
+          : null,
+      redirectAttackerUserId:
+          metadataUserId('attackerUserId') ??
+          (validActivity ? originalAttacker : null),
+      redirectDecoyOwnerUserId:
+          metadataUserId('decoyOwnerUserId') ??
+          (validActivity ? redirectOwner : null),
+      redirectTargetUserId:
+          metadataUserId('redirectedUserId') ??
+          (validActivity ? (redirectRecipient ?? finalTarget) : null),
       createdAt: createdRaw != null
           ? DateTime.tryParse(
                   createdRaw is String ? createdRaw : '',
@@ -102,6 +182,14 @@ class RaceFeedEvent {
           : DateTime.now(),
     );
   }
+
+  static String? _boundedActivityString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isNotEmpty && trimmed.length <= 100 ? trimmed : null;
+  }
+
+  String? get displayActorUserId => originalAttackerUserId ?? actorUserId;
 
   factory RaceFeedEvent.fromJson(Map<String, dynamic> json) =>
       tryFromJson(json) ??
@@ -456,11 +544,20 @@ class RaceFeedService extends ChangeNotifier {
       final attackerId = redirect.redirectAttackerUserId;
       final decoyOwnerId = redirect.redirectDecoyOwnerUserId;
       final redirectedId = redirect.redirectTargetUserId;
+      final canonicalAttribution =
+          redirect.activityVersion == 1 &&
+          redirect.actorUserId == attackerId &&
+          (redirect.targetUserId == redirectedId ||
+              redirect.targetUserId == redirect.originalTargetUserId);
+      final legacyAttribution = redirect.actorUserId == decoyOwnerId;
       if (attackerId == null ||
           decoyOwnerId == null ||
           redirectedId == null ||
-          redirect.actorUserId != decoyOwnerId ||
-          redirect.targetUserId != redirectedId) {
+          (!canonicalAttribution && !legacyAttribution) ||
+          (!canonicalAttribution && redirect.targetUserId != redirectedId) ||
+          (canonicalAttribution &&
+              redirect.targetUserId != redirectedId &&
+              redirect.targetUserId != redirect.originalTargetUserId)) {
         continue;
       }
       final terminalCreatedAt = redirect.createdAt.add(

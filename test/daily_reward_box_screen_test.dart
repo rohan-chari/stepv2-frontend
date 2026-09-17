@@ -16,6 +16,7 @@ class _BoxModeApi extends BackendApiService {
     this.rarePrizeMix,
     this.boxResult,
     this.itemOdds,
+    this.coinAmounts,
   });
 
   final bool claimedToday;
@@ -24,6 +25,7 @@ class _BoxModeApi extends BackendApiService {
   final Map<String, dynamic>? rarePrizeMix;
   final Map<String, dynamic>? boxResult;
   final Map<String, dynamic>? itemOdds;
+  final Map<String, dynamic>? coinAmounts;
   int legacyClaimCalls = 0;
   int boxClaimCalls = 0;
 
@@ -45,6 +47,7 @@ class _BoxModeApi extends BackendApiService {
           'COMMON': [10, 30],
           'UNCOMMON': [40, 80],
         },
+        if (coinAmounts != null) 'coinAmounts': coinAmounts,
         'accessoryPool': [
           {
             'id': 'a1',
@@ -402,6 +405,92 @@ void main() {
 
     expect(find.text('SWIPE OR TAP'), findsOneWidget);
     expect(find.text('Cowboy Hat'), findsWidgets);
+  });
+
+  testWidgets('reel coin decoys show exact backend preview amounts', (
+    tester,
+  ) async {
+    final auth = await _authService();
+    await _pumpScreen(
+      tester,
+      _BoxModeApi(
+        odds: const {'COMMON': 1.0},
+        itemOdds: const {
+          'rarity': {'COMMON': 1.0},
+        },
+        coinAmounts: const {'COMMON': 15, 'UNCOMMON': 50, 'RARE_FALLBACK': 120},
+      ),
+      auth,
+    );
+    expect(find.text('+15 COINS'), findsWidgets);
+    expect(find.text('10–30 coins'), findsNothing);
+
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await _pumpScreen(
+      tester,
+      _BoxModeApi(
+        odds: const {'UNCOMMON': 1.0},
+        itemOdds: const {
+          'rarity': {'UNCOMMON': 1.0},
+        },
+        coinAmounts: const {'UNCOMMON': 50},
+      ),
+      await _authService(),
+    );
+    expect(find.text('+50 COINS'), findsWidgets);
+  });
+
+  testWidgets('rare coin decoys use RARE_FALLBACK exactly', (tester) async {
+    await _pumpScreen(
+      tester,
+      _BoxModeApi(
+        odds: const {'RARE': 1.0},
+        rarePrizeMix: const {'COINS': 1.0},
+        itemOdds: const {
+          'rarity': {'RARE': 1.0},
+          'rareMix': {'COINS': 1.0},
+        },
+        coinAmounts: const {'RARE_FALLBACK': 120},
+      ),
+      await _authService(),
+    );
+    expect(find.text('+120 COINS'), findsWidgets);
+  });
+
+  testWidgets('missing, malformed, and zero preview amounts degrade safely', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      _BoxModeApi(
+        odds: const {'COMMON': 1.0},
+        itemOdds: const {
+          'rarity': {'COMMON': 1.0},
+        },
+        coinAmounts: const {'COMMON': '15'},
+      ),
+      await _authService(),
+    );
+    expect(find.text('Coins'), findsWidgets);
+    expect(find.text('10–30 coins'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await _pumpScreen(
+      tester,
+      _BoxModeApi(
+        odds: const {'COMMON': 1.0},
+        itemOdds: const {
+          'rarity': {'COMMON': 1.0},
+        },
+        coinAmounts: const {'COMMON': 0},
+      ),
+      await _authService(),
+    );
+    expect(find.text('+0 COINS'), findsWidgets);
   });
 
   testWidgets('winning a powerup reveals its name and inventory note', (

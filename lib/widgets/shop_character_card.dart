@@ -14,27 +14,40 @@ class ShopCharacterCard extends StatelessWidget {
     this.onEquip,
     this.onBuy,
     this.onDirectBuy,
+    this.onGetGold,
   });
   final ShopCharacter character;
-  final VoidCallback? onEdit, onEquip, onBuy, onDirectBuy;
+  final VoidCallback? onEdit, onEquip, onBuy, onDirectBuy, onGetGold;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final price = wardrobeCoinPrice(character.item['priceCoins']);
     final purchasable = character.canPurchase && price != null;
+    final directPurchasable =
+        character.directPurchaseAvailable &&
+        character.directStoreProductId != null;
+    final goldAction =
+        character.goldAccess &&
+        !character.owned &&
+        !purchasable &&
+        !directPurchasable;
     final buy = purchasable ? onBuy : null;
     final card = Container(
       key: character.goldAccess ? const Key('bara-gold-card-frame') : null,
       decoration: BoxDecoration(
         color: colors.parchment,
         borderRadius: BorderRadius.circular(14),
+        // Keep the historical Gold geometry while removing its visible
+        // decoration. The transparent two-pixel border is layout-only.
         border: Border.all(
           color: character.goldAccess
-              ? (colors.isDark ? colors.medalGold : colors.pillGoldDark)
+              ? Colors.transparent
               : colors.parchmentBorder,
           width: character.goldAccess ? 2 : 1,
         ),
+        // Preserve the existing Gold card's inner geometry; only its visual
+        // treatment is removed.
       ),
       padding: EdgeInsets.all(character.goldAccess ? 2 : 0),
       child: ClipRRect(
@@ -111,13 +124,21 @@ class ShopCharacterCard extends StatelessWidget {
                 available: true,
                 enabled: buy != null,
               )
-            else if (character.directPurchaseAvailable)
+            else if (directPurchasable)
               _strip(
                 context,
                 key: Key('shop-character-direct-${character.key}'),
                 label: 'DIRECT PURCHASE',
                 available: onDirectBuy != null,
                 enabled: onDirectBuy != null,
+              )
+            else if (goldAction)
+              _strip(
+                context,
+                key: Key('shop-character-get-gold-${character.key}'),
+                label: 'Get Gold',
+                available: onGetGold != null,
+                enabled: onGetGold != null,
               )
             else
               _strip(
@@ -131,35 +152,25 @@ class ShopCharacterCard extends StatelessWidget {
         ),
       ),
     );
-    final framedCard = character.goldAccess
+    final cleanedCard = character.goldAccess
         ? Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                card,
-                Positioned(
-                  top: -8,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      key: const Key('bara-gold-card-label'),
-                      color: colors.parchment,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        'Bara Gold',
-                        style: PixelText.title(
-                          size: 9,
-                          color: colors.isDark
-                              ? colors.textLight
-                              : colors.textDark,
-                        ),
-                      ),
-                    ),
-                  ),
+            clipBehavior: Clip.none,
+            children: [
+              card,
+              Positioned(
+                top: -8,
+                left: 0,
+                right: 0,
+                child: Container(
+                  key: const Key('bara-gold-card-label'),
+                  color: colors.parchment,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: const SizedBox(height: 9),
                 ),
-              ],
+              ),
+            ],
             ),
           )
         : card;
@@ -167,18 +178,21 @@ class ShopCharacterCard extends StatelessWidget {
       container: true,
       explicitChildNodes: character.owned,
       button:
-          !character.owned &&
-          (purchasable || character.directPurchaseAvailable),
+          !character.owned && (purchasable || directPurchasable || goldAction),
       enabled: !character.owned && purchasable
           ? buy != null
-          : !character.owned && character.directPurchaseAvailable
+          : !character.owned && directPurchasable
           ? onDirectBuy != null
+          : !character.owned && goldAction
+          ? onGetGold != null
           : null,
       onTap: !character.owned
           ? purchasable
                 ? buy
-                : character.directPurchaseAvailable
+                : directPurchasable
                 ? onDirectBuy
+                : goldAction
+                ? onGetGold
                 : null
           : null,
       label:
@@ -190,11 +204,13 @@ class ShopCharacterCard extends StatelessWidget {
           onTap: !character.owned
               ? purchasable
                     ? buy
-                    : character.directPurchaseAvailable
+                    : directPurchasable
                     ? onDirectBuy
+                    : goldAction
+                    ? onGetGold
                     : null
               : null,
-          child: framedCard,
+          child: cleanedCard,
         ),
       ),
     );

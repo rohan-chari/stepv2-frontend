@@ -246,6 +246,11 @@ class _RacesTabState extends State<RacesTab> {
 
   bool _favoriteOf(Map<String, dynamic> race) => race['isFavorite'] == true;
 
+  bool _pinEligible(Map<String, dynamic> row) {
+    final status = row['status'];
+    return status == 'PENDING' || status == 'ACTIVE';
+  }
+
   String _favoriteKey(String id, {required bool isTournament}) =>
       '${isTournament ? 'tournament' : 'race'}:$id';
 
@@ -318,9 +323,10 @@ class _RacesTabState extends State<RacesTab> {
   List<_ListEntry> get _pinnedEntries {
     final entries = <_ListEntry>[
       for (final race in [..._active, ..._waiting, ..._completed])
-        if (_favoriteOf(race)) _ListEntry.race(race),
+        if (_pinEligible(race) && _favoriteOf(race)) _ListEntry.race(race),
       for (final tournament in _tournaments)
-        if (Tournament.myStatus(tournament) != 'INVITED' &&
+        if (_pinEligible(tournament) &&
+            Tournament.myStatus(tournament) != 'INVITED' &&
             _favoriteOf(tournament))
           _ListEntry.tournament(tournament),
     ];
@@ -1889,11 +1895,14 @@ class _RacesTabState extends State<RacesTab> {
         race['myPlacementHidden'] == true ||
         ((placementPrivacyActive || legacyActiveRankUnsafe) &&
             myPlacement == null);
-    final isFavorite = _favoriteOf(_withFavoriteOverlay(race));
+    final isTerminal = status == 'COMPLETED' || status == 'CANCELLED';
+    final isFavorite = _favoriteOf(
+      isTerminal ? race : _withFavoriteOverlay(race),
+    );
     final favoriteBusy = _favoriteInFlight.contains(
       _favoriteKey(raceId, isTournament: false),
     );
-    final canFavorite = !isInvite && raceId.isNotEmpty;
+    final canFavorite = !isInvite && !isTerminal && raceId.isNotEmpty;
     final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
     // Canonical per-slot inventory. A well-formed list (including an empty
     // one) owns the mystery-box count; older/malformed payloads retain the

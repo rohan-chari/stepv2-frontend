@@ -1,6 +1,6 @@
 import '../utils/server_reel_preview.dart';
 import '../models/character_wardrobe.dart'
-    show wardrobeMap, wardrobeMaps, wardrobeCoinPrice;
+    show wardrobeMap, wardrobeMaps, wardrobeCoinPrice, wardrobeString;
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
@@ -961,26 +961,18 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
       'sku',
     );
     final powerupOdds = serverItemProbabilities(itemOdds['powerups'], 'type');
-    final ranges = wardrobeMap(box['coinRanges']);
+    final coinAmounts = wardrobeMap(box['coinAmounts']);
+    final coinRanges = wardrobeMap(box['coinRanges']);
 
-    _DailyStripItem coins(String rarity) {
-      final range = ranges[rarity];
-      var label = 'Coins';
-      if (range is List &&
-          range.length == 2 &&
-          range.every(
-            (value) =>
-                value is num &&
-                value.isFinite &&
-                value >= 0 &&
-                value == value.roundToDouble(),
-          ) &&
-          (range[1] as num) >= (range[0] as num)) {
-        label =
-            '${(range[0] as num).toInt()}–${(range[1] as num).toInt()} coins';
-      }
-      return _DailyStripItem.coinPreview(rarity, label);
-    }
+    Object? coinValue(String key) =>
+        coinAmounts[key] ?? coinRanges[key];
+
+    _DailyStripItem coins(String rarity) => _DailyStripItem.coinPreview(
+      rarity,
+      _dailyCoinAmount(
+        coinValue(rarity == 'RARE' ? 'RARE_FALLBACK' : rarity),
+      ),
+    );
 
     _DailyStripItem candidate() {
       final rarity = sampleServerProbability(
@@ -1044,6 +1036,27 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
 
 Color _rarityColor(String rarity) => caseRarityColor(rarity);
 
+int? _dailyCoinAmount(Object? value) => wardrobeCoinPrice(value);
+
+String _dailyCoinRangeLabel(Object? value) {
+  if (value is num && value.isFinite && value >= 0) {
+    return '+${value.toInt()} COINS';
+  }
+  if (value is Map) {
+    final min = wardrobeCoinPrice(value['min'] ?? value['minimum']);
+    final max = wardrobeCoinPrice(value['max'] ?? value['maximum']);
+    if (min != null && max != null && min >= 0 && max >= min) {
+      return min == max ? '+$min COINS' : '$min–$max COINS';
+    }
+  }
+  return 'Coins';
+}
+
+String _dailyCoinLabel(Object? value) {
+  final amount = _dailyCoinAmount(value);
+  return amount == null ? _dailyCoinRangeLabel(value) : '+$amount COINS';
+}
+
 /// One tile on the daily-box reel: a coin stack or an accessory.
 class _DailyStripItem {
   static const stripLength = 45;
@@ -1072,8 +1085,13 @@ class _DailyStripItem {
     this.coinPreview = false,
   });
 
-  const _DailyStripItem.coinPreview(String rarity, String label)
-    : this._(rarity: rarity, name: label, coinPreview: true);
+  const _DailyStripItem.coinPreview(String rarity, int? amount)
+    : this._(
+        rarity: rarity,
+        coinAmount: amount,
+        name: amount == null ? 'Coins' : null,
+        coinPreview: true,
+      );
 
   const _DailyStripItem.mysteryAccessory()
     : this._(rarity: 'UNKNOWN', name: '???');
@@ -1081,8 +1099,8 @@ class _DailyStripItem {
   factory _DailyStripItem.accessory(Map<String, dynamic> shopItem) {
     return _DailyStripItem._(
       rarity: 'RARE',
-      assetKey: shopItem['assetKey'] as String?,
-      name: shopItem['name'] as String? ?? 'Accessory',
+      assetKey: wardrobeString(shopItem['assetKey']),
+      name: wardrobeString(shopItem['name']) ?? 'Accessory',
       animationFrames: AccessoryThumbnail.framesOf(shopItem),
     );
   }
@@ -1093,8 +1111,8 @@ class _DailyStripItem {
   }) {
     return _DailyStripItem._(
       rarity: rarity,
-      powerupType: powerup['powerupType'] as String?,
-      name: powerup['name'] as String? ?? 'Powerup',
+      powerupType: wardrobeString(powerup['powerupType']),
+      name: wardrobeString(powerup['name']) ?? 'Powerup',
       requiresGold: powerup['requiresGold'] == true,
     );
   }
@@ -1118,10 +1136,11 @@ class _DailyStripItem {
         animationFrames: AccessoryThumbnail.framesOf(shopItem),
       );
     }
+    final coinAmount = _dailyCoinAmount(result['coinAmount']);
     return _DailyStripItem._(
       rarity: rarity,
-      coinAmount: wardrobeCoinPrice(result['coinAmount']),
-      name: wardrobeCoinPrice(result['coinAmount']) != null ? null : '???',
+      coinAmount: coinAmount,
+      name: coinAmount == null ? 'Coins' : null,
     );
   }
 
@@ -1147,8 +1166,8 @@ class _DailyReelTile extends StatelessWidget {
           Expanded(child: Center(child: _buildFace(context))),
           const SizedBox(height: 3),
           Text(
-            item.coinAmount != null
-                ? '+${item.coinAmount}'
+            item.isCoins
+                ? _dailyCoinLabel(item.coinAmount)
                 : (item.name ?? '???'),
             style: PixelText.body(
               size: 10,
@@ -1222,12 +1241,12 @@ class _LadderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final day = (tile['day'] as num?)?.toInt() ?? 0;
-    final reward = tile['reward'] as Map<String, dynamic>? ?? const {};
+    final day = tile['day'] is num ? (tile['day'] as num).toInt() : 0;
+    final reward = wardrobeMap(tile['reward']);
     final claimed = tile['claimed'] == true;
     final isToday = tile['isToday'] == true;
-    final rewardType = reward['type'] as String? ?? 'COINS';
-    final coinAmount = wardrobeCoinPrice(reward['coinAmount']);
+    final rewardType = wardrobeString(reward['type']) ?? 'COINS';
+    final coinAmount = _dailyCoinAmount(reward['coinAmount']);
 
     final borderColor = claimed
         ? AppColors.of(context).parchmentBorder
@@ -1283,9 +1302,7 @@ class _LadderTile extends StatelessWidget {
           Text(
             rewardType == 'ACCESSORY' || rewardType == 'POWERUP'
                 ? rewardType
-                : coinAmount == null
-                ? 'Reward received'
-                : '+$coinAmount',
+                : _dailyCoinLabel(coinAmount),
             style: PixelText.number(
               size: 14,
               color: AppColors.of(context).coinDark,
@@ -1333,7 +1350,7 @@ class _RewardRevealState extends State<_RewardReveal> {
   @override
   void initState() {
     super.initState();
-    final type = widget.reward['rewardType'] as String? ?? 'COINS';
+    final type = wardrobeString(widget.reward['rewardType']) ?? 'COINS';
     // Box claims (rarity present) already spun on the reel — go straight to
     // the reveal. The standalone accessory spinner is only for legacy day-6.
     if (type != 'ACCESSORY' || widget.reward['rarity'] != null) {
@@ -1347,19 +1364,21 @@ class _RewardRevealState extends State<_RewardReveal> {
 
   @override
   Widget build(BuildContext context) {
-    final type = widget.reward['rewardType'] as String? ?? 'COINS';
-    final coinAmount = wardrobeCoinPrice(widget.reward['coinAmount']);
-    final shopItem = widget.reward['shopItem'] as Map<String, dynamic>?;
+    final type = wardrobeString(widget.reward['rewardType']) ?? 'COINS';
+    final coinAmount = _dailyCoinAmount(
+      widget.reward['coinAmount'] ?? widget.reward['coinsAwarded'],
+    );
+    final shopItem = wardrobeMap(widget.reward['shopItem']);
     // Shop powerup prize (spinPowerups feature). Read defensively — a POWERUP
     // rewardType with a missing payload falls through to the coin card rather
     // than crashing.
-    final powerup = widget.reward['powerup'] as Map<String, dynamic>?;
-    final isPowerup = type == 'POWERUP' && powerup != null;
+    final powerup = wardrobeMap(widget.reward['powerup']);
+    final isPowerup = type == 'POWERUP' && powerup.isNotEmpty;
     // Present only on daily-box claims; legacy ladder claims have no rarity.
-    final rarity = widget.reward['rarity'] as String?;
+    final rarity = wardrobeString(widget.reward['rarity']);
     final rarityColor = rarity != null ? _rarityColor(rarity) : null;
 
-    if (type == 'ACCESSORY' && shopItem != null && !_spinDone) {
+    if (type == 'ACCESSORY' && shopItem.isNotEmpty && !_spinDone) {
       return _AccessorySpinner(
         targetItem: shopItem,
         onComplete: () {
@@ -1408,7 +1427,7 @@ class _RewardRevealState extends State<_RewardReveal> {
                 ),
               ),
             ],
-            if (isPowerup || (type == 'ACCESSORY' && shopItem != null)) ...[
+            if (isPowerup || (type == 'ACCESSORY' && shopItem.isNotEmpty)) ...[
               const SizedBox(height: 5),
               Text(
                 isPowerup ? 'POWERUP' : 'ACCESSORY',
@@ -1436,7 +1455,7 @@ class _RewardRevealState extends State<_RewardReveal> {
                   padding: const EdgeInsets.all(14),
                   child: Center(
                     child: PowerupIcon(
-                      type: powerup['powerupType'] as String? ?? '',
+                      type: wardrobeString(powerup['powerupType']) ?? '',
                       size: 96,
                     ),
                   ),
@@ -1444,7 +1463,7 @@ class _RewardRevealState extends State<_RewardReveal> {
               ),
               const SizedBox(height: 14),
               Text(
-                powerup['name'] as String? ?? 'Powerup',
+                wardrobeString(powerup['name']) ?? 'Powerup',
                 textAlign: TextAlign.center,
                 style: PixelText.title(
                   size: 22,
@@ -1460,7 +1479,7 @@ class _RewardRevealState extends State<_RewardReveal> {
                   color: AppColors.of(context).textMid,
                 ),
               ),
-            ] else if (type == 'ACCESSORY' && shopItem != null) ...[
+            ] else if (type == 'ACCESSORY' && shopItem.isNotEmpty) ...[
               Center(
                 child: Container(
                   width: 130,
@@ -1475,7 +1494,7 @@ class _RewardRevealState extends State<_RewardReveal> {
                   ),
                   padding: const EdgeInsets.all(10),
                   child: AccessoryThumbnail(
-                    assetKey: shopItem['assetKey'] as String? ?? '',
+                    assetKey: wardrobeString(shopItem['assetKey']) ?? '',
                     animationFrames: AccessoryThumbnail.framesOf(shopItem),
                     errorBuilder: (_, _, _) => Icon(
                       Icons.checkroom_rounded,
@@ -1487,7 +1506,7 @@ class _RewardRevealState extends State<_RewardReveal> {
               ),
               const SizedBox(height: 14),
               Text(
-                shopItem['name'] as String? ?? 'Accessory',
+                wardrobeString(shopItem['name']) ?? 'Accessory',
                 textAlign: TextAlign.center,
                 style: PixelText.title(
                   size: 22,
@@ -1507,7 +1526,9 @@ class _RewardRevealState extends State<_RewardReveal> {
               const Center(child: SpinningCoin(size: 96)),
               const SizedBox(height: 12),
               Text(
-                coinAmount == null ? 'REWARD RECEIVED' : '+$coinAmount COINS',
+                coinAmount == null
+                    ? 'REWARD RECEIVED'
+                    : _dailyCoinLabel(coinAmount),
                 textAlign: TextAlign.center,
                 style: PixelText.title(
                   size: 26,

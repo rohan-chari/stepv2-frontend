@@ -15,6 +15,8 @@ import 'tutorial_screen.dart' show TutorialMockPage;
 /// Hosts the REAL tab screens behind the tutorial spotlight, fed by seeded
 /// offline data. Each page is the actual production widget (HomeTab, RacesTab,
 /// …) so the walkthrough shows exactly what the user will see — not a mock.
+/// The race-detail preview also uses the real Activity parser, including
+/// additive activityV1 Decoy metadata.
 ///
 /// Spotlight anchors are passed down as optional `GlobalKey`s that the real
 /// screens expose; the overlay measures them by [keys]. The bottom

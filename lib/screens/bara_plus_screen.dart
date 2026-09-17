@@ -238,8 +238,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               ),
               _benefit(
                 Icons.bolt_rounded,
-                'Eligible rewarded actions skip the ad',
-                'The server still enforces every limit and eligibility rule.',
+                'Ad-free extra Daily Spin and box reroll',
+                'Eligible bonus spins and box rerolls skip their rewarded ad. Other rewarded placements remain unchanged.',
               ),
               _benefit(
                 Icons.refresh_rounded,

@@ -1290,6 +1290,34 @@ Map<String, dynamic> tutorialPreviewRaceMessages(String? kind) {
               .subtract(const Duration(minutes: 33))
               .toIso8601String(),
         },
+        {
+          'id': 'sys-4-decoy-v1',
+          'kind': 'SYSTEM',
+          'eventType': 'POWERUP_REDIRECTED',
+          'powerupType': 'HITCHHIKE',
+          'body':
+              'Maya Chen\'s Hitchhike was redirected by Sam Rivera\'s Decoy to Rohan.',
+          'actorUserId': 'rk-2',
+          'targetUserId': tutorialPreviewUserId,
+          'metadata': {
+            'activityV1': {
+              'action': 'POWERUP_USE',
+              'version': 1,
+              'originalAttackerUserId': 'rk-2',
+              'originalTargetUserId': tutorialPreviewUserId,
+              'finalTargetUserId': tutorialPreviewUserId,
+              'redirect': {
+                'type': 'DECOY',
+                'ownerUserId': 'rk-1',
+                'recipientUserId': tutorialPreviewUserId,
+              },
+              'outcome': 'REDIRECTED',
+            },
+          },
+          'createdAt': now
+              .subtract(const Duration(minutes: 45))
+              .toIso8601String(),
+        },
       ],
       'nextCursor': null,
     };

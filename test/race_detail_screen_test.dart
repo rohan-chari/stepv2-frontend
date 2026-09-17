@@ -1254,6 +1254,63 @@ void main() {
     }
   });
 
+  testWidgets('ActivityV1 Decoy rendering keeps the original attacker', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 3000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _CompactRaceRequestApi(
+      systemMessages: const [
+        {
+          'id': 'activity-v1-decoy',
+          'eventType': 'POWERUP_REDIRECTED',
+          'powerupType': 'HITCHHIKE',
+          'body': 'Anjali\'s Hitchhike was redirected to Shefali.',
+          'actorUserId': 'attacker',
+          'targetUserId': 'original-target',
+          'metadata': {
+            'activityV1': {
+              'action': 'POWERUP_USE',
+              'version': 1,
+              'originalAttackerUserId': 'attacker',
+              'originalTargetUserId': 'original-target',
+              'finalTargetUserId': 'redirected-user',
+              'redirect': {
+                'type': 'DECOY',
+                'ownerUserId': 'decoy-owner',
+                'recipientUserId': 'redirected-user',
+              },
+              'outcome': 'REDIRECTED',
+            },
+          },
+          'createdAt': '2026-08-25T15:03:05.000Z',
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.light(),
+        home: RaceDetailScreen(
+          authService: await _createAuthService(),
+          raceId: 'race-activity-v1',
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Anjali\'s Hitchhike was redirected to Shefali.',
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('attacker', findRichText: true), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Timeline applies semantic color to redirected and blocked rows',
     (tester) async {

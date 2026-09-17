@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/premium_item_frame.dart';
 import 'unified_shop_test.dart' show ShopApi, shopAuth;
 
 class _UnifiedApi extends ShopApi {
@@ -233,4 +234,30 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('powerups use Standard and Bara Gold subsections', (
+    tester,
+  ) async {
+    await render(tester, _UnifiedApi()..includePremium = true);
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('shop-subsection-powerups-standard')),
+        matching: find.text('Standard'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('shop-subsection-powerups-gold')),
+        matching: find.text('Bara Gold'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(PremiumItemFrame), findsNothing);
+    expect(
+      find.byKey(const Key('premium-powerup-frame-PW_LEECH')),
+      findsOneWidget,
+    );
+  });
 }

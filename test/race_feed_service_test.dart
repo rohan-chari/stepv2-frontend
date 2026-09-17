@@ -154,6 +154,57 @@ void main() {
     expect(service.hasMore, isFalse);
   });
 
+  test('parses additive activityV1 Decoy metadata defensively', () async {
+    final api = _FakeRaceFeedApi()
+      ..nextFetchMessages = [
+        {
+          'id': 'decoy-v1',
+          'kind': 'SYSTEM',
+          'body':
+              'Anjali used Hitchhike; Nathan\'s Decoy redirected it to Shefali.',
+          'eventType': 'POWERUP_REDIRECTED',
+          'powerupType': 'HITCHHIKE',
+          'actorUserId': 'attacker',
+          'targetUserId': 'original-target',
+          'metadata': {
+            'activityV1': {
+              'action': 'POWERUP_USE',
+              'version': 1,
+              'originalAttackerUserId': 'attacker',
+              'originalTargetUserId': 'original-target',
+              'finalTargetUserId': 'redirected-user',
+              'redirect': {
+                'type': 'DECOY',
+                'ownerUserId': 'decoy-owner',
+                'recipientUserId': 'redirected-user',
+              },
+              'outcome': 'REDIRECTED',
+            },
+          },
+          'createdAt': '2026-08-29T12:00:00.000Z',
+        },
+      ];
+    final service = RaceFeedService(
+      authService: await _authService(),
+      raceId: 'race-1',
+      api: api,
+    );
+
+    await service.loadInitial();
+
+    final event = service.events.single;
+    expect(event.activityAction, 'POWERUP_USE');
+    expect(event.activityVersion, 1);
+    expect(event.originalAttackerUserId, 'attacker');
+    expect(event.originalTargetUserId, 'original-target');
+    expect(event.finalTargetUserId, 'redirected-user');
+    expect(event.redirectType, 'DECOY');
+    expect(event.redirectDecoyOwnerUserId, 'decoy-owner');
+    expect(event.redirectTargetUserId, 'redirected-user');
+    expect(event.activityOutcome, 'REDIRECTED');
+    expect(event.redirectAttackerUserId, 'attacker');
+  });
+
   test('hasMore is true when nextCursor is present', () async {
     final api = _FakeRaceFeedApi()
       ..nextFetchMessages = [_event('evt-1')]

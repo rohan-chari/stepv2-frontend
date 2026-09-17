@@ -254,6 +254,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('terminal races stay in history but never enter pinned', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      data: {
+        'active': [
+          _race('completed-in-active', status: 'COMPLETED', favorite: true),
+          _race('cancelled-in-active', status: 'CANCELLED', favorite: true),
+          _race('active-pinned', favorite: true),
+        ],
+        'pending': const [],
+        'completed': [
+          _race('completed-history', status: 'COMPLETED', favorite: true),
+        ],
+      },
+    );
+
+    expect(
+      find.byKey(const Key('pinned-race-row-active-pinned')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('pinned-race-row-completed-in-active')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('pinned-race-row-cancelled-in-active')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('pinned-race-row-completed-history')),
+      findsNothing,
+    );
+    expect(find.text('completed-in-active'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('personal-state-completed')));
+    await tester.pump();
+    expect(find.text('completed-history'), findsOneWidget);
+  });
+
   testWidgets('pinned ordering does not reorder the originating active shelf', (
     tester,
   ) async {

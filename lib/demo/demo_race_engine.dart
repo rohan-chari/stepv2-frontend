@@ -669,7 +669,12 @@ class DemoRaceEngine {
     _ => 'a powerup',
   };
 
-  void _pushActivity(String eventType, String powerupType, String body) {
+  void _pushActivity(
+    String eventType,
+    String powerupType,
+    String body, {
+    Map<String, dynamic>? metadata,
+  }) {
     _activity.insert(0, {
       'id': 'demo-sys-$powerupType',
       'kind': 'SYSTEM',
@@ -678,6 +683,7 @@ class DemoRaceEngine {
       'body': body,
       'actorUserId': myUserId,
       'createdAt': DateTime.now().toIso8601String(),
+      ...?metadata == null ? null : <String, dynamic>{'metadata': metadata},
     });
   }
 

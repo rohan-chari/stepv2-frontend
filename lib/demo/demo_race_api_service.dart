@@ -632,6 +632,9 @@ class DemoRaceApiService extends BackendApiService {
   }) async => const {};
 
   // -- Chat / activity feed (RaceChatService + RaceFeedService) --------------
+  // ActivityV1 metadata is passed through unchanged by the engine so the
+  // production RaceFeedEvent parser and RaceDetailScreen render this mirror
+  // with the same canonical Decoy attribution as live Activity.
 
   @override
   Future<Map<String, dynamic>> fetchRaceMessages({
