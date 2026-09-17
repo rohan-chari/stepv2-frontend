@@ -2613,7 +2613,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     final name = item['name'] as String? ?? 'Accessory';
     final rawPrice = item['priceCoins'];
-    if (!_validCoinQuote(rawPrice)) {
+    final isGoldOnlyCharacter = item['goldExclusive'] == true;
+    if (!_validCoinQuote(rawPrice) && !isGoldOnlyCharacter) {
       await _showItemSheet(
         art: _purchaseArt(item),
         name: name,
@@ -2623,9 +2624,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       await showPreview();
       return null;
     }
-    final price = (rawPrice as num).toInt();
-    final coinPurchaseAllowed = item['canPurchase'] != false;
-    final goldUpgradeAvailable = item['goldExclusive'] == true && !_isGold;
+    final price = _validCoinQuote(rawPrice) ? (rawPrice as num).toInt() : 0;
+    final coinPurchaseAllowed =
+        !isGoldOnlyCharacter && item['canPurchase'] != false;
+    final goldUpgradeAvailable = isGoldOnlyCharacter && !_isGold;
     final directProductId = wardrobeString(
       wardrobeMap(item['directPurchase'])['storeProductId'],
     );
@@ -2635,7 +2637,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         _billing != null;
     // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
     // by the same server-served rules.
-    final route = _routeFor(price);
+    final route = isGoldOnlyCharacter
+        ? _AffordRoute.affordable
+        : _routeFor(price);
     final adsNeeded = _adsNeededFor(price);
     final adContext = route == _AffordRoute.watchAds
         ? _shopContextFor(item, RewardedAdPlacement.cosmeticUnlock)
