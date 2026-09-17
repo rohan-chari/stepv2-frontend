@@ -18,6 +18,8 @@ String powerupUseErrorCopy(Object error) {
         return 'Your Rainstorm is already active in this race.';
       case 'RALLY_FLAG_ACTIVE':
         return 'Your team already has an active Rally Flag.';
+      case 'POWERUP_COOLDOWN':
+        return 'This powerup is still cooling down in this race.';
       case 'NO_ELIGIBLE_TARGETS':
         return "Nobody else is out running to rain on right now.";
       case 'TARGET_ASLEEP':

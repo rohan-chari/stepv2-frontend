@@ -64,6 +64,7 @@ class RaceBootstrapResult {
     this.race,
     this.progress,
     this.globalPowerupInventory,
+    this.powerupCooldowns,
     this.progressUnavailable = false,
     this.participantsPagination,
     this.projectionMetadata,
@@ -75,6 +76,7 @@ class RaceBootstrapResult {
   final Map<String, dynamic>? race;
   final Map<String, dynamic>? progress;
   final Map<String, dynamic>? globalPowerupInventory;
+  final List<Map<String, dynamic>>? powerupCooldowns;
   final bool progressUnavailable;
   final Map<String, dynamic>? participantsPagination;
   final RaceProjectionMetadata? projectionMetadata;
@@ -1532,6 +1534,17 @@ class BackendApiService {
     for (final entry in raw.entries) {
       if (entry.key is! String) return null;
       result[entry.key as String] = entry.value;
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>>? _safeMapList(Object? raw) {
+    if (raw is! List) return null;
+    final result = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      final parsed = _safeStringMap(item);
+      if (parsed == null) return null;
+      result.add(parsed);
     }
     return result;
   }
@@ -3888,6 +3901,7 @@ class BackendApiService {
       globalPowerupInventory: _safeStringMap(
         payload?['globalPowerupInventory'],
       ),
+      powerupCooldowns: _safeMapList(payload?['powerupCooldowns']),
       progressUnavailable:
           progress == null && progressError?['code'] == 'PROGRESS_UNAVAILABLE',
       // Absent on a backend that ignored the paging query, which is exactly

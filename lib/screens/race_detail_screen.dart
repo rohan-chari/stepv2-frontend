@@ -503,6 +503,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // into this race via the redeem flow. Loaded best-effort; an older backend
   // without the endpoint leaves this empty (no extra UI, no crash).
   Map<String, int> _globalPowerupInventory = const {};
+  Map<String, DateTime> _powerupCooldowns = const {};
   bool _isLoading = true;
   bool _isActing = false;
   bool _rematchBusy = false;
@@ -1413,6 +1414,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         progressPrefetch = Future.value(bootstrap.progress);
         bootstrapProgressUnavailable = bootstrap.progressUnavailable;
         _applyGlobalPowerupInventory(bootstrap.globalPowerupInventory);
+        _applyPowerupCooldowns(bootstrap.powerupCooldowns);
       } else {
         // Frozen backend: restore the existing parallel detail/progress path.
         progressPrefetch = _api
@@ -3582,6 +3584,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
     }
     if (mounted) setState(() => _globalPowerupInventory = inventory);
+  }
+
+  void _applyPowerupCooldowns(List<Map<String, dynamic>>? rows) {
+    final cooldowns = <String, DateTime>{};
+    for (final row in rows ?? const <Map<String, dynamic>>[]) {
+      final type = row['powerupType'];
+      final nextUsableAt = DateTime.tryParse('${row['nextUsableAt'] ?? ''}');
+      if (type is String && nextUsableAt != null) {
+        cooldowns[type] = nextUsableAt.toLocal();
+      }
+    }
+    if (mounted) setState(() => _powerupCooldowns = cooldowns);
   }
 
   /// Spends a globally-owned powerup into this race: redeems it
@@ -8539,7 +8553,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
               PillButton(
                 key: Key('stash-use-${e.key}'),
-                label: 'USE',
+                label: _powerupCooldowns[e.key]?.isAfter(DateTime.now()) == true
+                    ? 'COOLDOWN'
+                    : 'USE',
                 variant: PillButtonVariant.secondary,
                 fontSize: 11,
                 padding: const EdgeInsets.symmetric(
