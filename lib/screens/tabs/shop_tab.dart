@@ -2543,17 +2543,22 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             groundHeight: 42,
             groundScrollSpeed: 26,
             excludeBackgroundSemantics: true,
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 34),
-                child: AnimatedCapybaraWithAccessories(
-                  size: 118,
-                  animal: animal,
-                  accessories: const [],
-                  animate: !MediaQuery.disableAnimationsOf(context),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 42 - 4 - 118 * .22,
+                  child: Center(
+                    child: AnimatedCapybaraWithAccessories(
+                      size: 118,
+                      animal: animal,
+                      accessories: const [],
+                      animate: !MediaQuery.disableAnimationsOf(context),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
