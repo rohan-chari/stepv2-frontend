@@ -24,6 +24,8 @@ class ShopCharacterCard extends StatelessWidget {
     final colors = AppColors.of(context);
     final price = wardrobeCoinPrice(character.item['priceCoins']);
     final purchasable = character.canPurchase && price != null;
+    final opensPurchaseSheet =
+        price != null && (purchasable || character.goldExclusive);
     final directPurchasable =
         character.directPurchaseAvailable &&
         character.directStoreProductId != null;
@@ -32,7 +34,7 @@ class ShopCharacterCard extends StatelessWidget {
         !character.hasAccess &&
         !purchasable &&
         !directPurchasable;
-    final buy = purchasable ? onBuy : null;
+    final buy = opensPurchaseSheet ? onBuy : null;
     final card = Container(
       key: character.goldAccess ? const Key('bara-gold-card-frame') : null,
       decoration: BoxDecoration(
@@ -111,20 +113,20 @@ class ShopCharacterCard extends StatelessWidget {
                 character.active ? 'ACTIVE' : 'Equip',
                 !character.active && character.canActivate ? onEquip : null,
               ),
-            ] else if (purchasable)
+            ] else if (opensPurchaseSheet)
               _strip(
                 context,
                 key: Key('shop-character-buy-${character.key}'),
                 label: '$price',
                 leading: const CoinGlyph(),
                 available: true,
-                enabled: buy != null,
+                enabled: onBuy != null,
               )
             else if (directPurchasable)
               _strip(
                 context,
                 key: Key('shop-character-direct-${character.key}'),
-                label: 'DIRECT PURCHASE',
+                label: 'BUY',
                 available: onDirectBuy != null,
                 enabled: onDirectBuy != null,
               )
@@ -180,8 +182,8 @@ class ShopCharacterCard extends StatelessWidget {
       explicitChildNodes: character.hasAccess,
       button:
           !character.hasAccess &&
-          (purchasable || directPurchasable || goldAction),
-      enabled: !character.hasAccess && purchasable
+          (opensPurchaseSheet || directPurchasable || goldAction),
+      enabled: !character.hasAccess && opensPurchaseSheet
           ? buy != null
           : !character.hasAccess && directPurchasable
           ? onDirectBuy != null
@@ -189,7 +191,7 @@ class ShopCharacterCard extends StatelessWidget {
           ? onGetGold != null
           : null,
       onTap: !character.hasAccess
-          ? purchasable
+          ? opensPurchaseSheet
                 ? buy
                 : directPurchasable
                 ? onDirectBuy
@@ -204,11 +206,11 @@ class ShopCharacterCard extends StatelessWidget {
               ? 'Included with Gold'
               : 'unowned'}${character.active ? ', active' : ''}${!character.hasAccess && purchasable ? ', buy for $price coins' : ''}',
       child: ExcludeSemantics(
-        excluding: !character.hasAccess && purchasable,
+        excluding: !character.hasAccess && opensPurchaseSheet,
         child: GestureDetector(
           excludeFromSemantics: true,
           onTap: !character.hasAccess
-              ? purchasable
+              ? opensPurchaseSheet
                     ? buy
                     : directPurchasable
                     ? onDirectBuy

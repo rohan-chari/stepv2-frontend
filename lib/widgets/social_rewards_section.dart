@@ -123,21 +123,35 @@ class _SocialRewardsSectionState extends State<SocialRewardsSection> {
     ].map(_controller.item).whereType<SocialRewardItem>().toList();
     if (items.length != 3) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
         key: const Key('home-social-rewards'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'FOLLOW BARA',
-            style: PixelText.title(
-              size: 18,
-              color: AppColors.of(context).textDark,
-            ),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.of(context).parchment,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.of(context).roofDark.withValues(alpha: .55),
+            width: 2,
           ),
-          const SizedBox(height: 8),
-          for (final reward in items) _card(reward),
-        ],
+          boxShadow: const [
+            BoxShadow(color: Color(0x66000000), offset: Offset(0, 3)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Follow Bara',
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final reward in items) _card(reward),
+          ],
+        ),
       ),
     );
   }
@@ -152,12 +166,13 @@ class _SocialRewardsSectionState extends State<SocialRewardsSection> {
         key: Key('home-social-${reward.platform}'),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.of(context).parchment,
+          color: AppColors.of(context).parchmentDark,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.of(context).parchmentBorder),
         ),
         child: Row(
           children: [
+            _platformLogo(reward.platform),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +185,14 @@ class _SocialRewardsSectionState extends State<SocialRewardsSection> {
                     ),
                   ),
                   Text(
-                    '${reward.handle} · +200 coins',
+                    reward.handle,
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                  Text(
+                    '+200 coins',
                     style: PixelText.body(
                       size: 12,
                       color: AppColors.of(context).textMid,
@@ -187,9 +209,7 @@ class _SocialRewardsSectionState extends State<SocialRewardsSection> {
                   : opened
                   ? 'CLAIM 200'
                   : 'FOLLOW',
-              variant: claimed
-                  ? PillButtonVariant.secondary
-                  : PillButtonVariant.primary,
+              variant: PillButtonVariant.rewardedAd,
               onPressed: claimed || busy
                   ? null
                   : () async {
@@ -203,6 +223,35 @@ class _SocialRewardsSectionState extends State<SocialRewardsSection> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _platformLogo(String platform) {
+    final colors = AppColors.of(context);
+    final (asset, icon, color) = switch (platform) {
+      'instagram' => ('assets/images/social_instagram.png', null, colors.ink),
+      'x' => ('assets/images/social_x.png', null, colors.ink),
+      'tiktok' => (null, Icons.music_note_rounded, colors.ink),
+      _ => (null, Icons.public_rounded, colors.textMid),
+    };
+    return Container(
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .13),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: .45)),
+      ),
+      child: asset != null
+          ? Image.asset(
+              asset,
+              width: 18,
+              height: 18,
+              color: color,
+              filterQuality: FilterQuality.medium,
+            )
+          : Icon(icon, size: 20, color: color),
     );
   }
 }

@@ -151,7 +151,7 @@ void main() {
       expect(find.text('Bara Gold'), findsNothing);
       expect(find.byKey(const Key('bara-gold-card-frame')), findsOneWidget);
       expect(find.byKey(const Key('bara-gold-card-label')), findsOneWidget);
-      expect(find.textContaining('DIRECT PURCHASE'), findsOneWidget);
+      expect(find.text('BUY'), findsOneWidget);
       expect(find.text('Unavailable'), findsNothing);
     },
   );
@@ -230,6 +230,6 @@ void main() {
     await tester.tap(find.byKey(const Key('shop-character-direct-sea_lion')));
     await tester.pump();
     expect(billing.directPurchases, ['bara_character_sea_lion_v1']);
-    expect(find.text('DIRECT PURCHASE'), findsOneWidget);
+    expect(find.text('BUY'), findsOneWidget);
   });
 }

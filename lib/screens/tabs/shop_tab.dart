@@ -9,6 +9,7 @@ import '../../widgets/shop_category_bar.dart';
 import '../../services/billing_controller.dart';
 import '../../widgets/billing_scope.dart';
 import '../../widgets/shop_product_grid.dart';
+import '../../widgets/home_course_track.dart';
 import '../../widgets/coin_pack_offers.dart';
 import '../../widgets/bara_plus_card.dart';
 import '../bara_plus_screen.dart';
@@ -1981,8 +1982,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   }
 
   List<Widget> _buildCharacterSubsections(List<ShopCharacter> rows) {
-    final standard = rows.where((row) => !row.goldAccess).toList();
-    final gold = rows.where((row) => row.goldAccess).toList();
+    final standard = rows.where((row) => !row.goldExclusive).toList();
+    final gold = rows.where((row) => row.goldExclusive).toList();
     Widget grid(List<ShopCharacter> values, Key key) => ShopProductGrid(
       spaciousPowerups: true,
       gridKey: key,
@@ -2134,13 +2135,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           _characterActionsReady &&
               (_wardrobesReady || legacy) &&
               !row.owned &&
-              row.canPurchase &&
+              (row.canPurchase || row.goldExclusive) &&
               wardrobeCoinPrice(row.item['priceCoins']) != null
           ? () async {
               if (!current()) return;
               setState(() => _characterActionOpen = true);
               try {
-                await _openStoreCosmeticSheet(row.item, canAct: rowCurrent);
+                await _openStoreCosmeticSheet({
+                  ...row.item,
+                  'canPurchase': row.canPurchase,
+                  'goldExclusive': row.goldExclusive,
+                }, canAct: rowCurrent);
               } finally {
                 if (mounted && generation == _shopSessionGeneration) {
                   setState(() => _characterActionOpen = false);
@@ -2228,6 +2233,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           'characterKey': id,
           'name': item['name'],
           'item': item,
+          'goldExclusive': item['goldExclusive'] == true,
           'owned': owned,
           'active': current['id'] == id,
           'canPurchase':
@@ -2513,6 +2519,20 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           );
   }
 
+  Widget _purchaseArt(Map<String, dynamic> item) {
+    final animal = wardrobeString(item['assetKey']);
+    if (item['slot'] == 'CHARACTER' && animal != null) {
+      return Center(
+        child: AnimatedCapybaraWithAccessories(
+          size: 82,
+          animal: animal,
+          accessories: const [],
+        ),
+      );
+    }
+    return _cosmeticArt(item, iconSize: 48);
+  }
+
   /// The equipped CHARACTER's assetKey, or null for the default capybara.
   ///
   /// The backend serializes `equipped[slot]` as an OBJECT
@@ -2594,7 +2614,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final rawPrice = item['priceCoins'];
     if (!_validCoinQuote(rawPrice)) {
       await _showItemSheet(
-        art: _cosmeticArt(item),
+        art: _purchaseArt(item),
         name: name,
         description: 'Price is currently unavailable. Please try again.',
         actions: [if (canOfferPreview) previewButton()],
@@ -2603,6 +2623,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       return null;
     }
     final price = (rawPrice as num).toInt();
+    final coinPurchaseAllowed = item['canPurchase'] != false;
+    final goldUpgradeAvailable = item['goldExclusive'] == true && !_isGold;
     // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
     // by the same server-served rules.
     final route = _routeFor(price);
@@ -2612,7 +2634,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         : null;
     _warmShopAd(adContext);
     await _showItemSheet(
-      art: _cosmeticArt(item, iconSize: 48),
+      art: _purchaseArt(item),
       name: name,
       slotLabel: _slotLabels[item['slot']],
       description: item['description'] is String
@@ -2633,7 +2655,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
           ),
         ?_adUnlockCapNotice(price),
         switch (route) {
-          _AffordRoute.affordable => PillButton(
+          _AffordRoute.affordable when coinPurchaseAllowed => PillButton(
             label: 'BUY · $price',
             leading: const CoinGlyph(size: 16),
             variant: PillButtonVariant.primary,
@@ -2647,6 +2669,17 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                     operation = _purchase(item);
                   },
           ),
+          _AffordRoute.affordable =>
+            goldUpgradeAvailable
+                ? PillButton(
+                    label: 'UPGRADE TO BARA GOLD',
+                    icon: Icons.workspace_premium_rounded,
+                    variant: PillButtonVariant.primary,
+                    fontSize: 14,
+                    fullWidth: true,
+                    onPressed: _openMembershipDetails,
+                  )
+                : const SizedBox.shrink(),
           _AffordRoute.watchAds => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -3694,7 +3727,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
 
     final tile = _ShopTile(
       artScale: .8,
-          art: _powerupArt(type),
+      art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
       // Item 23 — the strip is the PRICE, always. See _storeCosmeticTile.

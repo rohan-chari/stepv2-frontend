@@ -610,7 +610,7 @@ void main() {
       },
     );
     await _pumpScreen(tester, api: api);
-    expect(find.text('FOLLOW BARA'), findsOneWidget);
+    expect(find.text('Follow Bara'), findsOneWidget);
     expect(find.text('@bara.steps.app · +200 coins'), findsOneWidget);
     expect(find.text('@bara.app · +200 coins'), findsOneWidget);
     expect(find.text('@BaraStepsApp · +200 coins'), findsOneWidget);

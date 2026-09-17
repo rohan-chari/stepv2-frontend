@@ -97,6 +97,7 @@ class ShopCharacter {
           (json['hasAccess'] == true || json['owned'] == true) &&
           json['canEdit'] == true,
       availability = wardrobeString(json['availability']) ?? 'unavailable',
+      goldExclusive = json['goldExclusive'] == true,
       goldAccess = json['goldAccess'] == true,
       benefitVersion = wardrobeString(json['benefitVersion']),
       coinPurchaseAllowed = json['goldAccess'] == true
@@ -111,7 +112,7 @@ class ShopCharacter {
   final Map<String, dynamic> item;
   final bool owned, hasAccess, active, canPurchase, canActivate, canEdit;
   final String? accessSource;
-  final bool goldAccess, coinPurchaseAllowed;
+  final bool goldAccess, goldExclusive, coinPurchaseAllowed;
   final String? benefitVersion, unavailableReason;
   final Map<String, dynamic> directPurchase;
   final CharacterOutfit? outfit;
