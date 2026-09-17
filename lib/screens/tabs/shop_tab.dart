@@ -2409,22 +2409,25 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: 18),
-                Center(
-                  child: Container(
-                    width: 112,
-                    height: 112,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).parchmentDark,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AppColors.of(context).parchmentBorder,
-                        width: 1,
+                if (slotLabel == 'CHARACTER')
+                  SizedBox(width: double.infinity, height: 220, child: art)
+                else
+                  Center(
+                    child: Container(
+                      width: 112,
+                      height: 112,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.of(context).parchmentDark,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.of(context).parchmentBorder,
+                          width: 1,
+                        ),
                       ),
+                      child: art,
                     ),
-                    child: art,
                   ),
-                ),
                 const SizedBox(height: 16),
                 Text(
                   name,
