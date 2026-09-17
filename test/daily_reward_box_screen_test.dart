@@ -180,6 +180,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Taste redesign', () {
+    testWidgets('premium powerup decoys use the Gold treatment', (
+      tester,
+    ) async {
+      final auth = await _authService();
+      await _pumpScreen(
+        tester,
+        _BoxModeApi(
+          powerupPool: const [
+            {
+              'powerupType': 'LEECH',
+              'name': 'Leech',
+              'requiresGold': true,
+              'eligible': false,
+            },
+          ],
+          rarePrizeMix: const {'ACCESSORY': 0.0, 'POWERUP': 1.0},
+        ),
+        auth,
+      );
+
+      expect(find.text('Bara Gold'), findsWidgets);
+    });
+
     testWidgets('claimed night state uses the restored popup metadata', (
       tester,
     ) async {

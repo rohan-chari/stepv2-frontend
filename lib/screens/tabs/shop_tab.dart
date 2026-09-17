@@ -37,6 +37,7 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
+import '../../widgets/premium_item_frame.dart';
 import '../../widgets/remove_ads_action.dart';
 import '../../constants/powerup_copy.dart';
 import '../../tutorial/spotlight_overlay.dart';
@@ -3569,6 +3570,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
     final type = item['powerupType'] as String? ?? '';
     final owned = _ownedQuantityFor(item);
+    final requiresGold = item['requiresGold'] == true;
+    final goldEligible = item['goldEligible'] != false;
+    final premiumLocked = requiresGold && !goldEligible;
 
     // Affordability drives the strip + sheet action (item 10). Read coins
     // defensively off the auth service.
@@ -3609,18 +3613,29 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       );
     }
 
-    return _ShopTile(
+    final tile = _ShopTile(
       artScale: .8,
       art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
       // Item 23 — the strip is the PRICE, always. See _storeCosmeticTile.
-      stripLabel: _memberPriceCopy(item) != null ? '$price · PLUS' : '$price',
-      stripLeading: const CoinGlyph(),
+      stripLabel: premiumLocked
+          ? 'GOLD ONLY'
+          : _memberPriceCopy(item) != null
+          ? '$price · PLUS'
+          : '$price',
+      stripLeading: premiumLocked
+          ? Icon(
+              Icons.auto_awesome_rounded,
+              size: 13,
+              color: AppColors.of(context).textDark,
+            )
+          : const CoinGlyph(),
       stripEnabled: !_saving,
       onStrip: openSheet,
       onTap: openSheet,
     );
+    return premiumLocked || requiresGold ? PremiumItemFrame(child: tile) : tile;
   }
 
   /// The primary action button for a powerup detail sheet: BUY when affordable,
@@ -3633,6 +3648,23 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     int adsNeeded,
     RewardedAdContext? adContext,
   ) {
+    final requiresGold = item['requiresGold'] == true;
+    final goldEligible = item['goldEligible'] != false;
+    if (requiresGold && !goldEligible) {
+      return PillButton(
+        label: 'Get Bara Gold',
+        icon: Icons.auto_awesome_rounded,
+        variant: PillButtonVariant.primary,
+        fontSize: 13,
+        fullWidth: true,
+        onPressed: _saving
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                _openMembershipDetails();
+              },
+      );
+    }
     if (affordable) {
       return PillButton(
         label: 'BUY · $price',

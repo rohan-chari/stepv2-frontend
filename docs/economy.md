@@ -101,6 +101,32 @@ At these recurring-income rates, either current 200-coin Leech or Ghost Pepper
 costs **18.5 median active days**; p10 has no recurring income and p90 takes
 **2.53 active days**.
 
+### 0h. Late-event scoring review baseline — verified 2026-09-16 (prod, read-only)
+
+Trailing 30 database dates (`2026-08-17` through `2026-09-15`). Date math uses
+tz-naive `steps.date` and `coin_transactions.created_at::date`; this refresh is
+an unfiltered retained-account aggregate and is not directly comparable to the
+review-account-excluded snapshots above.
+
+| Metric | Value | Source |
+|---|---:|---|
+| Step-active user-days | 23,239 | `DB steps` |
+| Steps per active user-day | p10 **1,294.8** · p50 **5,896.0** · p90 **13,884.2** · mean 6,984.8 | `DB steps` |
+| Recurring positive coins per active user-day | p10 **0** · p50 **0** · p90 **55** · mean 23.46 | `DB steps × coin_transactions`; recurring filter, retained accounts |
+| Recurring positive coins per user active day | p10 **0** · p50 **0.91** · p90 **46.55** · mean 19.18 | same filter, 1,338 users |
+| Historical timed-effect rows, selected ten types | 26,598 total; lower-case DB enum labels (9 types present; `UPRISING` absent) | `DB race_active_effects` |
+
+The current active, non-test shop remains seven rows: 75 coins (`decoy`,
+`defense_scan`, `quick_rinse`), 150 (`hitchhike`), and 200 (`ghost_pepper`,
+`leech`, `rainstorm`). `DB powerup_shop_items` is runtime authority; the
+Wave-5 seed defaults for inactive/test-only rows are not live availability.
+
+Scoring source of truth remains `CODE
+src/modules/races/services/effectMultiplier.js:93-146`: freezes dominate,
+positive buffs sum, Rainstorm and Coin Flip loss use the minimum reduction,
+and Wrong Turn negates the resulting magnitude. This entry is a scoring
+verification, not a coin issuance or sink change.
+
 ### 0c. Refresh — verified 2026-08-12 (prod, read-only)
 
 | Metric | Value | Source |

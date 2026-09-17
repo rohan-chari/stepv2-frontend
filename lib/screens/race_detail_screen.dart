@@ -3097,14 +3097,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         participants = useContextParticipants;
       }
     }
-    // TR-651/657: enemy-team members only (no friendly fire) and no
-    // forfeiters — an invalid target is never presented. Individual races keep
-    // today's "everyone but me, minus stealthed" pool.
-    final targets = TeamRace.offensiveTargets(
+    // Most targeted powerups are enemy-only. Hitchhike deliberately also
+    // offers eligible teammates; the backend remains authoritative.
+    final targets = type == 'HITCHHIKE'
+        ? TeamRace.hitchhikeTargets(
+            participants: participants,
+            myUserId: _myUserId,
+            race: _race ?? const {},
+          )
+        : TeamRace.offensiveTargets(
       participants: participants,
       myUserId: _myUserId,
       race: _race ?? const {},
-    );
+          );
 
     if (type == 'QUICKSAND') {
       if (targets.isEmpty) {

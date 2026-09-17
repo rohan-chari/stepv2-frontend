@@ -613,7 +613,7 @@ abstract final class PowerupCopy {
         "Instantly reveal every opponent's active defenses (shields and mirrors)",
     // Also duration-neutral: the window is a backend-tuned value.
     'HITCHHIKE':
-        "Copy a rival's effective steps into your score while Hitchhike is active. Boosts and reversals carry over",
+        "Copy half of a racer's eligible steps into your score while Hitchhike is active. They lose nothing",
     'QUICK_RINSE':
         'Cut the remaining time on every opponent effect currently on you in half. Once an hour per race',
     'QUICKSAND':

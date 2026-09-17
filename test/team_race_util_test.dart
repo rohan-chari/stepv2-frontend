@@ -344,6 +344,34 @@ void main() {
       expect(targets.map((t) => t['userId']), isNot(contains('me')));
     });
 
+    test('Hitchhike offers eligible teammates and opponents, never self', () {
+      final targets = TeamRace.hitchhikeTargets(
+        participants: participants,
+        myUserId: 'me',
+        race: teamRace,
+      );
+      expect(
+        targets.map((t) => t['userId']),
+        containsAll(['ally', 'enemy1', 'enemy2']),
+      );
+      expect(targets.map((t) => t['userId']), isNot(contains('me')));
+    });
+
+    test('Hitchhike keeps stealth and forfeiture safety filters', () {
+      final targets = TeamRace.hitchhikeTargets(
+        participants: [
+          ...participants,
+          {'userId': 'hidden', 'team': 'TEAM_A', 'stealthed': true},
+          {'userId': 'gone', 'team': 'TEAM_A', 'forfeitedAt': '2026-07-15'},
+        ],
+        myUserId: 'me',
+        race: teamRace,
+      );
+      expect(targets.map((t) => t['userId']), contains('ally'));
+      expect(targets.map((t) => t['userId']), isNot(contains('hidden')));
+      expect(targets.map((t) => t['userId']), isNot(contains('gone')));
+    });
+
     test('TR-657: forfeited enemies are excluded from the pool', () {
       final withForfeit = [
         ...participants,

@@ -10,6 +10,7 @@ import 'unified_shop_test.dart' show ShopApi, shopAuth;
 class _UnifiedApi extends ShopApi {
   bool unavailable = false;
   bool ownedOnlyRinse = false;
+  bool includePremium = false;
   @override
   Future<Map<String, dynamic>> fetchPowerupShopCatalog({
     required String identityToken,
@@ -32,6 +33,17 @@ class _UnifiedApi extends ShopApi {
             'description': 'Clean up',
             'priceCoins': 75,
             'powerupType': 'QUICK_RINSE',
+          },
+        if (includePremium)
+          {
+            'sku': 'PW_LEECH',
+            'name': 'Leech',
+            'description': 'Premium powerup',
+            'priceCoins': 300,
+            'powerupType': 'LEECH',
+            'requiresGold': true,
+            'goldEligible': false,
+            'purchaseEligibility': 'GOLD_REQUIRED',
           },
       ],
     };
@@ -167,4 +179,16 @@ void main() {
       expect(find.textContaining('BUY ·'), findsNothing);
     },
   );
+
+  testWidgets('free premium powerup shows Gold treatment and upgrade CTA', (
+    tester,
+  ) async {
+    await render(tester, _UnifiedApi()..includePremium = true);
+    expect(find.text('Leech'), findsOneWidget);
+    expect(find.text('Bara Gold'), findsOneWidget);
+    await tester.ensureVisible(find.text('Leech'));
+    await tester.tap(find.text('Leech'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Get Bara Gold'), findsOneWidget);
+  });
 }

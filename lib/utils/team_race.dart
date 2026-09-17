@@ -414,6 +414,26 @@ abstract final class TeamRace {
         .toList(growable: false);
   }
 
+  /// Hitchhike may copy an eligible teammate as well as an opponent. Keep the
+  /// shared safety filters from [offensiveTargets], but do not apply its
+  /// enemy-team restriction; the backend remains authoritative for the final
+  /// target validation.
+  static List<Map<String, dynamic>> hitchhikeTargets({
+    required List<Map<String, dynamic>> participants,
+    required String? myUserId,
+    required Map<String, dynamic> race,
+  }) {
+    return participants
+        .where((p) {
+          if ((p['userId'] as String?) == myUserId) return false;
+          if (p['stealthed'] == true && p['targetable'] != true) return false;
+          if (hasForfeited(p)) return false;
+          if (hasActiveLegCramp(p)) return false;
+          return true;
+        })
+        .toList(growable: false);
+  }
+
   /// §7 powerups5 — the Bounty picker pool: only rivals currently AHEAD of the
   /// caster in standings (strictly more effective steps). Client-side pre-filter
   /// so a losing wager is never even offered; the server still validates the

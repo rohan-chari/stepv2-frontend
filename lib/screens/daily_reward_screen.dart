@@ -20,6 +20,7 @@ import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
+import '../widgets/premium_item_frame.dart';
 import '../widgets/spinning_coin.dart';
 import '../widgets/billing_scope.dart';
 import '../widgets/remove_ads_action.dart';
@@ -1017,13 +1018,27 @@ class _DailyRewardScreenState extends State<DailyRewardScreen>
       return const _DailyStripItem.mysteryAccessory();
     }
 
-    return [
+    final strip = [
       for (var i = 0; i < _DailyStripItem.stripLength; i++)
         if (i == _DailyStripItem.resultPosition && result != null)
           _DailyStripItem.fromResult(result)
         else
           candidate(),
     ];
+    // Premium entries are display-only decoys for free users. Their presence
+    // here never affects the server odds or the planted result tile.
+    final premiumDisplayItems = powerups
+        .where((item) => item['requiresGold'] == true)
+        .map(_DailyStripItem.powerup)
+        .toList();
+    for (var i = 0; i < premiumDisplayItems.length; i++) {
+      final position = 4 + i * 7;
+      if (position < strip.length &&
+          position != _DailyStripItem.resultPosition) {
+        strip[position] = premiumDisplayItems[i];
+      }
+    }
+    return strip;
   }
 }
 
@@ -1043,6 +1058,7 @@ class _DailyStripItem {
   // Set when this tile is a shop powerup (spinPowerups feature): drives the
   // PowerupIcon face. Null for coin/accessory tiles.
   final String? powerupType;
+  final bool requiresGold;
   final bool coinPreview;
 
   const _DailyStripItem._({
@@ -1052,6 +1068,7 @@ class _DailyStripItem {
     this.name,
     this.animationFrames = 1,
     this.powerupType,
+    this.requiresGold = false,
     this.coinPreview = false,
   });
 
@@ -1078,6 +1095,7 @@ class _DailyStripItem {
       rarity: rarity,
       powerupType: powerup['powerupType'] as String?,
       name: powerup['name'] as String? ?? 'Powerup',
+      requiresGold: powerup['requiresGold'] == true,
     );
   }
 
@@ -1119,7 +1137,7 @@ class _DailyReelTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CaseReelTile(
+    final tile = CaseReelTile(
       rarity: item.rarity,
       width: 86,
       height: 100,
@@ -1152,6 +1170,9 @@ class _DailyReelTile extends StatelessWidget {
         ],
       ),
     );
+    return item.isPowerup && item.requiresGold
+        ? PremiumItemFrame(compact: true, child: tile)
+        : tile;
   }
 
   Widget _buildFace(BuildContext context) {
