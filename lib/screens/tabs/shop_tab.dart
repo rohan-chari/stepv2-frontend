@@ -10,6 +10,7 @@ import '../../services/billing_controller.dart';
 import '../../widgets/billing_scope.dart';
 import '../../widgets/shop_product_grid.dart';
 import '../../widgets/home_course_track.dart';
+import '../../widgets/home_hero_scene.dart';
 import '../../widgets/coin_pack_offers.dart';
 import '../../widgets/bara_plus_card.dart';
 import '../bara_plus_screen.dart';
@@ -2528,11 +2529,27 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
   Widget _purchaseArt(Map<String, dynamic> item) {
     final animal = wardrobeString(item['assetKey']);
     if (item['slot'] == 'CHARACTER' && animal != null) {
-      return Center(
-        child: AnimatedCapybaraWithAccessories(
-          size: 82,
-          animal: animal,
-          accessories: const [],
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 180,
+          child: HomeHeroScene(
+            groundHeight: 42,
+            groundScrollSpeed: 26,
+            excludeBackgroundSemantics: true,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 34),
+                child: AnimatedCapybaraWithAccessories(
+                  size: 118,
+                  animal: animal,
+                  accessories: const [],
+                  animate: !MediaQuery.disableAnimationsOf(context),
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -3789,6 +3806,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               size: 13,
               color: AppColors.of(context).textDark,
             )
+          : _memberPriceCopy(item) != null
+          ? null
           : const CoinGlyph(),
       stripEnabled: !_saving && (premiumLocked || hasPrice),
       onStrip: price == null && !premiumLocked ? () {} : openSheet,
@@ -3826,6 +3845,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        const CoinGlyph(size: 13),
+        const SizedBox(width: 3),
         Text(
           '$original',
           style: PixelText.title(
