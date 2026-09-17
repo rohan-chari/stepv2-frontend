@@ -24,7 +24,7 @@ class ShopCharacterCard extends StatelessWidget {
     final price = wardrobeCoinPrice(character.item['priceCoins']);
     final purchasable = character.canPurchase && price != null;
     final buy = purchasable ? onBuy : null;
-    final card = DecoratedBox(
+    final card = Container(
       key: character.goldAccess ? const Key('bara-gold-card-frame') : null,
       decoration: BoxDecoration(
         color: colors.parchment,
@@ -36,8 +36,9 @@ class ShopCharacterCard extends StatelessWidget {
           width: character.goldAccess ? 2 : 1,
         ),
       ),
+      padding: EdgeInsets.all(character.goldAccess ? 2 : 0),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(character.goldAccess ? 12 : 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
