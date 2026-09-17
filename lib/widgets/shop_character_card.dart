@@ -50,7 +50,7 @@ class ShopCharacterCard extends StatelessWidget {
                     Padding(
                       padding: EdgeInsets.fromLTRB(
                         10,
-                        character.goldAccess ? 18 : 10,
+                        character.goldAccess ? 48 : 10,
                         10,
                         10,
                       ),
@@ -82,7 +82,7 @@ class ShopCharacterCard extends StatelessWidget {
                     ),
                     if (character.goldAccess)
                       const Positioned(
-                        top: 8,
+                        top: 6,
                         right: 8,
                         child: BaraGoldRibbon(compact: true),
                       ),
