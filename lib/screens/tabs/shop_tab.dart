@@ -3784,6 +3784,8 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
               size: 13,
               color: AppColors.of(context).textDark,
             )
+          : _memberPriceCopy(item) != null
+          ? null
           : const CoinGlyph(),
       stripEnabled: !_saving && (premiumLocked || hasPrice),
       onStrip: price == null && !premiumLocked ? () {} : openSheet,
@@ -3817,8 +3819,9 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         style: PixelText.title(size: 13, color: colors.textDark),
       );
     }
-    return Row(
+    return Column(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           '$original',
@@ -3827,14 +3830,22 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             color: Colors.red,
           ).copyWith(decoration: TextDecoration.lineThrough),
         ),
-        const SizedBox(width: 4),
-        Text('15%', style: PixelText.title(size: 10, color: colors.textAccent)),
-        const SizedBox(width: 4),
-        const CoinGlyph(size: 13),
-        const SizedBox(width: 3),
-        Text(
-          '$price',
-          style: PixelText.title(size: 13, color: colors.textDark),
+        const SizedBox(height: 1),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '15%',
+              style: PixelText.title(size: 10, color: colors.textAccent),
+            ),
+            const SizedBox(width: 4),
+            const CoinGlyph(size: 13),
+            const SizedBox(width: 3),
+            Text(
+              '$price',
+              style: PixelText.title(size: 13, color: colors.textDark),
+            ),
+          ],
         ),
       ],
     );
@@ -4227,8 +4238,8 @@ class _ShopTile extends StatelessWidget {
     this.badge,
     this.artScale = 1,
   }) : assert(
-         stripIcon != null || stripLeading != null,
-         'the strip needs a glyph',
+         stripIcon != null || stripLeading != null || stripLabelWidget != null,
+         'the strip needs a glyph or label',
        );
 
   final Widget art;
@@ -4358,7 +4369,7 @@ class _ShopTile extends StatelessWidget {
               // Action strip
               KeyedSubtree(
                 child: Container(
-                  height: 26,
+                  height: stripLabelWidget == null ? 26 : 42,
                   decoration: BoxDecoration(
                     color: onStrip == null
                         ? AppColors.of(context).parchmentDark
@@ -4377,15 +4388,17 @@ class _ShopTile extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      stripLeading ??
-                          Icon(
-                            stripIcon,
-                            size: 13,
-                            color: onStrip == null
-                                ? AppColors.of(context).textMid
-                                : AppColors.of(context).textDark,
-                          ),
-                      const SizedBox(width: 4),
+                      if (stripLeading != null || stripIcon != null) ...[
+                        stripLeading ??
+                            Icon(
+                              stripIcon,
+                              size: 13,
+                              color: onStrip == null
+                                  ? AppColors.of(context).textMid
+                                  : AppColors.of(context).textDark,
+                            ),
+                        const SizedBox(width: 4),
+                      ],
                       Flexible(
                         child:
                             stripLabelWidget ??
