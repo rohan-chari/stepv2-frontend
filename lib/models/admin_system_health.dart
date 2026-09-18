@@ -21,6 +21,8 @@ enum AdminSystemHealthCollectionStatus { complete, collecting }
 
 enum AdminSystemHealthFetchStatus { available, routeUnavailable, malformed }
 
+enum AdminSystemHealthQueueStatus { available, unavailable }
+
 class AdminSystemHealthFetchResult {
   const AdminSystemHealthFetchResult._(this.status, this.health);
 
@@ -63,6 +65,7 @@ class AdminSystemHealthEnvelope {
     required this.processes,
     required this.stepIngestion,
     required this.failureWindows,
+    required this.queueHealth,
   });
 
   static AdminSystemHealthEnvelope? tryParse(Object? value, {DateTime? now}) {
@@ -185,6 +188,11 @@ class AdminSystemHealthEnvelope {
         return null;
       }
 
+      final queueHealth = map.containsKey('queueHealth')
+          ? AdminSystemHealthQueueHealth._parse(map['queueHealth'])
+          : const AdminSystemHealthQueueHealth.unavailable();
+      if (queueHealth == null) return null;
+
       return AdminSystemHealthEnvelope._(
         status: status,
         overall: overall,
@@ -198,6 +206,7 @@ class AdminSystemHealthEnvelope {
         processes: List.unmodifiable(processes),
         stepIngestion: step,
         failureWindows: List.unmodifiable(windows ?? const []),
+        queueHealth: queueHealth,
       );
     } catch (_) {
       return null;
@@ -216,6 +225,7 @@ class AdminSystemHealthEnvelope {
   final List<AdminSystemHealthProcess> processes;
   final AdminSystemHealthStepIngestion? stepIngestion;
   final List<AdminSystemHealthFailureWindow> failureWindows;
+  final AdminSystemHealthQueueHealth queueHealth;
 
   AdminSystemHealthProcess? process(String role, String instance) {
     for (final process in processes) {
@@ -223,6 +233,88 @@ class AdminSystemHealthEnvelope {
     }
     return null;
   }
+}
+
+class AdminSystemHealthQueueHealth {
+  const AdminSystemHealthQueueHealth._({
+    required this.status,
+    required this.queues,
+  });
+
+  const AdminSystemHealthQueueHealth.unavailable()
+    : status = AdminSystemHealthQueueStatus.unavailable,
+      queues = const [];
+
+  static AdminSystemHealthQueueHealth? _parse(Object? value) {
+    final map = _objectMap(value);
+    if (map == null) return null;
+    final status = switch (map['status']) {
+      'available' => AdminSystemHealthQueueStatus.available,
+      'unavailable' => AdminSystemHealthQueueStatus.unavailable,
+      _ => null,
+    };
+    final raw = _objectList(map['queues']);
+    if (status == null || raw == null) return null;
+    if (status == AdminSystemHealthQueueStatus.unavailable) {
+      return raw.isEmpty ? const AdminSystemHealthQueueHealth.unavailable() : null;
+    }
+    const expected = [
+      'step-sync',
+      'powerup-recalc',
+      'race-dirty',
+      'global-event-boundary',
+      'notification-delivery',
+    ];
+    if (raw.length != expected.length) return null;
+    final queues = <AdminSystemHealthQueue>[];
+    for (var index = 0; index < raw.length; index++) {
+      final parsed = AdminSystemHealthQueue._parse(raw[index]);
+      if (parsed == null || parsed.name != expected[index]) return null;
+      queues.add(parsed);
+    }
+    return AdminSystemHealthQueueHealth._(
+      status: status,
+      queues: List.unmodifiable(queues),
+    );
+  }
+
+  final AdminSystemHealthQueueStatus status;
+  final List<AdminSystemHealthQueue> queues;
+}
+
+class AdminSystemHealthQueue {
+  const AdminSystemHealthQueue._({
+    required this.name,
+    required this.pendingCount,
+    required this.waitingCount,
+    required this.consumerCount,
+    required this.oldestPendingAgeMs,
+  });
+
+  static AdminSystemHealthQueue? _parse(Object? value) {
+    final map = _objectMap(value);
+    if (map == null || map['name'] is! String) return null;
+    final pending = _integer(map['pendingCount']);
+    final waiting = _integer(map['waitingCount']);
+    final consumers = _integer(map['consumerCount'], max: 1000000);
+    final oldest = _integer(map['oldestPendingAgeMs']);
+    if (pending == null || waiting == null || consumers == null || oldest == null) {
+      return null;
+    }
+    return AdminSystemHealthQueue._(
+      name: map['name']! as String,
+      pendingCount: pending,
+      waitingCount: waiting,
+      consumerCount: consumers,
+      oldestPendingAgeMs: oldest,
+    );
+  }
+
+  final String name;
+  final int pendingCount;
+  final int waitingCount;
+  final int consumerCount;
+  final int oldestPendingAgeMs;
 }
 
 class AdminSystemHealthMissingProcess {
