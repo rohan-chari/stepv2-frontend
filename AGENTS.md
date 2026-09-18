@@ -1,5 +1,13 @@
 # AGENTS.md — steps-tracker (Flutter app)
 
+## Operational source of truth
+
+- Exact Flutter build/run commands: `README.md`
+- Release/TestFlight/App Store workflow: `RELEASE.md`
+- Backend deploy/backup/PM2/queue operations: backend repo `OPERATIONS.md`
+- Files under `docs/archive/` are historical only.
+
+
 This file is the agent contract for this repo. It mirrors `CLAUDE.md` — the two
 must stay in sync; if you change a rule in one, change it in the other.
 
@@ -10,9 +18,9 @@ paths in committed files.
 ## Release configuration source of truth
 
 The Flutter run/build commands in `README.md` are the source of truth for
-release configuration. Read them before every build/upload. Keep
-`DEPLOYMENT.md` and saved local define files aligned with the README when
-configuration changes; do not silently omit its required values. Production
+release configuration. Read them before every build/upload. `RELEASE.md`
+owns the release/TestFlight/App Store workflow and must link back to the README
+rather than duplicating build commands. Production
 iOS commands require the RevenueCat public iOS SDK key, production backend
 and Google OAuth values, and the seven retained AdMob units. Inline-row native
 ad-unit defines must remain omitted on both platforms.
@@ -45,8 +53,9 @@ ad-unit defines must remain omitted on both platforms.
 
 - For managed database CPU investigations, read the DigitalOcean metrics access notes in `CLAUDE.local.md`; direct database metrics access is already configured.
 
-- Production runs with **exactly two PM2 workers** on the production host unless
-  the user explicitly authorizes a different capacity change.
+- Backend production topology is owned by the backend repo's `OPERATIONS.md`
+  and `ecosystem.config.js`. Do not infer backend process counts from this
+  frontend repository.
 - Staging is **shut down by default**. Start or reload the staging service only
   after the user gives explicit, in-the-moment authorization for that use. Do
   not start staging merely to verify a change, and shut it down again when the
@@ -100,7 +109,7 @@ before correctness or style.
   fields; no removed/repurposed fields; no new required params on existing
   endpoints.
 - **Build-time config is baked in.** `BACKEND_BASE_URL` is injected via
-  `--dart-define` at build (see `DEPLOYMENT.md`); a wrong value ships a broken
+  `--dart-define` at build (see `RELEASE.md`); a wrong value ships a broken
   binary that can't be hotfixed without a new App Store submission.
 - Supported content and remote artwork are activated by backend policy; a PNG
   missing from the bundle does not require a carrying app release. If a new
@@ -389,7 +398,7 @@ code. **Never ship one platform without the other.**
 - iOS: NO `--flavor`. The ADMOB defines are PROD-only — they enable the
   iOS-only rewarded-ad extra spin and box reroll; staging builds omit them.
   The reroll unit has NO test-ad fallback: omitting it compiles the reroll
-  button out. See `DEPLOYMENT.md` for the full release command.
+  button out. See `RELEASE.md` for the full release command.
 - Keep flavor (Android), backend URL, and version/build number in sync. The
   platforms are coupled in non-obvious ways: a dependency added for one (e.g.
   `firebase_*`) still links into the other's build. Build and verify **both**
@@ -397,7 +406,7 @@ code. **Never ship one platform without the other.**
 - The phrase **"push to App Store Connect"** explicitly authorizes uploading
   the current verified iOS archive. Prefer the existing configured App Store
   Connect API key; use the signed-in Xcode account as fallback. Follow
-  `DEPLOYMENT.md` and upload automatically after the matching Android artifact
+  `RELEASE.md` and upload automatically after the matching Android artifact
   is built and verified. Upload does not also authorize App Review submission
   or customer release.
 
