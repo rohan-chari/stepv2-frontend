@@ -239,6 +239,25 @@ Map<String, dynamic> _health({
       },
     ],
   },
+  'queueHealth': {
+    'status': 'available',
+    'queues': [
+      for (final name in const [
+        'step-sync',
+        'powerup-recalc',
+        'race-dirty',
+        'global-event-boundary',
+        'notification-delivery',
+      ])
+        {
+          'name': name,
+          'pendingCount': name == 'step-sync' ? 2 : 0,
+          'waitingCount': name == 'race-dirty' ? 3 : 0,
+          'consumerCount': 1,
+          'oldestPendingAgeMs': name == 'step-sync' ? 45000 : 0,
+        },
+    ],
+  },
   'failureWindows': [
     _failureWindow('60m', 60),
     _failureWindow(
@@ -319,6 +338,9 @@ void main() {
 
       expect(parsed, isNotNull);
       expect(parsed!.processes, hasLength(4));
+      expect(parsed.queueHealth.status, AdminSystemHealthQueueStatus.available);
+      expect(parsed.queueHealth.queues, hasLength(5));
+      expect(parsed.queueHealth.queues.first.pendingCount, 2);
       expect(parsed.failureWindows, hasLength(3));
       expect(parsed.failureWindows[0].requestFailureRate, 0.1);
       expect(
