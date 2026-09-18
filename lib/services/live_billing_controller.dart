@@ -518,14 +518,27 @@ class LiveBillingController extends BillingController {
       return const BillingResult(success: false, message: 'Account changed.');
     }
     final product = _productIds[id], identity = _identity;
-    if (!isAvailable ||
-        product == null ||
-        identity == null ||
-        snapshot.busy ||
-        _working) {
+    // Checkout availability is product-specific. A valid non-consumable must
+    // not be rejected just because this account's catalog has no coin pack or
+    // subscription offer alongside it.
+    if (!_storeAvailable || !store.configured || identity == null) {
       return const BillingResult(
         success: false,
-        message: 'This purchase is not available yet.',
+        message: 'The App Store is unavailable. Please try again.',
+      );
+    }
+    if (product == null) {
+      return const BillingResult(
+        success: false,
+        message:
+            'This item is still loading from the App Store. Please try again.',
+      );
+    }
+    if (snapshot.busy || _working) {
+      return const BillingResult(
+        success: false,
+        message:
+            'Another purchase is still being checked. Please try again shortly.',
       );
     }
     _working = true;

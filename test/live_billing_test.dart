@@ -91,7 +91,8 @@ class TestApi extends BackendApiService {
         'benefitVersion': 'bara_gold_v1',
       },
     ],
-    'membership': membership ??
+    'membership':
+        membership ??
         (goldAccountA && identityToken == 'token-a'
             ? {
                 'status': 'active',
@@ -137,10 +138,7 @@ class TestApi extends BackendApiService {
     syncHints.add(transactionId);
     syncTokens.add(identityToken);
     if (rawBootstrap != null && !rawBootstrap!.containsKey('goldPolicy')) {
-      return {
-        ...rawBootstrap!,
-        'status': pending ? 'pending' : 'complete',
-      };
+      return {...rawBootstrap!, 'status': pending ? 'pending' : 'complete'};
     }
     return {
       ...data(identityToken: identityToken),
@@ -301,13 +299,51 @@ class DirectCharacterTestStore extends TestStore {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('direct character checkout sends the verified native transaction to sync',
-      (tester) async {
+  testWidgets(
+    'direct character checkout sends the verified native transaction to sync',
+    (tester) async {
+      final api = TestApi();
+      api.rawBootstrap = {
+        ...api.data(),
+        'products': [
+          ...((api.data()['products'] as List).cast<Map<String, dynamic>>()),
+          {
+            'id': 'character_mouse',
+            'storeProductId': 'bara_character_mouse_v1',
+            'kind': 'non_consumable',
+            'plan': null,
+            'coins': 0,
+          },
+        ],
+      };
+      final store = DirectCharacterTestStore();
+      final billing = LiveBillingController(
+        auth: TestAuth(),
+        api: api,
+        store: store,
+        platform: 'ios',
+      );
+      addTearDown(billing.dispose);
+
+      await billing.refresh();
+      final result = await billing.buyDirectProduct('bara_character_mouse_v1');
+
+      expect(result.success, isTrue);
+      expect(store.purchases, 1);
+      expect(store.purchaseIdentities, ['identity-a']);
+      expect(api.syncHints, [null, 'transaction-1']);
+      expect(billing.snapshot.operationStatus, BillingOperationStatus.success);
+      await tester.pump();
+    },
+  );
+
+  testWidgets('a direct item can check out when it is the only native offer', (
+    tester,
+  ) async {
     final api = TestApi();
     api.rawBootstrap = {
       ...api.data(),
       'products': [
-        ...((api.data()['products'] as List).cast<Map<String, dynamic>>()),
         {
           'id': 'character_mouse',
           'storeProductId': 'bara_character_mouse_v1',
@@ -331,10 +367,6 @@ void main() {
 
     expect(result.success, isTrue);
     expect(store.purchases, 1);
-    expect(store.purchaseIdentities, ['identity-a']);
-    expect(api.syncHints, [null, 'transaction-1']);
-    expect(billing.snapshot.operationStatus, BillingOperationStatus.success);
-    await tester.pump();
   });
 
   testWidgets(
@@ -468,42 +500,45 @@ void main() {
     },
   );
 
-  testWidgets('account switching clears Gold state and reloads the active account',
-      (tester) async {
-    final auth = TestAuth();
-    final api = TestApi()
-      ..perAccount = true
-      ..goldAccountA = true;
-    final billing = LiveBillingController(
-      auth: auth,
-      api: api,
-      store: TestStore(),
-      platform: 'ios',
-    );
-    addTearDown(billing.dispose);
+  testWidgets(
+    'account switching clears Gold state and reloads the active account',
+    (tester) async {
+      final auth = TestAuth();
+      final api = TestApi()
+        ..perAccount = true
+        ..goldAccountA = true;
+      final billing = LiveBillingController(
+        auth: auth,
+        api: api,
+        store: TestStore(),
+        platform: 'ios',
+      );
+      addTearDown(billing.dispose);
 
-    await billing.refresh();
-    expect(billing.snapshot.isMember, isTrue);
-    expect(billing.goldPolicyAvailable, isTrue);
-    expect(billing.snapshot.effectiveDiscountPercent, 15);
+      await billing.refresh();
+      expect(billing.snapshot.isMember, isTrue);
+      expect(billing.goldPolicyAvailable, isTrue);
+      expect(billing.snapshot.effectiveDiscountPercent, 15);
 
-    auth.switchTo('b');
-    await tester.pump();
-    expect(billing.snapshot.isMember, isFalse);
-    expect(billing.goldPolicyAvailable, isFalse);
-    expect(billing.snapshot.effectiveDiscountPercent, 0);
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(billing.userId, 'b');
-    expect(billing.snapshot.isMember, isFalse);
+      auth.switchTo('b');
+      await tester.pump();
+      expect(billing.snapshot.isMember, isFalse);
+      expect(billing.goldPolicyAvailable, isFalse);
+      expect(billing.snapshot.effectiveDiscountPercent, 0);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(billing.userId, 'b');
+      expect(billing.snapshot.isMember, isFalse);
 
-    auth.switchTo('a');
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(billing.snapshot.isMember, isTrue);
-    expect(billing.goldPolicyAvailable, isTrue);
-  });
+      auth.switchTo('a');
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(billing.snapshot.isMember, isTrue);
+      expect(billing.goldPolicyAvailable, isTrue);
+    },
+  );
 
-  testWidgets('late Gold bootstrap cannot overwrite the switched-to account',
-      (tester) async {
+  testWidgets('late Gold bootstrap cannot overwrite the switched-to account', (
+    tester,
+  ) async {
     final auth = TestAuth();
     final api = TestApi()
       ..perAccount = true
@@ -541,8 +576,9 @@ void main() {
     expect(billing.goldPolicyAvailable, isFalse);
   });
 
-  testWidgets('missing Gold fields from an older backend fail closed',
-      (tester) async {
+  testWidgets('missing Gold fields from an older backend fail closed', (
+    tester,
+  ) async {
     final api = TestApi()
       ..rawBootstrap = {
         'available': true,
@@ -577,47 +613,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('purchase, restore, expiration, and resume refresh membership safely',
-      (tester) async {
-    final api = TestApi();
-    final billing = LiveBillingController(
-      auth: TestAuth(),
-      api: api,
-      store: TestStore(),
-      platform: 'ios',
-    );
-    addTearDown(billing.dispose);
+  testWidgets(
+    'purchase, restore, expiration, and resume refresh membership safely',
+    (tester) async {
+      final api = TestApi();
+      final billing = LiveBillingController(
+        auth: TestAuth(),
+        api: api,
+        store: TestStore(),
+        platform: 'ios',
+      );
+      addTearDown(billing.dispose);
 
-    await billing.refresh();
-    expect(billing.snapshot.isMember, isFalse);
+      await billing.refresh();
+      expect(billing.snapshot.isMember, isFalse);
 
-    // A verified purchase response updates the same controller without a restart.
-    api.goldAccountA = true;
-    await billing.refresh();
-    expect(billing.snapshot.isMember, isTrue);
-    expect(billing.goldPolicyAvailable, isTrue);
-    expect(billing.snapshot.effectiveDiscountPercent, 15);
+      // A verified purchase response updates the same controller without a restart.
+      api.goldAccountA = true;
+      await billing.refresh();
+      expect(billing.snapshot.isMember, isTrue);
+      expect(billing.goldPolicyAvailable, isTrue);
+      expect(billing.snapshot.effectiveDiscountPercent, 15);
 
-    // Restore uses the same backend-confirmed refresh path and is idempotent.
-    await billing.refresh();
-    expect(billing.snapshot.isMember, isTrue);
+      // Restore uses the same backend-confirmed refresh path and is idempotent.
+      await billing.refresh();
+      expect(billing.snapshot.isMember, isTrue);
 
-    // Expiration removes Gold-only behavior from the active snapshot.
-    api.goldAccountA = false;
-    await billing.refresh();
-    expect(billing.snapshot.isMember, isFalse);
-    expect(billing.snapshot.effectiveDiscountPercent, 0);
-    expect(billing.goldPolicyAvailable, isTrue);
+      // Expiration removes Gold-only behavior from the active snapshot.
+      api.goldAccountA = false;
+      await billing.refresh();
+      expect(billing.snapshot.isMember, isFalse);
+      expect(billing.snapshot.effectiveDiscountPercent, 0);
+      expect(billing.goldPolicyAvailable, isTrue);
 
-    // Resume refresh can observe a later reactivation without process restart.
-    api.goldAccountA = true;
-    await billing.refresh();
-    await tester.pump();
-    expect(billing.snapshot.isMember, isTrue);
-  });
+      // Resume refresh can observe a later reactivation without process restart.
+      api.goldAccountA = true;
+      await billing.refresh();
+      await tester.pump();
+      expect(billing.snapshot.isMember, isTrue);
+    },
+  );
 
-  testWidgets('mounted rewarded-action sheet follows an account switch',
-      (tester) async {
+  testWidgets('mounted rewarded-action sheet follows an account switch', (
+    tester,
+  ) async {
     final auth = TestAuth();
     final api = TestApi()..goldAccountA = true;
     final billing = LiveBillingController(

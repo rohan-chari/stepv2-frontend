@@ -1,5 +1,6 @@
 import '../../widgets/game_toast.dart';
 import '../../widgets/accessory_preview_sheet.dart';
+import '../../models/billing.dart';
 import '../../models/character_wardrobe.dart';
 import '../../services/character_wardrobe_controller.dart';
 import '../../widgets/shop_character_card.dart';
@@ -2583,6 +2584,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     bool Function()? canAct,
   }) async {
     Future<void>? operation;
+    BillingResult? directPurchaseResult;
     var getCoins = false, preview = false;
     final generation = _shopSessionGeneration;
     final userId = widget.authService.userId;
@@ -2732,9 +2734,11 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                       : () {
                           if (!claimAction()) return;
                           Navigator.of(context).pop();
-                          operation = _billing!.buyDirectProduct(
-                            directProductId,
-                          );
+                          operation = _billing!
+                              .buyDirectProduct(directProductId)
+                              .then((result) {
+                                directPurchaseResult = result;
+                              });
                         },
                 ),
               if (goldUpgradeAvailable) ...[
@@ -2798,6 +2802,10 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
       if (_shopActionContext != adContext) _disposeShopAdTarget();
     });
     await operation;
+    if (directPurchaseResult case final result?
+        when !result.success && mounted) {
+      _showError(context, result.message);
+    }
     await showPreview();
     return getCoins ? ShopCategory.featured : null;
   }
