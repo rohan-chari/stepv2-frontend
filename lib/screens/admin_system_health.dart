@@ -118,6 +118,8 @@ class _SystemHealthContent extends StatelessWidget {
         const SizedBox(height: 14),
         _PoolNow(health: health),
         const SizedBox(height: 14),
+        _QueueHealth(health: health),
+        const SizedBox(height: 14),
         _LastHour(health: health),
         const SizedBox(height: 14),
         _FailureRates(health: health),
@@ -297,6 +299,72 @@ class _ProcessRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _QueueHealth extends StatelessWidget {
+  const _QueueHealth({required this.health});
+
+  final AdminSystemHealthEnvelope health;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final queueHealth = health.queueHealth;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Heading('QUEUE HEALTH'),
+        if (queueHealth.status == AdminSystemHealthQueueStatus.unavailable)
+          Text(
+            'QUEUE TELEMETRY UNAVAILABLE',
+            style: AdminSans.body(size: 11, color: colors.textMid),
+          )
+        else
+          for (final queue in queueHealth.queues)
+            Container(
+              margin: const EdgeInsets.only(top: 7),
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: colors.parchmentDark.withValues(alpha: 0.66),
+                border: Border.all(color: colors.parchmentBorder),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    queue.name.toUpperCase(),
+                    style: AdminSans.title(size: 10, color: colors.textDark),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      _TinyValue(
+                        label: 'PENDING',
+                        value: _number(queue.pendingCount),
+                      ),
+                      _TinyValue(
+                        label: 'WAITING',
+                        value: _number(queue.waitingCount),
+                      ),
+                      _TinyValue(
+                        label: 'OLDEST',
+                        value: _queueAge(queue.oldestPendingAgeMs),
+                      ),
+                      _TinyValue(
+                        label: 'CONSUMERS',
+                        value: _number(queue.consumerCount),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+      ],
     );
   }
 }
@@ -615,6 +683,15 @@ String _milliseconds(double value) =>
 
 String _millisecondsOrUnavailable(double? value) =>
     value == null ? 'UNAVAILABLE' : _milliseconds(value);
+
+String _queueAge(int milliseconds) {
+  if (milliseconds <= 0) return 'NONE';
+  final seconds = milliseconds ~/ 1000;
+  if (seconds < 60) return '${seconds}s';
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) return '${minutes}m';
+  return '${minutes ~/ 60}h';
+}
 
 String _bytes(int value) {
   if (value < 1024 * 1024) return '${(value / 1024).toStringAsFixed(1)} KB';
