@@ -195,6 +195,7 @@ class TestStore extends StoreBillingClient {
   String identity = '';
   final purchaseIdentities = <String>[];
   Completer<String?>? purchaseCompleter;
+  Completer<void>? identifyCompleter;
   final planChanges = <List<String>>[];
   bool rejectPlanChange = false;
   bool restoreAccountMismatch = false;
@@ -224,6 +225,9 @@ class TestStore extends StoreBillingClient {
   @override
   Future<void> identify(String identity) async {
     this.identity = identity;
+    if (identifyCompleter case final Completer<void> pending) {
+      await pending.future;
+    }
   }
 
   @override
@@ -332,6 +336,137 @@ void main() {
     expect(billing.snapshot.operationStatus, BillingOperationStatus.success);
     await tester.pump();
   });
+
+  testWidgets(
+    'a purchase waits for the active catalog refresh instead of being dropped',
+    (tester) async {
+      final api = TestApi();
+      api.rawBootstrap = {
+        ...api.data(),
+        'products': [
+          ...((api.data()['products'] as List).cast<Map<String, dynamic>>()),
+          {
+            'id': 'character_mouse',
+            'storeProductId': 'bara_character_mouse_v1',
+            'kind': 'non_consumable',
+            'plan': null,
+            'coins': 0,
+          },
+        ],
+      };
+      final store = DirectCharacterTestStore();
+      final billing = LiveBillingController(
+        auth: TestAuth(),
+        api: api,
+        store: store,
+        platform: 'ios',
+      );
+      addTearDown(billing.dispose);
+
+      await billing.refresh();
+      final delayed = Completer<Map<String, dynamic>>();
+      api.delayedBootstrap = delayed;
+      final refreshing = billing.refresh();
+      await tester.pump();
+
+      final checkout = billing.buyDirectProduct('bara_character_mouse_v1');
+      expect(store.purchases, 0);
+
+      delayed.complete(api.rawBootstrap!);
+      await refreshing;
+      final result = await checkout;
+
+      expect(result.success, isTrue);
+      expect(store.purchases, 1);
+      expect(api.syncHints, [null, null, 'transaction-1']);
+    },
+  );
+
+  testWidgets(
+    'a direct purchase waits until a refresh rebuilds its product mapping',
+    (tester) async {
+      final api = TestApi();
+      api.rawBootstrap = {
+        ...api.data(),
+        'products': [
+          ...((api.data()['products'] as List).cast<Map<String, dynamic>>()),
+          {
+            'id': 'character_mouse',
+            'storeProductId': 'bara_character_mouse_v1',
+            'kind': 'non_consumable',
+            'plan': null,
+            'coins': 0,
+          },
+        ],
+      };
+      final store = DirectCharacterTestStore();
+      final billing = LiveBillingController(
+        auth: TestAuth(),
+        api: api,
+        store: store,
+        platform: 'ios',
+      );
+      addTearDown(billing.dispose);
+
+      await billing.refresh();
+      final identify = Completer<void>();
+      store.identifyCompleter = identify;
+      final refreshing = billing.refresh();
+      await tester.pump();
+      final checkout = billing.buyDirectProduct('bara_character_mouse_v1');
+
+      identify.complete();
+      await refreshing;
+      final result = await checkout;
+
+      expect(result.success, isTrue);
+      expect(store.purchases, 1);
+    },
+  );
+
+  testWidgets(
+    'a purchase waiting on a stale refresh settles when the account changes',
+    (tester) async {
+      final api = TestApi();
+      api.rawBootstrap = {
+        ...api.data(),
+        'products': [
+          ...((api.data()['products'] as List).cast<Map<String, dynamic>>()),
+          {
+            'id': 'character_mouse',
+            'storeProductId': 'bara_character_mouse_v1',
+            'kind': 'non_consumable',
+            'plan': null,
+            'coins': 0,
+          },
+        ],
+      };
+      final auth = TestAuth();
+      final store = DirectCharacterTestStore();
+      final billing = LiveBillingController(
+        auth: auth,
+        api: api,
+        store: store,
+        platform: 'ios',
+      );
+      addTearDown(billing.dispose);
+
+      await billing.refresh();
+      final delayed = Completer<Map<String, dynamic>>();
+      api.delayedBootstrap = delayed;
+      unawaited(billing.refresh());
+      await tester.pump();
+      final checkout = billing.buyDirectProduct('bara_character_mouse_v1');
+
+      auth.switchUser();
+      final result = await checkout;
+      delayed.complete(api.rawBootstrap!);
+
+      expect(result.success, isFalse);
+      expect(result.message, 'Account changed.');
+      expect(store.purchases, 0);
+    },
+  );
 
   testWidgets('account switching clears Gold state and reloads the active account',
       (tester) async {

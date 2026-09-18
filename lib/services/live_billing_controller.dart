@@ -45,6 +45,7 @@ class LiveBillingController extends BillingController {
   int _cost = 50;
   bool _working = false;
   bool _loadingCatalog = false;
+  Completer<void>? _refreshIdle;
   Timer? _retry;
   Map<String, dynamic> _data = {};
   final Map<String, String> _productIds = {};
@@ -188,6 +189,14 @@ class LiveBillingController extends BillingController {
       generation == _generation &&
       auth.userId == _user &&
       auth.authToken == _token;
+  void _releaseRefreshWaiter() {
+    final refreshIdle = _refreshIdle;
+    _refreshIdle = null;
+    if (refreshIdle != null && !refreshIdle.isCompleted) {
+      refreshIdle.complete();
+    }
+  }
+
   void _authChanged() {
     if (auth.userId == _user && auth.authToken == _token) {
       _notify();
@@ -195,6 +204,7 @@ class LiveBillingController extends BillingController {
     }
     _generation++;
     _retry?.cancel();
+    _releaseRefreshWaiter();
     _working = false;
     _loadingCatalog = false;
     _user = auth.userId ?? '';
@@ -241,6 +251,8 @@ class LiveBillingController extends BillingController {
     }
     _working = true;
     _loadingCatalog = true;
+    final refreshIdle = Completer<void>();
+    _refreshIdle = refreshIdle;
     _notify();
     try {
       final data = await api.fetchBillingBootstrap(
@@ -385,6 +397,10 @@ class LiveBillingController extends BillingController {
         _loadingCatalog = false;
         _notify();
       }
+      // A newer account/session may have started another refresh while this
+      // one was awaiting I/O. Only settle the waiter that belongs to this run.
+      if (identical(_refreshIdle, refreshIdle)) _refreshIdle = null;
+      if (!refreshIdle.isCompleted) refreshIdle.complete();
     }
   }
 
@@ -491,10 +507,17 @@ class LiveBillingController extends BillingController {
   }
 
   Future<BillingResult> _purchase(String id) async {
-    final product = _productIds[id],
-        identity = _identity,
-        generation = _generation,
-        user = _user;
+    final generation = _generation, user = _user;
+    // A tap can land after the Shop has rendered its localized price but while
+    // the same catalog refresh is still reconciling StoreKit history. Queue the
+    // checkout behind that refresh instead of silently declining it. This is
+    // shared by coin packs, memberships, permanent access, and direct items.
+    final refreshIdle = _working ? _refreshIdle : null;
+    if (refreshIdle != null) await refreshIdle.future;
+    if (!_current(generation)) {
+      return const BillingResult(success: false, message: 'Account changed.');
+    }
+    final product = _productIds[id], identity = _identity;
     if (!isAvailable ||
         product == null ||
         identity == null ||
@@ -615,17 +638,23 @@ class LiveBillingController extends BillingController {
   Future<BillingResult> buyCoins(CoinPackOffer pack) => _purchase(pack.id);
 
   @override
-  Future<BillingResult> buyDirectProduct(String storeProductId) {
+  Future<BillingResult> buyDirectProduct(String storeProductId) async {
+    final generation = _generation;
+    final refreshIdle = _working ? _refreshIdle : null;
+    if (refreshIdle != null) {
+      await refreshIdle.future;
+    }
+    if (!_current(generation)) {
+      return const BillingResult(success: false, message: 'Account changed.');
+    }
     final id = _productIds.entries
         .where((entry) => entry.value == storeProductId)
         .map((entry) => entry.key)
         .firstOrNull;
     return id == null
-        ? Future.value(
-            const BillingResult(
-              success: false,
-              message: 'This character purchase is unavailable.',
-            ),
+        ? const BillingResult(
+            success: false,
+            message: 'This character purchase is unavailable.',
           )
         : _purchase(id);
   }
@@ -1045,6 +1074,7 @@ class LiveBillingController extends BillingController {
     _disposed = true;
     _generation++;
     _retry?.cancel();
+    _releaseRefreshWaiter();
     auth.removeListener(_authChanged);
     store.setOnCustomerInfoChanged(null);
     super.dispose();
