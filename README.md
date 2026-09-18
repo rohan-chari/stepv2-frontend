@@ -111,7 +111,7 @@ Open `ios/Runner.xcworkspace` in Xcode and verify the **HealthKit**, **Sign in w
 ## Flutter commands
 
 These commands are the source of truth for build and release configuration.
-Keep `DEPLOYMENT.md` and saved local build settings aligned with them.
+Keep `RELEASE.md` and saved local build settings aligned with them.
 
 Before running a production iOS command below, load the app's RevenueCat
 **public iOS SDK key** into your shell (local setup: `CLAUDE.local.md`):
@@ -157,7 +157,7 @@ advertiser-ID collection off. Consent still controls runtime measurement.
 Android omits these defines and has no Meta App Events integration.
 
 Before upload, verify the actual archived plist using the gated command in
-[DEPLOYMENT.md](DEPLOYMENT.md#push-the-archive-to-app-store-connect).
+[RELEASE.md](RELEASE.md#push-the-archive-to-app-store-connect).
 
 ### First-time setup
 ```bash
@@ -257,7 +257,7 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
 # The ADMOB defines are REQUIRED for release builds — without them the
 # rewarded-ad extra spin and the display banners are compiled out (safe, but
 # missing). GOOGLE_IOS_CLIENT_ID (prod iOS OAuth client) is likewise REQUIRED
-# or the release ships without the Google sign-in button. See DEPLOYMENT.md.
+# or the release ships without the Google sign-in button. See RELEASE.md.
 # ADMOB_BOX_REROLL_AD_UNIT_ID is the rewarded box-reroll unit (batch 08-08
 # item 11) — it has NO test-ad fallback: omit it and the reroll button is
 # compiled out of the release entirely.
