@@ -5363,7 +5363,6 @@ class BackendApiService {
     final inventory = powerupData?['inventory'];
     if ((!typed && !legacy) ||
         participants is! List ||
-        participants.isEmpty ||
         powerupData == null ||
         inventory is! List) {
       return null;
