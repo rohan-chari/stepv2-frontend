@@ -412,22 +412,48 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   _text('Store pricing is currently unavailable.')
                 else ...[
                   LayoutBuilder(
+                    key: const Key('bara-gold-plan-row'),
                     builder: (context, constraints) {
+                      const gap = 28.0;
                       final cardWidth = (constraints.maxWidth * 0.39)
                           .clamp(118.0, 142.0);
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final planOffer in offers)
-                            Expanded(
-                              child: Center(
-                                child: SizedBox(
-                                  width: cardWidth,
-                                  child: _planButton(billing, planOffer),
+                      final totalWidth = cardWidth * 2 + gap;
+                      final sideInset = (constraints.maxWidth - totalWidth) / 2;
+                      return SizedBox(
+                        height: 161,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left: sideInset,
+                              top: 0,
+                              width: cardWidth,
+                              child: KeyedSubtree(
+                                key: const Key('bara-gold-weekly-slot'),
+                                child: _planButton(
+                                  billing,
+                                  offers.firstWhere(
+                                    (item) => item.plan == BillingPlan.weekly,
+                                  ),
                                 ),
                               ),
                             ),
-                        ],
+                            Positioned(
+                              right: sideInset,
+                              top: 0,
+                              width: cardWidth,
+                              child: KeyedSubtree(
+                                key: const Key('bara-gold-monthly-slot'),
+                                child: _planButton(
+                                  billing,
+                                  offers.firstWhere(
+                                    (item) => item.plan == BillingPlan.monthly,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
