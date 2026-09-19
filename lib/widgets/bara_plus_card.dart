@@ -44,7 +44,8 @@ class BaraPlusCard extends StatelessWidget {
         final colors = AppColors.of(context);
         final textScale = MediaQuery.textScalerOf(context).scale(1);
         final tall = textScale > 1.35;
-        final cardHeight = tall ? 250.0 : 220.0;
+        final cardHeight = tall ? 266.0 : 236.0;
+        final groundHeight = tall ? 70.0 : 64.0;
 
         return Semantics(
           button: true,
@@ -71,7 +72,7 @@ class BaraPlusCard extends StatelessWidget {
                     // The accessory-editor world is the card, not a side panel.
                     HomeHeroScene(
                       key: const Key('bara-gold-hero-scene'),
-                      groundHeight: tall ? 58 : 52,
+                      groundHeight: groundHeight,
                       groundScrollSpeed: 24,
                       excludeBackgroundSemantics: true,
                       child: const SizedBox.expand(),
@@ -83,7 +84,7 @@ class BaraPlusCard extends StatelessWidget {
                       left: 0,
                       right: 0,
                       bottom:
-                          (tall ? 58 : 52) -
+                          groundHeight -
                           4 -
                           (tall ? 128 : 116) * .22 -
                           (tall ? 3 : 2),
@@ -145,7 +146,7 @@ class BaraPlusCard extends StatelessWidget {
                     Positioned(
                       left: 12,
                       right: 12,
-                      bottom: tall ? 5 : 4,
+                      bottom: tall ? 7 : 6,
                       child: Container(
                         key: const Key('bara-gold-upgrade-cta'),
                         width: double.infinity,
@@ -157,8 +158,8 @@ class BaraPlusCard extends StatelessWidget {
                           color: colors.pillGold,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: colors.pillGoldDark,
-                            width: 1.5,
+                            color: AppColors.medalGold,
+                            width: 2,
                           ),
                           boxShadow: [
                             BoxShadow(
