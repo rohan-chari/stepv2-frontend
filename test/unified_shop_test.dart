@@ -362,6 +362,31 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Gold modal pricing row has equal outer margins', (tester) async {
+    addTearDown(tester.view.reset);
+    final billing = FakeBilling();
+    await pumpShop(tester, billing: billing);
+    await tester.tap(find.byKey(const Key('bara-plus-card')));
+    await tester.pumpAndSettle();
+
+    final paywall = tester.getRect(find.byKey(const Key('bara-gold-paywall')));
+    final row = tester.getRect(find.byKey(const Key('bara-gold-plan-row')));
+    final weekly = tester.getRect(
+      find.byKey(const Key('bara-gold-weekly-slot')),
+    );
+    final monthly = tester.getRect(
+      find.byKey(const Key('bara-gold-monthly-slot')),
+    );
+
+    expect(row.left - paywall.left, closeTo(12, 0.5));
+    expect(paywall.right - row.right, closeTo(12, 0.5));
+    expect(weekly.width, closeTo(monthly.width, 0.5));
+    expect(
+      weekly.left - row.left,
+      closeTo(row.right - monthly.right, 0.5),
+    );
+  });
+
   testWidgets(
     'embedded membership keeps plans without repeating marketing hero',
     (tester) async {
