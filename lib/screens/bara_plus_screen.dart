@@ -133,40 +133,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 ),
               ),
             ),
-            Positioned(
-              left: 12,
-              right: 12,
-              top: 10,
-              child: Column(
-                children: [
-                  Text(
-                    'Bara Gold',
-                    textAlign: TextAlign.center,
-                    style: PixelText.title(
-                      size: 25,
-                      color: colors.textLight,
-                    ).copyWith(
-                      shadows: const [
-                        Shadow(
-                          color: Color(0x66000000),
-                          blurRadius: 4,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Ad-free. Exclusive perks.',
-                    textAlign: TextAlign.center,
-                    style: PixelText.body(
-                      size: 12.5,
-                      color: colors.textLight.withValues(alpha: 0.86),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+
           ],
         ),
       ),
