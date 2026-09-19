@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import 'bara_gold_benefits.dart';
 
-/// One benefit row, with manual paging and a four-second reading interval.
+/// One benefit row, with manual paging and a 2.5-second reading interval.
 class BaraGoldBenefitsCarousel extends StatefulWidget {
   const BaraGoldBenefitsCarousel({super.key});
 
@@ -51,7 +51,7 @@ class BaraGoldBenefitsCarousel extends StatefulWidget {
 
 class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
     with WidgetsBindingObserver {
-  static const _interval = Duration(seconds: 4);
+  static const _interval = Duration(milliseconds: 2500);
   static const _transition = Duration(milliseconds: 350);
   static const _count = 4;
   // Duplicate end pages provide a seamless wrap in both swipe directions.
@@ -180,13 +180,12 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
                         label: '${benefit.title}. ${benefit.detail} Benefit ${index + 1} of $_count.',
                         excludeSemantics: true,
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          padding: const EdgeInsets.fromLTRB(10, 5, 10, 15),
                           child: Row(
                             children: [
                               BaraGoldBenefitIcon(benefit: benefit),
                               const SizedBox(width: 10),
                               Expanded(child: BaraGoldBenefitText(benefit: benefit, short: true)),
-                              const SizedBox(width: 34),
                             ],
                           ),
                         ),
@@ -195,12 +194,13 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
                   ),
                 ),
                 Positioned(
-                  right: 10,
-                  top: 0,
-                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 6,
                   child: IgnorePointer(
                     child: ExcludeSemantics(
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           for (var i = 0; i < _count; i++)
