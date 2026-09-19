@@ -3823,51 +3823,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  /// Resolves the Pickpocket target list via the legacy-named backend endpoint,
-  /// returns only racers holding a stealable powerup. The returned userIds are
-  /// re-joined with [eligibleTargets] (the live participant rows) so the picker
-  /// keeps showing avatars/steps. Defends against an older backend that lacks
-  /// the endpoint by falling back to the full eligible-racer list.
-  Future<List<Map<String, dynamic>>> _resolveSneakySwapTargets(
-    String token,
-    List<Map<String, dynamic>> eligibleTargets,
-  ) async {
-    try {
-      final result = await _api.fetchSneakySwapTargets(
-        identityToken: token,
-        raceId: widget.raceId,
-      );
-      final rawTargets =
-          (result['targets'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-
-      // Index live participants so we can enrich with steps/avatar.
-      final byUserId = <String, Map<String, dynamic>>{
-        for (final p in eligibleTargets)
-          if (p['userId'] is String) p['userId'] as String: p,
-      };
-
-      final resolved = <Map<String, dynamic>>[];
-      for (final t in rawTargets) {
-        final userId = t['userId'] as String?;
-        if (userId == null) continue;
-        final live = byUserId[userId];
-        resolved.add({
-          'userId': userId,
-          'displayName': live?['displayName'] ?? t['displayName'] ?? '???',
-          if (live?['profilePhotoUrl'] != null)
-            'profilePhotoUrl': live!['profilePhotoUrl'],
-          if (live?['totalSteps'] != null) 'totalSteps': live!['totalSteps'],
-        });
-      }
-      return resolved;
-    } catch (_) {
-      // Old backend without the endpoint (404) or transient failure: degrade to
-      // the prior behavior of offering every eligible racer.
-      return eligibleTargets;
-    }
-  }
-
   Future<String?> _showTargetPicker(
     List<Map<String, dynamic>> targets,
     String powerupType,
