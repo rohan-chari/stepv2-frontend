@@ -18,8 +18,12 @@ class BaraPlusCard extends StatelessWidget {
       'slot': 'BACK',
       'assetKey': 'cape',
       'renderMetadata': <String, dynamic>{
-        'renderLayer': 'behind',
-        'walkSway': true,
+        'scale': 2.1499999999999995,
+        'offsetX': -0.1,
+        'offsetY': -0.00423728813559332,
+        'rotation': 0.24915254237288265,
+        'renderLayer': 'front',
+        'animationFrames': 6,
       },
     },
   ];
@@ -71,26 +75,6 @@ class BaraPlusCard extends StatelessWidget {
                       groundScrollSpeed: 24,
                       excludeBackgroundSemantics: true,
                       child: const SizedBox.expand(),
-                    ),
-
-                    // Readability layer for the overlaid copy while leaving the
-                    // full environment visible behind it.
-                    IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              colors.ink.withValues(alpha: 0.82),
-                              colors.ink.withValues(alpha: 0.58),
-                              colors.ink.withValues(alpha: 0.12),
-                              Colors.transparent,
-                            ],
-                            stops: const [0, .42, .68, 1],
-                          ),
-                        ),
-                      ),
                     ),
 
                     // Real in-game animated capybara + the existing cape asset.
