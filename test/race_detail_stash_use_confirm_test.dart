@@ -178,14 +178,23 @@ class _StashApi extends BackendApiService {
     if (rejectUse || decoyCooldown) {
       // Mirrors the current backend's rejected-redeemed-item refund.
       _stashQuantity++;
+      final refundedPowerup = {
+        'powerupType': stashType,
+        'quantity': _stashQuantity,
+      };
       if (decoyCooldown) {
-        throw const ApiException(
+        throw ApiException(
           'Wait 1 hour after your Decoy pops before using another in this race',
           statusCode: 409,
           code: 'DECOY_COOLDOWN',
+          details: {'refundedPowerup': refundedPowerup},
         );
       }
-      throw const ApiException('Quick Rinse is on cooldown', statusCode: 409);
+      throw ApiException(
+        'Quick Rinse is on cooldown',
+        statusCode: 409,
+        details: {'refundedPowerup': refundedPowerup},
+      );
     }
     lastUpgradeLevel = upgradeLevel;
     return const {'result': {}};
