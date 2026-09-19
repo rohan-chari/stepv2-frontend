@@ -161,6 +161,7 @@ class _StashApi extends BackendApiService {
     return {
       'returned': true,
       'powerupType': stashType == 'HITCHHIKE' ? 'HITCHHIKE' : stashType,
+      'quantity': _stashQuantity,
     };
   }
 
