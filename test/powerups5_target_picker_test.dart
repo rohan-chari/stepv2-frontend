@@ -32,6 +32,12 @@ class _Api extends BackendApiService {
   }) async => {
     'contract': targetContract,
     'participants': [
+      if (targetContract != 'race-powerup-target-context-v2')
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'totalSteps': 38000,
+        },
       {'userId': 'user-2', 'displayName': 'Hill Climber', 'totalSteps': 42000},
       if (powerupType != 'BOUNTY' ||
           targetContract != 'race-powerup-target-context-v2')
