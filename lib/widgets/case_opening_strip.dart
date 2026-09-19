@@ -147,6 +147,13 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
     _controller.forward();
   }
 
+  Widget _buildPreviewItem(int sourceIndex, int distanceFromCenter) {
+    return KeyedSubtree(
+      key: Key('case-opening-leading-preview-$distanceFromCenter'),
+      child: widget.itemBuilder(context, sourceIndex, false),
+    );
+  }
+
   Widget _buildItem(int index) {
     final isResult = index == widget.resultIndex;
     final tile = widget.itemBuilder(context, index, isResult);
@@ -200,14 +207,22 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
           // The window Container insets its child by its 2px border on each side.
           final centerX = (viewportWidth - 4).clamp(0.0, double.infinity) / 2;
 
-          // Start with the first preview tile centered under the win pointer.
-          // The old hard-left start made the tutorial pointer sit near a tile
-          // edge before the user swiped, which looked visibly broken.
-          final startScroll = widget.itemWidth / 2 - centerX;
+          // Keep the real item 0 centered under the pointer at idle, but
+          // prepend enough synthetic preview tiles to fill the visible space to
+          // its left. Without these, centering the literal first child exposes
+          // the finite start of the Row (a large empty felt block).
+          final leadingPreviewCount = math.max(
+            2,
+            (centerX / totalItemWidth).ceil() + 1,
+          );
+          final firstRealItemCenter =
+              leadingPreviewCount * totalItemWidth + widget.itemWidth / 2;
+          final startScroll = firstRealItemCenter - centerX;
 
-          // The result item's centre position in the full strip.
+          // Result position is shifted by the synthetic leading previews.
           final resultItemCenter =
-              widget.resultIndex * totalItemWidth + widget.itemWidth / 2;
+              (leadingPreviewCount + widget.resultIndex) * totalItemWidth +
+              widget.itemWidth / 2;
           final endScroll = resultItemCenter - centerX;
           final totalScroll = endScroll - startScroll;
 
@@ -343,12 +358,26 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         for (
+                                          int p = 0;
+                                          p < leadingPreviewCount;
+                                          p++
+                                        ) ...[
+                                          if (p > 0)
+                                            const SizedBox(width: _itemSpacing),
+                                          _buildPreviewItem(
+                                            (widget.itemCount -
+                                                    leadingPreviewCount +
+                                                    p) %
+                                                widget.itemCount,
+                                            leadingPreviewCount - 1 - p,
+                                          ),
+                                        ],
+                                        for (
                                           int i = 0;
                                           i < widget.itemCount;
                                           i++
                                         ) ...[
-                                          if (i > 0)
-                                            const SizedBox(width: _itemSpacing),
+                                          const SizedBox(width: _itemSpacing),
                                           _buildItem(i),
                                         ],
                                       ],
