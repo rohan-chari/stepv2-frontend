@@ -4644,7 +4644,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final upgradeable = _isUpgradeable(type);
     final tierLabels = PowerupCopy.upgradeTierLabelsFor(type);
     final myCoins = widget.authService.coins;
-    final redeemedFromStash = powerup['redeemedFromInventory'] == true;
+    final redeemedFromStash = _isRedeemedFromStash(powerup);
 
     // §6.4: Pocket Watch gets its own two-mode sheet. The generic tier sheet
     // can't express "extend all my buffs" vs "extend ONE debuff I put on a
