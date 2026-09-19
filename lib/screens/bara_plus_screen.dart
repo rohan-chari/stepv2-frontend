@@ -7,6 +7,8 @@ import '../services/meta_app_events_service.dart';
 import '../styles.dart';
 import '../widgets/billing_action_feedback.dart';
 import '../widgets/billing_scope.dart';
+import '../widgets/home_course_track.dart';
+import '../widgets/home_hero_scene.dart';
 import '../widgets/pill_button.dart';
 
 /// Bara Gold membership surface. Prices come from native store metadata.
@@ -37,6 +39,21 @@ class BaraPlusBody extends StatefulWidget {
 }
 
 class _BaraGoldBodyState extends State<BaraPlusBody> {
+  static const _capeAccessory = <Map<String, dynamic>>[
+    <String, dynamic>{
+      'slot': 'BACK',
+      'assetKey': 'cape',
+      'renderMetadata': <String, dynamic>{
+        'scale': 2.1499999999999995,
+        'offsetX': -0.1,
+        'offsetY': -0.00423728813559332,
+        'rotation': 0.24915254237288265,
+        'renderLayer': 'front',
+        'animationFrames': 6,
+      },
+    },
+  ];
+
   BillingPlan _plan = BillingPlan.monthly;
   bool _busy = false;
   late final _feedback = BillingActionFeedback(
@@ -82,6 +99,80 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
           ),
   );
 
+  Widget _goldHero() {
+    final colors = AppColors.of(context);
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    const heroHeight = 154.0;
+    const groundHeight = 58.0;
+    const capySize = 116.0;
+
+    return ClipRRect(
+      key: const Key('bara-gold-paywall-hero'),
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: heroHeight,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            HomeHeroScene(
+              groundHeight: groundHeight,
+              groundScrollSpeed: 24,
+              excludeBackgroundSemantics: true,
+              child: const SizedBox.expand(),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: groundHeight - 4 - capySize * .22 - 2,
+              child: Center(
+                child: AnimatedCapybaraWithAccessories(
+                  accessories: _capeAccessory,
+                  size: capySize,
+                  stepDuration: const Duration(milliseconds: 720),
+                  animate: !disableAnimations,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 10,
+              child: Column(
+                children: [
+                  Text(
+                    'Bara Gold',
+                    textAlign: TextAlign.center,
+                    style: PixelText.title(
+                      size: 25,
+                      color: colors.textLight,
+                    ).copyWith(
+                      shadows: const [
+                        Shadow(
+                          color: Color(0x66000000),
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Ad-free. Exclusive perks.',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 12.5,
+                      color: colors.textLight.withValues(alpha: 0.86),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _benefitTile(
     IconData icon,
     String title,
@@ -96,7 +187,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
 
     return Container(
       key: key,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
         color: tileColor,
         borderRadius: BorderRadius.circular(16),
@@ -108,23 +199,23 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: colors.pillGold.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(14),
             ),
             alignment: Alignment.center,
-            child: Icon(icon, size: 25, color: iconColor),
+            child: Icon(icon, size: 23, color: iconColor),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _text(title, size: 16, title: true),
+                _text(title, size: 15, title: true),
                 const SizedBox(height: 3),
-                _text(detail, size: 12.5),
+                _text(detail, size: 12),
               ],
             ),
           ),
@@ -161,8 +252,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   ? null
                   : () => setState(() => _plan = offer.plan),
               child: Container(
-                constraints: const BoxConstraints(minHeight: 142),
-                padding: const EdgeInsets.fromLTRB(12, 20, 12, 14),
+                constraints: const BoxConstraints(minHeight: 150),
+                padding: const EdgeInsets.fromLTRB(12, 22, 12, 15),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: borderColor, width: 2),
@@ -317,34 +408,36 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   ),
                 ),
               if (!state.isMember) ...[
+                _goldHero(),
+                const SizedBox(height: 12),
                 _benefitTile(
                   Icons.monetization_on_outlined,
                   'Monthly coin bonus',
                   'Get extra coins every month. Monthly members get the biggest bonus.',
                   key: const Key('gold-benefit-coins'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 _benefitTile(
                   Icons.block_rounded,
                   'Ad-free experience',
                   'No banners, no inline ads, no interruptions. Just Bara.',
                   key: const Key('gold-benefit-adfree'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 _benefitTile(
                   Icons.card_giftcard_rounded,
                   'Free rerolls on everything',
                   'Reroll Daily Spins and boxes anytime, no ads required.',
                   key: const Key('gold-benefit-rerolls'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 _benefitTile(
                   Icons.workspace_premium_rounded,
                   'Exclusive characters & powerups',
                   'Unlock special characters, unique accessories, and exclusive shop powerups only for Gold members.',
                   key: const Key('gold-benefit-exclusive'),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 if (offers.isEmpty)
                   _text('Store pricing is currently unavailable.')
                 else ...[
@@ -357,7 +450,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 15),
                   PillButton(
                     key: Key(
                       trialDays > 0
@@ -390,7 +483,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                             );
                           },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 9),
                   Text(
                     trialDays > 0
                         ? 'The store confirms trial eligibility; billing starts after the trial unless cancelled. Auto-renews until cancelled.'
@@ -429,7 +522,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                       : () => _perform(billing.cancelRenewal),
                 ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               TextButton(
                 key: const Key('restore-bara'),
                 onPressed: disabled ? null : () => _perform(billing.restore),
