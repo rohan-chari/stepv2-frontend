@@ -3631,10 +3631,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// to the use call, so redeeming from the stash lands the same request a HELD
   /// powerup would.
   bool _isRedeemedFromStash(Map<String, dynamic> powerup) {
-    // Prefer the explicit server provenance. Keep the old null/null heuristic as
-    // a rolling-deploy fallback for a client that sees an older progress payload.
-    return powerup['redeemedFromInventory'] == true ||
-        (powerup['rarity'] == null && powerup['earnedAtSteps'] == null);
+    // Prefer the explicit server provenance, including an explicit FALSE.
+    // Fall back to the old null/null shape only when an older backend omitted
+    // the field entirely during a rolling deploy.
+    final explicit = powerup['redeemedFromInventory'];
+    if (explicit is bool) return explicit;
+    return powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
   }
 
   Future<bool> _returnRedeemedPowerupToStash(
