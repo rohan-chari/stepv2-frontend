@@ -4373,6 +4373,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     required int myCoins,
     required void Function(int level, String? targetEffectId) onConfirm,
     VoidCallback? onDiscard,
+    VoidCallback? onReturnToStash,
     VoidCallback? onReroll,
     int? discardPriceCoins,
   }) {
@@ -4420,6 +4421,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       },
                 discardPriceCoins: discardPriceCoins,
               ),
+              if (onReturnToStash != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: PillButton(
+                    key: const Key('return-redeemed-to-stash'),
+                    label: 'RETURN TO STASH',
+                    variant: PillButtonVariant.secondary,
+                    fullWidth: true,
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onReturnToStash();
+                    },
+                  ),
+                ),
               if (onReroll != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -4642,14 +4657,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           upgradeLevel: level,
           targetEffectId: targetEffectId,
         ),
-        onDiscard: () => _confirmAndDiscardPowerup(powerup),
+        onDiscard: redeemedFromStash
+            ? null
+            : () => _confirmAndDiscardPowerup(powerup),
+        onReturnToStash: redeemedFromStash
+            ? () => unawaited(_returnRedeemedPowerupToStash(powerup))
+            : null,
         onReroll: _canDeferredReroll(powerup)
             ? () => _rerollHeldPowerup(powerup)
             : null,
         // Third price surface (ui-test-planner): same _capRemaining and the
         // same min(price, cap) clamp as the DISCARD tag and the dialog, or the
         // sheet keeps promising the full price.
-        discardPriceCoins: _capRemaining == 0
+        discardPriceCoins: redeemedFromStash || _capRemaining == 0
             ? null
             : _discardPayoutFor(powerup),
       );
