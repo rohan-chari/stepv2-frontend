@@ -5354,7 +5354,9 @@ class BackendApiService {
     required String powerupType,
   }) {
     final contract = payload?['contract'];
-    final typed = contract == 'race-powerup-target-context-v1';
+    final typed =
+        contract == 'race-powerup-target-context-v2' ||
+        contract == 'race-powerup-target-context-v1';
     final legacy = contract == 'race-powerup-use-context-v1';
     final participants = payload?['participants'];
     final powerupData = _safeStringMap(payload?['powerupData']);
