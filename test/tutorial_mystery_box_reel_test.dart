@@ -49,12 +49,26 @@ void main() {
 
     final viewport = find.byKey(const Key('case-opening-reel-viewport'));
     final firstTile = find.byKey(const Key('tile-0'));
+    final leadingPreview = find.byKey(
+      const Key('case-opening-leading-preview-0'),
+    );
 
     expect(viewport, findsOneWidget);
     expect(firstTile, findsOneWidget);
+    expect(leadingPreview, findsOneWidget);
     expect(
       tester.getCenter(firstTile).dx,
       closeTo(tester.getCenter(viewport).dx, 0.5),
+    );
+    expect(
+      tester.getCenter(leadingPreview).dx,
+      lessThan(tester.getCenter(viewport).dx),
+      reason: 'idle reel must have a tile visible to the left of the pointer',
+    );
+    expect(
+      tester.getCenter(leadingPreview).dx,
+      greaterThan(tester.getTopLeft(viewport).dx),
+      reason: 'leading preview should be inside the visible reel window',
     );
   });
 }
