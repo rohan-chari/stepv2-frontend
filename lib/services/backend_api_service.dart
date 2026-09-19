@@ -6561,6 +6561,25 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Returns a still-HELD powerup that came from global stash back to the
+  /// account-wide inventory. Safe to retry; the backend owns the provenance and
+  /// conditional HELD transition.
+  Future<Map<String, dynamic>> returnRedeemedPowerupToStash({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/powerups/'
+          '${Uri.encodeComponent(powerupId)}/return-to-stash',
+      body: const {},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   /// Additive read-only preview; callers render unavailable on older backends.
   Future<Map<String, dynamic>> fetchShopItemPreview({
     required String identityToken,
