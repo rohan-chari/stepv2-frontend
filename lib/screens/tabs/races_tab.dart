@@ -813,15 +813,33 @@ class _RacesTabState extends State<RacesTab> {
       badgeColor = AppColors.of(context).textMid;
     }
 
-    return GestureDetector(
-      onTap: () => _navigateToTournamentDetail(id),
-      behavior: HitTestBehavior.opaque,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
       child: Container(
-        color: cardColor,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        key: Key('tournament-invite-card-surface-$id'),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: _raceCardShadow,
+        ),
+        child: Material(
+          color: cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.9),
+              width: 1.5,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: id.isEmpty ? null : () => _navigateToTournamentDetail(id),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             Row(
               children: [
                 Expanded(
@@ -918,7 +936,10 @@ class _RacesTabState extends State<RacesTab> {
                 ],
               ),
             ],
-          ],
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
