@@ -3059,6 +3059,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     Map<String, dynamic> powerup, {
     int upgradeLevel = 0,
     String? targetEffectId,
+    bool returnRedeemedOnLocalAbort = false,
   }) async {
     final type = powerup['type'] as String;
     // Store-redeemed items are distinguishable from race-earned drops even
@@ -3066,12 +3067,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // with neither a rarity nor a milestone. The server returns these to the
     // global stash on a rejected use, so reconcile instead of restoring a
     // stale in-race snapshot.
-    final wasRedeemedFromStash =
-        powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
+    final wasRedeemedFromStash = _isRedeemedFromStash(powerup);
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
       _clearPowerupProcessing();
       return;
+    }
+
+    Future<void> abortBeforeUse() async {
+      _clearPowerupProcessing();
+      if (returnRedeemedOnLocalAbort && wasRedeemedFromStash) {
+        await _returnRedeemedPowerupToStash(powerup, silent: true);
+      }
     }
 
     String? targetUserId;
@@ -3092,7 +3099,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         type,
       );
       if (useContextParticipants == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showErrorToast(context, 'Couldn’t load eligible targets. Try again.');
         }
@@ -3106,24 +3113,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     if (type == 'QUICKSAND') {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) showErrorToast(context, 'No targets available');
         return;
       }
       targetUserIds = await _showQuicksandTargetPicker(targets);
       if (targetUserIds == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (type == 'PINECONE_TOSS') {
       targetDirection = await _showPineconeDirectionPicker();
       if (targetDirection == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (type == 'SNEAKY_SWAP') {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showInfoToast(context, 'No one has a powerup to steal right now');
         }
@@ -3131,12 +3138,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (type == 'BOUNTY') {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showInfoToast(context, 'No rivals are ahead of you to target');
         }
@@ -3144,12 +3151,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (kTargetedPowerupTypes.contains(type)) {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showErrorToast(
             context,
@@ -3163,12 +3170,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      await abortBeforeUse();
+      return;
+    }
     _showPowerupProcessing(type);
     setState(() => _isActing = true);
     // Optimistically empty the slot the moment the user commits (mirrors the
@@ -3620,6 +3630,53 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// sheet already made (Pocket Watch's tier + rival effect) straight through
   /// to the use call, so redeeming from the stash lands the same request a HELD
   /// powerup would.
+  bool _isRedeemedFromStash(Map<String, dynamic> powerup) {
+    // Prefer the explicit server provenance. Keep the old null/null heuristic as
+    // a rolling-deploy fallback for a client that sees an older progress payload.
+    return powerup['redeemedFromInventory'] == true ||
+        (powerup['rarity'] == null && powerup['earnedAtSteps'] == null);
+  }
+
+  Future<bool> _returnRedeemedPowerupToStash(
+    Map<String, dynamic> powerup, {
+    bool silent = false,
+  }) async {
+    final token = widget.authService.authToken;
+    final powerupId = powerup['id'];
+    if (token == null ||
+        token.isEmpty ||
+        powerupId is! String ||
+        powerupId.isEmpty ||
+        !_isRedeemedFromStash(powerup)) {
+      return false;
+    }
+
+    try {
+      await _api.returnRedeemedPowerupToStash(
+        identityToken: token,
+        raceId: widget.raceId,
+        powerupId: powerupId,
+      );
+      // Refresh both the race tray and the account-wide stash projection.
+      await _loadProgress();
+      if (!silent && mounted) {
+        showInfoToast(
+          context,
+          '${PowerupCopy.nameFor(powerup['type'] as String?)} returned to your stash',
+        );
+      }
+      return true;
+    } catch (error) {
+      // A failed return leaves the authoritative HELD row visible after refresh,
+      // where the user can retry. Never pretend the paid item disappeared.
+      await _loadProgress();
+      if (!silent && mounted) {
+        showErrorToast(context, powerupUseErrorCopy(error));
+      }
+      return false;
+    }
+  }
+
   Future<void> _redeemAndUsePowerup(
     String powerupType, {
     int upgradeLevel = 0,
@@ -3677,6 +3734,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       redeemedPowerup,
       upgradeLevel: upgradeLevel,
       targetEffectId: targetEffectId,
+      returnRedeemedOnLocalAbort: true,
     );
   }
 
@@ -4569,6 +4627,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final upgradeable = _isUpgradeable(type);
     final tierLabels = PowerupCopy.upgradeTierLabelsFor(type);
     final myCoins = widget.authService.coins;
+    final redeemedFromStash = powerup['redeemedFromInventory'] == true;
 
     // §6.4: Pocket Watch gets its own two-mode sheet. The generic tier sheet
     // can't express "extend all my buffs" vs "extend ONE debuff I put on a
@@ -4702,23 +4761,44 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 // away the Protein Shake would dead-end the demo script.
                 if (!widget.demoMode) ...[
                   const SizedBox(height: 8),
-                  PillButton(
-                    label: 'DISCARD',
-                    variant: PillButtonVariant.accent,
-                    fontSize: 13,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 10,
+                  if (redeemedFromStash)
+                    PillButton(
+                      key: const Key('return-redeemed-to-stash'),
+                      label: 'RETURN TO STASH',
+                      variant: PillButtonVariant.secondary,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      onPressed: _isActing
+                          ? null
+                          : () {
+                              Navigator.of(ctx).pop();
+                              unawaited(
+                                _returnRedeemedPowerupToStash(powerup),
+                              );
+                            },
+                    )
+                  else
+                    PillButton(
+                      label: 'DISCARD',
+                      variant: PillButtonVariant.accent,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      trailing: _discardPriceTrailing(powerup),
+                      onPressed: _isActing
+                          ? null
+                          : () {
+                              Navigator.of(ctx).pop();
+                              _confirmAndDiscardPowerup(powerup);
+                            },
                     ),
-                    trailing: _discardPriceTrailing(powerup),
-                    onPressed: _isActing
-                        ? null
-                        : () {
-                            Navigator.of(ctx).pop();
-                            _confirmAndDiscardPowerup(powerup);
-                          },
-                  ),
                   if (_canDeferredReroll(powerup)) ...[
                     const SizedBox(height: 8),
                     PillButton(
@@ -8489,6 +8569,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     ? pw['id'] as String
                     : null;
                 return ItemSlot(
+                  shellKey: Key('powerup-slot-$i'),
                   state: ItemSlotState.mysteryBox,
                   isExtraSlot: isExtraSlot,
                   onTap: _isActing || boxId == null
@@ -8503,6 +8584,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               final rawType = pw['type'];
               final rawRarity = pw['rarity'];
               return ItemSlot(
+                shellKey: Key('powerup-slot-$i'),
                 state: ItemSlotState.held,
                 powerupType: rawType is String ? rawType : '',
                 rarity: rawRarity is String ? rawRarity : null,
@@ -8516,6 +8598,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               );
             } else {
               return ItemSlot(
+                shellKey: Key('powerup-slot-$i'),
                 state: ItemSlotState.empty,
                 isExtraSlot: isExtraSlot,
               );
