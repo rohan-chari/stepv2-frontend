@@ -80,8 +80,11 @@ void main() {
     expect(avatar.accessories.single['slot'], 'BACK');
     expect(avatar.accessories.single['assetKey'], 'cape');
     final metadata = avatar.accessories.single['renderMetadata'] as Map;
-    expect(metadata['renderLayer'], 'behind');
-    expect(metadata['walkSway'], isTrue);
+    expect(metadata['renderLayer'], 'front');
+    expect(metadata['animationFrames'], 6);
+    expect(metadata['scale'], closeTo(2.15, 0.000001));
+    expect(metadata['offsetX'], closeTo(-0.1, 0.000001));
+    expect(metadata['rotation'], closeTo(0.24915254237288265, 0.000001));
     expect(find.byKey(const Key('bara-gold-hero-scene')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('bara-plus-card')));
