@@ -612,9 +612,13 @@ void main() {
       expect(find.byKey(const Key('race-favorite-invite')), findsNothing);
       expect(find.byKey(const Key('race-favorite-tournament-1')), findsNothing);
 
+      await tester.ensureVisible(
+        find.byKey(const Key('personal-state-completed')),
+      );
       await tester.tap(find.byKey(const Key('personal-state-completed')));
       await tester.pump(const Duration(milliseconds: 200));
-      expect(find.byKey(const Key('race-favorite-complete')), findsOneWidget);
+      expect(find.byKey(const Key('race-favorite-complete')), findsNothing);
+      expect(find.text('Complete'), findsOneWidget);
     },
   );
 

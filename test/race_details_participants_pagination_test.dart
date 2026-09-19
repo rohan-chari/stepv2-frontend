@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:step_tracker/widgets/leaderboard_plank.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -168,6 +169,13 @@ class _PagedActiveApi extends BackendApiService {
     'participants': [
       {'userId': 'u0', 'displayName': 'Racer u0', 'totalSteps': 9000.0},
     ],
+    'pagination': {
+      'offset': 0,
+      'limit': 15,
+      'total': 247,
+      'hasMore': true,
+      'nextOffset': 15,
+    },
     'currentUser': {
       'userId': 'user-1',
       'displayName': 'Trail Walker',
@@ -553,7 +561,17 @@ void main() {
         find.byKey(const Key('standings-pinned-current-user')),
         findsOneWidget,
       );
-      expect(find.text('42'), findsOneWidget);
+      expect(
+        tester
+            .widget<LeaderboardPlank>(
+              find.descendant(
+                of: find.byKey(const Key('standings-pinned-current-user')),
+                matching: find.byType(LeaderboardPlank),
+              ),
+            )
+            .rankLabel,
+        '42',
+      );
       expect(find.text('8,200'), findsOneWidget);
       expect(find.text('• • •'), findsOneWidget);
     });

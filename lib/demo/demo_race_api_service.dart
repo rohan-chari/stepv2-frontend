@@ -314,19 +314,25 @@ class DemoRaceApiService extends BackendApiService {
         (legacy['participants'] as List?)?.whereType<Map<String, dynamic>>() ??
         const <Map<String, dynamic>>[];
     return {
-      'contract': 'race-powerup-target-context-v1',
+      'contract': 'race-powerup-target-context-v2',
       'participants': [
         for (final participant in participants)
-          {
-            'userId': participant['userId'],
-            'displayName': participant['displayName'],
-            'profilePhotoUrl': participant['profilePhotoUrl'],
-            'team': participant['team'],
-            'forfeitedAt': participant['forfeitedAt'],
-            'stealthed': participant['stealthed'] == true,
-            if (powerupType == 'BOUNTY')
-              'totalSteps': (participant['totalSteps'] as num?)?.toInt() ?? 0,
-          },
+          if (participant['userId'] != engine.myUserId &&
+              participant['forfeitedAt'] == null &&
+              participant['stealthed'] != true &&
+              (powerupType != 'BOUNTY' ||
+                  ((participant['totalSteps'] as num?) ?? 0) >
+                      engine.stepsFor(engine.myUserId)))
+            {
+              'userId': participant['userId'],
+              'displayName': participant['displayName'],
+              'profilePhotoUrl': participant['profilePhotoUrl'],
+              'team': participant['team'],
+              'forfeitedAt': participant['forfeitedAt'],
+              'stealthed': participant['stealthed'] == true,
+              if (powerupType == 'BOUNTY')
+                'totalSteps': (participant['totalSteps'] as num?)?.toInt() ?? 0,
+            },
       ],
       'powerupData': legacy['powerupData'],
     };

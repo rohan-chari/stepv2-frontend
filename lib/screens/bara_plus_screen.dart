@@ -90,8 +90,14 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
   }) => Text(
     value,
     style: title
-        ? PixelText.title(size: size, color: color ?? AppColors.of(context).textDark)
-        : PixelText.body(size: size, color: color ?? AppColors.of(context).textMid),
+        ? PixelText.title(
+            size: size,
+            color: color ?? AppColors.of(context).textDark,
+          )
+        : PixelText.body(
+            size: size,
+            color: color ?? AppColors.of(context).textMid,
+          ),
   );
 
   Widget _goldHero() {
@@ -147,7 +153,9 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
       decoration: BoxDecoration(
         color: colors.parchment,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.parchmentBorder.withValues(alpha: 0.65)),
+        border: Border.all(
+          color: colors.parchmentBorder.withValues(alpha: 0.65),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,8 +178,11 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
     final title = offer.plan == BillingPlan.weekly ? 'WEEKLY' : 'MONTHLY';
     final fill = selected
         ? (colors.isDark
-            ? colors.pillGoldDark
-            : Color.alphaBlend(colors.pillGold.withValues(alpha: 0.18), colors.parchment))
+              ? colors.pillGoldDark
+              : Color.alphaBlend(
+                  colors.pillGold.withValues(alpha: 0.18),
+                  colors.parchment,
+                ))
         : colors.parchment;
     final borderColor = selected
         ? (colors.isDark ? colors.pillGold : colors.pillGoldDark)
@@ -215,24 +226,29 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                       if (monthly && selected && offer.price == r'$3.99') ...[
                         Text(
                           r'$5.99',
-                          style: PixelText.body(size: 14, color: secondary).copyWith(
-                            decoration: TextDecoration.lineThrough,
-                            decorationColor: colors.error,
-                            decorationThickness: 2,
-                          ),
+                          style: PixelText.body(size: 14, color: secondary)
+                              .copyWith(
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: colors.error,
+                                decorationThickness: 2,
+                              ),
                         ),
                         const SizedBox(height: 2),
                       ],
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          offer.price,
-                          style: PixelText.title(size: 30, color: foreground),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            offer.price,
+                            style: PixelText.title(size: 30, color: foreground),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        offer.plan == BillingPlan.weekly ? 'per week' : 'per month',
+                        offer.plan == BillingPlan.weekly
+                            ? 'per week'
+                            : 'per month',
                         style: PixelText.body(size: 12, color: secondary),
                       ),
                     ],
@@ -249,7 +265,10 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               child: Center(
                 child: Container(
                   key: const Key('bara-gold-best-deal'),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: colors.pillGold,
                     borderRadius: BorderRadius.circular(999),
@@ -258,9 +277,22 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.workspace_premium_rounded, size: 13, color: colors.textDark),
+                      Icon(
+                        Icons.workspace_premium_rounded,
+                        size: 13,
+                        color: colors.textDark,
+                      ),
                       const SizedBox(width: 4),
-                      Text('BEST DEAL', style: PixelText.title(size: 9.5, color: colors.textDark)),
+                      Flexible(
+                        child: Text(
+                          'BEST DEAL',
+                          textAlign: TextAlign.center,
+                          style: PixelText.title(
+                            size: 9.5,
+                            color: colors.textDark,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -287,10 +319,16 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
         final colors = AppColors.of(context);
         final state = billing.snapshot;
         final offers = billing.plans
-            .where((offer) => offer.plan == BillingPlan.weekly || offer.plan == BillingPlan.monthly)
+            .where(
+              (offer) =>
+                  offer.plan == BillingPlan.weekly ||
+                  offer.plan == BillingPlan.monthly,
+            )
             .toList();
         final matching = offers.where((item) => item.plan == _plan);
-        final monthly = offers.where((item) => item.plan == BillingPlan.monthly);
+        final monthly = offers.where(
+          (item) => item.plan == BillingPlan.monthly,
+        );
         final StorePlanOffer? offer = matching.isNotEmpty
             ? matching.first
             : monthly.isNotEmpty
@@ -298,7 +336,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
             : offers.isNotEmpty
             ? offers.first
             : null;
-        final disabled = _busy || state.busy || offer == null || !billing.isAvailable;
+        final disabled =
+            _busy || state.busy || offer == null || !billing.isAvailable;
         final trialDays = offer?.trialDays ?? 0;
 
         return Container(
@@ -313,13 +352,19 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   children: [
                     IconButton(
                       onPressed: () => Navigator.maybePop(context),
-                      icon: Icon(Icons.arrow_back_rounded, color: colors.textDark),
+                      icon: Icon(
+                        Icons.arrow_back_rounded,
+                        color: colors.textDark,
+                      ),
                     ),
                     Expanded(
                       child: Text(
                         'Bara Gold',
                         textAlign: TextAlign.center,
-                        style: PixelText.title(size: 22, color: colors.textDark),
+                        style: PixelText.title(
+                          size: 22,
+                          color: colors.textDark,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 48),
@@ -329,7 +374,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 _goldHero(),
                 const SizedBox(height: 10),
                 for (final benefit in BaraGoldBenefit.values) ...[
-                  if (benefit != BaraGoldBenefit.values.first) const SizedBox(height: 6),
+                  if (benefit != BaraGoldBenefit.values.first)
+                    const SizedBox(height: 6),
                   _benefitTile(benefit),
                 ],
                 const SizedBox(height: 16),
@@ -340,9 +386,11 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                     key: const Key('bara-gold-plan-row'),
                     builder: (context, constraints) {
                       final weeklyOffer = offers
-                          .where((item) => item.plan == BillingPlan.weekly).firstOrNull;
+                          .where((item) => item.plan == BillingPlan.weekly)
+                          .firstOrNull;
                       final monthlyOffer = offers
-                          .where((item) => item.plan == BillingPlan.monthly).firstOrNull;
+                          .where((item) => item.plan == BillingPlan.monthly)
+                          .firstOrNull;
                       if (weeklyOffer == null || monthlyOffer == null) {
                         return Center(
                           child: SizedBox(
@@ -352,7 +400,10 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                         );
                       }
                       const gap = 28.0;
-                      final cardWidth = (constraints.maxWidth * 0.39).clamp(118.0, 142.0);
+                      final cardWidth = (constraints.maxWidth * 0.39).clamp(
+                        118.0,
+                        142.0,
+                      );
                       final totalWidth = cardWidth * 2 + gap;
                       final sideInset = (constraints.maxWidth - totalWidth) / 2;
                       return SizedBox(
@@ -385,17 +436,26 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   ),
                   const SizedBox(height: 15),
                   PillButton(
-                    key: Key(trialDays > 0 ? 'start-bara-trial' : 'subscribe-bara'),
-                    label: trialDays > 0 ? 'TRY ${trialDays.toString()} DAYS FREE' : 'SUBSCRIBE',
+                    key: Key(
+                      trialDays > 0 ? 'start-bara-trial' : 'subscribe-bara',
+                    ),
+                    label: trialDays > 0
+                        ? 'TRY ${trialDays.toString()} DAYS FREE'
+                        : 'SUBSCRIBE',
                     variant: PillButtonVariant.secondary,
                     fullWidth: true,
                     loading: _busy,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-                    onPressed: disabled || offer == null
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 15,
+                    ),
+                    onPressed: disabled
                         ? null
                         : () {
                             unawaited(
-                              MetaAppEventsService.instance.log(MetaConversion.purchaseIntent),
+                              MetaAppEventsService.instance.log(
+                                MetaConversion.purchaseIntent,
+                              ),
                             );
                             unawaited(
                               _perform(
@@ -411,10 +471,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                     trialDays > 0
                         ? 'The store confirms trial eligibility; billing starts after the trial unless cancelled. Auto-renews until cancelled.'
                         : (offer == null
-                            ? ''
-                            : offer.price + ' per ' +
-                                (offer.plan == BillingPlan.weekly ? 'week' : 'month') +
-                                '. Auto-renews until cancelled.'),
+                              ? ''
+                              : '${offer.price} per ${offer.plan == BillingPlan.weekly ? 'week' : 'month'}. Auto-renews until cancelled.'),
                     textAlign: TextAlign.center,
                     style: PixelText.body(size: 11.5, color: colors.textMid),
                   ),
@@ -422,7 +480,9 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               ] else ...[
                 const SizedBox(height: 8),
                 _text(
-                  state.isTrial ? 'Your Gold trial is active.' : 'Your Bara Gold membership is active.',
+                  state.isTrial
+                      ? 'Your Gold trial is active.'
+                      : 'Your Bara Gold membership is active.',
                   size: 20,
                   title: true,
                 ),
@@ -432,7 +492,9 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   label: 'MANAGE MEMBERSHIP',
                   fullWidth: true,
                   variant: PillButtonVariant.secondary,
-                  onPressed: _busy || state.busy ? null : () => _perform(billing.cancelRenewal),
+                  onPressed: _busy || state.busy
+                      ? null
+                      : () => _perform(billing.cancelRenewal),
                 ),
               ],
               const SizedBox(height: 8),
@@ -444,7 +506,10 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               if (state.operationStatus == BillingOperationStatus.pending)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: _text(state.message ?? 'Purchase is awaiting confirmation.', size: 12),
+                  child: _text(
+                    state.message ?? 'Purchase is awaiting confirmation.',
+                    size: 12,
+                  ),
                 ),
             ],
           ),

@@ -8,7 +8,6 @@ import 'package:step_tracker/models/admin_system_health.dart';
 import 'package:step_tracker/screens/admin_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
-import 'package:step_tracker/widgets/spinning_crate.dart';
 
 class _SystemHealthApi extends BackendApiService {
   _SystemHealthApi({List<Object>? results, this.blocker})
@@ -20,6 +19,27 @@ class _SystemHealthApi extends BackendApiService {
   final Completer<void>? blocker;
   final List<String> calls = [];
   int _resultIndex = 0;
+
+  @override
+  Future<Map<String, dynamic>> fetchAdminStatsView({
+    required String identityToken,
+    required String view,
+    required String window,
+    required String section,
+  }) async => {
+    'view': view,
+    'sections': {
+      for (final section in [
+        'dashboard-summary',
+        'dashboard-growth',
+        'dashboard-dau-engagement',
+      ])
+        section: await fetchAdminStats(
+          identityToken: identityToken,
+          sections: [section],
+        ),
+    },
+  };
 
   @override
   Future<Map<String, dynamic>> fetchAdminStats({
@@ -302,16 +322,21 @@ Future<void> _pump(
       ),
     ),
   );
-  for (var i = 0; i < 8; i++) {
+  for (var i = 0; i < 12; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
 
 Future<void> _expand(WidgetTester tester) async {
-  final header = find.byKey(const Key('admin-section-header-SYSTEM HEALTH'));
-  await tester.ensureVisible(header);
-  await tester.tap(header, warnIfMissed: false);
-  for (var i = 0; i < 8; i++) {
+  final header = find.text('System health');
+  await tester.scrollUntilVisible(
+    header,
+    400,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(header);
+  for (var i = 0; i < 12; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -488,36 +513,21 @@ void main() {
     });
   });
 
-  testWidgets(
-    'both branches place one lazy section immediately before CONFIG',
-    (tester) async {
-      for (final ios in [true, false]) {
-        final api = _SystemHealthApi();
-        await _pump(tester, api, ios: ios);
-        expect(
-          find.byKey(const Key('admin-section-SYSTEM HEALTH')),
-          findsOneWidget,
-        );
-        expect(api.calls.where((call) => call == 'system-health'), isEmpty);
-        expect(find.text('POOL NOW'), findsNothing);
-        final systemY = tester
-            .getTopLeft(find.byKey(const Key('admin-section-SYSTEM HEALTH')))
-            .dy;
-        final configY = tester
-            .getTopLeft(find.byKey(const Key('admin-section-CONFIG')))
-            .dy;
-        expect(systemY, lessThan(configY));
-
-        await _expand(tester);
-        expect(
-          api.calls.where((call) => call == 'system-health'),
-          hasLength(1),
-        );
-        expect(find.text('POOL NOW'), findsOneWidget);
-        await tester.pumpWidget(const SizedBox.shrink());
-      }
-    },
-  );
+  testWidgets('both platforms navigate to one lazy System health page', (
+    tester,
+  ) async {
+    for (final ios in [true, false]) {
+      final api = _SystemHealthApi();
+      await _pump(tester, api, ios: ios);
+      expect(api.calls.where((call) => call == 'system-health'), isEmpty);
+      expect(find.text('POOL NOW'), findsNothing);
+      await _expand(tester);
+      expect(api.calls.where((call) => call == 'system-health'), hasLength(1));
+      expect(find.text('POOL NOW'), findsOneWidget);
+      expect(find.text('System health'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
 
   testWidgets(
     'renders process rows and exact complete/collecting failure cards',
@@ -552,17 +562,22 @@ void main() {
     final blocker = Completer<void>();
     final api = _SystemHealthApi(blocker: blocker);
     await _pump(tester, api);
-    final header = find.byKey(const Key('admin-section-header-SYSTEM HEALTH'));
-    await tester.ensureVisible(header);
-    await tester.tap(header, warnIfMissed: false);
+    final header = find.text('System health');
+    await tester.scrollUntilVisible(
+      header,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(header);
     await tester.pump();
     await tester.pump();
 
-    expect(find.byType(SpinningCrate), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Couldn’t load system health.'), findsNothing);
 
     blocker.complete();
-    for (var i = 0; i < 8; i++) {
+    for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(find.text('HEALTHY'), findsOneWidget);
@@ -701,9 +716,14 @@ void main() {
     await _pump(tester, api);
     await _expand(tester);
     final refresh = find.byKey(const Key('admin-system-health-refresh'));
-    await tester.ensureVisible(refresh);
+    await tester.scrollUntilVisible(
+      refresh,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(refresh);
-    for (var i = 0; i < 8; i++) {
+    for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
@@ -727,7 +747,7 @@ void main() {
     final openedApi = _SystemHealthApi();
     await _pump(tester, openedApi);
     await _expand(tester);
-    await tester.tap(find.byKey(const Key('admin-screen-refresh')));
+    await tester.tap(find.byTooltip('Refresh System health'));
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
@@ -814,6 +834,10 @@ void main() {
     );
     await _expand(tester);
     expect(tester.takeException(), isNull);
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.byType(ListView), findsOneWidget);
+    expect(
+      tester.widget<ListView>(find.byType(ListView)).scrollDirection,
+      Axis.vertical,
+    );
   });
 }

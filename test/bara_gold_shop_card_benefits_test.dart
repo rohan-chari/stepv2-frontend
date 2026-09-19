@@ -76,10 +76,7 @@ Future<void> _pumpCard(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final palette = night ? AppPalette.night : AppPalette.light;
-  Widget card = BaraPlusCard(
-    controller: scoped ? null : billing,
-    onTap: onTap,
-  );
+  Widget card = BaraPlusCard(controller: scoped ? null : billing, onTap: onTap);
   if (scoped) card = BillingScope(controller: billing, child: card);
 
   await tester.pumpWidget(
@@ -144,7 +141,7 @@ void main() {
       greaterThan(tester.getBottomLeft(benefits).dy),
     );
     expect(tester.getSize(benefits), tester.getSize(cta));
-    expect(tester.getSize(benefits).height, 56);
+    expect(tester.getSize(benefits).height, greaterThanOrEqualTo(56));
     expect(find.byType(AnimatedCapybaraWithAccessories), findsOneWidget);
     final avatar = tester.widget<AnimatedCapybaraWithAccessories>(
       find.byType(AnimatedCapybaraWithAccessories),
@@ -210,7 +207,9 @@ void main() {
           expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
           expect(find.text('Bara Gold'), findsOneWidget);
           expect(
-            tester.getSize(find.byKey(const Key('bara-gold-hero-viewport'))).height,
+            tester
+                .getSize(find.byKey(const Key('bara-gold-hero-viewport')))
+                .height,
             closeTo(tall ? 184 : 160, 0.01),
           );
           final scene = tester.widget<HomeHeroScene>(

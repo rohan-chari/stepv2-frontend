@@ -367,7 +367,8 @@ void main() {
     final billing = FakeBilling();
     await pumpShop(tester, billing: billing);
     await tester.tap(find.byKey(const Key('bara-plus-card')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     final paywall = tester.getRect(find.byKey(const Key('bara-gold-paywall')));
     final row = tester.getRect(find.byKey(const Key('bara-gold-plan-row')));
@@ -401,8 +402,8 @@ void main() {
       await pumpRetainedMembership(tester, billing: FakeBilling());
       expect(find.text('Monthly coin bonus'), findsOneWidget);
       expect(find.text('Ad-free experience'), findsOneWidget);
-      expect(find.text('Free rerolls on everything'), findsOneWidget);
-      expect(find.text('Exclusive characters & powerups'), findsOneWidget);
+      expect(find.text('Free rerolls'), findsOneWidget);
+      expect(find.text('Exclusive characters'), findsOneWidget);
       expect(find.byKey(const Key('plan-monthly')), findsOneWidget);
       expect(find.byKey(const Key('bara-gold-best-deal')), findsOneWidget);
       expect(find.byKey(const Key('restore-bara')), findsOneWidget);
@@ -418,7 +419,7 @@ void main() {
       width: 320,
       textScale: 1.6,
     );
-    expect(find.text('Bara Gold'), findsOneWidget);
+    expect(find.byKey(const Key('bara-gold-paywall-hero')), findsOneWidget);
     final monthly = find.byKey(const Key('plan-monthly'));
     final weekly = find.byKey(const Key('plan-weekly'));
     expect(

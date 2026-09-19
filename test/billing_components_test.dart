@@ -150,10 +150,13 @@ void main() {
     await tester.tap(find.byKey(const Key('plan-monthly')));
     await tester.pump();
     expect(
-      find.textContaining('Monthly Gold grants 1,000 coins'),
+      find.textContaining('Extra coins each month, based on your plan.'),
       findsOneWidget,
     );
-    expect(find.text('One free reroll per powerup'), findsOneWidget);
+    expect(
+      find.text('Reroll Daily Spins and boxes without ads.'),
+      findsOneWidget,
+    );
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-bara-trial')),
       400,
@@ -166,7 +169,7 @@ void main() {
     expect(billing.snapshot.trialCredits, 0);
   });
   testWidgets(
-    'selected plan copy stays white and the pricing note is centered',
+    'selected plan copy follows the surface palette and the pricing note is centered',
     (tester) async {
       final billing = FakeBilling();
       await tester.pumpWidget(
@@ -179,20 +182,23 @@ void main() {
         ),
       );
 
-      for (final label in ['WEEKLY', r'$1.49', '200 coins / week']) {
+      for (final label in ['MONTHLY', r'$3.99']) {
         expect(
           tester.widget<Text>(find.text(label)).style!.color,
-          AppPalette.light.textLight,
+          AppPalette.light.textDark,
         );
       }
-      final note = find.textContaining(r'$1.49 per week.');
-      final noteAlign = find.ancestor(of: note, matching: find.byType(Align));
-      expect(noteAlign, findsOneWidget);
-      expect(tester.widget<Align>(noteAlign).alignment, Alignment.center);
+      expect(
+        tester.widget<Text>(find.text('per month')).style!.color,
+        AppPalette.light.textMid,
+      );
+      final note = find.textContaining('Auto-renews until cancelled.');
+      expect(note, findsOneWidget);
+      expect(tester.widget<Text>(note).textAlign, TextAlign.center);
     },
   );
 
-  testWidgets('Gold benefit icons use the brighter night purple', (
+  testWidgets('Gold benefit icons use the shared night palette', (
     tester,
   ) async {
     final billing = FakeBilling();
@@ -207,12 +213,16 @@ void main() {
     );
 
     expect(
-      tester.widget<Icon>(find.byIcon(Icons.local_offer_outlined)).color,
-      AppPalette.night.medalGold,
+      tester
+          .widget<Icon>(find.byIcon(Icons.workspace_premium_rounded).first)
+          .color,
+      AppPalette.night.feedGold,
     );
   });
 
-  testWidgets('Bara Gold card uses the short premium subtitle', (tester) async {
+  testWidgets('Bara Gold card shows its carousel and upgrade action', (
+    tester,
+  ) async {
     final billing = FakeBilling();
     await tester.pumpWidget(
       BillingScope(
@@ -223,7 +233,7 @@ void main() {
       ),
     );
 
-    expect(find.text('More room to move, play, and collect.'), findsOneWidget);
+    expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
     expect(find.textContaining('15% member discount'), findsNothing);
     expect(find.textContaining('Gold perks'), findsNothing);
     final cardMaterial = find.ancestor(
@@ -233,7 +243,7 @@ void main() {
     expect(cardMaterial, findsNWidgets(2));
     expect(
       tester.widget<Material>(cardMaterial.first).color,
-      AppPalette.light.parchment,
+      AppPalette.light.dirtMid,
     );
   });
 
@@ -253,13 +263,10 @@ void main() {
       of: find.byKey(const Key('bara-plus-card')),
       matching: find.byType(Material),
     );
+    expect(tester.widget<Material>(card.first).color, AppPalette.night.dirtMid);
     expect(
-      tester.widget<Material>(card.first).color,
-      AppPalette.night.parchment,
-    );
-    expect(
-      tester.widget<Icon>(find.byIcon(Icons.auto_awesome)).color,
-      AppPalette.night.medalGold,
+      tester.widget<Icon>(find.byIcon(Icons.block_rounded).first).color,
+      AppPalette.night.error,
     );
   });
   testWidgets(

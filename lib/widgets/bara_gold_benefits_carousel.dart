@@ -26,13 +26,15 @@ class BaraGoldBenefitsCarousel extends StatefulWidget {
       return height;
     }
 
-    // Border 2 + horizontal padding 20 + icon/gap 42 + indicator space 34.
-    final textWidth = width - 98;
+    // Border 2 + horizontal padding 20 + icon/gap 42. Dots sit below.
+    final textWidth = width - 64;
     var height = 56.0;
     for (final benefit in BaraGoldBenefit.values) {
-      final content = measure(benefit.title, goldBenefitTitleStyle(context), textWidth) +
-          2 + measure(benefit.teaser, goldBenefitDetailStyle(context), textWidth);
-      height = math.max(height, content + 18);
+      final content =
+          measure(benefit.title, goldBenefitTitleStyle(context), textWidth) +
+          2 +
+          measure(benefit.teaser, goldBenefitDetailStyle(context), textWidth);
+      height = math.max(height, content + 22);
     }
     // Match the CTA's own border, padding, arrow and optional sparkles too.
     final innerWidth = width - 27;
@@ -46,7 +48,8 @@ class BaraGoldBenefitsCarousel extends StatefulWidget {
   }
 
   @override
-  State<BaraGoldBenefitsCarousel> createState() => _BaraGoldBenefitsCarouselState();
+  State<BaraGoldBenefitsCarousel> createState() =>
+      _BaraGoldBenefitsCarouselState();
 }
 
 class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
@@ -79,9 +82,10 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
     super.didChangeDependencies();
     final media = MediaQuery.of(context);
     _screenSize = media.size;
-    _enabled = !media.disableAnimations &&
+    _enabled =
+        !media.disableAnimations &&
         !media.accessibleNavigation &&
-        TickerMode.of(context) &&
+        TickerMode.valuesOf(context).enabled &&
         (ModalRoute.of(context)?.isCurrent ?? true);
     _restartTimer();
   }
@@ -95,18 +99,29 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
   void _restartTimer() {
     _timer?.cancel();
     _timer = null;
-    if (!mounted || !_enabled || !_resumed || _touching || _scrolling ||
-        _hovered || _focused) return;
+    if (!mounted ||
+        !_enabled ||
+        !_resumed ||
+        _touching ||
+        _scrolling ||
+        _hovered ||
+        _focused) {
+      return;
+    }
     _timer = Timer(_interval, () {
       if (!mounted || !_pages.hasClients) return;
       final box = context.findRenderObject();
-      if (box is! RenderBox || !box.hasSize ||
-          !(box.localToGlobal(Offset.zero) & box.size)
-              .overlaps(Offset.zero & _screenSize)) {
+      if (box is! RenderBox ||
+          !box.hasSize ||
+          !(box.localToGlobal(Offset.zero) & box.size).overlaps(
+            Offset.zero & _screenSize,
+          )) {
         _restartTimer();
         return;
       }
-      unawaited(_pages.nextPage(duration: _transition, curve: Curves.easeInOutCubic));
+      unawaited(
+        _pages.nextPage(duration: _transition, curve: Curves.easeInOutCubic),
+      );
     });
   }
 
@@ -145,21 +160,41 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
     final colors = AppColors.of(context);
     final active = (_page - 1) % _count;
     return MouseRegion(
-      onEnter: (_) { _hovered = true; _restartTimer(); },
-      onExit: (_) { _hovered = false; _restartTimer(); },
+      onEnter: (_) {
+        _hovered = true;
+        _restartTimer();
+      },
+      onExit: (_) {
+        _hovered = false;
+        _restartTimer();
+      },
       child: Focus(
         canRequestFocus: false,
-        onFocusChange: (value) { _focused = value; _restartTimer(); },
+        onFocusChange: (value) {
+          _focused = value;
+          _restartTimer();
+        },
         child: Listener(
-          onPointerDown: (_) { _touching = true; _restartTimer(); },
-          onPointerUp: (_) { _touching = false; _restartTimer(); },
-          onPointerCancel: (_) { _touching = false; _restartTimer(); },
+          onPointerDown: (_) {
+            _touching = true;
+            _restartTimer();
+          },
+          onPointerUp: (_) {
+            _touching = false;
+            _restartTimer();
+          },
+          onPointerCancel: (_) {
+            _touching = false;
+            _restartTimer();
+          },
           child: Container(
             key: const Key('bara-gold-benefits'),
             decoration: BoxDecoration(
               color: colors.parchment,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: colors.parchmentBorder.withValues(alpha: 0.65)),
+              border: Border.all(
+                color: colors.parchmentBorder.withValues(alpha: 0.65),
+              ),
             ),
             clipBehavior: Clip.antiAlias,
             child: Stack(
@@ -177,7 +212,8 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
                       final index = (page - 1) % _count;
                       final benefit = BaraGoldBenefit.values[index];
                       return Semantics(
-                        label: '${benefit.title}. ${benefit.detail} Benefit ${index + 1} of $_count.',
+                        label:
+                            '${benefit.title}. ${benefit.detail} Benefit ${index + 1} of $_count.',
                         excludeSemantics: true,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(10, 5, 10, 15),
@@ -185,7 +221,12 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
                             children: [
                               BaraGoldBenefitIcon(benefit: benefit),
                               const SizedBox(width: 10),
-                              Expanded(child: BaraGoldBenefitText(benefit: benefit, short: true)),
+                              Expanded(
+                                child: BaraGoldBenefitText(
+                                  benefit: benefit,
+                                  short: true,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -208,10 +249,14 @@ class _BaraGoldBenefitsCarouselState extends State<BaraGoldBenefitsCarousel>
                               key: ValueKey('gold-benefit-dot-$i'),
                               width: 4,
                               height: 4,
-                              margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 1.5,
+                              ),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: i == active ? colors.textAccent : colors.parchmentBorder,
+                                color: i == active
+                                    ? colors.textAccent
+                                    : colors.parchmentBorder,
                               ),
                             ),
                         ],

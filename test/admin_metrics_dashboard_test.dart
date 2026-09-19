@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:step_tracker/screens/admin_dashboard_controller.dart';
+import 'package:step_tracker/screens/admin_dashboard_detail.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,49 +17,52 @@ class _DashboardApi extends BackendApiService {
     this.failuresRemaining = const {},
     this.blocker,
   });
-
   final Map<String, Map<String, dynamic>> responses;
   final Map<String, int> failuresRemaining;
-  final Map<String, int> _failureAttempts = {};
   final Completer<void>? blocker;
-  final List<String> calls = [];
-  int inFlight = 0;
-  int maxInFlight = 0;
-
+  final calls = <String>[];
+  final attempts = <String, int>{};
+  int inFlight = 0, maxInFlight = 0;
   @override
-  Future<Map<String, dynamic>> fetchAdminStats({
+  Future<Map<String, dynamic>> fetchAdminStatsView({
     required String identityToken,
-    List<String> sections = const [],
-    String? window,
+    required String view,
+    required String window,
+    required String section,
   }) async {
-    final section = sections.isEmpty ? 'legacy' : sections.single;
-    calls.add(section);
-    inFlight += 1;
-    maxInFlight = inFlight > maxInFlight ? inFlight : maxInFlight;
+    calls.add(view);
+    inFlight++;
+    if (inFlight > maxInFlight) maxInFlight = inFlight;
     try {
       if (blocker != null) await blocker!.future;
-      final attemptedFailures = _failureAttempts[section] ?? 0;
-      final allowedFailures = failuresRemaining[section] ?? 0;
-      if (attemptedFailures < allowedFailures) {
-        _failureAttempts[section] = attemptedFailures + 1;
-        throw Exception('failed once $section');
+      final attempt = attempts.update(view, (v) => v + 1, ifAbsent: () => 1);
+      if (attempt <= (failuresRemaining[view] ?? 0)) {
+        throw const ApiException('Unavailable', statusCode: 503);
       }
-      return responses[section] ?? const <String, dynamic>{};
+      return {
+        'view': view,
+        'sections': {
+          for (final name
+              in AdminView.values.firstWhere((v) => v.apiName == view).sections)
+            name:
+                responses[name] ??
+                {
+                  'metricsDashboard': {
+                    'schemaVersion': 2,
+                    'status': 'available',
+                  },
+                },
+        },
+      };
     } finally {
-      inFlight -= 1;
+      inFlight--;
     }
   }
 
   @override
   Future<Map<String, dynamic>> fetchAdminSettings({
     required String identityToken,
-  }) async => const {'bannerAdsEnabled': true};
-
-  @override
-  Future<Map<String, dynamic>> fetchAdminSuggestions({
-    required String identityToken,
-    int limit = 50,
-  }) async => const {'suggestions': <Map<String, dynamic>>[]};
+  }) async => {'bannerAdsEnabled': true};
 }
 
 Future<AuthService> _auth() async {
@@ -446,14 +451,32 @@ Future<void> _pump(
   }
 }
 
-Future<void> _expand(WidgetTester tester, String title) async {
-  final header = find.byKey(Key('admin-section-header-$title'));
-  await tester.ensureVisible(header);
-  await tester.pump();
-  await tester.tap(header, warnIfMissed: false);
-  for (var i = 0; i < 8; i++) {
-    await tester.pump(const Duration(milliseconds: 50));
+Future<void> _frames(WidgetTester tester) async {
+  for (var i = 0; i < 12; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
   }
+}
+
+Future<void> _open(WidgetTester tester, String title) async {
+  final link = find.text(title);
+  await tester.scrollUntilVisible(
+    link,
+    350,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(link);
+  await _frames(tester);
+  expect(find.byType(AdminDashboardDetail), findsOneWidget);
+}
+
+Future<void> _show(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -498,418 +521,378 @@ void main() {
     expect(envelope.summary?.map('retention')?.ratio('d1').percent, isNull);
   });
 
-  testWidgets('iOS shows expanded Summary then ordered lazy boards', (
+  testWidgets('overview shows account values and seven ordered detail links', (
     tester,
   ) async {
     final api = _DashboardApi(responses: _completeResponses());
     await _pump(tester, api);
-
-    const order = [
-      'SUMMARY',
-      'USER GROWTH',
-      'INVITE FUNNEL',
-      'ONBOARDING FUNNEL',
-      'ACTIVATION',
-      'RETENTION',
-      'RACE + ENGAGEMENT',
-      'VIRALITY',
-      'REVENUE',
-      'SYSTEM HEALTH',
-      'CONFIG',
-      'INBOX',
-      'DEBUG',
-    ];
-    for (final title in order) {
-      expect(find.byKey(Key('admin-section-$title')), findsOneWidget);
+    expect(find.text('1,234 total accounts'), findsOneWidget);
+    expect(find.text('61'), findsOneWidget);
+    expect(api.calls, ['overview']);
+    for (final title in [
+      'Growth',
+      'Activity',
+      'Retention',
+      'Races & friends',
+      'Invites & onboarding',
+      'Ads & shop',
+      'System health',
+    ]) {
+      await _show(tester, find.text(title));
+      expect(find.text(title).hitTestable(), findsOneWidget);
     }
-    expect(find.text('Total accounts'), findsOneWidget);
-    expect(find.text('1,234'), findsOneWidget);
-    expect(find.text('Engaged box openers today'), findsOneWidget);
-    expect(find.text('COLLECTING SINCE 2026-08-08'), findsWidgets);
-    expect(find.text('DAU (stepped today)'), findsNothing);
-    expect(api.calls, ['dashboard-summary']);
-
-    await _expand(tester, 'USER GROWTH');
-    expect(api.calls.last, 'dashboard-growth');
-    await _expand(tester, 'INVITE FUNNEL');
-    expect(api.calls.last, 'dashboard-funnels');
-    await _expand(tester, 'ONBOARDING FUNNEL');
-    expect(api.calls.where((c) => c == 'dashboard-funnels').length, 1);
-    expect(find.text('IOS'), findsOneWidget);
-    expect(find.text('ANDROID'), findsNothing);
+    await _show(tester, find.text('Growth'));
+    await tester.tap(find.text('Growth'));
+    await _frames(tester);
+    expect(api.calls, ['overview', 'growth']);
     expect(api.maxInFlight, 1);
   });
 
-  testWidgets('provider-only Phase A rows are hidden, DB revenue remains', (
-    tester,
-  ) async {
-    final api = _DashboardApi(responses: _completeResponses());
-    await _pump(tester, api);
-    await _expand(tester, 'REVENUE');
+  testWidgets(
+    'provider-only and retired panels stay absent while Ads remains reachable',
+    (tester) async {
+      final api = _DashboardApi(responses: _completeResponses());
+      await _pump(tester, api);
+      await _open(tester, 'Ads & shop');
+      expect(api.calls.last, 'ads');
+      expect(find.text('Ads'), findsOneWidget);
+      expect(find.text('Shop'), findsOneWidget);
+      for (final removed in [
+        'Ad revenue',
+        'Ad impressions',
+        'Match rate',
+        'Real-money purchases',
+        'RELEASE ADOPTION',
+        'ACTIVATION',
+      ]) {
+        expect(find.text(removed), findsNothing);
+      }
+      expect(api.calls, isNot(contains('dashboard-release-adoption')));
+    },
+  );
 
-    expect(find.textContaining('Signed rewarded grants'), findsNWidgets(2));
-    expect(find.textContaining('Unique rewarded watchers'), findsNWidgets(2));
-    expect(find.text('SIGNED REWARDED ADS'), findsOneWidget);
-    expect(find.text('Ad revenue'), findsNothing);
-    expect(find.text('Ad impressions'), findsNothing);
-    expect(find.text('Match rate'), findsNothing);
-    expect(find.text('Real-money purchases'), findsNothing);
-    expect(find.textContaining('retained-account history'), findsWidgets);
-  });
-
-  testWidgets('Admin onboarding shows tutorial skip as a start-share exit', (
+  testWidgets('onboarding skip remains a side branch with start denominator', (
     tester,
   ) async {
     await _pump(tester, _DashboardApi(responses: _completeResponses()));
-    await _expand(tester, 'ONBOARDING FUNNEL');
-
-    expect(find.text('Tutorial skipped'), findsOneWidget);
-    expect(find.text('7 · 8.8% of start'), findsOneWidget);
-    final openedY = tester.getTopLeft(find.text('Tutorial opened')).dy;
-    final skippedY = tester.getTopLeft(find.text('Tutorial skipped')).dy;
-    final boxY = tester.getTopLeft(find.text('Box opened')).dy;
-    expect(openedY, lessThan(skippedY));
-    expect(skippedY, lessThan(boxY));
-  });
-
-  testWidgets('disabled and old-backend states preserve Config Inbox Debug', (
-    tester,
-  ) async {
-    final disabled = _dashboard(
-      'summary',
-      null,
-      status: 'disabled',
-      sources: {
-        'productDb': {
-          'status': 'available',
-          'asOf': '2026-08-18T15:04:05.000Z',
-        },
-        'foregroundActivity': {'status': 'disabled', 'asOf': null},
-        'appStoreConnect': {'status': 'not_configured', 'asOf': null},
-        'admob': {'status': 'not_configured', 'asOf': null},
-      },
-    );
-    final api = _DashboardApi(responses: {'dashboard-summary': disabled});
-    await _pump(tester, api);
-
-    expect(find.text('Dashboard temporarily disabled'), findsOneWidget);
-    expect(find.byKey(const Key('admin-section-CONFIG')), findsOneWidget);
-    expect(find.byKey(const Key('admin-section-INBOX')), findsOneWidget);
-    expect(find.byKey(const Key('admin-section-DEBUG')), findsOneWidget);
-
-    final legacyApi = _DashboardApi(
-      responses: {
-        'dashboard-summary': {
-          'users': {'total': 8},
-          'versionsSince': '2026-07-20',
-          'versions': [
-            {'version': '2.3.8', 'platform': 'ios', 'users': 7},
-          ],
-        },
-      },
-    );
-    await _pump(tester, legacyApi);
-    expect(find.text('Dashboard requires a server update'), findsOneWidget);
-    expect(find.byKey(const Key('admin-section-USER GROWTH')), findsNothing);
-    await _expand(tester, 'DEBUG');
-    expect(find.text('RELEASE ADOPTION'), findsOneWidget);
-    await tester.tap(find.text('RELEASE ADOPTION'));
-    await tester.pump();
-    expect(find.text('2.3.8 (ios)'), findsOneWidget);
-    expect(find.text('Accounts seen by backend in last 30d'), findsOneWidget);
-  });
-
-  testWidgets('section error stays inside its board and retry succeeds', (
-    tester,
-  ) async {
-    final responses = _completeResponses();
-    final api = _DashboardApi(
-      responses: responses,
-      failuresRemaining: const {'dashboard-activation': 1},
-    );
-    await _pump(tester, api);
-    await _expand(tester, 'ACTIVATION');
-
-    expect(find.text('Couldn’t load this section.'), findsOneWidget);
+    await _open(tester, 'Invites & onboarding');
+    await tester.tap(find.text('Onboarding'));
+    await _frames(tester);
+    await _show(tester, find.text('↳ Tutorial skipped'));
+    expect(find.text('7'), findsWidgets);
+    expect(find.textContaining('8.8% of starts'), findsOneWidget);
+    final opened = find.text('Tutorial opened');
+    final skipped = find.text('↳ Tutorial skipped');
+    final box = find.text('Box opened');
     expect(
-      find.byKey(const Key('admin-dashboard-retry-dashboard-activation')),
-      findsOneWidget,
+      tester.getTopLeft(opened).dy,
+      lessThan(tester.getTopLeft(skipped).dy),
     );
-    expect(find.byKey(const Key('admin-section-RETENTION')), findsOneWidget);
-
-    await tester.tap(
-      find.byKey(const Key('admin-dashboard-retry-dashboard-activation')),
-    );
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    expect(find.text('Health connected within 24h'), findsOneWidget);
-    expect(
-      api.calls.where((call) => call == 'dashboard-activation'),
-      hasLength(2),
-    );
+    expect(tester.getTopLeft(skipped).dy, lessThan(tester.getTopLeft(box).dy));
   });
 
   testWidgets(
-    'rapid refresh coalesces and reloads only opened blocks serially',
+    'disabled and old-backend data preserve Tools without restoring retired panels',
     (tester) async {
-      final blocker = Completer<void>();
-      final api = _DashboardApi(
-        responses: _completeResponses(),
-        blocker: blocker,
-      );
-      await _pump(tester, api);
-      expect(api.calls, ['dashboard-summary']);
-      blocker.complete();
-      await tester.pump();
-      for (var i = 0; i < 8; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
+      for (final response in [
+        _dashboard('summary', null, status: 'disabled'),
+        <String, dynamic>{
+          'users': {'total': 8},
+        },
+      ]) {
+        await _pump(
+          tester,
+          _DashboardApi(responses: {'dashboard-summary': response}),
+        );
+        expect(find.text('Couldn’t update this section.'), findsOneWidget);
+        await tester.tap(find.text('Tools'));
+        await _frames(tester);
+        for (final label in ['Configuration', 'Inbox', 'Debugging']) {
+          expect(find.text(label), findsOneWidget);
+        }
+        expect(find.text('RELEASE ADOPTION'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
       }
-      await _expand(tester, 'USER GROWTH');
-      expect(api.calls, ['dashboard-summary', 'dashboard-growth']);
-
-      await tester.tap(find.byIcon(Icons.refresh));
-      await tester.tap(find.byIcon(Icons.refresh));
-      for (var i = 0; i < 12; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
-
-      expect(api.calls, [
-        'dashboard-summary',
-        'dashboard-growth',
-        'dashboard-summary',
-        'dashboard-growth',
-      ]);
-      expect(api.maxInFlight, 1);
     },
   );
+
+  testWidgets(
+    'detail failure remains retryable and successful retry restores content',
+    (tester) async {
+      final api = _DashboardApi(
+        responses: _completeResponses(),
+        failuresRemaining: {'growth': 1},
+      );
+      await _pump(tester, api);
+      await _open(tester, 'Growth');
+      expect(find.text('Couldn’t update this section.'), findsOneWidget);
+      await tester.tap(find.text('Retry'));
+      await _frames(tester);
+      expect(find.text('Couldn’t update this section.'), findsNothing);
+      expect(api.calls.where((v) => v == 'growth'), hasLength(2));
+      expect(find.text('310'), findsWidgets);
+    },
+  );
+
+  testWidgets('rapid refresh coalesces and refreshes only the visible page', (
+    tester,
+  ) async {
+    final blocker = Completer<void>();
+    final api = _DashboardApi(
+      responses: _completeResponses(),
+      blocker: blocker,
+    );
+    await _pump(tester, api);
+    expect(api.calls, ['overview']);
+    blocker.complete();
+    await _frames(tester);
+    await _open(tester, 'Growth');
+    final refresh = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.refresh),
+    );
+    refresh.onPressed!();
+    refresh.onPressed!();
+    await _frames(tester);
+    expect(api.calls, ['overview', 'growth', 'growth']);
+    expect(api.maxInFlight, 1);
+  });
 
   testWidgets('malformed leaves render unavailable and never zero or crash', (
     tester,
   ) async {
-    final api = _DashboardApi(
-      responses: {
-        'dashboard-summary': _dashboard('summary', {
-          'growth': {
-            'totalSignups': null,
-            'signupsToday': 'nine',
-            'signupsLast7Days': [],
-            'engagedBoxOpenersToday': {},
-            'observedForegroundDau': false,
-          },
-          'retention': 'broken',
-          'races': null,
-        }),
-      },
+    await _pump(
+      tester,
+      _DashboardApi(
+        responses: {
+          'dashboard-summary': _dashboard('summary', {
+            'growth': {
+              'totalSignups': null,
+              'signupsToday': 'nine',
+              'signupsLast7Days': [],
+            },
+            'retention': 'broken',
+            'races': null,
+          }),
+        },
+      ),
     );
-    await _pump(tester, api);
-
-    expect(find.text('UNAVAILABLE'), findsWidgets);
+    expect(find.text('Unavailable total accounts'), findsOneWidget);
+    expect(find.text('Unavailable'), findsWidgets);
     expect(find.text('0'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'valid empty DB results render zero while null stays unavailable',
-    (tester) async {
-      final api = _DashboardApi(
+  testWidgets('valid zero values remain distinct from missing activity', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _DashboardApi(
         responses: {
           'dashboard-summary': _dashboard('summary', {
-            'growth': {
-              'totalSignups': 0,
-              'signupsToday': 0,
-              'signupsLast7Days': 0,
-              'engagedBoxOpenersToday': 0,
-              'observedForegroundDau': null,
-              'observedForegroundWau': null,
-            },
-            'retention': {
-              'd1': {'numerator': 0, 'denominator': 0, 'percent': null},
-            },
-            'races': {
-              'usersInActiveNonFeaturedRaces': 0,
-              'activeNonFeaturedRaces': 0,
-              'activeDailyRaces': 0,
-              'nonFeaturedRacesCreatedToday': 0,
-            },
+            'growth': {'totalSignups': 0, 'signupsLast7Days': 0},
+            'races': {'usersInActiveNonFeaturedRaces': 0},
           }),
         },
-      );
-      await _pump(tester, api);
+      ),
+    );
+    expect(find.text('0 total accounts'), findsOneWidget);
+    expect(find.text('0'), findsNWidgets(2));
+    expect(find.text('Unavailable'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 
-      expect(find.text('0'), findsWidgets);
-      expect(find.text('0 / 0 · —'), findsOneWidget);
-      expect(find.text('UNAVAILABLE'), findsWidgets);
+  testWidgets('stale source retains values with timestamp provenance', (
+    tester,
+  ) async {
+    final response = _summary();
+    (response['metricsDashboard'] as Map)['sources'] = {
+      'productDb': {'status': 'stale', 'asOf': '2026-08-17T15:04:05.000Z'},
+    };
+    await _pump(
+      tester,
+      _DashboardApi(responses: {'dashboard-summary': response}),
+    );
+    expect(find.text('1,234 total accounts'), findsOneWidget);
+    final stale = find.textContaining('Product data: STALE');
+    await _show(tester, stale);
+    expect(stale, findsOneWidget);
+    await tester.tap(stale);
+    await _frames(tester);
+    expect(find.textContaining('2026-08-17T15:04:05.000Z'), findsOneWidget);
+  });
+
+  testWidgets('metric definition explains source and account exclusions', (
+    tester,
+  ) async {
+    await _pump(tester, _DashboardApi(responses: _completeResponses()));
+    await tester.tap(find.byTooltip('About total accounts'));
+    await _frames(tester);
+    expect(find.textContaining('accounts, not installs'), findsOneWidget);
+    expect(find.textContaining('Source: product database'), findsOneWidget);
+    expect(
+      find.textContaining('Deleted accounts are excluded'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('activity definition preserves source, time scope and coverage', (
+    tester,
+  ) async {
+    await _pump(tester, _DashboardApi(responses: _completeResponses()));
+    final info = find.byTooltip('About App opens');
+    await _show(tester, info);
+    await tester.tap(info);
+    await _frames(tester);
+    expect(find.textContaining('WAU'), findsOneWidget);
+    expect(find.textContaining('never a sum of daily users'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Older clients without foreground telemetry are missing',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'onboarding without its cohort window never invents a time range',
+    (tester) async {
+      final responses = _completeResponses();
+      ((responses['dashboard-funnels']!['metricsDashboard']
+                  as Map)['onboardingFunnel']
+              as Map)
+          .remove('cohortWindowDays');
+      await _pump(tester, _DashboardApi(responses: responses));
+      await _open(tester, 'Invites & onboarding');
+      await tester.tap(find.text('Onboarding'));
+      await _frames(tester);
+      await _show(tester, find.textContaining('Unknown-day start cohort'));
+      expect(find.textContaining('Unknown-day start cohort'), findsWidgets);
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('stale source stays visible with as-of provenance', (
+  testWidgets('compact and wide iPhones keep current detail rows contained', (
     tester,
   ) async {
-    final response = _summary();
-    final dashboard = response['metricsDashboard'] as Map<String, dynamic>;
-    dashboard['sources'] = {
-      'productDb': {'status': 'stale', 'asOf': '2026-08-17T15:04:05.000Z'},
-    };
-    final api = _DashboardApi(responses: {'dashboard-summary': response});
-    await _pump(tester, api);
-
-    expect(find.text('STALE'), findsOneWidget);
-    expect(find.textContaining('AS OF 2026-08-17'), findsOneWidget);
-    expect(find.text('1,234'), findsOneWidget);
-  });
-
-  testWidgets('metric info affordance opens its definition and source note', (
-    tester,
-  ) async {
-    final api = _DashboardApi(responses: _completeResponses());
-    await _pump(tester, api);
-
-    await tester.tap(find.bySemanticsLabel('Definition for Total accounts'));
-    await tester.pump();
-    expect(
-      find.text(
-        'Retained non-review iOS accounts, whether signed in with Apple or Google; this is not installs.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('SOURCE · PRODUCT DB'), findsOneWidget);
-    expect(
-      find.text('WINDOW · CURRENT RETAINED-ACCOUNT SNAPSHOT'),
-      findsOneWidget,
-    );
-    expect(find.text('COVERAGE · NOT APPLICABLE'), findsOneWidget);
-  });
-
-  testWidgets('nested and onboarding metrics show exact provenance', (
-    tester,
-  ) async {
-    final api = _DashboardApi(responses: _completeResponses());
-    await _pump(tester, api);
-
-    await _expand(tester, 'USER GROWTH');
-    final dailyForegroundInfo = find.bySemanticsLabel(
-      'Definition for 2026-08-17 · observed foreground',
-    );
-    await tester.ensureVisible(dailyForegroundInfo);
-    await tester.tap(dailyForegroundInfo);
-    await tester.pump();
-    expect(find.text('SOURCE · FOREGROUND TELEMETRY'), findsOneWidget);
-    expect(find.text('WINDOW · 2026-08-17 · ET DAY'), findsOneWidget);
-    expect(find.text('COVERAGE · UNAVAILABLE'), findsOneWidget);
-    expect(find.text('COVERAGE · NOT APPLICABLE'), findsNothing);
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pump();
-
-    await _expand(tester, 'RACE + ENGAGEMENT');
-    final pushInfo = find.bySemanticsLabel('Definition for Push · RACE_INVITE');
-    await tester.ensureVisible(pushInfo);
-    await tester.tap(pushInfo);
-    await tester.pump();
-    expect(
-      find.text('SOURCE · NOTIFICATION RECEIPTS + PRODUCT DB'),
-      findsOneWidget,
-    );
-    expect(find.text('WINDOW · TRAILING 7D · ET'), findsOneWidget);
-    expect(find.text('COVERAGE · UNAVAILABLE'), findsOneWidget);
-    expect(find.text('COVERAGE · NOT APPLICABLE'), findsNothing);
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pump();
-
-    await _expand(tester, 'RETENTION');
-    final cohortInfo = find.bySemanticsLabel('Definition for 2026-08-10');
-    await tester.ensureVisible(cohortInfo);
-    await tester.tap(cohortInfo);
-    await tester.pump();
-    expect(
-      find.text('SOURCE · FOREGROUND TELEMETRY + PRODUCT DB'),
-      findsOneWidget,
-    );
-    expect(find.text('WINDOW · 2026-08-10 COHORT · D1/D7/D30'), findsOneWidget);
-    expect(find.textContaining('COVERAGE · D1 UNAVAILABLE'), findsOneWidget);
-    expect(find.text('COVERAGE · NOT APPLICABLE'), findsNothing);
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pump();
-
-    await _expand(tester, 'ONBOARDING FUNNEL');
-    final onboardingInfo = find.bySemanticsLabel('Definition for Started');
-    await tester.ensureVisible(onboardingInfo);
-    await tester.tap(onboardingInfo);
-    await tester.pump();
-    expect(find.text('SOURCE · ACTIVATION TELEMETRY'), findsOneWidget);
-    expect(
-      find.text('WINDOW · 30D START COHORT · FIRST 24 ELAPSED HOURS'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('COVERAGE · CAPABILITY-SCOPED IOS COHORT'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('missing section-specific windows render unavailable', (
-    tester,
-  ) async {
-    final responses = _completeResponses();
-    final onboardingEnvelope =
-        responses['dashboard-funnels']!['metricsDashboard']
-            as Map<String, dynamic>;
-    final onboarding =
-        onboardingEnvelope['onboardingFunnel'] as Map<String, dynamic>;
-    onboarding.remove('cohortWindowDays');
-    final releaseEnvelope =
-        responses['dashboard-release-adoption']!['metricsDashboard']
-            as Map<String, dynamic>;
-    final release = releaseEnvelope['releaseAdoption'] as Map<String, dynamic>;
-    release.remove('windowDays');
-
-    await _pump(tester, _DashboardApi(responses: responses));
-    await _expand(tester, 'ONBOARDING FUNNEL');
-    expect(find.text('WINDOW UNAVAILABLE START COHORT · 24H'), findsOneWidget);
-
-    await _expand(tester, 'DEBUG');
-    final releaseHeader = find.byKey(
-      const Key('admin-section-header-RELEASE ADOPTION'),
-    );
-    await tester.ensureVisible(releaseHeader);
-    await tester.tap(releaseHeader);
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    expect(
-      find.text('Accounts seen by backend · window unavailable'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('compact and wide iPhones keep long rows inside their boards', (
-    tester,
-  ) async {
-    for (final size in const [Size(320, 1000), Size(430, 1000)]) {
-      final api = _DashboardApi(responses: _completeResponses());
-      await _pump(tester, api, logicalSize: size);
-      await _expand(tester, 'RACE + ENGAGEMENT');
+    for (final size in [const Size(320, 1000), const Size(430, 1000)]) {
+      await _pump(
+        tester,
+        _DashboardApi(responses: _completeResponses()),
+        logicalSize: size,
+      );
+      await _open(tester, 'Races & friends');
       expect(tester.takeException(), isNull, reason: 'overflow at $size');
       await tester.pumpWidget(const SizedBox.shrink());
     }
   });
 
+  testWidgets('Android renders the shared overview and fetches the same page', (
+    tester,
+  ) async {
+    final api = _DashboardApi(responses: _completeResponses());
+    await _pump(tester, api, ios: false);
+    expect(api.calls, ['overview']);
+    expect(find.text('1,234 total accounts'), findsOneWidget);
+    await _open(tester, 'Growth');
+    expect(api.calls, ['overview', 'growth']);
+  });
   testWidgets(
-    'non-iOS keeps the legacy Admin surface and emits no v2 request',
+    'Ads shows exact daily viewers, grants and recorded reward totals',
     (tester) async {
-      final api = _DashboardApi(
-        responses: {
-          'legacy': {
-            'users': {'total': 3},
-          },
-        },
+      await _pump(tester, _DashboardApi(responses: _completeResponses()));
+      await _open(tester, 'Ads & shop');
+      await _show(tester, find.text('Daily values'));
+      await tester.tap(find.text('Daily values'));
+      await _frames(tester);
+      expect(find.text('116'), findsNWidgets(2));
+      await _show(tester, find.text('Ad watches'));
+      await tester.tap(find.text('Ad watches'));
+      await _frames(tester);
+      expect(find.text('423'), findsNWidgets(2));
+      await _show(tester, find.text('Coins'));
+      expect(find.text('102'), findsOneWidget);
+      await tester.tap(find.text('Coins'));
+      await _frames(tester);
+      expect(
+        find.textContaining('Source: rewarded-ad callbacks'),
+        findsOneWidget,
       );
-      await _pump(tester, api, ios: false);
+      expect(
+        find.textContaining('not ad impressions or revenue'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-      expect(api.calls, ['legacy']);
-      expect(find.byKey(const Key('admin-section-GROWTH')), findsOneWidget);
-      expect(find.byKey(const Key('admin-section-SUMMARY')), findsNothing);
+  testWidgets(
+    'Retention keeps zero denominator unavailable and explains mature cohort provenance',
+    (tester) async {
+      final responses = _completeResponses();
+      final summary =
+          (responses['dashboard-summary']!['metricsDashboard']
+                  as Map)['summary']
+              as Map;
+      (summary['retention'] as Map)['d1'] = {
+        'numerator': 0,
+        'denominator': 0,
+        'percent': null,
+      };
+      await _pump(tester, _DashboardApi(responses: responses));
+      await _open(tester, 'Retention');
+      expect(
+        find.textContaining('0 of 0 · Pooled mature cohorts'),
+        findsOneWidget,
+      );
+      expect(find.text('Unavailable'), findsWidgets);
+      expect(find.text('0.0%'), findsNothing);
+      await tester.tap(find.text('Day 1 return'));
+      await _frames(tester);
+      expect(
+        find.textContaining(
+          'Source: foreground telemetry and product database',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Numerator: 0. Denominator: 0.'),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.textContaining('exact signup + 1 ET days')), findsOneWidget);
+      await tester.tap(find.byTooltip('Close definition'));
+      await _frames(tester);
+      await _show(tester, find.text('View daily cohorts'));
+      await tester.tap(find.text('View daily cohorts'));
+      await _frames(tester);
+      await _show(tester, find.text('2026-08-10'));
+      await tester.tap(find.text('2026-08-10'));
+      await _frames(tester);
+      expect(find.textContaining('this ET signup date'), findsOneWidget);
+      expect(
+        find.textContaining('exact-day foreground return'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'onboarding side-branch definition retains activation source and start denominator',
+    (tester) async {
+      await _pump(tester, _DashboardApi(responses: _completeResponses()));
+      await _open(tester, 'Invites & onboarding');
+      await tester.tap(find.text('Onboarding'));
+      await _frames(tester);
+      await _show(tester, find.text('↳ Tutorial skipped'));
+      await tester.tap(find.text('↳ Tutorial skipped'));
+      await _frames(tester);
+      expect(
+        find.textContaining('Source: activation telemetry'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Start conversion: 7 / 80.'), findsOneWidget);
+      expect(find.textContaining('within 24 elapsed hours'), findsOneWidget);
+      expect(find.textContaining('Previous-spine conversion'), findsNothing);
     },
   );
 }

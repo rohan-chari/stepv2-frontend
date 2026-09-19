@@ -133,7 +133,17 @@ class _TeamPowerupApi extends BackendApiService {
     required String raceId,
     required String powerupType,
   }) async {
-    return targetContextCompleter?.future ?? const {'participants': []};
+    if (targetContextCompleter != null) return targetContextCompleter!.future;
+    final progress = await fetchRaceProgress(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    return {
+      'contract': 'race-powerup-target-context-v2',
+      'participants': (progress['participants'] as List)
+          .where((row) => row['team'] == 'TEAM_B' && row['forfeitedAt'] == null)
+          .toList(),
+    };
   }
 
   @override
@@ -373,6 +383,7 @@ void main() {
       expect(find.byKey(const Key('powerup-processing-overlay')), findsNothing);
 
       targetContextCompleter.complete({
+        'contract': 'race-powerup-target-context-v2',
         'participants': await api
             .fetchRaceProgress(
               identityToken: 'session-token',

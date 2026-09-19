@@ -27,6 +27,23 @@ class _SignalJammerBackendApiService extends BackendApiService {
   String? lastTargetUserId;
   int lastUpgradeLevel = -1;
 
+  // Server-approved targets are separate from the standings projection.
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async => {
+    'contract': 'race-powerup-target-context-v2',
+    'participants': [
+      {
+        'userId': 'user-2',
+        'displayName': viewerDetoured ? '???' : 'Hill Climber',
+        'totalSteps': viewerDetoured ? null : 38000,
+      },
+    ],
+  };
+
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,

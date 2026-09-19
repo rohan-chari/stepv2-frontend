@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('deployment handoff pins placement-specific platform defines', () {
-    final deployment = File('DEPLOYMENT.md').readAsStringSync();
+    final deployment = File('README.md').readAsStringSync();
     for (final define in <String>[
       'ADMOB_RACE_DETAIL_EXIT_INTERSTITIAL_AD_UNIT_ID=',
       'ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID=',
@@ -30,7 +30,10 @@ void main() {
         'ADMOB_RACE_RESULTS_EXIT_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-4538901002392200/6032212376',
       ),
     );
-    expect(deployment, contains('2 impressions/user/day'));
+    expect(
+      File('docs/interstitial-preloading-requirements.md').readAsStringSync(),
+      contains('two-per-local-day cap'),
+    );
     expect(deployment, isNot(contains('seven complete production')));
     expect(deployment, isNot(contains('no-ID telemetry baseline')));
   });

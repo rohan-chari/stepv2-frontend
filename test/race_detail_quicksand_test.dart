@@ -10,6 +10,20 @@ import 'package:step_tracker/widgets/pill_button.dart';
 class _QuicksandApi extends BackendApiService {
   List<String>? sentTargets;
 
+  // Server-approved targets are separate from the standings projection.
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async => {
+    'contract': 'race-powerup-target-context-v2',
+    'participants': [
+      for (var i = 1; i <= 4; i++)
+        {'userId': 'u$i', 'displayName': 'Rival $i', 'totalSteps': 4000 - i},
+    ],
+  };
+
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,

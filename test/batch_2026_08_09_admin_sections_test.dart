@@ -16,22 +16,50 @@ import 'package:step_tracker/services/backend_api_service.dart';
 /// renders "—" instead of throwing.
 class _AdminApi extends BackendApiService {
   _AdminApi({
-    this.base = const {},
-    this.sectioned,
     this.threads,
     this.threadsThrow = false,
   });
 
-  final Map<String, dynamic> base;
+  final Map<String, dynamic> base = const {};
 
   /// Returned when a non-empty `sections` list is requested. Null means the
   /// backend ignores the param and answers with the legacy payload.
-  final Map<String, dynamic>? sectioned;
+  final Map<String, dynamic>? sectioned = null;
   final Map<String, dynamic>? threads;
   final bool threadsThrow;
 
   final List<List<String>> statsCalls = [];
   int threadCalls = 0;
+
+  final viewCalls = <String>[];
+  @override
+  Future<Map<String, dynamic>> fetchAdminStatsView({
+    required String identityToken,
+    required String view,
+    required String window,
+    required String section,
+  }) async {
+    viewCalls.add(view);
+    return {
+      'view': view,
+      'sections': {
+        for (final name
+            in view == 'overview'
+                ? [
+                    'dashboard-summary',
+                    'dashboard-growth',
+                    'dashboard-dau-engagement',
+                  ]
+                : view == 'ads'
+                ? ['dashboard-revenue', 'ads']
+                : ['economy'])
+          name: {
+            'metricsDashboard': {'schemaVersion': 2, 'status': 'available'},
+            ...?sectioned,
+          },
+      },
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> fetchAdminStats({
@@ -91,16 +119,43 @@ Future<void> _pumpHub(WidgetTester tester, _AdminApi api) async {
 }
 
 Future<void> _expand(WidgetTester tester, String title) async {
-  final header = find.byKey(Key('admin-section-header-$title'));
-  // Expanding the sections above pushes the later headers off-screen; without
-  // this the tap silently misses and the assertion below reads as a missing
-  // widget rather than a missed tap.
-  await tester.ensureVisible(header);
-  await tester.pump();
-  await tester.tap(header, warnIfMissed: false);
-  for (var i = 0; i < 6; i++) {
+  if (find.text('Tools').evaluate().isNotEmpty &&
+      find.text('Configuration').evaluate().isEmpty) {
+    await tester.tap(find.text('Tools'));
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+  final label = switch (title) {
+    'CONFIG' => 'Configuration',
+    'INBOX' => 'Inbox',
+    _ => 'Debugging',
+  };
+  final header = find.text(label);
+  await tester.scrollUntilVisible(
+    header,
+    350,
+    scrollable: find.byType(Scrollable).first,
+  );
+  for (var i = 0; i < 12; i++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
+  await tester.tap(header);
+  for (var i = 0; i < 12; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+Future<void> _openAds(WidgetTester tester) async {
+  final link = find.text('Ads & shop');
+  await tester.scrollUntilVisible(
+    link,
+    350,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(link);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pumpBody(WidgetTester tester, Widget body) async {
@@ -116,15 +171,7 @@ Future<void> _pumpBody(WidgetTester tester, Widget body) async {
   await tester.pump();
 }
 
-const _sectionOrder = [
-  'GROWTH',
-  'ENGAGEMENT',
-  'REVENUE',
-  'SYSTEM HEALTH',
-  'CONFIG',
-  'INBOX',
-  'DEBUG',
-];
+const _sectionOrder = ['CONFIG', 'INBOX', 'DEBUG'];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -143,26 +190,41 @@ void main() {
   // The hub
   // ------------------------------------------------------------------
   group('hub layout', () {
-    testWidgets('renders the six sections in order', (tester) async {
+    testWidgets('overview separates analytics from ordered operational tools', (
+      tester,
+    ) async {
       await _pumpHub(tester, _AdminApi());
-
-      for (final title in _sectionOrder) {
-        expect(
-          find.byKey(Key('admin-section-$title')),
-          findsOneWidget,
-          reason: '$title section missing',
+      for (final title in [
+        'Growth',
+        'Activity',
+        'Retention',
+        'Races & friends',
+        'Invites & onboarding',
+        'Ads & shop',
+        'System health',
+      ]) {
+        await tester.scrollUntilVisible(
+          find.text(title),
+          350,
+          scrollable: find.byType(Scrollable).first,
         );
+        await tester.pumpAndSettle();
+        expect(find.text(title).hitTestable(), findsOneWidget);
       }
-
-      double top(String t) =>
-          tester.getTopLeft(find.byKey(Key('admin-section-$t'))).dy;
-      for (var i = 1; i < _sectionOrder.length; i++) {
-        expect(
-          top(_sectionOrder[i - 1]) < top(_sectionOrder[i]),
-          isTrue,
-          reason: '${_sectionOrder[i - 1]} must precede ${_sectionOrder[i]}',
-        );
+      await tester.tap(find.text('Tools'));
+      await tester.pumpAndSettle();
+      final labels = ['Configuration', 'Inbox', 'Debugging'];
+      for (final label in labels) {
+        expect(find.text(label), findsOneWidget);
       }
+      expect(
+        tester.getTopLeft(find.text(labels[0])).dy,
+        lessThan(tester.getTopLeft(find.text(labels[1])).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text(labels[1])).dy,
+        lessThan(tester.getTopLeft(find.text(labels[2])).dy),
+      );
     });
 
     testWidgets('DEBUG starts collapsed and its toys live inside it', (
@@ -220,94 +282,55 @@ void main() {
   // ------------------------------------------------------------------
   // Lazy per-section fetching
   // ------------------------------------------------------------------
-  group('lazy section fetching', () {
-    testWidgets('the base payload is fetched once, with no sections', (
-      tester,
-    ) async {
-      final api = _AdminApi(
-        base: const {
-          'users': {'total': 12},
-        },
-      );
-      await _pumpHub(tester, api);
-
-      expect(api.statsCalls, [const <String>[]]);
-    });
-
-    testWidgets('REVENUE fetches economy+ads only when first expanded', (
-      tester,
-    ) async {
-      final api = _AdminApi(
-        base: const {
-          'users': {'total': 12},
-        },
-        sectioned: const {
-          'coinEconomy': {
-            'days': [
-              {'date': '2026-08-08', 'minted': 900, 'sunk': 400},
-            ],
-          },
-        },
-      );
-      await _pumpHub(tester, api);
-      expect(api.statsCalls.length, 1);
-
-      await _expand(tester, 'REVENUE');
-      expect(api.statsCalls.length, 2);
-      expect(api.statsCalls.last, ['economy', 'ads']);
-
-      // Collapsing and re-expanding must not re-run the aggregates.
-      await _expand(tester, 'REVENUE');
-      await _expand(tester, 'REVENUE');
-      expect(api.statsCalls.length, 2);
-    });
-
-    testWidgets('refresh re-pulls REVENUE once it has been opened', (
-      tester,
-    ) async {
-      final api = _AdminApi(
-        sectioned: const {
-          'coinEconomy': {'days': []},
-        },
-      );
-      await _pumpHub(tester, api);
-      await _expand(tester, 'REVENUE');
-      expect(api.statsCalls.length, 2);
-
-      await tester.tap(find.byIcon(Icons.refresh));
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      // Base + revenue again: the lazy latch must not freeze the numbers for
-      // the life of the screen.
-      expect(api.statsCalls.length, 4);
-      expect(api.statsCalls.last, ['economy', 'ads']);
-    });
-
-    testWidgets('refresh does NOT fetch REVENUE that was never opened', (
+  group('lazy page fetching', () {
+    testWidgets('overview is fetched once without operational requests', (
       tester,
     ) async {
       final api = _AdminApi();
       await _pumpHub(tester, api);
-      expect(api.statsCalls.length, 1);
-
-      await tester.tap(find.byIcon(Icons.refresh));
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      // Refresh must not start paying for aggregates nobody asked to see.
-      expect(api.statsCalls, [const <String>[], const <String>[]]);
+      expect(api.viewCalls, ['overview']);
+      expect(api.statsCalls, isEmpty);
+      expect(api.threadCalls, 0);
     });
-
-    testWidgets('INBOX fetches threads only when first expanded', (
+    testWidgets('Ads fetches on navigation and reuses its cache on return', (
+      tester,
+    ) async {
+      final api = _AdminApi();
+      await _pumpHub(tester, api);
+      expect(api.viewCalls, ['overview']);
+      await _openAds(tester);
+      expect(api.viewCalls, ['overview', 'ads']);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await _openAds(tester);
+      expect(api.viewCalls, ['overview', 'ads']);
+    });
+    testWidgets('Ads refresh fetches only its own page', (tester) async {
+      final api = _AdminApi();
+      await _pumpHub(tester, api);
+      await _openAds(tester);
+      await tester.tap(find.byTooltip('Refresh Ads & shop'));
+      await tester.pumpAndSettle();
+      expect(api.viewCalls, ['overview', 'ads', 'ads']);
+    });
+    testWidgets('overview refresh does not fetch unopened Ads or Shop', (
+      tester,
+    ) async {
+      final api = _AdminApi();
+      await _pumpHub(tester, api);
+      await tester.tap(find.byTooltip('Refresh overview'));
+      await tester.pumpAndSettle();
+      expect(api.viewCalls, ['overview', 'overview']);
+    });
+    testWidgets('Inbox fetches once across collapse and reopening', (
       tester,
     ) async {
       final api = _AdminApi();
       await _pumpHub(tester, api);
       expect(api.threadCalls, 0);
-
+      await _expand(tester, 'INBOX');
+      expect(api.threadCalls, 1);
+      await _expand(tester, 'INBOX');
       await _expand(tester, 'INBOX');
       expect(api.threadCalls, 1);
     });

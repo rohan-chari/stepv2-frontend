@@ -112,7 +112,7 @@ class AdminCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: colors.textMid.withValues(alpha: .14)),
       ),
-      child: child,
+      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }

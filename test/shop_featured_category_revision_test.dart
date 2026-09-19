@@ -69,7 +69,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('bara-plus-card')), findsOneWidget);
     expect(find.text('Bara Gold'), findsOneWidget);
-    expect(find.text('More room to move, play, and collect.'), findsOneWidget);
+    expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
     expect(find.textContaining('15% member discount'), findsNothing);
     expect(find.textContaining('Gold perks'), findsNothing);
   });

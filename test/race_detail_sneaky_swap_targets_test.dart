@@ -9,7 +9,7 @@ import 'package:step_tracker/widgets/item_slot.dart';
 /// Fake API for the Sneaky Swap target-picker flow. Renders an ACTIVE race with
 /// powerups enabled and a single held SNEAKY_SWAP in the signed-in user's
 /// inventory. The set of racers the picker should offer is driven entirely by
-/// [targets] — the value the new `fetchSneakySwapTargets` endpoint returns.
+/// [targets] — the value the new `fetchRacePowerupTargetContext` endpoint returns.
 class _SneakySwapBackendApiService extends BackendApiService {
   _SneakySwapBackendApiService({required this.targets});
 
@@ -119,12 +119,16 @@ class _SneakySwapBackendApiService extends BackendApiService {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchSneakySwapTargets({
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
     required String identityToken,
     required String raceId,
+    required String powerupType,
   }) async {
     sneakySwapTargetsCalls += 1;
-    return {'targets': targets};
+    return {
+      'contract': 'race-powerup-target-context-v2',
+      'participants': targets,
+    };
   }
 }
 

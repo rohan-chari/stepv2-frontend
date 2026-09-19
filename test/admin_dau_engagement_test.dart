@@ -13,6 +13,31 @@ class _DauApi extends BackendApiService {
   final List<List<String>> sectionsCalls = [];
   final List<String?> windows = [];
 
+  final viewCalls = <(String, String)>[];
+  @override
+  Future<Map<String, dynamic>> fetchAdminStatsView({
+    required String identityToken,
+    required String view,
+    required String window,
+    required String section,
+  }) async {
+    viewCalls.add((view, window));
+    return {
+      'view': view,
+      'sections': {
+        for (final name
+            in view == 'overview'
+                ? [
+                    'dashboard-summary',
+                    'dashboard-growth',
+                    'dashboard-dau-engagement',
+                  ]
+                : ['dashboard-dau-engagement'])
+          name: _metricsWithDau(_completeDauEngagement),
+      },
+    };
+  }
+
   @override
   Future<Map<String, dynamic>> fetchAdminStats({
     required String identityToken,
@@ -165,75 +190,56 @@ void main() {
   });
 
   group('DAU + engagement dashboard section', () {
-    testWidgets('appears after SUMMARY and requests its section lazily', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1170, 3400);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
-      final api = _DauApi();
-      final auth = await _adminAuth();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppThemeData.light(),
-          home: AdminScreen(
-            authService: auth,
-            backendApiService: api,
-            isIosForTesting: true,
+    testWidgets(
+      'overview and Activity request separate cached pages with visible action data',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 1200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final api = _DauApi();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AdminScreen(
+              authService: await _adminAuth(),
+              backendApiService: api,
+            ),
           ),
-        ),
-      );
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+        );
+        await tester.pumpAndSettle();
+        expect(api.viewCalls, [('overview', '7d')]);
+        expect(find.text('74'), findsWidgets);
+        Future<void> open() async {
+          await tester.scrollUntilVisible(
+            find.text('Activity'),
+            350,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Activity'));
+          await tester.pumpAndSettle();
+        }
 
-      expect(
-        find.byKey(const Key('admin-section-DAU + ENGAGEMENT')),
-        findsOneWidget,
-      );
-      expect(api.sectionsCalls, [
-        ['dashboard-summary'],
-      ]);
-      expect(api.windows, ['30d']);
-
-      final summaryTop = tester
-          .getTopLeft(find.byKey(const Key('admin-section-SUMMARY')))
-          .dy;
-      final dauTop = tester
-          .getTopLeft(find.byKey(const Key('admin-section-DAU + ENGAGEMENT')))
-          .dy;
-      expect(summaryTop, lessThan(dauTop));
-
-      await tester.ensureVisible(
-        find.byKey(const Key('admin-section-header-DAU + ENGAGEMENT')),
-      );
-      await tester.tap(
-        find.byKey(const Key('admin-section-header-DAU + ENGAGEMENT')),
-        warnIfMissed: false,
-      );
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      expect(api.sectionsCalls.last, ['dashboard-dau-engagement']);
-      expect(api.windows.last, '30d');
-
-      await tester.tap(
-        find.byKey(const Key('admin-section-header-DAU + ENGAGEMENT')),
-        warnIfMissed: false,
-      );
-      await tester.pump();
-      await tester.tap(
-        find.byKey(const Key('admin-section-header-DAU + ENGAGEMENT')),
-        warnIfMissed: false,
-      );
-      await tester.pump();
-      expect(
-        api.sectionsCalls
-            .where((call) => call.contains('dashboard-dau-engagement'))
-            .length,
-        1,
-      );
-    });
+        await open();
+        expect(api.viewCalls, [('overview', '7d'), ('activity', '7d')]);
+        expect(find.text('People taking an action'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Boxes opened'),
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('31 people'), findsOneWidget);
+        expect(find.textContaining('58 events'), findsOneWidget);
+        await tester.tap(find.text('Boxes opened'));
+        await tester.pumpAndSettle();
+        expect(find.text('Boxes opened · people'), findsOneWidget);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await open();
+        expect(api.viewCalls, [('overview', '7d'), ('activity', '7d')]);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
       'renders action reach, raw events, union, daily rows, and comparisons',
@@ -315,33 +321,24 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-      'Android legacy admin does not request or render the new section',
-      (tester) async {
-        tester.view.physicalSize = const Size(1170, 3400);
-        tester.view.devicePixelRatio = 3;
-        addTearDown(tester.view.reset);
-        final api = _DauApi();
-        final auth = await _adminAuth();
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: AppThemeData.light(),
-            home: AdminScreen(
-              authService: auth,
-              backendApiService: api,
-              isIosForTesting: false,
-            ),
+    testWidgets('Android uses the same page contract and action overview', (
+      tester,
+    ) async {
+      final api = _DauApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminScreen(
+            authService: await _adminAuth(),
+            backendApiService: api,
+            isIosForTesting: false,
           ),
-        );
-        for (var i = 0; i < 6; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-
-        expect(find.text('GROWTH'), findsOneWidget);
-        expect(find.text('DAU + ENGAGEMENT'), findsNothing);
-        expect(api.sectionsCalls, [<String>[]]);
-        expect(tester.takeException(), isNull);
-      },
-    );
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(api.viewCalls, [('overview', '7d')]);
+      expect(find.text('74'), findsWidgets);
+      expect(find.text('Active users'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
   });
 }

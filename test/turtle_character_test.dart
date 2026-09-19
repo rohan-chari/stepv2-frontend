@@ -6,7 +6,6 @@ import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
-import 'package:step_tracker/widgets/accessory_thumbnail.dart';
 import 'package:step_tracker/widgets/attack_outcome_modal.dart';
 import 'package:step_tracker/widgets/feed_bubble.dart';
 import 'package:step_tracker/widgets/goal_track.dart';
@@ -297,12 +296,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('1000'), findsWidgets);
 
-    final thumbs = tester
-        .widgetList<AccessoryThumbnail>(find.byType(AccessoryThumbnail))
-        .where((t) => t.assetKey == 'turtle')
-        .toList();
-    expect(thumbs, isNotEmpty, reason: 'no turtle thumbnail in the store grid');
-    expect(thumbs.first.assetPath, _turtleAsset);
-    expect(thumbs.first.animationFrames, 8);
+    expect(
+      _renderedSheets(tester)[_turtleAsset],
+      8,
+      reason: 'the real character card must render all eight turtle frames',
+    );
   });
 }

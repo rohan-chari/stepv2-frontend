@@ -19,6 +19,25 @@ class _Api extends BackendApiService {
   int usePowerupCalls = 0;
   String? lastTargetUserId;
 
+  // Server-approved targets are separate from the standings projection.
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async => {
+    'contract': 'race-powerup-target-context-v2',
+    'participants': [
+      {'userId': 'user-2', 'displayName': 'Hill Climber', 'totalSteps': 42000},
+      if (powerupType != 'BOUNTY')
+        {
+          'userId': 'user-3',
+          'displayName': 'Ridge Runner',
+          'totalSteps': 31000,
+        },
+    ],
+  };
+
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
@@ -42,9 +61,21 @@ class _Api extends BackendApiService {
       'powerupsEnabled': true,
       'endsAt': '2026-12-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
-        {'userId': 'user-3', 'displayName': 'Ridge Runner', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-3',
+          'displayName': 'Ridge Runner',
+          'status': 'ACCEPTED',
+        },
       ],
     };
   }
@@ -57,9 +88,21 @@ class _Api extends BackendApiService {
     return {
       'status': 'ACTIVE',
       'participants': [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'totalSteps': 38000},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'totalSteps': 42000},
-        {'userId': 'user-3', 'displayName': 'Ridge Runner', 'totalSteps': 31000},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'totalSteps': 38000,
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'totalSteps': 42000,
+        },
+        {
+          'userId': 'user-3',
+          'displayName': 'Ridge Runner',
+          'totalSteps': 31000,
+        },
       ],
       'powerupData': {
         'enabled': true,
@@ -187,41 +230,40 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   });
 
-  testWidgets(
-    'Bounty opens the picker filtered to rivals ahead of me only',
-    (tester) async {
-      final api = _Api(heldType: 'BOUNTY');
-      await _openUse(tester, api);
+  testWidgets('Bounty opens the picker filtered to rivals ahead of me only', (
+    tester,
+  ) async {
+    final api = _Api(heldType: 'BOUNTY');
+    await _openUse(tester, api);
 
-      expect(find.text('CHOOSE A TARGET'), findsOneWidget);
-      final picker = find
-          .ancestor(
-            of: find.text('CHOOSE A TARGET'),
-            matching: find.byType(Column),
-          )
-          .last;
-      // Only the racer ahead of me (Hill Climber, 42k > my 38k) is offered.
-      expect(
-        find.descendant(of: picker, matching: find.text('@Hill Climber')),
-        findsOneWidget,
-      );
-      // The racer behind me (Ridge Runner, 31k) is filtered out.
-      expect(
-        find.descendant(of: picker, matching: find.text('@Ridge Runner')),
-        findsNothing,
-      );
+    expect(find.text('CHOOSE A TARGET'), findsOneWidget);
+    final picker = find
+        .ancestor(
+          of: find.text('CHOOSE A TARGET'),
+          matching: find.byType(Column),
+        )
+        .last;
+    // Only the racer ahead of me (Hill Climber, 42k > my 38k) is offered.
+    expect(
+      find.descendant(of: picker, matching: find.text('@Hill Climber')),
+      findsOneWidget,
+    );
+    // The racer behind me (Ridge Runner, 31k) is filtered out.
+    expect(
+      find.descendant(of: picker, matching: find.text('@Ridge Runner')),
+      findsNothing,
+    );
 
-      // Pick the eligible target -> use call carries their userId.
-      await tester.tap(
-        find.descendant(of: picker, matching: find.text('@Hill Climber')),
-      );
-      await _pumpFrames(tester);
+    // Pick the eligible target -> use call carries their userId.
+    await tester.tap(
+      find.descendant(of: picker, matching: find.text('@Hill Climber')),
+    );
+    await _pumpFrames(tester);
 
-      expect(api.usePowerupCalls, 1);
-      expect(api.lastTargetUserId, 'user-2');
+    expect(api.usePowerupCalls, 1);
+    expect(api.lastTargetUserId, 'user-2');
 
-      await tester.pump(const Duration(seconds: 3));
-      await tester.pump(const Duration(milliseconds: 300));
-    },
-  );
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+  });
 }

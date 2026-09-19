@@ -196,11 +196,9 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
           // GameContainer contributes 10px of horizontal padding on each side,
           // so the visible reel window is 20px narrower than this LayoutBuilder.
           // Use the ACTUAL viewport width for both idle and landing geometry.
-          final viewportWidth = (outerWidth - 20).clamp(
-            0.0,
-            double.infinity,
-          );
-          final centerX = viewportWidth / 2;
+          final viewportWidth = (outerWidth - 20).clamp(0.0, double.infinity);
+          // The window Container insets its child by its 2px border on each side.
+          final centerX = (viewportWidth - 4).clamp(0.0, double.infinity) / 2;
 
           // Start with the first preview tile centered under the win pointer.
           // The old hard-left start made the tutorial pointer sit near a tile
