@@ -107,6 +107,14 @@ Future<void> _pumpCard(
   await tester.pump();
 }
 
+Future<void> _nextBenefit(WidgetTester tester) async {
+  final pager = find.byKey(const Key('bara-gold-benefits-pager'));
+  await tester.ensureVisible(pager);
+  await tester.pump();
+  await tester.drag(pager, Offset(-tester.getSize(pager).width * 0.8, 0));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('compact hero keeps terrain scale and the benefits below it', (
     tester,
@@ -118,9 +126,6 @@ void main() {
     expect(find.text('Bara Gold'), findsOneWidget);
     expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
     expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
-    for (final title in _benefitTitles) {
-      expect(find.text(title), findsOneWidget);
-    }
     final hero = find.byKey(const Key('bara-gold-hero-scene'));
     final viewport = find.byKey(const Key('bara-gold-hero-viewport'));
     final benefits = find.byKey(const Key('bara-gold-benefits'));
@@ -138,6 +143,8 @@ void main() {
       tester.getTopLeft(cta).dy,
       greaterThan(tester.getBottomLeft(benefits).dy),
     );
+    expect(tester.getSize(benefits), tester.getSize(cta));
+    expect(tester.getSize(benefits).height, 56);
     expect(find.byType(AnimatedCapybaraWithAccessories), findsOneWidget);
     final avatar = tester.widget<AnimatedCapybaraWithAccessories>(
       find.byType(AnimatedCapybaraWithAccessories),
@@ -145,6 +152,12 @@ void main() {
     expect(avatar.animate, isFalse);
     expect(avatar.size, 116);
     expect(avatar.accessories.single['assetKey'], 'cape');
+    // Preserve coverage of all four perks, now reached by paging rather than
+    // requiring the old four-row layout to remain on screen.
+    for (final title in _benefitTitles) {
+      expect(find.text(title).hitTestable(), findsOneWidget);
+      await _nextBenefit(tester);
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -158,7 +171,9 @@ void main() {
 
     await tester.tap(find.text('Bara Gold'));
     expect(taps, 1);
-    await tester.tap(find.text('Exclusive characters'));
+    await _nextBenefit(tester);
+    expect(taps, 1, reason: 'A horizontal swipe must not open checkout.');
+    await tester.tap(find.text('Exclusive characters').hitTestable());
     expect(taps, 2);
     final cta = find.byKey(const Key('bara-gold-upgrade-cta'));
     await tester.ensureVisible(cta);
@@ -191,8 +206,6 @@ void main() {
             night: night,
           );
 
-          // The scenery is compact in every orientation, not only when the
-          // phone is rotated. Large text keeps extra room above the avatar.
           final tall = layout.scale > 1.35;
           expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
           expect(find.text('Bara Gold'), findsOneWidget);
@@ -210,26 +223,30 @@ void main() {
           expect(avatar.size, tall ? 128 : 116);
 
           final palette = night ? AppPalette.night : AppPalette.light;
-          final panel = tester.widget<Container>(
-            find.byKey(const Key('bara-gold-benefits')),
-          );
+          final benefits = find.byKey(const Key('bara-gold-benefits'));
+          final panel = tester.widget<Container>(benefits);
           expect((panel.decoration as BoxDecoration).color, palette.parchment);
-          final panelRect = tester.getRect(
-            find.byKey(const Key('bara-gold-benefits')),
-          );
+          await tester.ensureVisible(benefits);
+          await tester.pump();
           for (final title in _benefitTitles) {
-            final finder = find.text(title);
+            final finder = find.text(title).hitTestable();
+            expect(finder, findsOneWidget);
             final text = tester.widget<Text>(finder);
             final rect = tester.getRect(finder);
+            final panelRect = tester.getRect(benefits);
             expect(text.maxLines, isNull);
             expect(rect.left, greaterThanOrEqualTo(panelRect.left));
             expect(rect.right, lessThanOrEqualTo(panelRect.right));
+            expect(rect.top, greaterThanOrEqualTo(panelRect.top));
+            expect(rect.bottom, lessThanOrEqualTo(panelRect.bottom));
+            await _nextBenefit(tester);
           }
           final cta = find.byKey(const Key('bara-gold-upgrade-cta'));
           await tester.ensureVisible(cta);
           await tester.pump();
           final ctaRect = tester.getRect(cta);
           final labelRect = tester.getRect(find.text('Upgrade to Bara Gold'));
+          expect(tester.getSize(benefits), tester.getSize(cta));
           expect(ctaRect.height, greaterThanOrEqualTo(56));
           expect(labelRect.left, greaterThanOrEqualTo(ctaRect.left));
           expect(labelRect.right, lessThanOrEqualTo(ctaRect.right));

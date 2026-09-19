@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/billing.dart';
 import '../services/billing_controller.dart';
 import '../styles.dart';
+import 'bara_gold_benefits_carousel.dart';
 import 'billing_scope.dart';
-import 'coin_glyph.dart';
 import 'home_course_track.dart';
 import 'home_hero_scene.dart';
 
@@ -76,14 +76,25 @@ class BaraPlusCard extends StatelessWidget {
                         colors: [colors.dirtMid, colors.dirtDark],
                       ),
                     ),
-                    child: const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _GoldBenefitsPanel(),
-                        SizedBox(height: 8),
-                        _GoldUpgradeCta(),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final rowHeight = BaraGoldBenefitsCarousel.rowHeight(
+                          context,
+                          constraints.maxWidth,
+                        );
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              height: rowHeight,
+                              child: const BaraGoldBenefitsCarousel(),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(height: rowHeight, child: const _GoldUpgradeCta()),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -100,9 +111,8 @@ class BaraPlusCard extends StatelessWidget {
     final sceneHeight = tall ? 236.0 : 206.0;
     final groundHeight = tall ? 70.0 : 64.0;
 
-    // Remove 30 logical pixels of sky now that the subtitle is gone. Keep
-    // terrain scale, avatar size and feet anchoring unchanged in all orientations.
-    // Crop unused soil rather than stretching the shared ground artwork.
+    // Keep the compact scenery and real cape animation unchanged. Crop unused
+    // soil rather than stretching the shared ground artwork.
     final visibleHeight = sceneHeight - groundHeight + 18;
     return ClipRect(
       key: const Key('bara-gold-hero-viewport'),
@@ -124,11 +134,7 @@ class BaraPlusCard extends StatelessWidget {
               Positioned(
                 left: 0,
                 right: 0,
-                bottom:
-                    groundHeight -
-                    4 -
-                    (tall ? 128 : 116) * .22 -
-                    (tall ? 3 : 2),
+                bottom: groundHeight - 4 - (tall ? 128 : 116) * .22 - (tall ? 3 : 2),
                 child: Center(
                   child: KeyedSubtree(
                     key: const Key('bara-gold-cape-avatar'),
@@ -172,134 +178,7 @@ class BaraPlusCard extends StatelessWidget {
   }
 }
 
-class _GoldBenefitsPanel extends StatelessWidget {
-  const _GoldBenefitsPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final gold = colors.isDark ? colors.feedGold : colors.coinDark;
-    final divider = Divider(
-      height: 1,
-      thickness: 1,
-      indent: 42,
-      color: colors.parchmentBorder.withValues(alpha: 0.5),
-    );
-
-    return Container(
-      key: const Key('bara-gold-benefits'),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      decoration: BoxDecoration(
-        color: colors.parchment,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colors.parchmentBorder.withValues(alpha: 0.65),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colors.dirtDark.withValues(alpha: 0.28),
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _GoldBenefitRow(
-            icon: Icon(Icons.block_rounded, color: colors.error, size: 22),
-            tint: colors.error,
-            title: 'Ad-free experience',
-            detail: 'No banners or interruptions. Just Bara.',
-          ),
-          divider,
-          _GoldBenefitRow(
-            icon: Icon(Icons.workspace_premium_rounded, color: gold, size: 24),
-            tint: gold,
-            title: 'Exclusive characters',
-            detail: 'Unlock special characters and shop power-ups.',
-          ),
-          divider,
-          _GoldBenefitRow(
-            icon: const CoinGlyph(size: 26),
-            tint: gold,
-            title: 'Monthly coin bonus',
-            detail: 'Extra coins each month, based on your plan.',
-          ),
-          divider,
-          _GoldBenefitRow(
-            icon: Icon(
-              Icons.autorenew_rounded,
-              color: colors.feedShield,
-              size: 24,
-            ),
-            tint: colors.feedShield,
-            title: 'Free rerolls',
-            detail: 'Reroll Daily Spins and boxes without ads.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoldBenefitRow extends StatelessWidget {
-  const _GoldBenefitRow({
-    required this.icon,
-    required this.tint,
-    required this.title,
-    required this.detail,
-  });
-
-  final Widget icon;
-  final Color tint;
-  final String title;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ExcludeSemantics(
-            child: Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: tint.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: icon,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: PixelText.title(size: 14, color: colors.textDark),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  detail,
-                  style: PixelText.body(size: 12, color: colors.textMid),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Visual CTA for the card's existing InkWell. Tapping anywhere still opens
-/// membership details; this widget never invokes a billing operation itself.
+/// The existing card InkWell owns navigation; this never starts a purchase.
 class _GoldUpgradeCta extends StatelessWidget {
   const _GoldUpgradeCta();
 
@@ -327,10 +206,7 @@ class _GoldUpgradeCta extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Decorative elements yield space to the label on small screens
-          // and at large text sizes. Text wraps instead of being scaled down.
-          final showSparkles =
-              constraints.maxWidth >= 280 &&
+          final showSparkles = constraints.maxWidth >= 280 &&
               MediaQuery.textScalerOf(context).scale(1) <= 1.35;
           final sparkle = ExcludeSemantics(
             child: Icon(
@@ -356,11 +232,7 @@ class _GoldUpgradeCta extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     ExcludeSemantics(
-                      child: Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 22,
-                        color: colors.textDark,
-                      ),
+                      child: Icon(Icons.arrow_forward_rounded, size: 22, color: colors.textDark),
                     ),
                   ],
                 ),
