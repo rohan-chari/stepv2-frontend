@@ -196,9 +196,11 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
     final selected = !billing.snapshot.isMember && _plan == offer.plan;
     final monthly = offer.plan == BillingPlan.monthly;
     final title = offer.plan == BillingPlan.weekly ? 'WEEKLY' : 'MONTHLY';
-    final fill = selected ? colors.roofMid : colors.parchment;
+    final fill = selected
+        ? (colors.isDark ? colors.pillGoldDark : colors.roofMid)
+        : colors.parchment;
     final borderColor = selected
-        ? (colors.isDark ? colors.feedGold : colors.pillGoldDark)
+        ? (colors.isDark ? colors.pillGold : colors.pillGoldDark)
         : colors.parchmentBorder;
     final foreground = selected ? colors.textLight : colors.textDark;
     final secondary = selected
@@ -443,6 +445,9 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                     label: trialDays > 0
                         ? 'TRY ' + trialDays.toString() + ' DAYS FREE'
                         : 'SUBSCRIBE',
+                    variant: colors.isDark
+                        ? PillButtonVariant.secondary
+                        : PillButtonVariant.primary,
                     fullWidth: true,
                     loading: _busy,
                     padding: const EdgeInsets.symmetric(
