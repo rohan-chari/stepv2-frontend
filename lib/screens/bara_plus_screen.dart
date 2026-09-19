@@ -313,13 +313,9 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: colors.isDark ? colors.feedGold : colors.pillGold,
+                  color: colors.pillGold,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: colors.isDark
-                        ? colors.feedGold
-                        : colors.pillGoldDark,
-                  ),
+                  border: Border.all(color: colors.pillGoldDark),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -327,14 +323,18 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                     Icon(
                       Icons.workspace_premium_rounded,
                       size: 13,
-                      color: colors.textDark,
+                      color: colors.isDark
+                          ? colors.textLight
+                          : colors.textDark,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'BEST DEAL',
                       style: PixelText.title(
                         size: 9.5,
-                        color: colors.textDark,
+                        color: colors.isDark
+                            ? colors.textLight
+                            : colors.textDark,
                       ),
                     ),
                   ],
@@ -441,20 +441,17 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 else ...[
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      const gap = 12.0;
-                      final cardWidth = ((constraints.maxWidth - gap) / 2)
-                          .clamp(132.0, 158.0);
+                      final cardWidth = ((constraints.maxWidth - 36) / 2)
+                          .clamp(118.0, 142.0);
                       return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          for (var index = 0; index < offers.length; index++) ...[
-                            if (index > 0) const SizedBox(width: gap),
+                          for (final planOffer in offers)
                             SizedBox(
                               width: cardWidth,
-                              child: _planButton(billing, offers[index]),
+                              child: _planButton(billing, planOffer),
                             ),
-                          ],
                         ],
                       );
                     },
