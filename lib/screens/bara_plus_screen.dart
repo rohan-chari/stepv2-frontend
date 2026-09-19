@@ -413,25 +413,21 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 else ...[
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      const gap = 28.0;
-                      final cardWidth = ((constraints.maxWidth - gap) / 2)
+                      final cardWidth = (constraints.maxWidth * 0.39)
                           .clamp(118.0, 142.0);
-                      final groupWidth = cardWidth * 2 + gap;
-                      return Center(
-                        child: SizedBox(
-                          width: groupWidth,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (final planOffer in offers)
-                                SizedBox(
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final planOffer in offers)
+                            Expanded(
+                              child: Center(
+                                child: SizedBox(
                                   width: cardWidth,
                                   child: _planButton(billing, planOffer),
                                 ),
-                            ],
-                          ),
-                        ),
+                              ),
+                            ),
+                        ],
                       );
                     },
                   ),
