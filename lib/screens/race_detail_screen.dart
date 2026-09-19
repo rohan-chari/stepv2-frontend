@@ -3081,37 +3081,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     var participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
-    final needsTargetingContext =
-        _participantsHasMore ||
-        (_participantsTotal != null &&
-            participants.length < _participantsTotal!);
     final typeTargets =
         type == 'QUICKSAND' ||
         type == 'PINECONE_TOSS' ||
         type == 'SNEAKY_SWAP' ||
         kTargetedPowerupTypes.contains(type);
-    if (typeTargets && type != 'PINECONE_TOSS' && needsTargetingContext) {
+    if (typeTargets && type != 'PINECONE_TOSS') {
       final useContextParticipants = await _loadRacePowerupTargetContext(
         token,
         type,
       );
-      if (useContextParticipants.isNotEmpty) {
-        participants = useContextParticipants;
+      if (useContextParticipants == null) {
+        _clearPowerupProcessing();
+        if (mounted) {
+          showErrorToast(context, 'Couldn’t load eligible targets. Try again.');
+        }
+        return;
       }
+      participants = useContextParticipants;
     }
-    // Most targeted powerups are enemy-only. Hitchhike deliberately also
-    // offers eligible teammates; the backend remains authoritative.
-    final targets = type == 'HITCHHIKE'
-        ? TeamRace.hitchhikeTargets(
-            participants: participants,
-            myUserId: _myUserId,
-            race: _race ?? const {},
-          )
-        : TeamRace.offensiveTargets(
-      participants: participants,
-      myUserId: _myUserId,
-      race: _race ?? const {},
-    );
+    // v2 use-context is authoritative for picker eligibility. The mutation
+    // endpoint still revalidates under lock in case state changes after this read.
+    final targets = participants;
 
     if (type == 'QUICKSAND') {
       if (targets.isEmpty) {
@@ -3131,47 +3122,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         return;
       }
     } else if (type == 'SNEAKY_SWAP') {
-      // Only offer racers who actually hold something stealable. New endpoint;
-      // on an older backend (or any failure) fall back to all eligible racers.
-      final swapTargets = await _resolveSneakySwapTargets(token, targets);
-      if (swapTargets.isEmpty) {
+      if (targets.isEmpty) {
         _clearPowerupProcessing();
         if (mounted) {
           showInfoToast(context, 'No one has a powerup to steal right now');
         }
         return;
       }
-      // Steal redesign: pick a target and the server takes one RANDOM
-      // stealable powerup from them — nothing of yours is given up, so the
-      // old two-step SWAP AWAY / TAKE FROM TARGET pickers are gone.
-      targetUserId = await _showTargetPicker(swapTargets, type);
+      targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
         _clearPowerupProcessing();
         return;
       }
     } else if (type == 'BOUNTY') {
-      // §7 powerups5 — Bounty may only wager on a rival currently AHEAD of me.
-      // Pre-filter the picker client-side (server still validates on a fresher
-      // scoreline); never present a losing wager.
-      var myTotalSteps = 0;
-      for (final p in participants) {
-        if ((p['userId'] as String?) == _myUserId) {
-          myTotalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
-          break;
-        }
-      }
-      final aheadTargets = TeamRace.targetsAheadOf(
-        targets: targets,
-        myTotalSteps: myTotalSteps,
-      );
-      if (aheadTargets.isEmpty) {
+      if (targets.isEmpty) {
         _clearPowerupProcessing();
         if (mounted) {
           showInfoToast(context, 'No rivals are ahead of you to target');
         }
         return;
       }
-      targetUserId = await _showTargetPicker(aheadTargets, type);
+      targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
         _clearPowerupProcessing();
         return;
@@ -3424,7 +3395,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  Future<List<Map<String, dynamic>>> _loadRacePowerupTargetContext(
+  Future<List<Map<String, dynamic>>?> _loadRacePowerupTargetContext(
     String token,
     String powerupType,
   ) async {
@@ -3434,6 +3405,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         raceId: widget.raceId,
         powerupType: powerupType,
       );
+      if (result['contract'] != 'race-powerup-target-context-v2') {
+        return null;
+      }
       final rawParticipants =
           (result['participants'] as List?)
               ?.whereType<Map<String, dynamic>>()
@@ -3452,10 +3426,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       return rawParticipants;
     } catch (_) {
-      // Missing/old/malformed/transient typed context keeps the already-loaded
-      // progress page exactly as it was. Never replay this URL through the
-      // legacy method: older backends already returned that body above.
-      return const [];
+      // Targeting is fail-closed: stale/general participant lists must never
+      // substitute for server-approved eligibility on a consumable action.
+      return null;
     }
   }
 
@@ -3847,51 +3820,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) showErrorToast(context, e.toString());
     } finally {
       _endAction();
-    }
-  }
-
-  /// Resolves the Pickpocket target list via the legacy-named backend endpoint,
-  /// returns only racers holding a stealable powerup. The returned userIds are
-  /// re-joined with [eligibleTargets] (the live participant rows) so the picker
-  /// keeps showing avatars/steps. Defends against an older backend that lacks
-  /// the endpoint by falling back to the full eligible-racer list.
-  Future<List<Map<String, dynamic>>> _resolveSneakySwapTargets(
-    String token,
-    List<Map<String, dynamic>> eligibleTargets,
-  ) async {
-    try {
-      final result = await _api.fetchSneakySwapTargets(
-        identityToken: token,
-        raceId: widget.raceId,
-      );
-      final rawTargets =
-          (result['targets'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-
-      // Index live participants so we can enrich with steps/avatar.
-      final byUserId = <String, Map<String, dynamic>>{
-        for (final p in eligibleTargets)
-          if (p['userId'] is String) p['userId'] as String: p,
-      };
-
-      final resolved = <Map<String, dynamic>>[];
-      for (final t in rawTargets) {
-        final userId = t['userId'] as String?;
-        if (userId == null) continue;
-        final live = byUserId[userId];
-        resolved.add({
-          'userId': userId,
-          'displayName': live?['displayName'] ?? t['displayName'] ?? '???',
-          if (live?['profilePhotoUrl'] != null)
-            'profilePhotoUrl': live!['profilePhotoUrl'],
-          if (live?['totalSteps'] != null) 'totalSteps': live!['totalSteps'],
-        });
-      }
-      return resolved;
-    } catch (_) {
-      // Old backend without the endpoint (404) or transient failure: degrade to
-      // the prior behavior of offering every eligible racer.
-      return eligibleTargets;
     }
   }
 
