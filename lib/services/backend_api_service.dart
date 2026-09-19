@@ -5288,7 +5288,12 @@ class BackendApiService {
     );
     final raw = await _readRawResponse(response);
     if (raw.statusCode == 404) {
-      _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      // A deleted/stale race is a domain 404, not evidence that this backend
+      // lacks the endpoint. Only a route-level/unknown 404 poisons capability
+      // detection for the rest of the app session.
+      if (raw.code != 'RACE_NOT_FOUND') {
+        _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      }
       throw _apiExceptionFromRaw(raw);
     }
     if (raw.statusCode < 200 || raw.statusCode >= 300) {
@@ -5330,7 +5335,12 @@ class BackendApiService {
     );
     final raw = await _readRawResponse(response);
     if (raw.statusCode == 404) {
-      _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      // A deleted/stale race is a domain 404, not evidence that this backend
+      // lacks the endpoint. Only a route-level/unknown 404 poisons capability
+      // detection for the rest of the app session.
+      if (raw.code != 'RACE_NOT_FOUND') {
+        _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      }
       throw _apiExceptionFromRaw(raw);
     }
     if (raw.statusCode < 200 || raw.statusCode >= 300) {
