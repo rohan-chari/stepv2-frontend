@@ -367,10 +367,12 @@ void main() {
     (tester) async {
       addTearDown(tester.view.reset);
       await pumpRetainedMembership(tester, billing: FakeBilling());
-      expect(find.text('A LITTLE EXTRA JOY'), findsOneWidget);
-      expect(find.text('For you. For your capy.'), findsNothing);
-      expect(find.text('Plan-specific coin grants'), findsOneWidget);
+      expect(find.text('Monthly coin bonus'), findsOneWidget);
+      expect(find.text('Ad-free experience'), findsOneWidget);
+      expect(find.text('Free rerolls on everything'), findsOneWidget);
+      expect(find.text('Exclusive characters & powerups'), findsOneWidget);
       expect(find.byKey(const Key('plan-monthly')), findsOneWidget);
+      expect(find.byKey(const Key('bara-gold-best-deal')), findsOneWidget);
       expect(find.byKey(const Key('restore-bara')), findsOneWidget);
     },
   );
