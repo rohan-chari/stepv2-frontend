@@ -164,36 +164,42 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
   Widget _buildItem(int index) {
     final isResult = index == widget.resultIndex;
     final tile = widget.itemBuilder(context, index, isResult);
-    if (!isResult) return tile;
-    // Lock-in pop: as the reel settles, the winning tile lifts, scales up and
-    // catches a gold glow — the "it's THIS one" beat.
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        final locked = _animation.value > 0.985;
-        final content = locked
-            ? DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.of(
-                        context,
-                      ).pillGold.withValues(alpha: 0.85),
-                      blurRadius: 18,
-                      spreadRadius: 2,
-                    ),
-                  ],
+    final content = !isResult
+        ? tile
+        : AnimatedBuilder(
+            animation: _animation,
+            builder: (context, child) {
+              final locked = _animation.value > 0.985;
+              final decorated = locked
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.of(
+                              context,
+                            ).pillGold.withValues(alpha: 0.85),
+                            blurRadius: 18,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: child,
+                    )
+                  : child!;
+              return Transform.translate(
+                offset: Offset(0, locked ? -5.0 : 0.0),
+                child: Transform.scale(
+                  scale: locked ? 1.07 : 1.0,
+                  child: decorated,
                 ),
-                child: child,
-              )
-            : child!;
-        return Transform.translate(
-          offset: Offset(0, locked ? -5.0 : 0.0),
-          child: Transform.scale(scale: locked ? 1.07 : 1.0, child: content),
-        );
-      },
-      child: tile,
+              );
+            },
+            child: tile,
+          );
+    return KeyedSubtree(
+      key: Key('case-opening-real-item-$index'),
+      child: content,
     );
   }
 
