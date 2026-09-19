@@ -3151,6 +3151,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         builder: (sheetContext) {
           _membershipSheetContext = sheetContext;
           Widget body() => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
                 height: 52,
