@@ -68,7 +68,7 @@ class BaraPlusCard extends StatelessWidget {
                 children: [
                   _hero(context, tall: tall),
                   Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
