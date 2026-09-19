@@ -3654,12 +3654,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
 
     try {
-      await _api.returnRedeemedPowerupToStash(
+      final result = await _api.returnRedeemedPowerupToStash(
         identityToken: token,
         raceId: widget.raceId,
         powerupId: powerupId,
       );
-      // Refresh both the race tray and the account-wide stash projection.
+
+      // The mutation already knows the authoritative post-return quantity.
+      // Apply it locally instead of issuing a second global-inventory GET.
+      final type = powerup['type'];
+      final quantity = result['quantity'];
+      if (type is String && quantity is num && mounted) {
+        final updated = Map<String, int>.from(_globalPowerupInventory);
+        final value = quantity.toInt();
+        if (value > 0) {
+          updated[type] = value;
+        } else {
+          updated.remove(type);
+        }
+        setState(() => _globalPowerupInventory = updated);
+      }
+
+      // Only the race tray needs a refresh now.
       await _loadProgress();
       if (!silent && mounted) {
         showInfoToast(
