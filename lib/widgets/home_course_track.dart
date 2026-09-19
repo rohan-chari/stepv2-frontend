@@ -1203,23 +1203,12 @@ class _BehindCapybaraAccessoryOverlay extends StatelessWidget {
     final rotation = _metadataDouble(metadata, 'rotation') ?? 0.0;
     final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
     final animationFrames = _metadataInt(metadata, 'animationFrames') ?? 1;
-    // Optional presentation-only sway for static BACK assets used in hero
-    // previews. Off by default so equipped accessories everywhere else keep
-    // their exact existing rendering.
-    final walkSway = metadata['walkSway'] == true;
-    const swayX = <double>[0, -1.5, -3, -1.5, 0, 1.5];
-    const swayY = <double>[0, -1, 0, 1, 0, -1];
-    const swayRotation = <double>[0, -0.025, -0.04, -0.02, 0, 0.02];
-    final frame = frameIndex % swayX.length;
-    final dx = walkSway ? swayX[frame] * (capybaraSize / 96) : 0.0;
-    final dy = walkSway ? swayY[frame] * (capybaraSize / 96) : 0.0;
-    final extraRotation = walkSway ? swayRotation[frame] : 0.0;
 
     return Positioned.fill(
       child: Transform.translate(
-        offset: Offset(offsetX + dx, offsetY + dy),
+        offset: Offset(offsetX, offsetY),
         child: Transform.rotate(
-          angle: rotation + extraRotation,
+          angle: rotation,
           alignment: Alignment.center,
           child: Transform.scale(
             scale: scale,
