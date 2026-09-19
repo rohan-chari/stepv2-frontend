@@ -13,9 +13,13 @@ import 'package:step_tracker/widgets/item_slot.dart';
 /// 42,000), `user-3` (behind, 31,000). A held wave-5 powerup is injected per
 /// test via [_Api.heldType].
 class _Api extends BackendApiService {
-  _Api({required this.heldType});
+  _Api({
+    required this.heldType,
+    this.targetContract = 'race-powerup-target-context-v2',
+  });
 
   final String heldType;
+  final String targetContract;
   int usePowerupCalls = 0;
   String? lastTargetUserId;
 
@@ -26,10 +30,11 @@ class _Api extends BackendApiService {
     required String raceId,
     required String powerupType,
   }) async => {
-    'contract': 'race-powerup-target-context-v2',
+    'contract': targetContract,
     'participants': [
       {'userId': 'user-2', 'displayName': 'Hill Climber', 'totalSteps': 42000},
-      if (powerupType != 'BOUNTY')
+      if (powerupType != 'BOUNTY' ||
+          targetContract != 'race-powerup-target-context-v2')
         {
           'userId': 'user-3',
           'displayName': 'Ridge Runner',
@@ -229,6 +234,37 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 300));
   });
+
+  testWidgets(
+    'legacy target context falls back to safe client eligibility',
+    (tester) async {
+      final api = _Api(
+        heldType: 'BOUNTY',
+        targetContract: 'race-powerup-use-context-v1',
+      );
+      await _openUse(tester, api);
+
+      expect(find.text('Couldn’t load eligible targets. Try again.'), findsNothing);
+      expect(find.text('CHOOSE A TARGET'), findsOneWidget);
+      final picker = find
+          .ancestor(
+            of: find.text('CHOOSE A TARGET'),
+            matching: find.byType(Column),
+          )
+          .last;
+      expect(
+        find.descendant(of: picker, matching: find.text('@Hill Climber')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: picker, matching: find.text('@Ridge Runner')),
+        findsNothing,
+      );
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 300));
+    },
+  );
 
   testWidgets('Bounty opens the picker filtered to rivals ahead of me only', (
     tester,
