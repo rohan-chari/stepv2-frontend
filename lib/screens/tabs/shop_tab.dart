@@ -1594,11 +1594,6 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      _buildSectionHeader(
-                                        'Featured',
-                                        'featured',
-                                        _featuredKey,
-                                      ),
                                       _buildFeatured(),
                                       _buildSectionHeader(
                                         'Powerups',
@@ -3231,12 +3226,13 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
     });
   }
 
-  // Featured shop content includes the active Bara Gold entry and coin packs.
+  // Bara Gold is the promo. "Featured" labels the coin packs below it.
   Widget _buildFeatured() {
     final billing = BillingScope.maybeOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SizedBox(height: 24),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: BaraPlusCard(
@@ -3244,7 +3240,7 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
             onTap: _openMembershipDetails,
           ),
         ),
-        const SizedBox(height: 12),
+        _buildSectionHeader('Featured', 'featured', _featuredKey),
         Container(
           key: _coinsKey,
           child: CoinPackOffers(

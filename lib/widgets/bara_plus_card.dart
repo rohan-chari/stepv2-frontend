@@ -151,8 +151,16 @@ class BaraPlusCard extends StatelessWidget {
                 left: 16,
                 right: 16,
                 top: tall ? 13 : 14,
-                child: Text(
-                  'Bara Gold',
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      const TextSpan(text: 'Bara '),
+                      TextSpan(
+                        text: 'Gold',
+                        style: TextStyle(color: colors.medalGold),
+                      ),
+                    ],
+                  ),
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -160,6 +168,7 @@ class BaraPlusCard extends StatelessWidget {
                     size: tall ? 24 : 27,
                     color: colors.textLight,
                   ).copyWith(
+                    fontWeight: FontWeight.w800,
                     shadows: const [
                       Shadow(
                         color: Color(0x66000000),
@@ -225,7 +234,7 @@ class _GoldUpgradeCta extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        'Upgrade to Bara Gold',
+                        'Learn more',
                         textAlign: TextAlign.center,
                         style: PixelText.title(size: 15, color: colors.textDark),
                       ),

@@ -13,12 +13,15 @@ class _StashApi extends BackendApiService {
     this.stashType = 'TRAIL_MIX',
     this.rejectUse = false,
     this.decoyCooldown = false,
-  }) : _stashQuantity = 2;
+    this.strandedRedeemed = false,
+  }) : _stashQuantity = strandedRedeemed ? 1 : 2;
 
   final String stashType;
   final bool rejectUse;
   final bool decoyCooldown;
+  final bool strandedRedeemed;
   int redeemCalls = 0;
+  int returnCalls = 0;
   int? lastUpgradeLevel;
   int _stashQuantity;
 
@@ -54,7 +57,17 @@ class _StashApi extends BackendApiService {
     ],
     'powerupData': {
       'enabled': true,
-      'inventory': const [],
+      'inventory': strandedRedeemed
+          ? const [
+              {
+                'id': 'stranded-pw',
+                'type': 'HITCHHIKE',
+                'rarity': null,
+                'status': 'HELD',
+                'redeemedFromInventory': true,
+              },
+            ]
+          : const [],
       'powerupSlots': 3,
       'queuedBoxCount': 0,
       // One live timed self-buff, so Pocket Watch's "MY BUFFS" mode has
@@ -109,8 +122,46 @@ class _StashApi extends BackendApiService {
           // Store redemption deliberately has no rarity or earnedAtSteps.
           'rarity': null,
           'status': 'HELD',
+          'redeemedFromInventory': true,
         },
       },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async => {
+    'contract': 'race-powerup-target-context-v2',
+    'participants': powerupType == 'HITCHHIKE'
+        ? const <Map<String, dynamic>>[]
+        : const [
+            {
+              'userId': 'u1',
+              'displayName': 'Otter42',
+              'totalSteps': 4000,
+            },
+          ],
+    'powerupData': const {
+      'powerupSlots': 3,
+      'inventory': [],
+    },
+  };
+
+  @override
+  Future<Map<String, dynamic>> returnRedeemedPowerupToStash({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async {
+    returnCalls++;
+    _stashQuantity++;
+    return {
+      'returned': true,
+      'powerupType': stashType == 'HITCHHIKE' ? 'HITCHHIKE' : stashType,
+      'quantity': _stashQuantity,
     };
   }
 
@@ -127,14 +178,23 @@ class _StashApi extends BackendApiService {
     if (rejectUse || decoyCooldown) {
       // Mirrors the current backend's rejected-redeemed-item refund.
       _stashQuantity++;
+      final refundedPowerup = {
+        'powerupType': stashType,
+        'quantity': _stashQuantity,
+      };
       if (decoyCooldown) {
-        throw const ApiException(
+        throw ApiException(
           'Wait 1 hour after your Decoy pops before using another in this race',
           statusCode: 409,
           code: 'DECOY_COOLDOWN',
+          details: {'refundedPowerup': refundedPowerup},
         );
       }
-      throw const ApiException('Quick Rinse is on cooldown', statusCode: 409);
+      throw ApiException(
+        'Quick Rinse is on cooldown',
+        statusCode: 409,
+        details: {'refundedPowerup': refundedPowerup},
+      );
     }
     lastUpgradeLevel = upgradeLevel;
     return const {'result': {}};
@@ -251,6 +311,49 @@ void main() {
     // The authoritative follow-up read restores a server-refunded redeemed
     // item to the account-wide stash rather than leaving it in a race slot.
     expect(find.text('Trail Mix x2'), findsOneWidget);
+  });
+
+  testWidgets(
+    'local target-selection failure returns a just-redeemed stash item',
+    (tester) async {
+      final api = _StashApi(stashType: 'HITCHHIKE');
+      await _pump(tester, api);
+
+      await tester.tap(find.byKey(const Key('stash-use-HITCHHIKE')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byKey(const Key('stash-confirm-use')));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(api.redeemCalls, 1);
+      expect(api.returnCalls, 1);
+      expect(find.text('Hitchhike x2'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a stranded redeemed HELD item can be returned to stash', (
+    tester,
+  ) async {
+    final api = _StashApi(
+      stashType: 'HITCHHIKE',
+      strandedRedeemed: true,
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.byKey(const Key('powerup-slot-0')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(const Key('return-redeemed-to-stash')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('return-redeemed-to-stash')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(api.returnCalls, 1);
+    expect(find.text('Hitchhike x2'), findsOneWidget);
   });
 
   testWidgets('Decoy cooldown shows server wait and restores refunded stash', (

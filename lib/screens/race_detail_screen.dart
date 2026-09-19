@@ -3059,6 +3059,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     Map<String, dynamic> powerup, {
     int upgradeLevel = 0,
     String? targetEffectId,
+    bool returnRedeemedOnLocalAbort = false,
   }) async {
     final type = powerup['type'] as String;
     // Store-redeemed items are distinguishable from race-earned drops even
@@ -3066,12 +3067,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // with neither a rarity nor a milestone. The server returns these to the
     // global stash on a rejected use, so reconcile instead of restoring a
     // stale in-race snapshot.
-    final wasRedeemedFromStash =
-        powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
+    final wasRedeemedFromStash = _isRedeemedFromStash(powerup);
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
       _clearPowerupProcessing();
       return;
+    }
+
+    Future<void> abortBeforeUse() async {
+      _clearPowerupProcessing();
+      if (returnRedeemedOnLocalAbort && wasRedeemedFromStash) {
+        await _returnRedeemedPowerupToStash(powerup, silent: true);
+      }
     }
 
     String? targetUserId;
@@ -3092,7 +3099,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         type,
       );
       if (useContextParticipants == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showErrorToast(context, 'Couldn’t load eligible targets. Try again.');
         }
@@ -3106,24 +3113,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     if (type == 'QUICKSAND') {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) showErrorToast(context, 'No targets available');
         return;
       }
       targetUserIds = await _showQuicksandTargetPicker(targets);
       if (targetUserIds == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (type == 'PINECONE_TOSS') {
       targetDirection = await _showPineconeDirectionPicker();
       if (targetDirection == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (type == 'SNEAKY_SWAP') {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showInfoToast(context, 'No one has a powerup to steal right now');
         }
@@ -3131,12 +3138,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (type == 'BOUNTY') {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showInfoToast(context, 'No rivals are ahead of you to target');
         }
@@ -3144,12 +3151,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     } else if (kTargetedPowerupTypes.contains(type)) {
       if (targets.isEmpty) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         if (mounted) {
           showErrorToast(
             context,
@@ -3163,12 +3170,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       targetUserId = await _showTargetPicker(targets, type);
       if (targetUserId == null) {
-        _clearPowerupProcessing();
+        await abortBeforeUse();
         return;
       }
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      await abortBeforeUse();
+      return;
+    }
     _showPowerupProcessing(type);
     setState(() => _isActing = true);
     // Optimistically empty the slot the moment the user commits (mirrors the
@@ -3358,12 +3368,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       _loadProgress();
     } catch (e) {
       if (wasRedeemedFromStash) {
-        // A current backend returns a rejected redeemed item to the global
-        // stash; an older backend may retain it in the race tray instead. Do
-        // not restore our stale local snapshot — re-read both authoritative
-        // projections so either server version renders where it actually put
-        // the item.
-        _loadProgress();
+        // Current backends include the authoritative post-refund stash quantity
+        // on the rejected response, so no extra inventory read is needed.
+        final refunded = e is ApiException
+            ? e.details?['refundedPowerup']
+            : null;
+        final refundedMap = refunded is Map
+            ? Map<String, dynamic>.from(refunded)
+            : null;
+        final refundedType = refundedMap?['powerupType'];
+        if (refundedType is String && refundedMap?['quantity'] is num) {
+          _applyStashQuantity(refundedType, refundedMap?['quantity']);
+        } else {
+          // Rolling-deploy fallback for an older backend that performed the
+          // refund but did not include its quantity in the error envelope.
+          unawaited(_loadGlobalPowerupInventory(token));
+        }
+        unawaited(_loadProgress());
       } else {
         restoreInventory();
       }
@@ -3405,9 +3426,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         raceId: widget.raceId,
         powerupType: powerupType,
       );
-      if (result['contract'] != 'race-powerup-target-context-v2') {
-        return null;
-      }
+      final contract = result['contract'];
+      final authoritative =
+          contract == 'race-powerup-target-context-v2';
+      final legacy =
+          contract == 'race-powerup-target-context-v1' ||
+          contract == 'race-powerup-use-context-v1';
+      if (!authoritative && !legacy) return null;
+
       final rawParticipants =
           (result['participants'] as List?)
               ?.whereType<Map<String, dynamic>>()
@@ -3424,10 +3450,46 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _disposeRerollIfUnavailable();
         _updateEffectExpiryRefresh();
       }
-      return rawParticipants;
+
+      // V2 is already filtered by the backend and is the source of truth.
+      if (authoritative) return rawParticipants;
+
+      // During a rolling deploy an older backend can still return the legacy
+      // full roster. Preserve the pre-v2 safe filters instead of making every
+      // targeted powerup unusable. The mutation endpoint remains authoritative.
+      final eligible = powerupType == 'HITCHHIKE'
+          ? TeamRace.hitchhikeTargets(
+              participants: rawParticipants,
+              myUserId: _myUserId,
+              race: _race ?? const {},
+            )
+          : TeamRace.offensiveTargets(
+              participants: rawParticipants,
+              myUserId: _myUserId,
+              race: _race ?? const {},
+            );
+
+      if (powerupType == 'SNEAKY_SWAP') {
+        return _resolveSneakySwapTargets(token, eligible);
+      }
+      if (powerupType == 'BOUNTY') {
+        var myTotalSteps = 0;
+        for (final participant in rawParticipants) {
+          if ((participant['userId'] as String?) == _myUserId) {
+            myTotalSteps =
+                (participant['totalSteps'] as num?)?.toInt() ?? 0;
+            break;
+          }
+        }
+        return TeamRace.targetsAheadOf(
+          targets: eligible,
+          myTotalSteps: myTotalSteps,
+        );
+      }
+      return eligible;
     } catch (_) {
-      // Targeting is fail-closed: stale/general participant lists must never
-      // substitute for server-approved eligibility on a consumable action.
+      // Unknown/malformed responses still fail closed. We only fall back when
+      // the server explicitly returned one of the known older contracts.
       return null;
     }
   }
@@ -3579,6 +3641,73 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// sheet already made (Pocket Watch's tier + rival effect) straight through
   /// to the use call, so redeeming from the stash lands the same request a HELD
   /// powerup would.
+  bool _isRedeemedFromStash(Map<String, dynamic> powerup) {
+    // Prefer the explicit server provenance, including an explicit FALSE.
+    // Fall back to the old null/null shape only when an older backend omitted
+    // the field entirely during a rolling deploy.
+    final explicit = powerup['redeemedFromInventory'];
+    if (explicit is bool) return explicit;
+    return powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
+  }
+
+  void _applyStashQuantity(String type, Object? rawQuantity) {
+    if (rawQuantity is! num || !mounted) return;
+    final updated = Map<String, int>.from(_globalPowerupInventory);
+    final quantity = rawQuantity.toInt();
+    if (quantity > 0) {
+      updated[type] = quantity;
+    } else {
+      updated.remove(type);
+    }
+    setState(() => _globalPowerupInventory = updated);
+  }
+
+  Future<bool> _returnRedeemedPowerupToStash(
+    Map<String, dynamic> powerup, {
+    bool silent = false,
+  }) async {
+    final token = widget.authService.authToken;
+    final powerupId = powerup['id'];
+    if (token == null ||
+        token.isEmpty ||
+        powerupId is! String ||
+        powerupId.isEmpty ||
+        !_isRedeemedFromStash(powerup)) {
+      return false;
+    }
+
+    try {
+      final result = await _api.returnRedeemedPowerupToStash(
+        identityToken: token,
+        raceId: widget.raceId,
+        powerupId: powerupId,
+      );
+
+      // The mutation already knows the authoritative post-return quantity.
+      // Apply it locally instead of issuing a second global-inventory GET.
+      final type = powerup['type'];
+      if (type is String) _applyStashQuantity(type, result['quantity']);
+
+      // Only the race tray needs a refresh now.
+      await _loadProgress();
+      if (!silent && mounted) {
+        showInfoToast(
+          context,
+          '${PowerupCopy.nameFor(powerup['type'] as String?)} returned to your stash',
+        );
+      }
+      return true;
+    } catch (error) {
+      // A failed return leaves the authoritative HELD row visible after refresh,
+      // where the user can retry. Never pretend the paid item disappeared.
+      await _loadProgress();
+      if (!silent && mounted) {
+        showErrorToast(context, powerupUseErrorCopy(error));
+      }
+      return false;
+    }
+  }
+
   Future<void> _redeemAndUsePowerup(
     String powerupType, {
     int upgradeLevel = 0,
@@ -3636,6 +3765,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       redeemedPowerup,
       upgradeLevel: upgradeLevel,
       targetEffectId: targetEffectId,
+      returnRedeemedOnLocalAbort: true,
     );
   }
 
@@ -3820,6 +3950,50 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) showErrorToast(context, e.toString());
     } finally {
       _endAction();
+    }
+  }
+
+  /// Legacy deploy-skew fallback for Sneaky Swap. The current v2 target
+  /// context already filters this server-side; older contexts need the
+  /// dedicated endpoint so we do not offer racers with nothing stealable.
+  Future<List<Map<String, dynamic>>> _resolveSneakySwapTargets(
+    String token,
+    List<Map<String, dynamic>> eligibleTargets,
+  ) async {
+    try {
+      final result = await _api.fetchSneakySwapTargets(
+        identityToken: token,
+        raceId: widget.raceId,
+      );
+      final rawTargets =
+          (result['targets'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+
+      final byUserId = <String, Map<String, dynamic>>{
+        for (final participant in eligibleTargets)
+          if (participant['userId'] is String)
+            participant['userId'] as String: participant,
+      };
+
+      final resolved = <Map<String, dynamic>>[];
+      for (final target in rawTargets) {
+        final userId = target['userId'] as String?;
+        if (userId == null) continue;
+        final live = byUserId[userId];
+        if (live == null) continue;
+        resolved.add({
+          'userId': userId,
+          'displayName': live['displayName'] ?? target['displayName'] ?? '???',
+          if (live['profilePhotoUrl'] != null)
+            'profilePhotoUrl': live['profilePhotoUrl'],
+          if (live['totalSteps'] != null) 'totalSteps': live['totalSteps'],
+        });
+      }
+      return resolved;
+    } catch (_) {
+      // The dedicated route predates v2 but may still be absent on a very old
+      // backend. Keep the historical fallback and let usePowerup revalidate.
+      return eligibleTargets;
     }
   }
 
@@ -4230,6 +4404,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     required int myCoins,
     required void Function(int level, String? targetEffectId) onConfirm,
     VoidCallback? onDiscard,
+    VoidCallback? onReturnToStash,
     VoidCallback? onReroll,
     int? discardPriceCoins,
   }) {
@@ -4277,6 +4452,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       },
                 discardPriceCoins: discardPriceCoins,
               ),
+              if (onReturnToStash != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: PillButton(
+                    key: const Key('return-redeemed-to-stash'),
+                    label: 'RETURN TO STASH',
+                    variant: PillButtonVariant.secondary,
+                    fullWidth: true,
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onReturnToStash();
+                    },
+                  ),
+                ),
               if (onReroll != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -4484,6 +4673,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final upgradeable = _isUpgradeable(type);
     final tierLabels = PowerupCopy.upgradeTierLabelsFor(type);
     final myCoins = widget.authService.coins;
+    final redeemedFromStash = _isRedeemedFromStash(powerup);
 
     // §6.4: Pocket Watch gets its own two-mode sheet. The generic tier sheet
     // can't express "extend all my buffs" vs "extend ONE debuff I put on a
@@ -4498,14 +4688,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           upgradeLevel: level,
           targetEffectId: targetEffectId,
         ),
-        onDiscard: () => _confirmAndDiscardPowerup(powerup),
+        onDiscard: redeemedFromStash
+            ? null
+            : () => _confirmAndDiscardPowerup(powerup),
+        onReturnToStash: redeemedFromStash
+            ? () => unawaited(_returnRedeemedPowerupToStash(powerup))
+            : null,
         onReroll: _canDeferredReroll(powerup)
             ? () => _rerollHeldPowerup(powerup)
             : null,
         // Third price surface (ui-test-planner): same _capRemaining and the
         // same min(price, cap) clamp as the DISCARD tag and the dialog, or the
         // sheet keeps promising the full price.
-        discardPriceCoins: _capRemaining == 0
+        discardPriceCoins: redeemedFromStash || _capRemaining == 0
             ? null
             : _discardPayoutFor(powerup),
       );
@@ -4617,23 +4812,44 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 // away the Protein Shake would dead-end the demo script.
                 if (!widget.demoMode) ...[
                   const SizedBox(height: 8),
-                  PillButton(
-                    label: 'DISCARD',
-                    variant: PillButtonVariant.accent,
-                    fontSize: 13,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 10,
+                  if (redeemedFromStash)
+                    PillButton(
+                      key: const Key('return-redeemed-to-stash'),
+                      label: 'RETURN TO STASH',
+                      variant: PillButtonVariant.secondary,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      onPressed: _isActing
+                          ? null
+                          : () {
+                              Navigator.of(ctx).pop();
+                              unawaited(
+                                _returnRedeemedPowerupToStash(powerup),
+                              );
+                            },
+                    )
+                  else
+                    PillButton(
+                      label: 'DISCARD',
+                      variant: PillButtonVariant.accent,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      trailing: _discardPriceTrailing(powerup),
+                      onPressed: _isActing
+                          ? null
+                          : () {
+                              Navigator.of(ctx).pop();
+                              _confirmAndDiscardPowerup(powerup);
+                            },
                     ),
-                    trailing: _discardPriceTrailing(powerup),
-                    onPressed: _isActing
-                        ? null
-                        : () {
-                            Navigator.of(ctx).pop();
-                            _confirmAndDiscardPowerup(powerup);
-                          },
-                  ),
                   if (_canDeferredReroll(powerup)) ...[
                     const SizedBox(height: 8),
                     PillButton(
@@ -8404,6 +8620,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     ? pw['id'] as String
                     : null;
                 return ItemSlot(
+                  shellKey: Key('powerup-slot-$i'),
                   state: ItemSlotState.mysteryBox,
                   isExtraSlot: isExtraSlot,
                   onTap: _isActing || boxId == null
@@ -8418,6 +8635,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               final rawType = pw['type'];
               final rawRarity = pw['rarity'];
               return ItemSlot(
+                shellKey: Key('powerup-slot-$i'),
                 state: ItemSlotState.held,
                 powerupType: rawType is String ? rawType : '',
                 rarity: rawRarity is String ? rawRarity : null,
@@ -8431,6 +8649,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               );
             } else {
               return ItemSlot(
+                shellKey: Key('powerup-slot-$i'),
                 state: ItemSlotState.empty,
                 isExtraSlot: isExtraSlot,
               );

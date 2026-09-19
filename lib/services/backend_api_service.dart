@@ -5288,7 +5288,12 @@ class BackendApiService {
     );
     final raw = await _readRawResponse(response);
     if (raw.statusCode == 404) {
-      _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      // A deleted/stale race is a domain 404, not evidence that this backend
+      // lacks the endpoint. Only a route-level/unknown 404 poisons capability
+      // detection for the rest of the app session.
+      if (raw.code != 'RACE_NOT_FOUND') {
+        _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      }
       throw _apiExceptionFromRaw(raw);
     }
     if (raw.statusCode < 200 || raw.statusCode >= 300) {
@@ -5330,7 +5335,12 @@ class BackendApiService {
     );
     final raw = await _readRawResponse(response);
     if (raw.statusCode == 404) {
-      _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      // A deleted/stale race is a domain 404, not evidence that this backend
+      // lacks the endpoint. Only a route-level/unknown 404 poisons capability
+      // detection for the rest of the app session.
+      if (raw.code != 'RACE_NOT_FOUND') {
+        _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      }
       throw _apiExceptionFromRaw(raw);
     }
     if (raw.statusCode < 200 || raw.statusCode >= 300) {
@@ -5354,14 +5364,15 @@ class BackendApiService {
     required String powerupType,
   }) {
     final contract = payload?['contract'];
-    final typed = contract == 'race-powerup-target-context-v1';
+    final typed =
+        contract == 'race-powerup-target-context-v2' ||
+        contract == 'race-powerup-target-context-v1';
     final legacy = contract == 'race-powerup-use-context-v1';
     final participants = payload?['participants'];
     final powerupData = _safeStringMap(payload?['powerupData']);
     final inventory = powerupData?['inventory'];
     if ((!typed && !legacy) ||
         participants is! List ||
-        participants.isEmpty ||
         powerupData == null ||
         inventory is! List) {
       return null;
@@ -6557,6 +6568,25 @@ class BackendApiService {
       identityToken: identityToken,
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  /// Returns a still-HELD powerup that came from global stash back to the
+  /// account-wide inventory. Safe to retry; the backend owns the provenance and
+  /// conditional HELD transition.
+  Future<Map<String, dynamic>> returnRedeemedPowerupToStash({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/powerups/'
+          '${Uri.encodeComponent(powerupId)}/return-to-stash',
+      body: const {},
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 

@@ -122,7 +122,7 @@ void main() {
 
     expect(find.text('Bara Gold'), findsOneWidget);
     expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
-    expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
+    expect(find.text('Learn more'), findsOneWidget);
     final hero = find.byKey(const Key('bara-gold-hero-scene'));
     final viewport = find.byKey(const Key('bara-gold-hero-viewport'));
     final benefits = find.byKey(const Key('bara-gold-benefits'));
@@ -244,7 +244,7 @@ void main() {
           await tester.ensureVisible(cta);
           await tester.pump();
           final ctaRect = tester.getRect(cta);
-          final labelRect = tester.getRect(find.text('Upgrade to Bara Gold'));
+          final labelRect = tester.getRect(find.text('Learn more'));
           expect(tester.getSize(benefits), tester.getSize(cta));
           expect(ctaRect.height, greaterThanOrEqualTo(56));
           expect(labelRect.left, greaterThanOrEqualTo(ctaRect.left));
