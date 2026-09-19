@@ -68,7 +68,7 @@ class BaraPlusCard extends StatelessWidget {
                 children: [
                   _hero(context, tall: tall),
                   Container(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
@@ -81,7 +81,7 @@ class BaraPlusCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _GoldBenefitsPanel(),
-                        SizedBox(height: 12),
+                        SizedBox(height: 8),
                         _GoldUpgradeCta(),
                       ],
                     ),
@@ -198,13 +198,13 @@ class _GoldBenefitsPanel extends StatelessWidget {
     final divider = Divider(
       height: 1,
       thickness: 1,
-      indent: 52,
+      indent: 42,
       color: colors.parchmentBorder.withValues(alpha: 0.5),
     );
 
     return Container(
       key: const Key('bara-gold-benefits'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       decoration: BoxDecoration(
         color: colors.parchment,
         borderRadius: BorderRadius.circular(16),
@@ -222,21 +222,21 @@ class _GoldBenefitsPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _GoldBenefitRow(
-            icon: Icon(Icons.block_rounded, color: colors.error, size: 26),
+            icon: Icon(Icons.block_rounded, color: colors.error, size: 22),
             tint: colors.error,
             title: 'Ad-free experience',
             detail: 'No banners or interruptions. Just Bara.',
           ),
           divider,
           _GoldBenefitRow(
-            icon: Icon(Icons.workspace_premium_rounded, color: gold, size: 28),
+            icon: Icon(Icons.workspace_premium_rounded, color: gold, size: 24),
             tint: gold,
             title: 'Exclusive characters',
             detail: 'Unlock special characters and shop power-ups.',
           ),
           divider,
           _GoldBenefitRow(
-            icon: const CoinGlyph(size: 30),
+            icon: const CoinGlyph(size: 26),
             tint: gold,
             title: 'Monthly coin bonus',
             detail: 'Extra coins each month, based on your plan.',
@@ -246,7 +246,7 @@ class _GoldBenefitsPanel extends StatelessWidget {
             icon: Icon(
               Icons.autorenew_rounded,
               color: colors.feedShield,
-              size: 28,
+              size: 24,
             ),
             tint: colors.feedShield,
             title: 'Free rerolls',
@@ -275,23 +275,23 @@ class _GoldBenefitRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ExcludeSemantics(
             child: Container(
-              width: 40,
-              height: 40,
+              width: 32,
+              height: 32,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: tint.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: icon,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,7 +300,7 @@ class _GoldBenefitRow extends StatelessWidget {
                   title,
                   style: PixelText.title(size: 14, color: colors.textDark),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   detail,
                   style: PixelText.body(size: 12, color: colors.textMid),
@@ -325,7 +325,7 @@ class _GoldUpgradeCta extends StatelessWidget {
     return Container(
       key: const Key('bara-gold-upgrade-cta'),
       constraints: const BoxConstraints(minHeight: 56),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -351,7 +351,7 @@ class _GoldUpgradeCta extends StatelessWidget {
           final sparkle = ExcludeSemantics(
             child: Icon(
               Icons.auto_awesome_rounded,
-              size: 20,
+              size: 18,
               color: colors.textLight.withValues(alpha: 0.85),
             ),
           );
