@@ -85,8 +85,8 @@ class BaraPlusCard extends StatelessWidget {
                       bottom:
                           (tall ? 58 : 52) -
                           4 -
-                          (tall ? 128 : 116) * .22 +
-                          (tall ? 18 : 16),
+                          (tall ? 128 : 116) * .22 -
+                          (tall ? 3 : 2),
                       child: Center(
                         child: KeyedSubtree(
                           key: const Key('bara-gold-cape-avatar'),
@@ -145,13 +145,13 @@ class BaraPlusCard extends StatelessWidget {
                     Positioned(
                       left: 12,
                       right: 12,
-                      bottom: 12,
+                      bottom: tall ? 5 : 4,
                       child: Container(
                         key: const Key('bara-gold-upgrade-cta'),
                         width: double.infinity,
                         padding: EdgeInsets.symmetric(
                           horizontal: 14,
-                          vertical: tall ? 11 : 10,
+                          vertical: tall ? 9 : 8,
                         ),
                         decoration: BoxDecoration(
                           color: colors.pillGold,
