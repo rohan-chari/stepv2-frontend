@@ -238,10 +238,9 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
         ? colors.textLight.withValues(alpha: 0.74)
         : colors.textMid;
 
-    return Expanded(
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
           Material(
             color: fill,
             borderRadius: BorderRadius.circular(16),
@@ -305,7 +304,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
           ),
           if (monthly)
             Positioned(
-              right: 10,
+              left: -8,
               top: -11,
               child: Container(
                 key: const Key('bara-gold-best-deal'),
@@ -342,8 +341,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 ),
               ),
             ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -441,14 +439,25 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 if (offers.isEmpty)
                   _text('Store pricing is currently unavailable.')
                 else ...[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var index = 0; index < offers.length; index++) ...[
-                        if (index > 0) const SizedBox(width: 10),
-                        _planButton(billing, offers[index]),
-                      ],
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const gap = 12.0;
+                      final cardWidth = ((constraints.maxWidth - gap) / 2)
+                          .clamp(132.0, 158.0);
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var index = 0; index < offers.length; index++) ...[
+                            if (index > 0) const SizedBox(width: gap),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _planButton(billing, offers[index]),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 15),
                   PillButton(
