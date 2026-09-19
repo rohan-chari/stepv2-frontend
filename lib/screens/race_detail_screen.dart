@@ -3368,12 +3368,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       _loadProgress();
     } catch (e) {
       if (wasRedeemedFromStash) {
-        // A current backend returns a rejected redeemed item to the global
-        // stash; an older backend may retain it in the race tray instead. Do
-        // not restore our stale local snapshot — re-read both authoritative
-        // projections so either server version renders where it actually put
-        // the item.
-        _loadProgress();
+        // Current backends include the authoritative post-refund stash quantity
+        // on the rejected response, so no extra inventory read is needed.
+        final refunded = e is ApiException
+            ? e.details?['refundedPowerup']
+            : null;
+        final refundedMap = refunded is Map
+            ? Map<String, dynamic>.from(refunded)
+            : null;
+        final refundedType = refundedMap?['powerupType'];
+        if (refundedType is String && refundedMap?['quantity'] is num) {
+          _applyStashQuantity(refundedType, refundedMap?['quantity']);
+        } else {
+          // Rolling-deploy fallback for an older backend that performed the
+          // refund but did not include its quantity in the error envelope.
+          unawaited(_loadGlobalPowerupInventory(token));
+        }
+        unawaited(_loadProgress());
       } else {
         restoreInventory();
       }
@@ -3639,6 +3650,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
   }
 
+  void _applyStashQuantity(String type, Object? rawQuantity) {
+    if (rawQuantity is! num || !mounted) return;
+    final updated = Map<String, int>.from(_globalPowerupInventory);
+    final quantity = rawQuantity.toInt();
+    if (quantity > 0) {
+      updated[type] = quantity;
+    } else {
+      updated.remove(type);
+    }
+    setState(() => _globalPowerupInventory = updated);
+  }
+
   Future<bool> _returnRedeemedPowerupToStash(
     Map<String, dynamic> powerup, {
     bool silent = false,
@@ -3663,17 +3686,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // The mutation already knows the authoritative post-return quantity.
       // Apply it locally instead of issuing a second global-inventory GET.
       final type = powerup['type'];
-      final quantity = result['quantity'];
-      if (type is String && quantity is num && mounted) {
-        final updated = Map<String, int>.from(_globalPowerupInventory);
-        final value = quantity.toInt();
-        if (value > 0) {
-          updated[type] = value;
-        } else {
-          updated.remove(type);
-        }
-        setState(() => _globalPowerupInventory = updated);
-      }
+      if (type is String) _applyStashQuantity(type, result['quantity']);
 
       // Only the race tray needs a refresh now.
       await _loadProgress();
