@@ -77,35 +77,40 @@ class BaraPlusCard extends StatelessWidget {
                       child: const SizedBox.expand(),
                     ),
 
-                    // Real in-game animated capybara + the existing cape asset.
+                    // Real in-game animated capybara + the existing cape asset,
+                    // centered in the card like the accessory-editor preview.
                     Positioned(
-                      right: tall ? 4 : 8,
+                      left: 0,
+                      right: 0,
                       bottom:
                           (tall ? 58 : 52) -
                           4 -
-                          (tall ? 128 : 116) * .22,
-                      child: KeyedSubtree(
-                        key: const Key('bara-gold-cape-avatar'),
-                        child: AnimatedCapybaraWithAccessories(
-                          accessories: _capeAccessory,
-                          size: tall ? 128 : 116,
-                          stepDuration: const Duration(milliseconds: 720),
-                          animate: !MediaQuery.disableAnimationsOf(context),
+                          (tall ? 128 : 116) * .22 +
+                          (tall ? 18 : 16),
+                      child: Center(
+                        child: KeyedSubtree(
+                          key: const Key('bara-gold-cape-avatar'),
+                          child: AnimatedCapybaraWithAccessories(
+                            accessories: _capeAccessory,
+                            size: tall ? 128 : 116,
+                            stepDuration: const Duration(milliseconds: 720),
+                            animate: !MediaQuery.disableAnimationsOf(context),
+                          ),
                         ),
                       ),
                     ),
 
-                    // All information sits on top of the world scene.
+                    // Centered headline/copy over the live scene.
                     Positioned(
-                      left: tall ? 14 : 16,
-                      top: tall ? 14 : 15,
-                      bottom: tall ? 14 : 15,
-                      width: tall ? 215 : 205,
+                      left: 16,
+                      right: 16,
+                      top: tall ? 13 : 14,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
                             'Bara Gold',
+                            textAlign: TextAlign.center,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: PixelText.title(
@@ -124,6 +129,7 @@ class BaraPlusCard extends StatelessWidget {
                           const SizedBox(height: 5),
                           Text(
                             'Ad-free. Exclusive perks.',
+                            textAlign: TextAlign.center,
                             maxLines: tall ? 2 : 1,
                             overflow: TextOverflow.ellipsis,
                             style: PixelText.body(
@@ -131,55 +137,62 @@ class BaraPlusCard extends StatelessWidget {
                               color: colors.textLight.withValues(alpha: 0.84),
                             ),
                           ),
-                          const Spacer(),
-                          Container(
-                            key: const Key('bara-gold-upgrade-cta'),
-                            width: double.infinity,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: tall ? 11 : 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colors.pillGold,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: colors.pillGoldDark,
-                                width: 1.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colors.pillGoldShadow.withValues(
-                                    alpha: 0.65,
-                                  ),
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      'Upgrade to Bara Gold',
-                                      style: PixelText.title(
-                                        size: tall ? 12.5 : 13.5,
-                                        color: colors.textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 5),
-                                Icon(
-                                  Icons.arrow_forward_rounded,
-                                  size: 19,
-                                  color: colors.textDark,
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
+                      ),
+                    ),
+
+                    // Full-width CTA over the bottom of the scene.
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 12,
+                      child: Container(
+                        key: const Key('bara-gold-upgrade-cta'),
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: tall ? 11 : 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.pillGold,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: colors.pillGoldDark,
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: colors.pillGoldShadow.withValues(
+                                alpha: 0.65,
+                              ),
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'Upgrade to Bara Gold',
+                                  textAlign: TextAlign.center,
+                                  style: PixelText.title(
+                                    size: tall ? 12.5 : 13.5,
+                                    color: colors.textDark,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 19,
+                              color: colors.textDark,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
