@@ -3405,9 +3405,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         raceId: widget.raceId,
         powerupType: powerupType,
       );
-      if (result['contract'] != 'race-powerup-target-context-v2') {
-        return null;
-      }
+      final contract = result['contract'];
+      final authoritative =
+          contract == 'race-powerup-target-context-v2';
+      final legacy =
+          contract == 'race-powerup-target-context-v1' ||
+          contract == 'race-powerup-use-context-v1';
+      if (!authoritative && !legacy) return null;
+
       final rawParticipants =
           (result['participants'] as List?)
               ?.whereType<Map<String, dynamic>>()
@@ -3424,10 +3429,46 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _disposeRerollIfUnavailable();
         _updateEffectExpiryRefresh();
       }
-      return rawParticipants;
+
+      // V2 is already filtered by the backend and is the source of truth.
+      if (authoritative) return rawParticipants;
+
+      // During a rolling deploy an older backend can still return the legacy
+      // full roster. Preserve the pre-v2 safe filters instead of making every
+      // targeted powerup unusable. The mutation endpoint remains authoritative.
+      final eligible = powerupType == 'HITCHHIKE'
+          ? TeamRace.hitchhikeTargets(
+              participants: rawParticipants,
+              myUserId: _myUserId,
+              race: _race ?? const {},
+            )
+          : TeamRace.offensiveTargets(
+              participants: rawParticipants,
+              myUserId: _myUserId,
+              race: _race ?? const {},
+            );
+
+      if (powerupType == 'SNEAKY_SWAP') {
+        return _resolveSneakySwapTargets(token, eligible);
+      }
+      if (powerupType == 'BOUNTY') {
+        var myTotalSteps = 0;
+        for (final participant in rawParticipants) {
+          if ((participant['userId'] as String?) == _myUserId) {
+            myTotalSteps =
+                (participant['totalSteps'] as num?)?.toInt() ?? 0;
+            break;
+          }
+        }
+        return TeamRace.targetsAheadOf(
+          targets: eligible,
+          myTotalSteps: myTotalSteps,
+        );
+      }
+      return eligible;
     } catch (_) {
-      // Targeting is fail-closed: stale/general participant lists must never
-      // substitute for server-approved eligibility on a consumable action.
+      // Unknown/malformed responses still fail closed. We only fall back when
+      // the server explicitly returned one of the known older contracts.
       return null;
     }
   }
@@ -3820,6 +3861,50 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) showErrorToast(context, e.toString());
     } finally {
       _endAction();
+    }
+  }
+
+  /// Legacy deploy-skew fallback for Sneaky Swap. The current v2 target
+  /// context already filters this server-side; older contexts need the
+  /// dedicated endpoint so we do not offer racers with nothing stealable.
+  Future<List<Map<String, dynamic>>> _resolveSneakySwapTargets(
+    String token,
+    List<Map<String, dynamic>> eligibleTargets,
+  ) async {
+    try {
+      final result = await _api.fetchSneakySwapTargets(
+        identityToken: token,
+        raceId: widget.raceId,
+      );
+      final rawTargets =
+          (result['targets'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+
+      final byUserId = <String, Map<String, dynamic>>{
+        for (final participant in eligibleTargets)
+          if (participant['userId'] is String)
+            participant['userId'] as String: participant,
+      };
+
+      final resolved = <Map<String, dynamic>>[];
+      for (final target in rawTargets) {
+        final userId = target['userId'] as String?;
+        if (userId == null) continue;
+        final live = byUserId[userId];
+        if (live == null) continue;
+        resolved.add({
+          'userId': userId,
+          'displayName': live['displayName'] ?? target['displayName'] ?? '???',
+          if (live['profilePhotoUrl'] != null)
+            'profilePhotoUrl': live['profilePhotoUrl'],
+          if (live['totalSteps'] != null) 'totalSteps': live['totalSteps'],
+        });
+      }
+      return resolved;
+    } catch (_) {
+      // The dedicated route predates v2 but may still be absent on a very old
+      // backend. Keep the historical fallback and let usePowerup revalidate.
+      return eligibleTargets;
     }
   }
 
