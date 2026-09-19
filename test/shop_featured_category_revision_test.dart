@@ -69,7 +69,18 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('bara-plus-card')), findsOneWidget);
     expect(find.text('Bara Gold'), findsOneWidget);
-    expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
+    expect(find.text('Learn more'), findsOneWidget);
+    final goldCard = find.byKey(const Key('bara-plus-card'));
+    final featured = find.byKey(const Key('shop-section-featured'));
+    final coins = find.byType(CoinPackOffers);
+    expect(
+      tester.getBottomLeft(goldCard).dy,
+      lessThan(tester.getTopLeft(featured).dy),
+    );
+    expect(
+      tester.getBottomLeft(featured).dy,
+      lessThanOrEqualTo(tester.getTopLeft(coins).dy),
+    );
     expect(find.textContaining('15% member discount'), findsNothing);
     expect(find.textContaining('Gold perks'), findsNothing);
   });
