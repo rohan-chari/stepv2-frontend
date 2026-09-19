@@ -44,6 +44,12 @@ abstract class BillingController extends ChangeNotifier {
   Future<BillingResult> openLegal(String url) async =>
       const BillingResult(success: false, message: 'Link unavailable.');
   BillingSnapshot get snapshot;
+
+  /// Rerolls are wallet/gameplay actions, not native StoreKit purchases.
+  /// A catalog refresh or an unrelated pending IAP must not disable them.
+  /// Live implementations override this with reroll-specific in-flight state.
+  bool get rerollBusy => false;
+
   bool supportsRace(String raceId) => false;
   List<CoinPackOffer> get coinPacks =>
       isPreview ? CoinPackOffer.previewOffers : const [];
