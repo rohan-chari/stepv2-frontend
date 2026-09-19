@@ -207,20 +207,25 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
         ? colors.textLight.withValues(alpha: 0.74)
         : colors.textMid;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-          Material(
-            color: fill,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              key: Key('plan-' + offer.plan.name),
+    return SizedBox(
+      width: double.infinity,
+      height: 150,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Material(
+              color: fill,
               borderRadius: BorderRadius.circular(16),
-              onTap: billing.snapshot.isMember
-                  ? null
-                  : () => setState(() => _plan = offer.plan),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 150),
+              child: InkWell(
+                key: Key('plan-' + offer.plan.name),
+                borderRadius: BorderRadius.circular(16),
+                onTap: billing.snapshot.isMember
+                    ? null
+                    : () => setState(() => _plan = offer.plan),
+                child: Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 150),
                 padding: const EdgeInsets.fromLTRB(12, 22, 12, 15),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
@@ -268,6 +273,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                     ),
                   ],
                 ),
+                ),
               ),
             ),
           ),
@@ -313,7 +319,8 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
               ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
