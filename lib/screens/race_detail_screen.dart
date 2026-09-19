@@ -11196,10 +11196,34 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (paginated) {
       final canGoBack = _participantsOffset > 0;
       final canGoForward = hasMore;
+      final rawCurrentUser = _progress?['currentUser'];
+      final currentUser = rawCurrentUser is Map
+          ? <String, dynamic>{
+              for (final entry in rawCurrentUser.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            }
+          : null;
+      final currentUserOnPage = participants.any(
+        (participant) => participant['userId'] == _myUserId,
+      );
+      final pinnedCurrentUser =
+          currentUser != null &&
+              currentUser['userId'] == _myUserId &&
+              !currentUserOnPage &&
+              !TeamRace.hasForfeited(currentUser)
+          ? currentUser
+          : null;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ...rows,
+          if (pinnedCurrentUser != null) ...[
+            _standingsGapMarker(),
+            KeyedSubtree(
+              key: const Key('standings-pinned-current-user'),
+              child: _buildLeaderboardPlank(pinnedCurrentUser, 0),
+            ),
+          ],
           // The pager renders even on a single-page race so the position
           // readout ("1-12 of 12") is always available; both buttons simply
           // sit disabled.
