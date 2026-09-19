@@ -48,7 +48,7 @@ void main() {
     );
 
     final viewport = find.byKey(const Key('case-opening-reel-viewport'));
-    final firstTile = find.byKey(const Key('tile-0'));
+    final firstTile = find.byKey(const Key('case-opening-real-item-0'));
     final leadingPreview = find.byKey(
       const Key('case-opening-leading-preview-0'),
     );
