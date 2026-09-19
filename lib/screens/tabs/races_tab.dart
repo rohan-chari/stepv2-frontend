@@ -813,15 +813,33 @@ class _RacesTabState extends State<RacesTab> {
       badgeColor = AppColors.of(context).textMid;
     }
 
-    return GestureDetector(
-      onTap: () => _navigateToTournamentDetail(id),
-      behavior: HitTestBehavior.opaque,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
       child: Container(
-        color: cardColor,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        key: Key('tournament-invite-card-surface-$id'),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: _raceCardShadow,
+        ),
+        child: Material(
+          color: cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.9),
+              width: 1.5,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: id.isEmpty ? null : () => _navigateToTournamentDetail(id),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             Row(
               children: [
                 Expanded(
@@ -918,7 +936,10 @@ class _RacesTabState extends State<RacesTab> {
                 ],
               ),
             ],
-          ],
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1186,30 +1207,19 @@ class _RacesTabState extends State<RacesTab> {
     );
 
     // Tournament invites lead: they expire against a bracket that fills up.
+    // Each invite row owns its own card surface, exactly like the normal race
+    // list below. Do not wrap the whole invite section in a second parchment
+    // card — that creates the stacked/double-card look and makes invites taller.
     final rows = SliverList.builder(
       itemCount: tournamentInvites.length + raceInvites.length,
       itemBuilder: (context, i) {
         final isTournament = i < tournamentInvites.length;
-        final child = isTournament
+        return isTournament
             ? _buildTournamentTicket(tournamentInvites[i], i, isInvite: true)
             : _buildRaceRow(
                 raceInvites[i - tournamentInvites.length],
                 isInvite: true,
               );
-        final isLast = i == tournamentInvites.length + raceInvites.length - 1;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            child,
-            if (!isLast)
-              Container(
-                height: 1,
-                color: AppColors.of(
-                  context,
-                ).parchmentBorder.withValues(alpha: 0.9),
-              ),
-          ],
-        );
       },
     );
 
@@ -1217,18 +1227,7 @@ class _RacesTabState extends State<RacesTab> {
       header,
       SliverPadding(
         padding: const EdgeInsets.only(bottom: 8),
-        sliver: DecoratedSliver(
-          decoration: BoxDecoration(
-            color: AppColors.of(context).parchment,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
-              width: 2,
-            ),
-            boxShadow: _raceCardShadow,
-          ),
-          sliver: rows,
-        ),
+        sliver: rows,
       ),
     ];
   }

@@ -192,16 +192,28 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
       onHorizontalDragEnd: armed ? (_) => _startSpin() : null,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final viewportWidth = constraints.maxWidth;
+          final outerWidth = constraints.maxWidth;
+          // GameContainer contributes 10px of horizontal padding on each side,
+          // so the visible reel window is 20px narrower than this LayoutBuilder.
+          // Use the ACTUAL viewport width for both idle and landing geometry.
+          final viewportWidth = (outerWidth - 20).clamp(
+            0.0,
+            double.infinity,
+          );
           final centerX = viewportWidth / 2;
 
-          // The result item's left edge position in the full strip
+          // Start with the first preview tile centered under the win pointer.
+          // The old hard-left start made the tutorial pointer sit near a tile
+          // edge before the user swiped, which looked visibly broken.
+          final startScroll = widget.itemWidth / 2 - centerX;
+
+          // The result item's centre position in the full strip.
           final resultItemCenter =
               widget.resultIndex * totalItemWidth + widget.itemWidth / 2;
+          final endScroll = resultItemCenter - centerX;
+          final totalScroll = endScroll - startScroll;
 
-          // We want to scroll so the result ends up at centerX
-          final totalScroll = resultItemCenter - centerX;
-          // Hand these to the haptic tick listener (see _handleReelTick).
+          // Hand travel distance to the haptic tick listener.
           _totalScroll = totalScroll;
           _totalItemWidth = totalItemWidth;
 
@@ -296,7 +308,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                         // padding; using the full parent width here made the
                         // restored daily-reward popup overflow on narrow
                         // phones.
-                        width: (viewportWidth - 20).clamp(0.0, double.infinity),
+                        width: viewportWidth,
                         // Dark machine window: tiles glow against the deep
                         // felt, framed like a cabinet slot.
                         decoration: BoxDecoration(
@@ -318,6 +330,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                                   animation: _animation,
                                   builder: (context, child) {
                                     final scrollOffset =
+                                        startScroll +
                                         _animation.value * totalScroll;
                                     return Transform.translate(
                                       offset: Offset(-scrollOffset, 0),

@@ -104,17 +104,16 @@ void main() {
       expect(find.textContaining('credit'), findsNothing);
       expect(find.textContaining('cosmetic'), findsNothing);
       expect(find.textContaining('Bara+'), findsNothing);
-      expect(find.textContaining('200 coins'), findsOneWidget);
-      expect(find.textContaining('1,000 coins'), findsOneWidget);
-      expect(find.textContaining('free reroll'), findsOneWidget);
-      expect(
-        find.textContaining('Ad-free extra Daily Spin and box reroll'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('Eligible rewarded actions skip the ad'),
-        findsNothing,
-      );
+      expect(find.byKey(const Key('gold-benefit-coins')), findsOneWidget);
+      expect(find.byKey(const Key('gold-benefit-adfree')), findsOneWidget);
+      expect(find.byKey(const Key('gold-benefit-rerolls')), findsOneWidget);
+      expect(find.byKey(const Key('gold-benefit-exclusive')), findsOneWidget);
+      expect(find.text('Monthly coin bonus'), findsOneWidget);
+      expect(find.text('Ad-free experience'), findsOneWidget);
+      expect(find.text('Free rerolls on everything'), findsOneWidget);
+      expect(find.text('Exclusive characters & powerups'), findsOneWidget);
+      expect(find.byKey(const Key('bara-gold-best-deal')), findsOneWidget);
+      expect(find.text('BEST DEAL'), findsOneWidget);
     },
   );
 

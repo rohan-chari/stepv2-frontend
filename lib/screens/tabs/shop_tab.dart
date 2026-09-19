@@ -3151,28 +3151,34 @@ class _ShopTabState extends State<ShopTab> with WidgetsBindingObserver {
         builder: (sheetContext) {
           _membershipSheetContext = sheetContext;
           Widget body() => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 20),
+              SizedBox(
+                height: 52,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Center(
                       child: Text(
                         'Bara Gold',
+                        textAlign: TextAlign.center,
                         style: PixelText.title(
                           size: 24,
                           color: AppColors.of(sheetContext).textDark,
                         ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    key: const Key('shop-membership-close'),
-                    tooltip: 'Close membership',
-                    onPressed: () => Navigator.pop(sheetContext),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+                    Positioned(
+                      right: 4,
+                      child: IconButton(
+                        key: const Key('shop-membership-close'),
+                        tooltip: 'Close membership',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               if (billing != null &&
                   billing.plans.isEmpty &&

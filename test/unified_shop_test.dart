@@ -362,15 +362,49 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Gold modal pricing row has equal outer margins', (tester) async {
+    addTearDown(tester.view.reset);
+    final billing = FakeBilling();
+    await pumpShop(tester, billing: billing);
+    await tester.tap(find.byKey(const Key('bara-plus-card')));
+    await tester.pumpAndSettle();
+
+    final paywall = tester.getRect(find.byKey(const Key('bara-gold-paywall')));
+    final row = tester.getRect(find.byKey(const Key('bara-gold-plan-row')));
+    final weeklySlot = tester.getRect(
+      find.byKey(const Key('bara-gold-weekly-slot')),
+    );
+    final monthlySlot = tester.getRect(
+      find.byKey(const Key('bara-gold-monthly-slot')),
+    );
+    final weeklyCard = tester.getRect(find.byKey(const Key('plan-weekly')));
+    final monthlyCard = tester.getRect(find.byKey(const Key('plan-monthly')));
+
+    expect(row.left - paywall.left, closeTo(12, 0.5));
+    expect(paywall.right - row.right, closeTo(12, 0.5));
+    expect(weeklySlot.width, closeTo(monthlySlot.width, 0.5));
+    expect(weeklyCard.width, closeTo(monthlyCard.width, 0.5));
+    expect(weeklyCard.left, closeTo(weeklySlot.left, 0.5));
+    expect(weeklyCard.right, closeTo(weeklySlot.right, 0.5));
+    expect(monthlyCard.left, closeTo(monthlySlot.left, 0.5));
+    expect(monthlyCard.right, closeTo(monthlySlot.right, 0.5));
+    expect(
+      weeklyCard.left - row.left,
+      closeTo(row.right - monthlyCard.right, 0.5),
+    );
+  });
+
   testWidgets(
     'embedded membership keeps plans without repeating marketing hero',
     (tester) async {
       addTearDown(tester.view.reset);
       await pumpRetainedMembership(tester, billing: FakeBilling());
-      expect(find.text('A LITTLE EXTRA JOY'), findsOneWidget);
-      expect(find.text('For you. For your capy.'), findsNothing);
-      expect(find.text('Plan-specific coin grants'), findsOneWidget);
+      expect(find.text('Monthly coin bonus'), findsOneWidget);
+      expect(find.text('Ad-free experience'), findsOneWidget);
+      expect(find.text('Free rerolls on everything'), findsOneWidget);
+      expect(find.text('Exclusive characters & powerups'), findsOneWidget);
       expect(find.byKey(const Key('plan-monthly')), findsOneWidget);
+      expect(find.byKey(const Key('bara-gold-best-deal')), findsOneWidget);
       expect(find.byKey(const Key('restore-bara')), findsOneWidget);
     },
   );

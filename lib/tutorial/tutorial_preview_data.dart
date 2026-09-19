@@ -1,4 +1,5 @@
 import '../models/step_data.dart';
+import '../demo/demo_reel_preview.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/race_resolution_status.dart';
 import '../services/auth_service.dart';
@@ -1211,7 +1212,8 @@ Map<String, dynamic> tutorialPreviewRaceProgress() {
     'myDisplayPlacement': 2,
     'placementPrivacyActive': true,
     'powerupData': {
-      'dropOdds': {'reelPreviewAvailable': false},
+      'dropOdds': demoReelDropOdds,
+      'rarityByType': demoReelRarityByType,
       'enabled': true,
       'powerupSlots': 3,
       'queuedBoxCount': 1,

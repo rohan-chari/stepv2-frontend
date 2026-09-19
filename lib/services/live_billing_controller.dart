@@ -44,6 +44,7 @@ class LiveBillingController extends BillingController {
   bool _goldPolicyAvailable = false;
   int _cost = 50;
   bool _working = false;
+  bool _rerollWorking = false;
   bool _loadingCatalog = false;
   Timer? _retry;
   Map<String, dynamic> _data = {};
@@ -67,6 +68,10 @@ class LiveBillingController extends BillingController {
   @override
   bool supportsRace(String raceId) =>
       _rerollSupported && _user.isNotEmpty && raceId.isNotEmpty;
+
+  @override
+  bool get rerollBusy =>
+      _rerollWorking || (_working && !_loadingCatalog);
   @override
   int get rerollCoinCost => _cost;
   @override
@@ -196,6 +201,7 @@ class LiveBillingController extends BillingController {
     _generation++;
     _retry?.cancel();
     _working = false;
+    _rerollWorking = false;
     _loadingCatalog = false;
     _user = auth.userId ?? '';
     _token = auth.authToken;
@@ -906,7 +912,7 @@ class LiveBillingController extends BillingController {
     final token = _token, generation = _generation;
     if (!supportsRace(raceId) ||
         token == null ||
-        _working ||
+        rerollBusy ||
         funding == RerollFunding.ad ||
         ids.isEmpty ||
         ids.length > 8 ||
@@ -916,7 +922,8 @@ class LiveBillingController extends BillingController {
         message: 'Reroll unavailable.',
       );
     }
-    _working = true;
+    _rerollWorking = true;
+    _notify();
     final sorted = [...ids]..sort();
     // One unresolved operation per exact item set. Changing funding cannot turn
     // a timed-out debit into a new debit with a different UUID.
@@ -1034,7 +1041,7 @@ class LiveBillingController extends BillingController {
       );
     } finally {
       if (_current(generation)) {
-        _working = false;
+        _rerollWorking = false;
         _notify();
       }
     }
