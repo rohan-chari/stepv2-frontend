@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../models/race_prize_pool.dart';
 import 'demo_race_script.dart';
+import 'demo_reel_preview.dart';
 
 /// The demo race simulation (spec §5.2).
 ///
@@ -597,7 +598,8 @@ class DemoRaceEngine {
       'status': _completed ? 'COMPLETED' : 'ACTIVE',
       'participants': participants,
       'powerupData': {
-        'dropOdds': {'reelPreviewAvailable': false},
+        'dropOdds': demoReelDropOdds,
+        'rarityByType': demoReelRarityByType,
         'enabled': true,
         'powerupSlots': 3,
         'queuedBoxCount': 0,
