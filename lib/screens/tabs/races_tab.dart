@@ -1186,30 +1186,19 @@ class _RacesTabState extends State<RacesTab> {
     );
 
     // Tournament invites lead: they expire against a bracket that fills up.
+    // Each invite row owns its own card surface, exactly like the normal race
+    // list below. Do not wrap the whole invite section in a second parchment
+    // card — that creates the stacked/double-card look and makes invites taller.
     final rows = SliverList.builder(
       itemCount: tournamentInvites.length + raceInvites.length,
       itemBuilder: (context, i) {
         final isTournament = i < tournamentInvites.length;
-        final child = isTournament
+        return isTournament
             ? _buildTournamentTicket(tournamentInvites[i], i, isInvite: true)
             : _buildRaceRow(
                 raceInvites[i - tournamentInvites.length],
                 isInvite: true,
               );
-        final isLast = i == tournamentInvites.length + raceInvites.length - 1;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            child,
-            if (!isLast)
-              Container(
-                height: 1,
-                color: AppColors.of(
-                  context,
-                ).parchmentBorder.withValues(alpha: 0.9),
-              ),
-          ],
-        );
       },
     );
 
@@ -1217,18 +1206,7 @@ class _RacesTabState extends State<RacesTab> {
       header,
       SliverPadding(
         padding: const EdgeInsets.only(bottom: 8),
-        sliver: DecoratedSliver(
-          decoration: BoxDecoration(
-            color: AppColors.of(context).parchment,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
-              width: 2,
-            ),
-            boxShadow: _raceCardShadow,
-          ),
-          sliver: rows,
-        ),
+        sliver: rows,
       ),
     ];
   }
