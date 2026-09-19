@@ -371,19 +371,26 @@ void main() {
 
     final paywall = tester.getRect(find.byKey(const Key('bara-gold-paywall')));
     final row = tester.getRect(find.byKey(const Key('bara-gold-plan-row')));
-    final weekly = tester.getRect(
+    final weeklySlot = tester.getRect(
       find.byKey(const Key('bara-gold-weekly-slot')),
     );
-    final monthly = tester.getRect(
+    final monthlySlot = tester.getRect(
       find.byKey(const Key('bara-gold-monthly-slot')),
     );
+    final weeklyCard = tester.getRect(find.byKey(const Key('plan-weekly')));
+    final monthlyCard = tester.getRect(find.byKey(const Key('plan-monthly')));
 
     expect(row.left - paywall.left, closeTo(12, 0.5));
     expect(paywall.right - row.right, closeTo(12, 0.5));
-    expect(weekly.width, closeTo(monthly.width, 0.5));
+    expect(weeklySlot.width, closeTo(monthlySlot.width, 0.5));
+    expect(weeklyCard.width, closeTo(monthlyCard.width, 0.5));
+    expect(weeklyCard.left, closeTo(weeklySlot.left, 0.5));
+    expect(weeklyCard.right, closeTo(weeklySlot.right, 0.5));
+    expect(monthlyCard.left, closeTo(monthlySlot.left, 0.5));
+    expect(monthlyCard.right, closeTo(monthlySlot.right, 0.5));
     expect(
-      weekly.left - row.left,
-      closeTo(row.right - monthly.right, 0.5),
+      weeklyCard.left - row.left,
+      closeTo(row.right - monthlyCard.right, 0.5),
     );
   });
 
