@@ -154,6 +154,13 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
     );
   }
 
+  Widget _buildTrailingPreviewItem(int sourceIndex, int index) {
+    return KeyedSubtree(
+      key: Key('case-opening-trailing-preview-$index'),
+      child: widget.itemBuilder(context, sourceIndex, false),
+    );
+  }
+
   Widget _buildItem(int index) {
     final isResult = index == widget.resultIndex;
     final tile = widget.itemBuilder(context, index, isResult);
@@ -379,6 +386,17 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                                         ) ...[
                                           const SizedBox(width: _itemSpacing),
                                           _buildItem(i),
+                                        ],
+                                        for (
+                                          int p = 0;
+                                          p < leadingPreviewCount;
+                                          p++
+                                        ) ...[
+                                          const SizedBox(width: _itemSpacing),
+                                          _buildTrailingPreviewItem(
+                                            p % widget.itemCount,
+                                            p,
+                                          ),
                                         ],
                                       ],
                                     ),
