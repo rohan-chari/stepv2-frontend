@@ -271,10 +271,12 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
           ),
           if (monthly)
             Positioned(
-              left: -8,
+              left: 0,
+              right: 0,
               top: -11,
-              child: Container(
-                key: const Key('bara-gold-best-deal'),
+              child: Center(
+                child: Container(
+                  key: const Key('bara-gold-best-deal'),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 5,
@@ -308,6 +310,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                 ),
               ),
             ),
+          ),
       ],
     );
   }
