@@ -451,7 +451,7 @@ class LiveBillingController extends BillingController {
           _operation = BillingOperationStatus.failed;
           _message = error.code == 'PURCHASE_ACCOUNT_MISMATCH'
               ? 'This purchase belongs to another Bara account. Sign in to the original account to restore it.'
-              : 'This store purchase cannot be used with this Bara account.';
+              : 'This TestFlight purchase can only be fulfilled on an approved Bara admin account.';
           _notify();
         }
         final result = BillingResult(
