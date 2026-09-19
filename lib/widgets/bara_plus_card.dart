@@ -158,8 +158,8 @@ class BaraPlusCard extends StatelessWidget {
                           color: colors.pillGold,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: AppColors.medalGold,
-                            width: 2,
+                            color: colors.pillGoldDark,
+                            width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
