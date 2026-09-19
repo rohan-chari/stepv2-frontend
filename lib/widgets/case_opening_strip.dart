@@ -224,7 +224,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
           // prepend enough synthetic preview tiles to fill the visible space to
           // its left. Without these, centering the literal first child exposes
           // the finite start of the Row (a large empty felt block).
-          final leadingPreviewCount = math.max(
+          final leadingPreviewCount = max(
             2,
             (centerX / totalItemWidth).ceil() + 1,
           );
