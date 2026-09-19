@@ -37,7 +37,7 @@ class BaraPlusBody extends StatefulWidget {
 }
 
 class _BaraGoldBodyState extends State<BaraPlusBody> {
-  BillingPlan _plan = BillingPlan.weekly;
+  BillingPlan _plan = BillingPlan.monthly;
   bool _busy = false;
   late final _feedback = BillingActionFeedback(
     context: () => context,
@@ -82,35 +82,49 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
           ),
   );
 
-  Widget _benefit(IconData icon, String title, String detail) {
+  Widget _benefitTile(
+    IconData icon,
+    String title,
+    String detail, {
+    Key? key,
+  }) {
     final colors = AppColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+    final iconColor = colors.isDark ? colors.feedGold : colors.pillGoldDark;
+    final tileColor = colors.isDark
+        ? colors.parchmentDark.withValues(alpha: 0.88)
+        : colors.parchment.withValues(alpha: 0.92);
+
+    return Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: tileColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colors.parchmentBorder.withValues(alpha: 0.45),
+        ),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DecoratedBox(
+          Container(
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: colors.pillGold.withValues(alpha: .18),
-              borderRadius: BorderRadius.circular(12),
+              color: colors.pillGold.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Icon(
-                icon,
-                color: colors.isDark ? colors.medalGold : colors.pillGoldDark,
-                size: 22,
-              ),
-            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 25, color: iconColor),
           ),
-          const SizedBox(width: 13),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _text(title, size: 16, title: true),
                 const SizedBox(height: 3),
-                _text(detail, size: 13),
+                _text(detail, size: 12.5),
               ],
             ),
           ),
@@ -122,54 +136,122 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
   Widget _planButton(BillingController billing, StorePlanOffer offer) {
     final colors = AppColors.of(context);
     final selected = !billing.snapshot.isMember && _plan == offer.plan;
-    final cadence = offer.plan == BillingPlan.weekly ? 'week' : 'month';
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: Material(
-        color: selected ? colors.roofMid : colors.parchment,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          key: Key('plan-${offer.plan.name}'),
-          borderRadius: BorderRadius.circular(16),
-          onTap: billing.snapshot.isMember
-              ? null
-              : () => setState(() => _plan = offer.plan),
-          child: Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
+    final monthly = offer.plan == BillingPlan.monthly;
+    final title = offer.plan == BillingPlan.weekly ? 'WEEKLY' : 'MONTHLY';
+    final fill = selected ? colors.roofMid : colors.parchment;
+    final borderColor = selected
+        ? (colors.isDark ? colors.feedGold : colors.pillGoldDark)
+        : colors.parchmentBorder;
+    final foreground = selected ? colors.textLight : colors.textDark;
+    final secondary = selected
+        ? colors.textLight.withValues(alpha: 0.74)
+        : colors.textMid;
+
+    return Expanded(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Material(
+            color: fill,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              key: Key('plan-' + offer.plan.name),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected ? colors.roofMid : colors.parchmentBorder,
-                width: 2,
+              onTap: billing.snapshot.isMember
+                  ? null
+                  : () => setState(() => _plan = offer.plan),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 142),
+                padding: const EdgeInsets.fromLTRB(12, 20, 12, 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor, width: 2),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: PixelText.title(size: 12.5, color: foreground),
+                    ),
+                    const SizedBox(height: 12),
+                    if (monthly && selected && offer.price == r'$3.99') ...[
+                      Text(
+                        r'$5.99',
+                        style: PixelText.body(
+                          size: 14,
+                          color: secondary,
+                        ).copyWith(
+                          decoration: TextDecoration.lineThrough,
+                          decorationColor: colors.error,
+                          decorationThickness: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        offer.price,
+                        style: PixelText.title(
+                          size: 30,
+                          color: foreground,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      offer.plan == BillingPlan.weekly
+                          ? 'per week'
+                          : 'per month',
+                      style: PixelText.body(size: 12, color: secondary),
+                    ),
+                  ],
+                ),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _text(
-                  offer.plan == BillingPlan.weekly ? 'WEEKLY' : 'MONTHLY',
-                  size: 13,
-                  title: true,
-                  color: selected ? colors.textLight : null,
-                ),
-                const SizedBox(height: 6),
-                _text(
-                  offer.price,
-                  size: 23,
-                  title: true,
-                  color: selected ? colors.textLight : null,
-                ),
-                const SizedBox(height: 3),
-                _text(
-                  '${billingCoinLabel(offer.coinGrant)} coins / $cadence',
-                  size: 11,
-                  color: selected ? colors.textLight : null,
-                ),
-              ],
-            ),
           ),
-        ),
+          if (monthly)
+            Positioned(
+              right: 10,
+              top: -11,
+              child: Container(
+                key: const Key('bara-gold-best-deal'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.isDark ? colors.feedGold : colors.pillGold,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: colors.isDark
+                        ? colors.feedGold
+                        : colors.pillGoldDark,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      size: 13,
+                      color: colors.textDark,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'BEST DEAL',
+                      style: PixelText.title(
+                        size: 9.5,
+                        color: colors.textDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -183,9 +265,11 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
         child: _text('Bara Gold is not available right now.'),
       );
     }
+
     return ListenableBuilder(
       listenable: billing,
       builder: (context, _) {
+        final colors = AppColors.of(context);
         final state = billing.snapshot;
         final offers = billing.plans
             .where(
@@ -194,14 +278,30 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   offer.plan == BillingPlan.monthly,
             )
             .toList();
-        final offer =
-            offers.where((item) => item.plan == _plan).firstOrNull ??
-            offers.firstOrNull;
+        final matching = offers.where((item) => item.plan == _plan);
+        final monthly = offers.where(
+          (item) => item.plan == BillingPlan.monthly,
+        );
+        final StorePlanOffer? offer = matching.isNotEmpty
+            ? matching.first
+            : monthly.isNotEmpty
+            ? monthly.first
+            : offers.isNotEmpty
+            ? offers.first
+            : null;
         final disabled =
             _busy || state.busy || offer == null || !billing.isAvailable;
+        final trialDays = offer?.trialDays ?? 0;
+
         return Container(
           key: const Key('bara-gold-paywall'),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 26),
+          color: colors.parchmentLight,
+          padding: EdgeInsets.fromLTRB(
+            12,
+            widget.standalone ? 8 : 4,
+            12,
+            24,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -212,77 +312,68 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                     onPressed: () => Navigator.maybePop(context),
                     icon: Icon(
                       Icons.arrow_back_rounded,
-                      color: AppColors.of(context).textDark,
+                      color: colors.textDark,
                     ),
                   ),
                 ),
-              _text('A LITTLE EXTRA JOY', size: 10),
-              _text('Bara Gold', size: 42, title: true),
-              const SizedBox(height: 6),
-              _text('More room to move, play, and collect.', size: 16),
-              const SizedBox(height: 20),
-              _benefit(
-                Icons.local_offer_outlined,
-                '15% off the shop',
-                'Save on eligible coin purchases across the shop.',
-              ),
-              _benefit(
-                Icons.monetization_on_outlined,
-                'Plan-specific coin grants',
-                'Weekly Gold grants 200 coins. Monthly Gold grants 1,000 coins.',
-              ),
-              _benefit(
-                Icons.visibility_off_outlined,
-                'No forced ads',
-                'Banners, inline ads, and interruptions stay out of your run.',
-              ),
-              _benefit(
-                Icons.bolt_rounded,
-                'Ad-free extra Daily Spin and box reroll',
-                'Eligible bonus spins and box rerolls skip their rewarded ad. Other rewarded placements remain unchanged.',
-              ),
-              _benefit(
-                Icons.refresh_rounded,
-                'One free reroll per powerup',
-                'Gold rerolls do not consume coins or historical balances.',
-              ),
-              _benefit(
-                Icons.pets_rounded,
-                'Unlock every character',
-                'Use every normal character while your Bara Gold membership is active.',
-              ),
               if (!state.isMember) ...[
-                const SizedBox(height: 16),
+                _benefitTile(
+                  Icons.monetization_on_outlined,
+                  'Monthly coin bonus',
+                  'Get extra coins every month. Monthly members get the biggest bonus.',
+                  key: const Key('gold-benefit-coins'),
+                ),
+                const SizedBox(height: 8),
+                _benefitTile(
+                  Icons.block_rounded,
+                  'Ad-free experience',
+                  'No banners, no inline ads, no interruptions. Just Bara.',
+                  key: const Key('gold-benefit-adfree'),
+                ),
+                const SizedBox(height: 8),
+                _benefitTile(
+                  Icons.card_giftcard_rounded,
+                  'Free rerolls on everything',
+                  'Reroll Daily Spins and boxes anytime, no ads required.',
+                  key: const Key('gold-benefit-rerolls'),
+                ),
+                const SizedBox(height: 8),
+                _benefitTile(
+                  Icons.workspace_premium_rounded,
+                  'Exclusive characters & powerups',
+                  'Unlock special characters, unique accessories, and exclusive shop powerups only for Gold members.',
+                  key: const Key('gold-benefit-exclusive'),
+                ),
+                const SizedBox(height: 20),
                 if (offers.isEmpty)
                   _text('Store pricing is currently unavailable.')
                 else ...[
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       for (var index = 0; index < offers.length; index++) ...[
                         if (index > 0) const SizedBox(width: 10),
-                        Expanded(child: _planButton(billing, offers[index])),
+                        _planButton(billing, offers[index]),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  if ((offer?.trialDays ?? 0) > 0)
-                    _text(
-                      'Try ${offer!.trialDays} days free. The store confirms trial eligibility; billing starts after the trial unless cancelled.',
-                      size: 12,
-                    ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
                   PillButton(
                     key: Key(
-                      (offer?.trialDays ?? 0) > 0
+                      trialDays > 0
                           ? 'start-bara-trial'
                           : 'subscribe-bara',
                     ),
-                    label: (offer?.trialDays ?? 0) > 0
-                        ? 'TRY ${offer!.trialDays} DAYS FREE'
+                    label: trialDays > 0
+                        ? 'TRY ' + trialDays.toString() + ' DAYS FREE'
                         : 'SUBSCRIBE',
                     fullWidth: true,
                     loading: _busy,
-                    onPressed: disabled
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 15,
+                    ),
+                    onPressed: disabled || offer == null
                         ? null
                         : () {
                             unawaited(
@@ -292,23 +383,34 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                             );
                             unawaited(
                               _perform(
-                                () => offer.trialDays > 0
+                                () => trialDays > 0
                                     ? billing.startTrial(offer.plan)
                                     : billing.subscribe(offer.plan),
                               ),
                             );
                           },
                   ),
-                  const SizedBox(height: 9),
-                  Align(
-                    alignment: Alignment.center,
-                    child: _text(
-                      '${offer!.price} per ${offer.plan == BillingPlan.weekly ? 'week' : 'month'}. Auto-renews until cancelled.',
-                      size: 12,
+                  const SizedBox(height: 12),
+                  Text(
+                    trialDays > 0
+                        ? 'The store confirms trial eligibility; billing starts after the trial unless cancelled. Auto-renews until cancelled.'
+                        : (offer == null
+                              ? ''
+                              : offer.price +
+                                    ' per ' +
+                                    (offer.plan == BillingPlan.weekly
+                                        ? 'week'
+                                        : 'month') +
+                                    '. Auto-renews until cancelled.'),
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 11.5,
+                      color: colors.textMid,
                     ),
                   ),
                 ],
               ] else ...[
+                const SizedBox(height: 8),
                 _text(
                   state.isTrial
                       ? 'Your Gold trial is active.'
@@ -327,16 +429,19 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                       : () => _perform(billing.cancelRenewal),
                 ),
               ],
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               TextButton(
                 key: const Key('restore-bara'),
                 onPressed: disabled ? null : () => _perform(billing.restore),
                 child: _text('Restore purchases', size: 12),
               ),
               if (state.operationStatus == BillingOperationStatus.pending)
-                _text(
-                  state.message ?? 'Purchase is awaiting confirmation.',
-                  size: 12,
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: _text(
+                    state.message ?? 'Purchase is awaiting confirmation.',
+                    size: 12,
+                  ),
                 ),
             ],
           ),
