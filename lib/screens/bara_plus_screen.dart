@@ -414,6 +414,21 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                   LayoutBuilder(
                     key: const Key('bara-gold-plan-row'),
                     builder: (context, constraints) {
+                      final weeklyOffer = offers
+                          .where((item) => item.plan == BillingPlan.weekly)
+                          .firstOrNull;
+                      final monthlyOffer = offers
+                          .where((item) => item.plan == BillingPlan.monthly)
+                          .firstOrNull;
+                      if (weeklyOffer == null || monthlyOffer == null) {
+                        return Center(
+                          child: SizedBox(
+                            width: constraints.maxWidth * 0.55,
+                            child: _planButton(billing, offers.first),
+                          ),
+                        );
+                      }
+
                       const gap = 28.0;
                       final cardWidth = (constraints.maxWidth * 0.39)
                           .clamp(118.0, 142.0);
@@ -430,12 +445,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                               width: cardWidth,
                               child: KeyedSubtree(
                                 key: const Key('bara-gold-weekly-slot'),
-                                child: _planButton(
-                                  billing,
-                                  offers.firstWhere(
-                                    (item) => item.plan == BillingPlan.weekly,
-                                  ),
-                                ),
+                                child: _planButton(billing, weeklyOffer),
                               ),
                             ),
                             Positioned(
@@ -444,12 +454,7 @@ class _BaraGoldBodyState extends State<BaraPlusBody> {
                               width: cardWidth,
                               child: KeyedSubtree(
                                 key: const Key('bara-gold-monthly-slot'),
-                                child: _planButton(
-                                  billing,
-                                  offers.firstWhere(
-                                    (item) => item.plan == BillingPlan.monthly,
-                                  ),
-                                ),
+                                child: _planButton(billing, monthlyOffer),
                               ),
                             ),
                           ],
