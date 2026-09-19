@@ -47,7 +47,7 @@ class BaraPlusCard extends StatelessWidget {
 
         return Semantics(
           button: onTap != null,
-          label: 'Bara Gold membership. Ad-free. Exclusive perks.',
+          label: 'Bara Gold membership.',
           child: Material(
             color: colors.dirtMid,
             shape: RoundedRectangleBorder(
@@ -97,12 +97,12 @@ class BaraPlusCard extends StatelessWidget {
 
   Widget _hero(BuildContext context, {required bool tall}) {
     final colors = AppColors.of(context);
-    final sceneHeight = tall ? 266.0 : 236.0;
+    final sceneHeight = tall ? 236.0 : 206.0;
     final groundHeight = tall ? 70.0 : 64.0;
 
-    // Preserve the original sky, terrain scale and avatar anchoring. Only
-    // crop the soil where the old CTA sat; the new footer sizes to its text.
-    // Increasing HomeHeroScene.groundHeight would stretch the pixel artwork.
+    // Remove 30 logical pixels of sky now that the subtitle is gone. Keep
+    // terrain scale, avatar size and feet anchoring unchanged in all orientations.
+    // Crop unused soil rather than stretching the shared ground artwork.
     final visibleHeight = sceneHeight - groundHeight + 18;
     return ClipRect(
       key: const Key('bara-gold-hero-viewport'),
@@ -145,39 +145,23 @@ class BaraPlusCard extends StatelessWidget {
                 left: 16,
                 right: 16,
                 top: tall ? 13 : 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Bara Gold',
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: PixelText.title(
-                        size: tall ? 24 : 27,
-                        color: colors.textLight,
-                      ).copyWith(
-                        shadows: const [
-                          Shadow(
-                            color: Color(0x66000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 1),
-                          ),
-                        ],
+                child: Text(
+                  'Bara Gold',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(
+                    size: tall ? 24 : 27,
+                    color: colors.textLight,
+                  ).copyWith(
+                    shadows: const [
+                      Shadow(
+                        color: Color(0x66000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      'Ad-free. Exclusive perks.',
-                      textAlign: TextAlign.center,
-                      maxLines: tall ? 2 : 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: PixelText.body(
-                        size: tall ? 12.5 : 13,
-                        color: colors.textLight.withValues(alpha: 0.84),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],

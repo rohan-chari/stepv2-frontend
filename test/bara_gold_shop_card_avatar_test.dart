@@ -67,7 +67,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Bara Gold'), findsOneWidget);
-    expect(find.text('Ad-free. Exclusive perks.'), findsOneWidget);
+    expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
     expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
     expect(find.byKey(const Key('bara-gold-cape-avatar')), findsOneWidget);
     expect(find.byKey(const Key('bara-gold-upgrade-cta')), findsOneWidget);

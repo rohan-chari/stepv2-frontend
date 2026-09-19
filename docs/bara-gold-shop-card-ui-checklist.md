@@ -4,8 +4,10 @@
 
 Keep the existing live sky, scrolling ground, capybara and cape. Replace the
 old button strip with a naturally sized benefits panel and a larger CTA.
-The hero keeps its original render dimensions; only the unused soil behind
-the former button is cropped. No new assets or dependencies are required.
+The scenery banner is now 30 logical pixels shorter, with its subtitle
+removed in every orientation. Its visible height is 160 at normal text size
+and 184 with large text. The title, avatar size, terrain scale, benefits panel
+and CTA keep their existing styling. No new assets or dependencies are required.
 
 The four rows describe the current paywall benefits: ad-free play, exclusive
 characters and shop power-ups, monthly coin bonuses, and ad-free Daily Spin
@@ -15,16 +17,17 @@ No prices, rewards, entitlement checks or purchase flows change.
 ## Manual placement checklist
 
 1. **Live Shop, Featured:** Open Shop on a non-member account with Gold
-   available. The original hero appears above one benefits panel. All four
+   available. The shorter hero shows the Bara Gold title without the old
+   "Ad-free. Exclusive perks." subtitle. One benefits panel follows it. All four
    rows appear in order, with one Upgrade button below them. There is no
    second button over the grass or avatar. The coin offers and remaining
-   shop sections follow the expanded card without overlapping it.
+   shop sections follow the card without overlapping it.
 2. **Shop entry links:** Open Shop through a coin entry and through an
    Upgrade/Learn more entry. Confirm scrolling still reaches the intended
    section. Tapping the hero, a benefit row or the CTA opens the existing
    membership details sheet once; the sheet itself is not redesigned here.
 3. **Shop walkthrough:** On the first-time Shop walkthrough, or a replay,
-   confirm the taller Featured section does not cover a spotlight target or
+   confirm the Featured section does not cover a spotlight target or
    strand the walkthrough above the power-up section.
 4. **Billing preview mirror:** Run the existing billing preview entry point,
    open Shop with the free sample account, and repeat the placement check.
@@ -33,7 +36,9 @@ No prices, rewards, entitlement checks or purchase flows change.
 5. **Small screens and accessibility:** Repeat on a narrow phone in both
    themes, then with large system text and Reduce Motion. Benefit text and
    the CTA must wrap and remain reachable by scrolling. Check that the
-   capybara's feet stay on the grass and the footer does not clip them.
+   capybara's feet stay on the grass, the title does not overlap the avatar,
+   and the footer does not clip it. In any supported rotated preview, the
+   subtitle must remain absent; this change is not orientation-specific.
 
 ## Surfaces unchanged in source
 
@@ -45,19 +50,20 @@ No prices, rewards, entitlement checks or purchase flows change.
 
 ## Verification status
 
-Added `test/bara_gold_shop_card_benefits_test.dart` to exercise the real card,
-ordering, original hero dimensions, tap callback, policy visibility, reduced
-motion and narrow/large-text layouts in both palettes. Existing avatar tests
-are unchanged.
+Updated both shop-card widget tests to assert that the subtitle is absent.
+The benefits tests cover the compact hero dimensions, unchanged avatar and
+terrain sizes, tap callback, policy visibility, reduced motion and narrow/
+large-text layouts in both palettes and orientations. Existing unrelated
+assertions, including the 56-pixel CTA minimum height, remain intact.
 
 Pending locally (Flutter/Dart are not installed in the editing environment):
 
 ```sh
-dart format lib/widgets/bara_plus_card.dart test/bara_gold_shop_card_benefits_test.dart
+dart format lib/widgets/bara_plus_card.dart test/bara_gold_shop_card_avatar_test.dart test/bara_gold_shop_card_benefits_test.dart
 flutter analyze
 flutter test test/bara_gold_shop_card_avatar_test.dart test/bara_gold_shop_card_benefits_test.dart
 ```
 
-Source/whitespace checks only were possible here. No simulator or device
-render, full-suite run, platform build or independent subagent review was
-performed. The checklist above is not a record of completed manual testing.
+No Flutter test run, simulator or device render, full-suite run, platform build
+or independent subagent review was performed. The checklist above is not a
+record of completed manual testing.

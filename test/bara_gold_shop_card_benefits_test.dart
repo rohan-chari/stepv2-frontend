@@ -65,13 +65,14 @@ Future<void> _pumpCard(
   WidgetTester tester, {
   required _CardBilling billing,
   double width = 390,
+  double height = 844,
   double textScale = 1,
   bool night = false,
   bool scoped = false,
   VoidCallback? onTap,
 }) async {
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = Size(width, 844);
+  tester.view.physicalSize = Size(width, height);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final palette = night ? AppPalette.night : AppPalette.light;
@@ -107,7 +108,7 @@ Future<void> _pumpCard(
 }
 
 void main() {
-  testWidgets('perks replace the old CTA area without stretching the hero', (
+  testWidgets('compact hero keeps terrain scale and the benefits below it', (
     tester,
   ) async {
     final billing = _CardBilling();
@@ -115,7 +116,7 @@ void main() {
     await _pumpCard(tester, billing: billing);
 
     expect(find.text('Bara Gold'), findsOneWidget);
-    expect(find.text('Ad-free. Exclusive perks.'), findsOneWidget);
+    expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
     expect(find.text('Upgrade to Bara Gold'), findsOneWidget);
     for (final title in _benefitTitles) {
       expect(find.text(title), findsOneWidget);
@@ -127,8 +128,8 @@ void main() {
     final scene = tester.widget<HomeHeroScene>(hero);
     expect(scene.groundHeight, 64);
     expect(scene.groundScrollSpeed, 24);
-    expect(tester.getSize(hero).height, 236);
-    expect(tester.getSize(viewport).height, closeTo(190, 0.01));
+    expect(tester.getSize(hero).height, 206);
+    expect(tester.getSize(viewport).height, closeTo(160, 0.01));
     expect(
       tester.getTopLeft(benefits).dy,
       greaterThanOrEqualTo(tester.getBottomLeft(viewport).dy),
@@ -142,6 +143,7 @@ void main() {
       find.byType(AnimatedCapybaraWithAccessories),
     );
     expect(avatar.animate, isFalse);
+    expect(avatar.size, 116);
     expect(avatar.accessories.single['assetKey'], 'cape');
     expect(tester.takeException(), isNull);
   });
@@ -168,12 +170,14 @@ void main() {
 
   for (final night in [false, true]) {
     for (final layout in [
-      (width: 320.0, scale: 1.0),
-      (width: 390.0, scale: 1.0),
-      (width: 320.0, scale: 2.0),
+      (width: 320.0, height: 844.0, scale: 1.0),
+      (width: 390.0, height: 844.0, scale: 1.0),
+      (width: 320.0, height: 844.0, scale: 2.0),
+      (width: 844.0, height: 390.0, scale: 1.0),
+      (width: 844.0, height: 390.0, scale: 2.0),
     ]) {
       testWidgets(
-        'perks and CTA fit ${layout.width}px at ${layout.scale}x '
+        'perks and CTA fit ${layout.width}x${layout.height}px at ${layout.scale}x '
         'in ${night ? 'night' : 'light'} theme',
         (tester) async {
           final billing = _CardBilling();
@@ -182,9 +186,28 @@ void main() {
             tester,
             billing: billing,
             width: layout.width,
+            height: layout.height,
             textScale: layout.scale,
             night: night,
           );
+
+          // The scenery is compact in every orientation, not only when the
+          // phone is rotated. Large text keeps extra room above the avatar.
+          final tall = layout.scale > 1.35;
+          expect(find.text('Ad-free. Exclusive perks.'), findsNothing);
+          expect(find.text('Bara Gold'), findsOneWidget);
+          expect(
+            tester.getSize(find.byKey(const Key('bara-gold-hero-viewport'))).height,
+            closeTo(tall ? 184 : 160, 0.01),
+          );
+          final scene = tester.widget<HomeHeroScene>(
+            find.byKey(const Key('bara-gold-hero-scene')),
+          );
+          expect(scene.groundHeight, tall ? 70 : 64);
+          final avatar = tester.widget<AnimatedCapybaraWithAccessories>(
+            find.byType(AnimatedCapybaraWithAccessories),
+          );
+          expect(avatar.size, tall ? 128 : 116);
 
           final palette = night ? AppPalette.night : AppPalette.light;
           final panel = tester.widget<Container>(
