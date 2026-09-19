@@ -168,6 +168,17 @@ class _PagedActiveApi extends BackendApiService {
     'participants': [
       {'userId': 'u0', 'displayName': 'Racer u0', 'totalSteps': 9000.0},
     ],
+    'currentUser': {
+      'userId': 'user-1',
+      'displayName': 'Trail Walker',
+      'profilePhotoUrl': null,
+      'totalSteps': myTotalSteps,
+      'placement': 42,
+      'stealthed': false,
+      'finishedAt': null,
+      'forfeitedAt': null,
+      'currentMultiplier': 1.0,
+    },
     'powerupData': {
       'enabled': false,
       'inventory': [],
@@ -527,6 +538,24 @@ void main() {
         const {'race_id': raceId},
         const {'race_id': raceId},
       ]);
+    });
+
+    testWidgets('pins viewer placement and steps when viewer is off-page', (
+      tester,
+    ) async {
+      await _pump(tester, _PagedActiveApi());
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.ensureVisible(find.text('STANDINGS').first);
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('standings-pinned-current-user')),
+        findsOneWidget,
+      );
+      expect(find.text('42'), findsOneWidget);
+      expect(find.text('8,200'), findsOneWidget);
+      expect(find.text('• • •'), findsOneWidget);
     });
 
     testWidgets('an off-page participant is NOT shown as a spectator', (
