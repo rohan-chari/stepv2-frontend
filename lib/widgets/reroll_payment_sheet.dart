@@ -58,7 +58,7 @@ Future<RerollFunding?> showRerollPaymentSheet(
                         ? 'RETRY BARA GOLD REROLL'
                         : 'FREE BARA GOLD REROLL',
                     fullWidth: true,
-                    onPressed: !state.busy
+                    onPressed: !controller.rerollBusy
                         ? () => Navigator.pop(context, RerollFunding.freeGold)
                         : null,
                   ),
@@ -82,7 +82,7 @@ Future<RerollFunding?> showRerollPaymentSheet(
                         (pendingFunding == RerollFunding.coins ||
                                 pendingFunding == null &&
                                     state.coins >= cost) &&
-                            !state.busy
+                            !controller.rerollBusy
                         ? () => Navigator.pop(context, RerollFunding.coins)
                         : null,
                   ),
@@ -109,7 +109,7 @@ Future<RerollFunding?> showRerollPaymentSheet(
                     label: 'WATCH AN AD',
                     fullWidth: true,
                     variant: PillButtonVariant.rewardedAd,
-                    onPressed: state.busy
+                    onPressed: controller.rerollBusy
                         ? null
                         : () => Navigator.pop(context, RerollFunding.ad),
                   ),
